@@ -1,32 +1,54 @@
-# React + TypeScript + Vite
+# Workout Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A mobile-first PWA for quick in-gym workout logging, strength progress, and body
+weight tracking during a bulk. Data lives in a Google Sheet via a Google Apps
+Script backend. Deployed as a static site on GitHub Pages.
 
-Currently, two official plugins are available:
+> Full product spec: Obsidian vault → `20 Projects/Personal/Workout Tracker.md`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- React + TypeScript + Vite, Tailwind CSS v4, dark mode only
+- Recharts for progress charts
+- PWA (installable, offline-tolerant write queue) via `vite-plugin-pwa`
+- Backend: Google Apps Script web app over a Google Sheet (see [BACKEND.md](./BACKEND.md))
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Develop
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev        # local dev server
+npm test           # vitest (pure logic: streaks, Epley, dates, progress)
+npm run build      # typecheck + production build
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Create `.env` from `.env.example` and set `VITE_API_URL` to your Apps Script
+`/exec` URL — or just enter it in the app's **Settings** at runtime.
+
+## Deploy
+
+- **Frontend:** push to `main` → GitHub Actions builds and publishes to Pages
+  (`.github/workflows/deploy.yml`). The Vite `base` is `/workout-tracker/` in
+  production; rename `REPO` in `vite.config.ts` if the repo name differs.
+- **Backend:** see [BACKEND.md](./BACKEND.md).
+
+## Status
+
+MVP: logging, rest timer, streaks + freeze credits, body weight, progress
+charts, CSV export. **Post-MVP:** AI chat assistant, historical data import
+(parser + confirmation UI).
+
+## Structure
+
+```
+src/
+  config/plan.ts        # the hardcoded workout plan (edit here)
+  types/                # shared data model
+  lib/                  # pure logic (streaks, epley, dates, progress, csv) + tests
+  services/             # storage (localStorage) + api (Apps Script client)
+  store/                # DataContext: state, optimistic writes, offline queue
+  components/           # RestTimer, StreakBar, Sparkline, BottomNav
+  features/today|progress|chat|settings/
+SimpleBackend.gs        # Apps Script backend
+deploy-backend.js       # clasp deploy helper
+```
