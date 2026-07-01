@@ -10,6 +10,7 @@ export type SetLog = {
 export type ExerciseLog = {
   exercise: string // matches a plan config key
   sets: SetLog[]
+  notes?: string
 }
 
 export type WorkoutSession = {
