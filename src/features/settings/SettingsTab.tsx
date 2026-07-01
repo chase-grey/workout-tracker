@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { download, workoutsToCsv } from '../../lib/csv'
+import { ImportScreen } from './ImportScreen'
 
 const SYNC_LABEL: Record<string, string> = {
   idle: 'Synced',
@@ -13,6 +14,7 @@ export function SettingsTab() {
   const { settings, updateSettings, refresh, sync, pendingWrites, workouts } = useData()
   const [apiUrl, setApiUrl] = useState(settings.apiUrl)
   const [saved, setSaved] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const save = () => {
     updateSettings({ ...settings, apiUrl: apiUrl.trim() })
@@ -48,12 +50,20 @@ export function SettingsTab() {
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">Data</label>
         <button
+          onClick={() => setImporting(true)}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          Import historical data
+        </button>
+        <button
           onClick={() => download(`workouts-${new Date().toISOString().slice(0, 10)}.csv`, workoutsToCsv(workouts))}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
           Export workouts as CSV
         </button>
       </section>
+
+      {importing && <ImportScreen onClose={() => setImporting(false)} />}
 
       <section className="flex flex-col gap-1">
         <label className="text-sm font-medium text-neutral-300">About</label>

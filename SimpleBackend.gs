@@ -130,11 +130,27 @@ function appendWorkoutRows(rows) {
 }
 
 function appendBodyWeight(body) {
+  const sh = sheet('body_weight', BW_HEADERS)
+
+  // Bulk form: { entries: [{ date, weightLbs }, ...] }
+  if (Array.isArray(body.entries)) {
+    const values = body.entries
+      .filter(function (e) {
+        return isFinite(Number(e.weightLbs)) && Number(e.weightLbs) > 0
+      })
+      .map(function (e) {
+        return [e.date || isoDate(new Date()), Number(e.weightLbs)]
+      })
+    if (values.length) {
+      sh.getRange(sh.getLastRow() + 1, 1, values.length, BW_HEADERS.length).setValues(values)
+    }
+    return { saved: values.length }
+  }
+
+  // Single form: { date, weightLbs }
   const weight = Number(body.weightLbs)
   if (!isFinite(weight) || weight <= 0) throw new Error('Invalid weight')
-  const date = body.date || isoDate(new Date())
-  const sh = sheet('body_weight', BW_HEADERS)
-  sh.appendRow([date, weight])
+  sh.appendRow([body.date || isoDate(new Date()), weight])
   return { saved: 1 }
 }
 

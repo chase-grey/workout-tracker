@@ -49,5 +49,7 @@ export const api = {
   fetchBodyWeight: (since?: string) => get<BodyWeightEntry[]>('bodyweight', since ? { since } : {}),
   postSession: (rows: WorkoutRow[]) => post<{ saved: number }>('session', { rows }),
   postBodyWeight: (entry: BodyWeightEntry) => post<{ saved: number }>('bodyweight', entry),
+  postBodyWeightBulk: (entries: BodyWeightEntry[]) =>
+    post<{ saved: number }>('bodyweight', { entries }),
   postImport: (rows: WorkoutRow[]) => post<{ saved: number }>('import', { rows }),
 }

@@ -19,6 +19,7 @@ type DataContextValue = {
   atRisk: boolean
   saveSession: (s: WorkoutSession) => Promise<void>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
+  importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
   refresh: () => Promise<void>
 }
@@ -115,6 +116,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, persistWeights],
   )
 
+  const importData = useCallback(
+    async (rows: WorkoutRow[], bws: BodyWeightEntry[]) => {
+      if (rows.length) persistWorkouts([...storage.loadWorkouts(), ...rows])
+      if (bws.length) persistWeights([...storage.loadBodyWeights(), ...bws])
+      if (rows.length) {
+        try {
+          await api.postImport(rows)
+        } catch {
+          enqueue({ type: 'session', rows })
+        }
+      }
+      if (bws.length) {
+        try {
+          await api.postBodyWeightBulk(bws)
+        } catch {
+          for (const entry of bws) enqueue({ type: 'bodyweight', entry })
+        }
+      }
+    },
+    [enqueue, persistWorkouts, persistWeights],
+  )
+
   const updateSettings = useCallback((s: Settings) => {
     setSettings(s)
     storage.saveSettings(s)
@@ -133,6 +156,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     atRisk,
     saveSession,
     logBodyWeight,
+    importData,
     updateSettings,
     refresh,
   }
