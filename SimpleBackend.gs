@@ -166,10 +166,15 @@ function sheet(name, headers) {
 }
 
 function isoDate(value) {
+  const tz = ss.getSpreadsheetTimeZone()
   if (value instanceof Date) {
-    return Utilities.formatDate(value, ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd')
+    return Utilities.formatDate(value, tz, 'yyyy-MM-dd')
   }
-  return String(value)
+  const s = String(value).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s // already ISO
+  const d = new Date(s) // reparse long/locale date strings from the sheet
+  if (!isNaN(d.getTime())) return Utilities.formatDate(d, tz, 'yyyy-MM-dd')
+  return s
 }
 
 function json(data, code) {
