@@ -27,7 +27,9 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
-      - run: npm install --no-audit --no-fund
+      # The lockfile is generated on Windows; npm mis-resolves platform-specific
+      # native deps (rollup/tailwind-oxide) from it on Linux. Resolve fresh here.
+      - run: rm -f package-lock.json && npm install --no-audit --no-fund
       - run: npm test
       - run: npm run build
         env:
