@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { download, workoutsToCsv } from '../../lib/csv'
 import { ImportScreen } from './ImportScreen'
+import { PlanEditor } from './PlanEditor'
 import { PlateCalculator } from '../tools/PlateCalculator'
 
 const SYNC_LABEL: Record<string, string> = {
@@ -16,6 +17,7 @@ export function SettingsTab() {
   const [apiUrl, setApiUrl] = useState(settings.apiUrl)
   const [saved, setSaved] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [editingPlan, setEditingPlan] = useState(false)
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
 
@@ -57,6 +59,20 @@ export function SettingsTab() {
       </section>
 
       <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">Workout plan</label>
+        <button
+          onClick={() => setEditingPlan(true)}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          Edit Push / Pull plan
+        </button>
+        <p className="text-xs text-neutral-500">
+          Customize exercises, sets, rep ranges, and rest. Targets during a workout auto-progress
+          from your history.
+        </p>
+      </section>
+
+      <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">Data</label>
         <button
           onClick={() => setImporting(true)}
@@ -73,6 +89,7 @@ export function SettingsTab() {
       </section>
 
       {importing && <ImportScreen onClose={() => setImporting(false)} />}
+      {editingPlan && <PlanEditor onClose={() => setEditingPlan(false)} />}
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">OpenAI API key (for Chat)</label>

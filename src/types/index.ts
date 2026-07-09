@@ -5,6 +5,8 @@ export type SetLog = {
   weightLbs: number | null
   reps: number
   notes?: string
+  /** Whether the user has marked this set complete (only completed sets are saved). */
+  done?: boolean
 }
 
 export type ExerciseLog = {

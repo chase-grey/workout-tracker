@@ -1,21 +1,25 @@
 import type { DayType } from '../types'
 
 /**
- * The hardcoded workout plan. Edit this object to change the plan — it is
- * intentionally a plain data structure so no component code needs to change.
+ * The workout plan model. DEFAULT_PLAN below is the seed; the live plan is
+ * editable in Settings and persisted per-device (see storage.loadPlan). It's a
+ * plain data structure so the AI assistant can also propose edits to it later.
  *
- * `restSec` is the prescribed rest AFTER each set of the exercise.
- * `bodyweight: true` means the weight field defaults to blank/"BW" (with an
- * optional added-weight entry for weighted variations).
+ * `restSec` is the prescribed rest after each set.
+ * `repMin`/`repMax` define the rep range used by the progression engine
+ * (double progression climbs to repMax, then adds weight and resets to repMin).
+ * `increment` is the weight step (lbs) when a weight bump is earned.
+ * `bodyweight: true` means the weight field defaults to blank/"BW".
  */
 export type PlannedExercise = {
-  /** Stable key — must match the `exercise` value stored in the sheet. */
+  /** Stable key — matches the `exercise` value stored in the sheet. */
   key: string
   name: string
   sets: number
-  /** Human-readable rep target, e.g. "6–10" or "12". */
-  repTarget: string
+  repMin: number
+  repMax: number
   restSec: number
+  increment?: number
   bodyweight?: boolean
   /** Optional / do-if-energy-allows. */
   optional?: boolean
@@ -30,51 +34,63 @@ export type DayPlan = {
   exercises: PlannedExercise[]
 }
 
-export const PLAN: Record<DayType, DayPlan> = {
+export type Plan = Record<DayType, DayPlan>
+
+export const DAY_TYPES: DayType[] = ['push', 'pull']
+
+export const DEFAULT_PLAN: Plan = {
   push: {
     type: 'push',
     label: 'Push Day',
     required: true,
     exercises: [
-      { key: 'cable_crunch', name: 'Cable Crunch', sets: 3, repTarget: '12–15', restSec: 60, group: 'Abs' },
-      { key: 'hanging_leg_raise', name: 'Hanging Leg Raise', sets: 3, repTarget: '10–12', restSec: 60, bodyweight: true, group: 'Abs' },
+      { key: 'cable_crunch', name: 'Cable Crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'Abs' },
+      { key: 'hanging_leg_raise', name: 'Hanging Leg Raise', sets: 3, repMin: 10, repMax: 12, restSec: 60, bodyweight: true, group: 'Abs' },
 
-      { key: 'incline_barbell_press', name: 'Incline Barbell Press', sets: 4, repTarget: '6–10', restSec: 180, group: 'Chest' },
-      { key: 'flat_dumbbell_press', name: 'Flat Dumbbell Press', sets: 3, repTarget: '8–10', restSec: 120, group: 'Chest' },
-      { key: 'cable_fly', name: 'Cable Fly / Pec Deck', sets: 3, repTarget: '12–15', restSec: 90, group: 'Chest' },
+      { key: 'incline_barbell_press', name: 'Incline Barbell Press', sets: 4, repMin: 6, repMax: 10, restSec: 180, increment: 5, group: 'Chest' },
+      { key: 'flat_dumbbell_press', name: 'Flat Dumbbell Press', sets: 3, repMin: 8, repMax: 10, restSec: 120, increment: 5, group: 'Chest' },
+      { key: 'cable_fly', name: 'Cable Fly / Pec Deck', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 2.5, group: 'Chest' },
 
-      { key: 'db_overhead_press', name: 'Dumbbell Overhead Press', sets: 3, repTarget: '8–10', restSec: 90, group: 'Shoulders & Triceps' },
-      { key: 'tricep_pushdown', name: 'Tricep Pushdown', sets: 2, repTarget: '12', restSec: 60, group: 'Shoulders & Triceps' },
-      { key: 'overhead_tricep_ext', name: 'Overhead Tricep Extension', sets: 2, repTarget: '12', restSec: 60, group: 'Shoulders & Triceps' },
+      { key: 'db_overhead_press', name: 'Dumbbell Overhead Press', sets: 3, repMin: 8, repMax: 10, restSec: 90, increment: 5, group: 'Shoulders & Triceps' },
+      { key: 'tricep_pushdown', name: 'Tricep Pushdown', sets: 2, repMin: 12, repMax: 12, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
+      { key: 'overhead_tricep_ext', name: 'Overhead Tricep Extension', sets: 2, repMin: 12, repMax: 12, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
 
-      { key: 'pullups_or_pulldown', name: 'Weighted Pull-ups or Lat Pulldown', sets: 3, repTarget: '6–8', restSec: 60, bodyweight: true, optional: true, group: 'Pull Finisher (optional)' },
+      { key: 'pullups_or_pulldown', name: 'Weighted Pull-ups or Lat Pulldown', sets: 3, repMin: 6, repMax: 8, restSec: 60, bodyweight: true, optional: true, group: 'Pull Finisher (optional)' },
     ],
   },
   pull: {
     type: 'pull',
-    label: 'Pull Day',
+    label: 'Pull + Legs Day',
     required: false,
     exercises: [
-      { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repTarget: '6–8', restSec: 180, group: 'Legs' },
-      { key: 'leg_adductor', name: 'Leg Adductor Machine', sets: 3, repTarget: '12–15', restSec: 90, group: 'Legs' },
-      { key: 'leg_abductor', name: 'Leg Abductor Machine', sets: 3, repTarget: '12–15', restSec: 90, group: 'Legs' },
+      { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repMin: 6, repMax: 8, restSec: 180, increment: 5, group: 'Legs' },
+      { key: 'leg_adductor', name: 'Leg Adductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 5, group: 'Legs' },
+      { key: 'leg_abductor', name: 'Leg Abductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 5, group: 'Legs' },
 
-      { key: 'weighted_pullups', name: 'Weighted Pull-ups', sets: 4, repTarget: '6–8', restSec: 120, bodyweight: true, group: 'Back' },
-      { key: 'cable_row', name: 'Cable Row (Neutral Grip)', sets: 3, repTarget: '8–10', restSec: 90, group: 'Back' },
+      { key: 'weighted_pullups', name: 'Weighted Pull-ups', sets: 4, repMin: 6, repMax: 8, restSec: 120, bodyweight: true, group: 'Back' },
+      { key: 'cable_row', name: 'Cable Row (Neutral Grip)', sets: 3, repMin: 8, repMax: 10, restSec: 90, increment: 5, group: 'Back' },
 
-      { key: 'incline_db_curl', name: 'Incline Dumbbell Curl', sets: 3, repTarget: '10–12', restSec: 90, group: 'Biceps' },
-      { key: 'hammer_curl', name: 'Hammer Curl', sets: 3, repTarget: '12', restSec: 60, group: 'Biceps' },
+      { key: 'incline_db_curl', name: 'Incline Dumbbell Curl', sets: 3, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'Biceps' },
+      { key: 'hammer_curl', name: 'Hammer Curl', sets: 3, repMin: 12, repMax: 12, restSec: 60, increment: 5, group: 'Biceps' },
     ],
   },
 }
 
-/** All exercises across both days, for selectors and import matching. */
+/** Human-readable rep range, e.g. "6–10" or "12". */
+export function repRangeLabel(e: Pick<PlannedExercise, 'repMin' | 'repMax'>): string {
+  return e.repMin === e.repMax ? `${e.repMin}` : `${e.repMin}–${e.repMax}`
+}
+
+/** All exercises across both days of the DEFAULT plan, for import matching + name fallback. */
 export const ALL_EXERCISES: PlannedExercise[] = [
-  ...PLAN.push.exercises,
-  ...PLAN.pull.exercises,
+  ...DEFAULT_PLAN.push.exercises,
+  ...DEFAULT_PLAN.pull.exercises,
 ]
 
 /** Lookup an exercise's display name by key, falling back to the key itself. */
 export function exerciseName(key: string): string {
   return ALL_EXERCISES.find((e) => e.key === key)?.name ?? key
 }
+
+/** Backwards-compatible alias for modules still importing PLAN. */
+export const PLAN = DEFAULT_PLAN

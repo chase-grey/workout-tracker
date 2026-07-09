@@ -1,4 +1,5 @@
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
+import { DEFAULT_PLAN, type Plan } from '../config/plan'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -6,6 +7,7 @@ const KEYS = {
   cacheWorkouts: 'wt.cache.workouts',
   cacheBodyWeight: 'wt.cache.bodyweight',
   queue: 'wt.queue',
+  plan: 'wt.plan',
 } as const
 
 export type Settings = {
@@ -53,4 +55,7 @@ export const storage = {
 
   loadQueue: (): QueuedWrite[] => read(KEYS.queue, []),
   saveQueue: (q: QueuedWrite[]) => write(KEYS.queue, q),
+
+  loadPlan: (): Plan => read(KEYS.plan, DEFAULT_PLAN),
+  savePlan: (p: Plan) => write(KEYS.plan, p),
 }

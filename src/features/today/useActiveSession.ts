@@ -1,15 +1,18 @@
 import { useCallback, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { DayType, SetLog, WorkoutSession } from '../../types'
-import { PLAN } from '../../config/plan'
 import { storage } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
+import { useData } from '../../store/DataContext'
+import { nextTarget } from '../../lib/progression'
 
 /**
  * Owns the in-progress workout session, mirrored to localStorage so a mid-gym
- * app close can be resumed.
+ * app close can be resumed. On start, every set is pre-filled with the
+ * progression target (weight × reps that beats the last session) — editable.
  */
 export function useActiveSession() {
+  const { plan, workouts } = useData()
   const [session, setSession] = useState<WorkoutSession | null>(() => storage.loadActiveSession())
 
   const commit = useCallback((next: WorkoutSession | null) => {
@@ -24,10 +27,24 @@ export function useActiveSession() {
         date: toISODate(new Date()),
         dayType,
         isHistorical: false,
-        exercises: PLAN[dayType].exercises.map((e) => ({ exercise: e.key, sets: [] })),
+        exercises: plan[dayType].exercises.map((e) => {
+          const target = nextTarget(workouts, e.key, {
+            repMin: e.repMin,
+            repMax: e.repMax,
+            bodyweight: e.bodyweight,
+            increment: e.increment,
+          })
+          const sets: SetLog[] = Array.from({ length: e.sets }, (_, i) => ({
+            setNumber: i + 1,
+            weightLbs: target.weightLbs,
+            reps: target.reps,
+            done: false,
+          }))
+          return { exercise: e.key, sets }
+        }),
       })
     },
-    [commit],
+    [commit, plan, workouts],
   )
 
   const mutateExercise = useCallback((exKey: string, fn: (sets: SetLog[]) => SetLog[]) => {
@@ -51,9 +68,7 @@ export function useActiveSession() {
       if (!prev) return prev
       const next: WorkoutSession = {
         ...prev,
-        exercises: prev.exercises.map((ex) =>
-          ex.exercise === exKey ? { ...ex, notes } : ex,
-        ),
+        exercises: prev.exercises.map((ex) => (ex.exercise === exKey ? { ...ex, notes } : ex)),
       }
       storage.saveActiveSession(next)
       return next
@@ -62,10 +77,18 @@ export function useActiveSession() {
 
   const addSet = useCallback(
     (exKey: string, template?: Partial<SetLog>) =>
-      mutateExercise(exKey, (sets) => [
-        ...sets,
-        { setNumber: sets.length + 1, weightLbs: template?.weightLbs ?? null, reps: template?.reps ?? 0 },
-      ]),
+      mutateExercise(exKey, (sets) => {
+        const last = sets[sets.length - 1]
+        return [
+          ...sets,
+          {
+            setNumber: sets.length + 1,
+            weightLbs: template?.weightLbs ?? last?.weightLbs ?? null,
+            reps: template?.reps ?? last?.reps ?? 0,
+            done: false,
+          },
+        ]
+      }),
     [mutateExercise],
   )
 

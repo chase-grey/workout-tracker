@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { WorkoutSession } from '../../types'
-import { PLAN } from '../../config/plan'
+import { useData } from '../../store/DataContext'
+import { nextTarget, type Target } from '../../lib/progression'
 import { useActiveSession } from './useActiveSession'
 import { ExerciseCard } from './ExerciseCard'
 import { RestTimer } from '../../components/RestTimer'
-import { hasLoggedSets } from '../../lib/session'
 
 type Props = {
   session: WorkoutSession
@@ -13,28 +13,49 @@ type Props = {
 }
 
 export function ActiveSession({ session, controls, onFinish }: Props) {
+  const { plan, workouts } = useData()
   const [rest, setRest] = useState<number | null>(null)
-  const plan = PLAN[session.dayType]
+  const day = plan[session.dayType]
 
   // Group planned exercises by their UI header, preserving plan order.
   const groups = useMemo(() => {
-    const map = new Map<string, typeof plan.exercises>()
-    for (const ex of plan.exercises) {
+    const map = new Map<string, typeof day.exercises>()
+    for (const ex of day.exercises) {
       const list = map.get(ex.group) ?? []
       list.push(ex)
       map.set(ex.group, list)
     }
     return [...map.entries()]
-  }, [plan])
+  }, [day])
 
-  const totalSets = session.exercises.reduce((n, ex) => n + ex.sets.length, 0)
+  // Progression targets per exercise (from history) — shown as the goal to beat.
+  const targets = useMemo(() => {
+    const m = new Map<string, Target>()
+    for (const e of day.exercises) {
+      m.set(
+        e.key,
+        nextTarget(workouts, e.key, {
+          repMin: e.repMin,
+          repMax: e.repMax,
+          bodyweight: e.bodyweight,
+          increment: e.increment,
+        }),
+      )
+    }
+    return m
+  }, [day, workouts])
+
+  const doneSets = session.exercises.reduce(
+    (n, ex) => n + ex.sets.filter((s) => s.done && s.reps > 0).length,
+    0,
+  )
 
   const finish = () => {
-    // Drop empty sets before saving.
+    // Save only the sets the user actually completed.
     const cleaned: WorkoutSession = {
       ...session,
       exercises: session.exercises
-        .map((ex) => ({ ...ex, sets: ex.sets.filter((s) => s.reps > 0) }))
+        .map((ex) => ({ ...ex, sets: ex.sets.filter((s) => s.done && s.reps > 0) }))
         .filter((ex) => ex.sets.length > 0),
     }
     onFinish(cleaned)
@@ -44,9 +65,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     <div className="flex flex-col gap-4 pb-28">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">{plan.label}</h2>
+          <h2 className="text-xl font-bold">{day.label}</h2>
           <p className="text-sm text-neutral-500">
-            {session.date} · {totalSets} set{totalSets === 1 ? '' : 's'} logged
+            {session.date} · {doneSets} set{doneSets === 1 ? '' : 's'} done
           </p>
         </div>
         <button
@@ -65,13 +86,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             {group}
           </h3>
           {exercises.map((planned) => {
-            const log = session.exercises.find((e) => e.exercise === planned.key)!
+            const log = session.exercises.find((e) => e.exercise === planned.key)
+            if (!log) return null
             return (
               <ExerciseCard
                 key={planned.key}
                 planned={planned}
+                target={targets.get(planned.key)}
                 log={log}
-                onAddSet={() => controls.addSet(planned.key)}
+                onAddSet={() => controls.addSet(planned.key, targets.get(planned.key))}
                 onUpdateSet={(i, patch) => controls.updateSet(planned.key, i, patch)}
                 onRemoveSet={(i) => controls.removeSet(planned.key, i)}
                 onSetNotes={(notes) => controls.setNotes(planned.key, notes)}
@@ -84,7 +107,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
       <button
         onClick={finish}
-        disabled={!hasLoggedSets(session)}
+        disabled={doneSets === 0}
         className="min-h-[52px] rounded-2xl bg-accent text-lg font-bold text-black disabled:opacity-30"
       >
         Finish workout

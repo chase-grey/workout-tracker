@@ -6,6 +6,7 @@ import { api } from '../services/api'
 import { sessionToRows } from '../lib/session'
 import { computeStreaks, isStreakAtRisk } from '../lib/streaks'
 import { toISODate } from '../lib/dates'
+import type { Plan } from '../config/plan'
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
@@ -13,6 +14,7 @@ type DataContextValue = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
   settings: Settings
+  plan: Plan
   sync: SyncState
   pendingWrites: number
   streaks: StreakState
@@ -21,6 +23,7 @@ type DataContextValue = {
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
+  updatePlan: (p: Plan) => void
   refresh: () => Promise<void>
 }
 
@@ -30,6 +33,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>(() => storage.loadWorkouts())
   const [bodyWeights, setBodyWeights] = useState<BodyWeightEntry[]>(() => storage.loadBodyWeights())
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
+  const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [queue, setQueue] = useState<QueuedWrite[]>(() => storage.loadQueue())
   const [sync, setSync] = useState<SyncState>('idle')
 
@@ -143,6 +147,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     storage.saveSettings(s)
   }, [])
 
+  const updatePlan = useCallback((p: Plan) => {
+    setPlan(p)
+    storage.savePlan(p)
+  }, [])
+
   const streaks = useMemo(() => computeStreaks(workouts), [workouts])
   const atRisk = useMemo(() => isStreakAtRisk(workouts), [workouts])
 
@@ -150,6 +159,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     workouts,
     bodyWeights,
     settings,
+    plan,
     sync,
     pendingWrites: queue.length,
     streaks,
@@ -158,6 +168,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logBodyWeight,
     importData,
     updateSettings,
+    updatePlan,
     refresh,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

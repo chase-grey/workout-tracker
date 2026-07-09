@@ -1,5 +1,5 @@
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types'
-import { PLAN, exerciseName } from '../config/plan'
+import { PLAN, exerciseName, repRangeLabel } from '../config/plan'
 import { toISODate, parseISODate } from './dates'
 
 const DAY_TYPES: DayType[] = ['push', 'pull']
@@ -19,7 +19,7 @@ function renderPlan(): string {
     for (const ex of day.exercises) {
       const optional = ex.optional ? ' [optional]' : ''
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${ex.repTarget} reps, ${ex.restSec}s rest${optional}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}`,
       )
     }
   }
