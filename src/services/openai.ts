@@ -54,3 +54,67 @@ export async function chatComplete(
   }
   return content
 }
+
+/* ---------------------------------------------------- function-calling API */
+
+export type Tool = {
+  type: 'function'
+  function: { name: string; description: string; parameters: Record<string, unknown> }
+}
+
+export type RawToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
+
+export type RawMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls?: RawToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string }
+
+export type AssistantTurn = {
+  /** The raw assistant message to append back into the history for the next call. */
+  message: RawMessage
+  content: string | null
+  toolCalls: { id: string; name: string; arguments: string }[]
+}
+
+/** Chat completion that may return tool calls (for letting the assistant edit the plan). */
+export async function chatCompleteRaw(
+  apiKey: string,
+  messages: RawMessage[],
+  opts?: { model?: string; tools?: Tool[] },
+): Promise<AssistantTurn> {
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: opts?.model ?? DEFAULT_MODEL,
+      messages,
+      ...(opts?.tools ? { tools: opts.tools, tool_choice: 'auto' } : {}),
+    }),
+  })
+
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    try {
+      const body = (await res.json()) as ErrorResponse
+      if (body.error?.message) detail = body.error.message
+    } catch {
+      /* keep status-based message */
+    }
+    throw new Error(`OpenAI request failed: ${detail}`)
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string | null; tool_calls?: RawToolCall[] } }[]
+  }
+  const msg = data.choices?.[0]?.message ?? { content: '' }
+  const toolCalls = (msg.tool_calls ?? []).map((tc) => ({
+    id: tc.id,
+    name: tc.function.name,
+    arguments: tc.function.arguments,
+  }))
+  return {
+    message: { role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls },
+    content: msg.content ?? null,
+    toolCalls,
+  }
+}

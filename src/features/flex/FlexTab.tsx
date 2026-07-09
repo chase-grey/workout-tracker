@@ -12,6 +12,7 @@ import {
 import { useData } from '../../store/DataContext'
 import { flexStats } from '../../lib/flex'
 import { parseISODate, toISODate } from '../../lib/dates'
+import { PoseMeasure } from './PoseMeasure'
 
 const GOAL = 180
 const MEASURE_CADENCE_DAYS = 7
@@ -34,6 +35,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 export function FlexTab() {
   const { flexEntries, logFlex } = useData()
   const [angle, setAngle] = useState('')
+  const [measuring, setMeasuring] = useState(false)
 
   const stats = useMemo(() => flexStats(flexEntries, undefined, { goalDeg: GOAL }), [flexEntries])
 
@@ -130,12 +132,22 @@ export function FlexTab() {
           </button>
         </div>
         <button
+          onClick={() => setMeasuring(true)}
+          className="mt-2 min-h-[44px] w-full rounded-xl bg-surface-2 text-sm font-medium text-neutral-300 active:opacity-80"
+        >
+          📷 Measure from photo (beta)
+        </button>
+        <button
           onClick={() => void logFlex(null, 'Stretch session (no measurement)')}
           className="mt-2 min-h-[44px] w-full rounded-xl bg-surface-2 text-sm font-medium text-neutral-300 active:opacity-80"
         >
           Just stretched (no measurement)
         </button>
       </div>
+
+      {measuring && (
+        <PoseMeasure onAngle={(deg) => setAngle(String(deg))} onClose={() => setMeasuring(false)} />
+      )}
 
       <p className="px-1 text-xs text-neutral-500">
         Measured today: {lastMeasured === toISODate(new Date()) ? 'yes' : 'not yet'}. Auto angle-from-photo

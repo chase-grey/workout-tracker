@@ -1,12 +1,64 @@
 import { useEffect, useRef, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { buildSystemPrompt } from '../../lib/chatPrompt'
-import { chatComplete, type ChatMessage } from '../../services/openai'
+import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/openai'
+import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
+import { repRangeLabel, type Plan } from '../../config/plan'
+import { DAY_TYPES } from '../../config/plan'
 
-type Turn = { role: 'user' | 'assistant'; content: string; error?: boolean }
+type Turn = { role: 'user' | 'assistant' | 'system'; content: string; error?: boolean }
+
+const UPDATE_PLAN_TOOL: Tool = {
+  type: 'function',
+  function: {
+    name: 'update_plan',
+    description:
+      "Edit the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, or rename a day. Only call when the user asks to change their plan.",
+    parameters: {
+      type: 'object',
+      properties: {
+        edits: {
+          type: 'array',
+          description: 'Edits applied in order.',
+          items: {
+            type: 'object',
+            properties: {
+              op: { type: 'string', enum: ['setExercise', 'addExercise', 'removeExercise', 'setDayLabel'] },
+              day: { type: 'string', enum: ['push', 'pull'] },
+              key: { type: 'string', description: 'exercise key (setExercise / removeExercise)' },
+              label: { type: 'string', description: 'new day label (setDayLabel)' },
+              fields: {
+                type: 'object',
+                description: 'fields to change (setExercise): name, sets, repMin, repMax, restSec, increment, bodyweight, group',
+              },
+              exercise: {
+                type: 'object',
+                description: 'new exercise (addExercise): name, sets, repMin, repMax, restSec, group, bodyweight, increment',
+              },
+            },
+            required: ['op', 'day'],
+          },
+        },
+      },
+      required: ['edits'],
+    },
+  },
+}
+
+/** A compact snapshot of the current plan so the assistant knows exact keys. */
+function planSnapshot(plan: Plan): string {
+  const lines = ['CURRENT PLAN (use these exact keys with update_plan):']
+  for (const d of DAY_TYPES) {
+    lines.push(`${plan[d].label} (${d}):`)
+    for (const e of plan[d].exercises) {
+      lines.push(`  key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s`)
+    }
+  }
+  return lines.join('\n')
+}
 
 export function ChatTab() {
-  const { workouts, bodyWeights, streaks, settings } = useData()
+  const { workouts, bodyWeights, streaks, settings, plan, updatePlan } = useData()
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -23,26 +75,56 @@ export function ChatTab() {
     if (!text || loading) return
 
     const priorTurns = turns
-    const nextTurns: Turn[] = [...priorTurns, { role: 'user', content: text }]
-    setTurns(nextTurns)
+    setTurns([...priorTurns, { role: 'user', content: text }])
     setInput('')
     setLoading(true)
 
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: buildSystemPrompt({ today: new Date(), workouts, bodyWeights, streaks }),
-      },
-      ...priorTurns.map((t) => ({ role: t.role, content: t.content }) as ChatMessage),
+    // Build the raw message history (system context + visible turns + new user).
+    const messages: RawMessage[] = [
+      { role: 'system', content: buildSystemPrompt({ today: new Date(), workouts, bodyWeights, streaks }) },
+      { role: 'system', content: planSnapshot(plan) },
+      ...priorTurns
+        .filter((t) => t.role !== 'system')
+        .map((t) => ({ role: t.role, content: t.content }) as RawMessage),
       { role: 'user', content: text },
     ]
 
+    let workingPlan = plan
+    const newTurns: Turn[] = []
     try {
-      const reply = await chatComplete(settings.openAiKey, messages)
-      setTurns([...nextTurns, { role: 'assistant', content: reply }])
+      // Tool loop: let the model call update_plan, apply it, feed results back.
+      for (let i = 0; i < 4; i++) {
+        const turn = await chatCompleteRaw(settings.openAiKey, messages, { tools: [UPDATE_PLAN_TOOL] })
+        messages.push(turn.message)
+
+        if (turn.toolCalls.length === 0) {
+          if (turn.content) newTurns.push({ role: 'assistant', content: turn.content })
+          break
+        }
+
+        for (const call of turn.toolCalls) {
+          let resultMsg = ''
+          if (call.name === 'update_plan') {
+            try {
+              const parsed = JSON.parse(call.arguments) as { edits: PlanEdit[] }
+              const res = applyPlanEdits(workingPlan, parsed.edits ?? [])
+              workingPlan = res.plan
+              updatePlan(res.plan)
+              if (res.applied.length) newTurns.push({ role: 'system', content: `🛠 ${res.applied.join('; ')}` })
+              resultMsg = JSON.stringify({ applied: res.applied, errors: res.errors })
+            } catch (e) {
+              resultMsg = JSON.stringify({ error: e instanceof Error ? e.message : 'bad arguments' })
+            }
+          } else {
+            resultMsg = JSON.stringify({ error: `unknown tool ${call.name}` })
+          }
+          messages.push({ role: 'tool', tool_call_id: call.id, content: resultMsg })
+        }
+      }
+      setTurns([...priorTurns, { role: 'user', content: text }, ...newTurns])
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Something went wrong.'
-      setTurns([...nextTurns, { role: 'assistant', content: msg, error: true }])
+      setTurns([...priorTurns, { role: 'user', content: text }, { role: 'assistant', content: msg, error: true }])
     } finally {
       setLoading(false)
     }
@@ -55,8 +137,7 @@ export function ChatTab() {
         <h2 className="text-xl font-bold">Add your OpenAI key</h2>
         <p className="max-w-xs text-sm text-neutral-500">
           To use the training assistant, add your OpenAI API key in Settings. It's stored on this
-          device only and used to answer questions about your last 90 days of workouts, body
-          weight, and streaks.
+          device only and used to answer questions about your training — and can edit your plan on request.
         </p>
       </div>
     )
@@ -78,35 +159,38 @@ export function ChatTab() {
       <div className="flex flex-1 flex-col gap-3 pb-24">
         {turns.length === 0 && !loading && (
           <p className="pt-8 text-center text-sm text-neutral-500">
-            Ask about your training — progress, what to lift next, or how your streak is doing.
+            Ask about your training, or tell me to tweak your plan — e.g. "add face pulls to pull day"
+            or "bump incline bench to 4×5–8".
           </p>
         )}
 
-        {turns.map((t, i) => (
-          <div
-            key={i}
-            className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
-                t.role === 'user'
-                  ? 'bg-accent text-black'
-                  : t.error
-                    ? 'bg-surface text-red-400'
-                    : 'bg-surface text-neutral-100'
-              }`}
-            >
+        {turns.map((t, i) =>
+          t.role === 'system' ? (
+            <div key={i} className="mx-auto rounded-full bg-accent-2/15 px-3 py-1 text-xs text-accent-2">
               {t.content}
             </div>
-          </div>
-        ))}
+          ) : (
+            <div key={i} className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+                  t.role === 'user'
+                    ? 'bg-accent text-black'
+                    : t.error
+                      ? 'bg-surface text-red-400'
+                      : 'bg-surface text-neutral-100'
+                }`}
+              >
+                {t.content}
+              </div>
+            </div>
+          ),
+        )}
 
         {loading && (
           <div className="flex justify-start">
             <div className="rounded-2xl bg-surface px-3 py-2 text-sm text-neutral-400">…</div>
           </div>
         )}
-
         <div ref={endRef} />
       </div>
 
@@ -117,7 +201,7 @@ export function ChatTab() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') void send()
           }}
-          placeholder="Ask about your training…"
+          placeholder="Ask, or tell me to change your plan…"
           className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
         />
         <button
