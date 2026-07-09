@@ -38,6 +38,9 @@ export type Plan = Record<DayType, DayPlan>
 
 export const DAY_TYPES: DayType[] = ['push', 'pull']
 
+/** Marker exercise key for a detail-less "I trained" quick log (excluded from charts). */
+export const QUICK_LOG_KEY = '__quicklog__'
+
 export const DEFAULT_PLAN: Plan = {
   push: {
     type: 'push',
@@ -47,9 +50,9 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'cable_crunch', name: 'Cable Crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'Abs' },
       { key: 'hanging_leg_raise', name: 'Hanging Leg Raise', sets: 3, repMin: 10, repMax: 12, restSec: 60, bodyweight: true, group: 'Abs' },
 
-      { key: 'incline_barbell_press', name: 'Incline Barbell Press', sets: 4, repMin: 6, repMax: 10, restSec: 180, increment: 5, group: 'Chest' },
-      { key: 'flat_dumbbell_press', name: 'Flat Dumbbell Press', sets: 3, repMin: 8, repMax: 10, restSec: 120, increment: 5, group: 'Chest' },
-      { key: 'cable_fly', name: 'Cable Fly / Pec Deck', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 2.5, group: 'Chest' },
+      { key: 'incline_bench', name: 'Incline Bench Press', sets: 4, repMin: 6, repMax: 10, restSec: 180, increment: 5, group: 'Chest' },
+      { key: 'flat_bench', name: 'Flat Bench Press', sets: 3, repMin: 8, repMax: 10, restSec: 120, increment: 5, group: 'Chest' },
+      { key: 'iso_chest', name: 'Chest Fly / Pec Deck', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 2.5, group: 'Chest' },
 
       { key: 'db_overhead_press', name: 'Dumbbell Overhead Press', sets: 3, repMin: 8, repMax: 10, restSec: 90, increment: 5, group: 'Shoulders & Triceps' },
       { key: 'tricep_pushdown', name: 'Tricep Pushdown', sets: 2, repMin: 12, repMax: 12, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },

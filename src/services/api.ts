@@ -1,4 +1,6 @@
 import type { BodyWeightEntry, WorkoutRow } from '../types'
+import type { Plan } from '../config/plan'
+import type { FlexEntry } from '../lib/flex'
 import { storage } from './storage'
 
 /**
@@ -52,4 +54,8 @@ export const api = {
   postBodyWeightBulk: (entries: BodyWeightEntry[]) =>
     post<{ saved: number }>('bodyweight', { entries }),
   postImport: (rows: WorkoutRow[]) => post<{ saved: number }>('import', { rows }),
+  fetchFlex: (since?: string) => get<FlexEntry[]>('flexibility', since ? { since } : {}),
+  postFlex: (entry: FlexEntry) => post<{ saved: number }>('flexibility', entry),
+  fetchPlan: () => get<Plan | null>('plan'),
+  postPlan: (plan: Plan) => post<{ saved: number }>('plan', { plan }),
 }

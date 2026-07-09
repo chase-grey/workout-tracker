@@ -1,18 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { BodyWeightEntry, StreakState, WorkoutRow, WorkoutSession } from '../types'
+import { v4 as uuid } from 'uuid'
+import type { BodyWeightEntry, DayType, StreakState, WorkoutRow, WorkoutSession } from '../types'
 import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { api } from '../services/api'
 import { sessionToRows } from '../lib/session'
 import { computeStreaks, isStreakAtRisk } from '../lib/streaks'
 import { toISODate } from '../lib/dates'
-import type { Plan } from '../config/plan'
+import { QUICK_LOG_KEY, type Plan } from '../config/plan'
+import type { FlexEntry } from '../lib/flex'
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
 type DataContextValue = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
+  flexEntries: FlexEntry[]
   settings: Settings
   plan: Plan
   sync: SyncState
@@ -21,6 +24,9 @@ type DataContextValue = {
   atRisk: boolean
   saveSession: (s: WorkoutSession) => Promise<void>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
+  logFlex: (angleDeg: number | null, note?: string) => Promise<void>
+  quickLog: (dayType: DayType) => Promise<void>
+  logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
   updatePlan: (p: Plan) => void
@@ -32,6 +38,7 @@ const Ctx = createContext<DataContextValue | null>(null)
 export function DataProvider({ children }: { children: ReactNode }) {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>(() => storage.loadWorkouts())
   const [bodyWeights, setBodyWeights] = useState<BodyWeightEntry[]>(() => storage.loadBodyWeights())
+  const [flexEntries, setFlexEntries] = useState<FlexEntry[]>(() => storage.loadFlex())
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [queue, setQueue] = useState<QueuedWrite[]>(() => storage.loadQueue())
@@ -44,6 +51,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const persistWeights = useCallback((e: BodyWeightEntry[]) => {
     setBodyWeights(e)
     storage.saveBodyWeights(e)
+  }, [])
+  const persistFlex = useCallback((e: FlexEntry[]) => {
+    setFlexEntries(e)
+    storage.saveFlex(e)
   }, [])
   const persistQueue = useCallback((q: QueuedWrite[]) => {
     setQueue(q)
@@ -61,7 +72,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     for (const w of storage.loadQueue()) {
       try {
         if (w.type === 'session') await api.postSession(w.rows)
-        else await api.postBodyWeight(w.entry)
+        else if (w.type === 'bodyweight') await api.postBodyWeight(w.entry)
+        else if (w.type === 'flex') await api.postFlex(w.entry)
+        else if (w.type === 'plan') await api.postPlan(w.plan)
       } catch {
         remaining.push(w)
       }
@@ -84,7 +97,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       setSync('error')
     }
-  }, [flush, persistWorkouts, persistWeights])
+    // Best-effort extras — tolerate an older backend without these routes.
+    try {
+      const f = await api.fetchFlex()
+      if (Array.isArray(f)) persistFlex(f)
+    } catch {
+      /* ignore */
+    }
+    try {
+      const p = await api.fetchPlan()
+      if (p && p.push && p.pull) {
+        setPlan(p)
+        storage.savePlan(p)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [flush, persistWorkouts, persistWeights, persistFlex])
 
   // Initial sync + flush the queue whenever we come back online.
   useEffect(() => {
@@ -142,15 +171,61 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, persistWorkouts, persistWeights],
   )
 
+  const logFlex = useCallback(
+    async (angleDeg: number | null, note?: string) => {
+      const entry: FlexEntry = { date: toISODate(new Date()), angleDeg, note }
+      persistFlex([...storage.loadFlex(), entry])
+      try {
+        await api.postFlex(entry)
+      } catch {
+        enqueue({ type: 'flex', entry })
+      }
+    },
+    [enqueue, persistFlex],
+  )
+
+  const quickLog = useCallback(
+    async (dayType: DayType) => {
+      const row: WorkoutRow = {
+        session_id: uuid(),
+        date: toISODate(new Date()),
+        day_type: dayType,
+        exercise: QUICK_LOG_KEY,
+        set_number: 1,
+        weight_lbs: null,
+        reps: 0,
+        notes: 'Quick log (no details)',
+        is_historical: false,
+      }
+      persistWorkouts([...storage.loadWorkouts(), row])
+      try {
+        await api.postSession([row])
+      } catch {
+        enqueue({ type: 'session', rows: [row] })
+      }
+    },
+    [enqueue, persistWorkouts],
+  )
+
+  const logProgressPhoto = useCallback(() => {
+    const next = { ...storage.loadSettings(), lastProgressPhoto: toISODate(new Date()) }
+    setSettings(next)
+    storage.saveSettings(next)
+  }, [])
+
   const updateSettings = useCallback((s: Settings) => {
     setSettings(s)
     storage.saveSettings(s)
   }, [])
 
-  const updatePlan = useCallback((p: Plan) => {
-    setPlan(p)
-    storage.savePlan(p)
-  }, [])
+  const updatePlan = useCallback(
+    (p: Plan) => {
+      setPlan(p)
+      storage.savePlan(p)
+      api.postPlan(p).catch(() => enqueue({ type: 'plan', plan: p }))
+    },
+    [enqueue],
+  )
 
   const streaks = useMemo(() => computeStreaks(workouts), [workouts])
   const atRisk = useMemo(() => isStreakAtRisk(workouts), [workouts])
@@ -158,6 +233,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const value: DataContextValue = {
     workouts,
     bodyWeights,
+    flexEntries,
     settings,
     plan,
     sync,
@@ -166,6 +242,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     atRisk,
     saveSession,
     logBodyWeight,
+    logFlex,
+    quickLog,
+    logProgressPhoto,
     importData,
     updateSettings,
     updatePlan,

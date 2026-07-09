@@ -11,6 +11,7 @@ import {
 import { useData } from '../../store/DataContext'
 import { ALL_EXERCISES } from '../../config/plan'
 import { availableExercises, exerciseSeries, filterRange, type Metric } from '../../lib/progress'
+import { GoalsPanel } from './GoalsPanel'
 
 const RANGES: { label: string; months: number | null }[] = [
   { label: '1M', months: 1 },
@@ -101,6 +102,11 @@ export function ProgressTab() {
     <div className="flex flex-col gap-4 pb-24">
       <h2 className="text-xl font-bold">Progress</h2>
 
+      <GoalsPanel />
+
+      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">
+        Per-exercise
+      </h3>
       <select
         value={exercise}
         onChange={(e) => setExercise(e.target.value)}

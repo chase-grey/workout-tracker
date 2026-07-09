@@ -1,5 +1,5 @@
 import type { WorkoutRow } from '../types'
-import { ALL_EXERCISES } from '../config/plan'
+import { ALL_EXERCISES, QUICK_LOG_KEY } from '../config/plan'
 import { epley1RM } from './epley'
 import { parseISODate } from './dates'
 
@@ -54,7 +54,7 @@ export function availableExercises(workouts: WorkoutRow[]): { key: string; name:
 
   const extraKeys = new Set<string>()
   for (const r of workouts) {
-    if (r.exercise && !planKeys.has(r.exercise)) extraKeys.add(r.exercise)
+    if (r.exercise && r.exercise !== QUICK_LOG_KEY && !planKeys.has(r.exercise)) extraKeys.add(r.exercise)
   }
 
   const extras = [...extraKeys]

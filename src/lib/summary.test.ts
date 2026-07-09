@@ -25,11 +25,11 @@ describe('weeklySummary', () => {
   it('counts distinct sessions this week, ignoring prior weeks', () => {
     const workouts: WorkoutRow[] = [
       // this week: session A (2 rows) + session B (1 row) => 2 distinct
-      row({ session_id: 'A', date: '2026-07-06', exercise: 'incline_barbell_press' }),
+      row({ session_id: 'A', date: '2026-07-06', exercise: 'incline_bench' }),
       row({ session_id: 'A', date: '2026-07-06', exercise: 'flat_dumbbell_press' }),
-      row({ session_id: 'B', date: '2026-07-08', exercise: 'incline_barbell_press' }),
+      row({ session_id: 'B', date: '2026-07-08', exercise: 'incline_bench' }),
       // prior week: should not count
-      row({ session_id: 'C', date: '2026-06-30', exercise: 'incline_barbell_press' }),
+      row({ session_id: 'C', date: '2026-06-30', exercise: 'incline_bench' }),
     ]
     const s = weeklySummary(workouts, [], TODAY)
     expect(s.workoutCount).toBe(2)
@@ -38,22 +38,22 @@ describe('weeklySummary', () => {
   it('detects a PR when this week beats all prior weeks', () => {
     const workouts: WorkoutRow[] = [
       // prior week best: 100 x 5 => 100 * (1 + 5/30) ≈ 116.7
-      row({ session_id: 'P', date: '2026-06-29', exercise: 'incline_barbell_press', weight_lbs: 100, reps: 5 }),
+      row({ session_id: 'P', date: '2026-06-29', exercise: 'incline_bench', weight_lbs: 100, reps: 5 }),
       // this week: 110 x 5 => 110 * (1 + 5/30) ≈ 128.3  -> PR
-      row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_barbell_press', weight_lbs: 110, reps: 5 }),
+      row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_bench', weight_lbs: 110, reps: 5 }),
     ]
     const s = weeklySummary(workouts, [], TODAY)
     expect(s.prs).toHaveLength(1)
-    expect(s.prs[0].exercise).toBe('Incline Barbell Press')
+    expect(s.prs[0].exercise).toBe('Incline Bench Press')
     expect(s.prs[0].est1RM).toBe(128.3)
   })
 
   it('does NOT report a PR when this week does not beat prior weeks', () => {
     const workouts: WorkoutRow[] = [
       // prior week best: 120 x 5
-      row({ session_id: 'P', date: '2026-06-29', exercise: 'incline_barbell_press', weight_lbs: 120, reps: 5 }),
+      row({ session_id: 'P', date: '2026-06-29', exercise: 'incline_bench', weight_lbs: 120, reps: 5 }),
       // this week: 110 x 5 -> not a PR
-      row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_barbell_press', weight_lbs: 110, reps: 5 }),
+      row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_bench', weight_lbs: 110, reps: 5 }),
     ]
     const s = weeklySummary(workouts, [], TODAY)
     expect(s.prs).toHaveLength(0)

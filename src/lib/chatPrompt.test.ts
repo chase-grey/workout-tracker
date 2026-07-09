@@ -9,7 +9,7 @@ const workouts: WorkoutRow[] = [
     session_id: 's1',
     date: '2026-06-15',
     day_type: 'push',
-    exercise: 'incline_barbell_press',
+    exercise: 'incline_bench',
     set_number: 1,
     weight_lbs: 135,
     reps: 8,
@@ -20,7 +20,7 @@ const workouts: WorkoutRow[] = [
     session_id: 's1',
     date: '2026-06-15',
     day_type: 'push',
-    exercise: 'incline_barbell_press',
+    exercise: 'incline_bench',
     set_number: 2,
     weight_lbs: 140,
     reps: 6,
@@ -56,7 +56,7 @@ describe('buildSystemPrompt', () => {
   })
 
   it('includes a known exercise name from the plan', () => {
-    expect(prompt).toContain('Incline Barbell Press')
+    expect(prompt).toContain('Incline Bench Press')
   })
 
   it('includes a logged set', () => {

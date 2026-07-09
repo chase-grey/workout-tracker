@@ -1,18 +1,22 @@
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
 import { DEFAULT_PLAN, type Plan } from '../config/plan'
+import type { FlexEntry } from '../lib/flex'
 
 const KEYS = {
   settings: 'wt.settings',
   activeSession: 'wt.activeSession',
   cacheWorkouts: 'wt.cache.workouts',
   cacheBodyWeight: 'wt.cache.bodyweight',
+  cacheFlex: 'wt.cache.flex',
   queue: 'wt.queue',
   plan: 'wt.plan',
 } as const
 
 export type Settings = {
   apiUrl: string
-  openAiKey: string // reserved for the post-MVP AI chat
+  openAiKey: string
+  /** ISO date of the last progress photo the user logged (for reminders). */
+  lastProgressPhoto?: string
 }
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '' }
@@ -21,6 +25,8 @@ const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '' }
 export type QueuedWrite =
   | { type: 'session'; rows: WorkoutRow[] }
   | { type: 'bodyweight'; entry: BodyWeightEntry }
+  | { type: 'flex'; entry: FlexEntry }
+  | { type: 'plan'; plan: Plan }
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -52,6 +58,9 @@ export const storage = {
 
   loadBodyWeights: (): BodyWeightEntry[] => read(KEYS.cacheBodyWeight, []),
   saveBodyWeights: (entries: BodyWeightEntry[]) => write(KEYS.cacheBodyWeight, entries),
+
+  loadFlex: (): FlexEntry[] => read(KEYS.cacheFlex, []),
+  saveFlex: (entries: FlexEntry[]) => write(KEYS.cacheFlex, entries),
 
   loadQueue: (): QueuedWrite[] => read(KEYS.queue, []),
   saveQueue: (q: QueuedWrite[]) => write(KEYS.queue, q),

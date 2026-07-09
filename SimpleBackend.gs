@@ -32,6 +32,8 @@ const WORKOUT_HEADERS = [
   'is_historical',
 ]
 const BW_HEADERS = ['date', 'weight_lbs']
+const FLEX_HEADERS = ['date', 'angle_deg', 'note']
+const CONFIG_HEADERS = ['key', 'value']
 
 function doGet(e) {
   try {
@@ -40,6 +42,10 @@ function doGet(e) {
         return json(getWorkouts(e.parameter.since))
       case 'bodyweight':
         return json(getBodyWeight(e.parameter.since))
+      case 'flexibility':
+        return json(getFlex(e.parameter.since))
+      case 'plan':
+        return json(getPlan())
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -57,6 +63,10 @@ function doPost(e) {
         return json(appendWorkoutRows(body.rows))
       case 'bodyweight':
         return json(appendBodyWeight(body))
+      case 'flexibility':
+        return json(appendFlex(body))
+      case 'plan':
+        return json(savePlan(body.plan))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -151,6 +161,73 @@ function appendBodyWeight(body) {
   const weight = Number(body.weightLbs)
   if (!isFinite(weight) || weight <= 0) throw new Error('Invalid weight')
   sh.appendRow([body.date || isoDate(new Date()), weight])
+  return { saved: 1 }
+}
+
+/* ------------------------------------------------------- flexibility + plan */
+
+function getFlex(since) {
+  const sh = sheet('flexibility', FLEX_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0]) continue
+    const date = isoDate(r[0])
+    if (since && date < since) continue
+    out.push({
+      date: date,
+      angleDeg: r[1] === '' || r[1] === null ? null : Number(r[1]),
+      note: String(r[2] || ''),
+    })
+  }
+  return out
+}
+
+function appendFlex(body) {
+  const sh = sheet('flexibility', FLEX_HEADERS)
+  const list = Array.isArray(body.entries) ? body.entries : [body]
+  const values = list
+    .filter(function (e) {
+      return e && e.date
+    })
+    .map(function (e) {
+      const a = e.angleDeg === null || e.angleDeg === undefined || e.angleDeg === '' ? '' : Number(e.angleDeg)
+      return [e.date, a, e.note || '']
+    })
+  if (values.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, values.length, FLEX_HEADERS.length).setValues(values)
+  }
+  return { saved: values.length }
+}
+
+function getPlan() {
+  const sh = sheet('config', CONFIG_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'plan') {
+      try {
+        return JSON.parse(rows[i][1])
+      } catch (e) {
+        return null
+      }
+    }
+  }
+  return null // no custom plan stored yet
+}
+
+function savePlan(plan) {
+  if (!plan) throw new Error('No plan provided')
+  const sh = sheet('config', CONFIG_HEADERS)
+  const value = JSON.stringify(plan)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'plan') {
+      sh.getRange(i + 1, 2).setValue(value)
+      return { saved: 1 }
+    }
+  }
+  sh.appendRow(['plan', value])
   return { saved: 1 }
 }
 
