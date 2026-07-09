@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { exerciseSeries, filterRange } from './progress'
+import { availableExercises, exerciseSeries, filterRange } from './progress'
+import { ALL_EXERCISES } from '../config/plan'
 import type { WorkoutRow } from '../types'
 
 function r(session: string, date: string, weight: number | null, reps: number): WorkoutRow {
@@ -37,6 +38,35 @@ describe('exerciseSeries', () => {
 
   it('ignores other exercises', () => {
     expect(exerciseSeries(rows, 'squat', 'weight')).toEqual([])
+  })
+})
+
+describe('availableExercises', () => {
+  it('includes plan exercises and prettified unplanned imported keys', () => {
+    const planKey = ALL_EXERCISES[0].key
+    const w: WorkoutRow[] = [
+      { ...r('s1', '2026-01-01', 100, 5), exercise: planKey },
+      { ...r('s2', '2026-02-01', 90, 8), exercise: planKey },
+      { ...r('s3', '2026-03-01', 40, 12), exercise: 'iso_chest' },
+      { ...r('s4', '2026-03-02', 40, 12), exercise: 'iso_chest' }, // duplicate key
+    ]
+    const list = availableExercises(w)
+
+    // all plan exercises are present
+    for (const e of ALL_EXERCISES) {
+      expect(list).toContainEqual({ key: e.key, name: e.name })
+    }
+
+    // the unplanned imported key is present, prettified
+    expect(list).toContainEqual({ key: 'iso_chest', name: 'Iso Chest' })
+
+    // no duplicate entries for the imported key
+    expect(list.filter((x) => x.key === 'iso_chest')).toHaveLength(1)
+
+    // plan exercises come before imported extras
+    const planCount = ALL_EXERCISES.length
+    expect(list.slice(0, planCount).map((x) => x.key)).toEqual(ALL_EXERCISES.map((e) => e.key))
+    expect(list[planCount]).toEqual({ key: 'iso_chest', name: 'Iso Chest' })
   })
 })
 

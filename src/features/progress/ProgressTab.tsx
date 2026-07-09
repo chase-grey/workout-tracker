@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { ALL_EXERCISES } from '../../config/plan'
-import { exerciseSeries, filterRange, type Metric } from '../../lib/progress'
+import { availableExercises, exerciseSeries, filterRange, type Metric } from '../../lib/progress'
 
 const RANGES: { label: string; months: number | null }[] = [
   { label: '1M', months: 1 },
@@ -84,6 +84,8 @@ export function ProgressTab() {
   const [metric, setMetric] = useState<Metric>('1rm')
   const [months, setMonths] = useState<number | null>(3)
 
+  const exercises = useMemo(() => availableExercises(workouts), [workouts])
+
   const series = useMemo(
     () => filterRange(exerciseSeries(workouts, exercise, metric), months),
     [workouts, exercise, metric, months],
@@ -104,7 +106,7 @@ export function ProgressTab() {
         onChange={(e) => setExercise(e.target.value)}
         className="min-h-[44px] rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
       >
-        {ALL_EXERCISES.map((e) => (
+        {exercises.map((e) => (
           <option key={e.key} value={e.key}>
             {e.name}
           </option>

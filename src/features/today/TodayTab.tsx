@@ -5,6 +5,7 @@ import { ActiveSession } from './ActiveSession'
 import { WeightLogSheet } from './WeightLogSheet'
 import { StreakBar } from '../../components/StreakBar'
 import { Sparkline } from '../../components/Sparkline'
+import { WeeklySummary } from '../summary/WeeklySummary'
 
 export function TodayTab() {
   const { bodyWeights, saveSession } = useData()
@@ -66,6 +67,8 @@ export function TodayTab() {
           Log weight
         </button>
       </div>
+
+      <WeeklySummary />
 
       {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
     </div>

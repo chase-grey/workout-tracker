@@ -1,4 +1,5 @@
 import type { WorkoutRow } from '../types'
+import { ALL_EXERCISES } from '../config/plan'
 import { epley1RM } from './epley'
 import { parseISODate } from './dates'
 
@@ -30,6 +31,37 @@ export function exerciseSeries(rows: WorkoutRow[], exerciseKey: string, metric: 
   })
 
   return points.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/** Prettify a slug/free-text key into a Title Case display name. */
+function prettifyKey(key: string): string {
+  return key
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+}
+
+/**
+ * The exercises available to chart: all plan exercises (in plan order) followed
+ * by any distinct exercise keys present in `workouts` that aren't in the plan,
+ * sorted alphabetically by their derived display name.
+ */
+export function availableExercises(workouts: WorkoutRow[]): { key: string; name: string }[] {
+  const planKeys = new Set(ALL_EXERCISES.map((e) => e.key))
+  const planList = ALL_EXERCISES.map((e) => ({ key: e.key, name: e.name }))
+
+  const extraKeys = new Set<string>()
+  for (const r of workouts) {
+    if (r.exercise && !planKeys.has(r.exercise)) extraKeys.add(r.exercise)
+  }
+
+  const extras = [...extraKeys]
+    .map((key) => ({ key, name: prettifyKey(key) }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+
+  return [...planList, ...extras]
 }
 
 /** Keep points within the last `months` (null = all time). */
