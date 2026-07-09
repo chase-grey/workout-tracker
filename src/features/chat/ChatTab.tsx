@@ -5,6 +5,7 @@ import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/open
 import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
 import { repRangeLabel, type Plan } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
+import { MdVpnKey, MdBuild } from 'react-icons/md'
 
 type Turn = { role: 'user' | 'assistant' | 'system'; content: string; error?: boolean }
 
@@ -110,7 +111,7 @@ export function ChatTab() {
               const res = applyPlanEdits(workingPlan, parsed.edits ?? [])
               workingPlan = res.plan
               updatePlan(res.plan)
-              if (res.applied.length) newTurns.push({ role: 'system', content: `🛠 ${res.applied.join('; ')}` })
+              if (res.applied.length) newTurns.push({ role: 'system', content: res.applied.join('; ') })
               resultMsg = JSON.stringify({ applied: res.applied, errors: res.errors })
             } catch (e) {
               resultMsg = JSON.stringify({ error: e instanceof Error ? e.message : 'bad arguments' })
@@ -133,7 +134,7 @@ export function ChatTab() {
   if (!hasKey) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 pb-24 pt-24 text-center">
-        <span className="text-5xl">🔑</span>
+        <MdVpnKey className="text-5xl" aria-hidden />
         <h2 className="text-xl font-bold">Add your OpenAI key</h2>
         <p className="max-w-xs text-sm text-neutral-500">
           To use the training assistant, add your OpenAI API key in Settings. It's stored on this
@@ -167,6 +168,7 @@ export function ChatTab() {
         {turns.map((t, i) =>
           t.role === 'system' ? (
             <div key={i} className="mx-auto rounded-full bg-accent-2/15 px-3 py-1 text-xs text-accent-2">
+              <MdBuild className="inline align-text-bottom mr-1" aria-hidden />
               {t.content}
             </div>
           ) : (

@@ -7,6 +7,7 @@ import {
   parseImport,
   type ImportResult,
 } from '../../lib/parseImport'
+import { MdWarningAmber } from 'react-icons/md'
 
 const SKIP = '__skip__'
 const NEW = '__new__'
@@ -120,17 +121,18 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
                       onChange={(ev) => setDecisions((d) => ({ ...d, [e.rawName]: ev.target.value }))}
                       className="min-h-[44px] w-full rounded-lg bg-surface-2 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                     >
-                      <option value={NEW}>➕ Import as new: “{e.match.name || e.rawName}”</option>
+                      <option value={NEW}>Import as new: “{e.match.name || e.rawName}”</option>
                       {ALL_EXERCISES.map((x) => (
                         <option key={x.key} value={x.key}>
                           {x.name}
                         </option>
                       ))}
-                      <option value={SKIP}>⨯ Skip this exercise</option>
+                      <option value={SKIP}>Skip this exercise</option>
                     </select>
                     {warnCount > 0 && (
                       <p className="mt-1 text-xs text-accent">
-                        ⚠️ {warnCount} ambiguous weight row{warnCount === 1 ? '' : 's'} — verify after import
+                        <MdWarningAmber className="inline align-text-bottom mr-1" aria-hidden />
+                        {warnCount} ambiguous weight row{warnCount === 1 ? '' : 's'} — verify after import
                       </p>
                     )}
                   </div>

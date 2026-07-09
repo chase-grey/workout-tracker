@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { straddleAngleFromLandmarks, type Pt } from '../../lib/splitAngle'
+import { MdPhotoCamera } from 'react-icons/md'
 
 /**
  * Experimental: estimate side-split angle from a photo using MediaPipe Pose,
@@ -93,7 +94,14 @@ export function PoseMeasure({
         </p>
 
         <label className="mb-4 block min-h-[52px] cursor-pointer rounded-2xl bg-accent text-center text-lg font-bold leading-[52px] text-black">
-          {status === 'working' ? 'Working…' : '📷 Take / choose photo'}
+          {status === 'working' ? (
+            'Working…'
+          ) : (
+            <>
+              <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
+              Take / choose photo
+            </>
+          )}
           <input
             type="file"
             accept="image/*"

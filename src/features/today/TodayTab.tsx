@@ -7,6 +7,7 @@ import { StreakBar } from '../../components/StreakBar'
 import { Sparkline } from '../../components/Sparkline'
 import { WeeklySummary } from '../summary/WeeklySummary'
 import { parseISODate } from '../../lib/dates'
+import { MdPhotoCamera } from 'react-icons/md'
 
 const PHOTO_CADENCE_DAYS = 14
 
@@ -49,12 +50,15 @@ export function TodayTab() {
 
       {photoDue && (
         <div className="rounded-2xl bg-accent/15 p-3">
-          <p className="text-sm text-accent">📸 Progress-photo time — you should be able to see changes by now.</p>
+          <p className="text-sm text-accent">
+            <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
+            Progress-photo time — you should be able to see changes by now.
+          </p>
           <div className="mt-2 flex gap-2">
             <button
               onClick={() => {
                 logProgressPhoto()
-                flashMsg('Photo logged 📸')
+                flashMsg('Photo logged')
               }}
               className="min-h-[40px] flex-1 rounded-xl bg-accent text-sm font-semibold text-black"
             >

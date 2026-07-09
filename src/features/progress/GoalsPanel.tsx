@@ -1,6 +1,7 @@
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
 import { exerciseSeries } from '../../lib/progress'
+import { MdCelebration } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -27,7 +28,10 @@ function GoalRow({
         </span>
       </div>
       {proj.onTrack && proj.etaWeeks === 0 ? (
-        <p className="mt-1 text-sm text-accent-2">🎉 Goal reached!</p>
+        <p className="mt-1 text-sm text-accent-2">
+          <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
+          Goal reached!
+        </p>
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
           On track · ETA {fmtDate(proj.etaDate)} ({proj.slopePerWeek > 0 ? '+' : ''}

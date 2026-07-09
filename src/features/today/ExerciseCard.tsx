@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ExerciseLog, SetLog } from '../../types'
 import { repRangeLabel, type PlannedExercise } from '../../config/plan'
 import type { Target } from '../../lib/progression'
+import { MdTrackChanges } from 'react-icons/md'
 
 type Props = {
   planned: PlannedExercise
@@ -56,7 +57,12 @@ export function ExerciseCard({
           {planned.sets}×{repRangeLabel(planned)} · {restLabel}
         </span>
       </div>
-      {hint && <p className="mb-2 text-xs font-medium text-accent">🎯 {hint}</p>}
+      {hint && (
+        <p className="mb-2 text-xs font-medium text-accent">
+          <MdTrackChanges className="inline align-text-bottom mr-1" aria-hidden />
+          {hint}
+        </p>
+      )}
 
       <div className="flex flex-col gap-2">
         {log.sets.map((set, i) => (

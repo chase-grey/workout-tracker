@@ -9,10 +9,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { MdPhotoCamera } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { flexStats } from '../../lib/flex'
 import { parseISODate, toISODate } from '../../lib/dates'
 import { PoseMeasure } from './PoseMeasure'
+import { FlexRoutine } from './FlexRoutine'
 
 const GOAL = 180
 const MEASURE_CADENCE_DAYS = 7
@@ -67,7 +69,8 @@ export function FlexTab() {
 
       {measureDue && (
         <div className="rounded-2xl bg-accent/15 p-3 text-sm text-accent">
-          📸 Time to measure — take a photo in your widest split and enter the angle.
+          <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
+          Time to measure — take a photo in your widest split and enter the angle.
         </div>
       )}
 
@@ -101,8 +104,8 @@ export function FlexTab() {
                 contentStyle={{ background: '#171717', border: '1px solid #333', borderRadius: 12 }}
                 formatter={(v) => [`${v}°`, 'angle']}
               />
-              <ReferenceLine y={GOAL} stroke="#22c55e" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} />
+              <ReferenceLine y={GOAL} stroke="#6b7280" strokeDasharray="4 4" />
+              <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -112,8 +115,13 @@ export function FlexTab() {
         </div>
       )}
 
+      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">
+        Today's routine
+      </h3>
+      <FlexRoutine />
+
       <div className="rounded-2xl bg-surface p-3">
-        <p className="mb-2 text-sm font-medium text-neutral-300">Log a session</p>
+        <p className="mb-2 text-sm font-medium text-neutral-300">Log a measurement</p>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -133,9 +141,9 @@ export function FlexTab() {
         </div>
         <button
           onClick={() => setMeasuring(true)}
-          className="mt-2 min-h-[44px] w-full rounded-xl bg-surface-2 text-sm font-medium text-neutral-300 active:opacity-80"
+          className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl bg-surface-2 text-sm font-medium text-neutral-300 active:opacity-80"
         >
-          📷 Measure from photo (beta)
+          <MdPhotoCamera aria-hidden /> Measure from photo (beta)
         </button>
         <button
           onClick={() => void logFlex(null, 'Stretch session (no measurement)')}

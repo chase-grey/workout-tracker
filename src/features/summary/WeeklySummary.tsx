@@ -1,5 +1,6 @@
 import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
+import { MdEmojiEvents } from 'react-icons/md'
 
 /**
  * Compact "this week" summary card for the Today home screen: workout count,
@@ -27,7 +28,8 @@ export function WeeklySummary() {
             <ul className="space-y-1 text-sm">
               {summary.prs.map((pr) => (
                 <li key={pr.exercise} className="text-accent-2">
-                  🏆 {pr.exercise} — {pr.est1RM} lbs est. 1RM
+                  <MdEmojiEvents className="inline align-text-bottom mr-1" aria-hidden />
+                  {pr.exercise} — {pr.est1RM} lbs est. 1RM
                 </li>
               ))}
             </ul>

@@ -72,7 +72,7 @@ function Chart({ data, unit }: { data: { date: string; value: number }[]; unit: 
             labelStyle={{ color: '#a3a3a3' }}
             formatter={(v) => [`${v} ${unit}`, '']}
           />
-          <Line type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} />
+          <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} />
         </LineChart>
       </ResponsiveContainer>
     </div>

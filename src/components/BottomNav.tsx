@@ -1,11 +1,20 @@
+import type { IconType } from 'react-icons'
+import {
+  MdFitnessCenter,
+  MdInsights,
+  MdSelfImprovement,
+  MdChatBubbleOutline,
+  MdSettings,
+} from 'react-icons/md'
+
 export type Tab = 'today' | 'progress' | 'flex' | 'chat' | 'settings'
 
-const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: 'today', icon: '🏋️', label: 'Today' },
-  { id: 'progress', icon: '📈', label: 'Progress' },
-  { id: 'flex', icon: '🤸', label: 'Flex' },
-  { id: 'chat', icon: '💬', label: 'Chat' },
-  { id: 'settings', icon: '⚙️', label: 'Settings' },
+const TABS: { id: Tab; Icon: IconType; label: string }[] = [
+  { id: 'today', Icon: MdFitnessCenter, label: 'Today' },
+  { id: 'progress', Icon: MdInsights, label: 'Progress' },
+  { id: 'flex', Icon: MdSelfImprovement, label: 'Flex' },
+  { id: 'chat', Icon: MdChatBubbleOutline, label: 'Chat' },
+  { id: 'settings', Icon: MdSettings, label: 'Settings' },
 ]
 
 export function BottomNav({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
@@ -22,7 +31,7 @@ export function BottomNav({ active, onChange }: { active: Tab; onChange: (t: Tab
             active === t.id ? 'text-accent' : 'text-neutral-500'
           }`}
         >
-          <span className="text-xl leading-none">{t.icon}</span>
+          <t.Icon className="text-xl leading-none" aria-hidden />
           <span className="text-[11px] font-medium">{t.label}</span>
         </button>
       ))}
