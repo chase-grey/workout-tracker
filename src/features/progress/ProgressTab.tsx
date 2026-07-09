@@ -92,7 +92,11 @@ export function ProgressTab() {
     [workouts, exercise, metric, months],
   )
   const weightSeries = useMemo(
-    () => filterRange(bodyWeights.map((b) => ({ date: b.date, value: b.weightLbs })), months),
+    () =>
+      filterRange(
+        bodyWeights.filter((b) => b.weightLbs >= 50).map((b) => ({ date: b.date, value: b.weightLbs })),
+        months,
+      ),
     [bodyWeights, months],
   )
 

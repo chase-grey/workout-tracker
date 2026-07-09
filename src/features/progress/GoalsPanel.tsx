@@ -45,7 +45,10 @@ function GoalRow({
 export function GoalsPanel() {
   const { workouts, bodyWeights } = useData()
 
-  const bwPoints = bodyWeights.map((b) => ({ date: b.date, value: b.weightLbs }))
+  // Guard against implausible weigh-ins (e.g. stray test rows) skewing the fit.
+  const bwPoints = bodyWeights
+    .filter((b) => b.weightLbs >= 50)
+    .map((b) => ({ date: b.date, value: b.weightLbs }))
   const currentBw = bwPoints.length ? bwPoints[bwPoints.length - 1].value : 0
 
   const benchPoints = exerciseSeries(workouts, 'flat_bench', '1rm')
