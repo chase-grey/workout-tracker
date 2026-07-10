@@ -11,9 +11,15 @@ import { storage } from './storage'
  * The backend parses the raw body as JSON.
  */
 
+// Default Apps Script deployment. This endpoint is already public (the web app
+// is deployed "Anyone"), so baking it in just lets every device auto-connect
+// without pasting it into Settings first. A Settings value still overrides it.
+const DEFAULT_API_URL =
+  'https://script.google.com/macros/s/AKfycbxKDeDE9cRmW8eA5TjShq9dmRvJoVxVE4nsx0l43WLpyXBv_TvheDsYLpBCVuZHLL89xA/exec'
+
 function baseUrl(): string {
-  // Prefer a user-configured URL (Settings) over the build-time env value.
-  return (storage.loadSettings().apiUrl || import.meta.env.VITE_API_URL || '').trim()
+  // Prefer a user-configured URL (Settings), then a build-time env value, then the default.
+  return (storage.loadSettings().apiUrl || import.meta.env.VITE_API_URL || DEFAULT_API_URL).trim()
 }
 
 export function isConfigured(): boolean {
