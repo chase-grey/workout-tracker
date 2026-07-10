@@ -82,15 +82,25 @@ export async function chatCompleteRaw(
   messages: RawMessage[],
   opts?: { model?: string; tools?: Tool[] },
 ): Promise<AssistantTurn> {
-  const res = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: opts?.model ?? DEFAULT_MODEL,
-      messages,
-      ...(opts?.tools ? { tools: opts.tools, tool_choice: 'auto' } : {}),
-    }),
-  })
+  // In local dev, route through the Vite dev proxy (/api/chat), which injects an
+  // Epic (or OpenAI) key server-side and can reach the internal Epic LLM proxy.
+  // In the deployed build there's no such server, so we call OpenAI directly.
+  const useDevProxy = import.meta.env.DEV
+  const res = useDevProxy
+    ? await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, tools: opts?.tools, model: opts?.model }),
+      })
+    : await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: opts?.model ?? DEFAULT_MODEL,
+          messages,
+          ...(opts?.tools ? { tools: opts.tools, tool_choice: 'auto' } : {}),
+        }),
+      })
 
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`

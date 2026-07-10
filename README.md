@@ -25,6 +25,22 @@ npm run build      # typecheck + production build
 Create `.env` from `.env.example` and set `VITE_API_URL` to your Apps Script
 `/exec` URL — or just enter it in the app's **Settings** at runtime.
 
+## AI chat assistant
+
+The chat can answer questions about your data and edit your plans. Two ways to power it:
+
+- **Deployed app (GitHub Pages):** needs a **standard OpenAI key**, entered in Settings
+  (stored on-device, sent directly to OpenAI).
+- **Epic (Noggin) key:** the Epic LLM proxy (`llmproxy.epic.com`) is **internal-network only**,
+  so it can't be reached from the public site or a cross-origin browser call. Use it by running
+  the app **locally on Epic's network**:
+  1. In `.env` set `OPENAI_API_KEY="<your Epic key>"` (already defaults `OPENAI_BASE_URL`
+     to `https://llmproxy.epic.com/v1` and `OPENAI_MODEL=gpt-4o`).
+  2. `npm run dev` and open the local URL.
+  3. The Chat tab now routes through the Vite dev proxy (`/api/chat` in `vite.config.ts`),
+     which injects the key server-side and relaxes TLS for `*.epic.com`. The key never enters
+     the browser bundle. (`.env` is gitignored — never commit your key.)
+
 ## Deploy
 
 - **Frontend:** push to `main` → GitHub Actions builds and publishes to Pages

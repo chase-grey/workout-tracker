@@ -114,7 +114,9 @@ export function ChatTab() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, loading])
 
-  const hasKey = settings.openAiKey.trim().length > 0
+  // In local dev the Vite proxy holds the key (Epic or OpenAI); in the deployed
+  // build the user must supply an OpenAI key (an Epic key can't reach the internal proxy).
+  const hasKey = import.meta.env.DEV || settings.openAiKey.trim().length > 0
 
   const send = async () => {
     const text = input.trim()
@@ -193,8 +195,9 @@ export function ChatTab() {
         <MdVpnKey className="text-5xl" aria-hidden />
         <h2 className="text-xl font-bold">Add your OpenAI key</h2>
         <p className="max-w-xs text-sm text-neutral-500">
-          To use the training assistant, add your OpenAI API key in Settings. It's stored on this
-          device only and used to answer questions about your training — and can edit your plan on request.
+          To use the assistant in the deployed app, add an OpenAI API key in Settings (stored on this
+          device only). An Epic key only works when you run the app locally (<code>npm run dev</code>)
+          on Epic's network — see the README.
         </p>
       </div>
     )
