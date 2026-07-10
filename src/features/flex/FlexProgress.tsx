@@ -12,9 +12,8 @@ import {
 import { MdPhotoCamera } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { flexStats } from '../../lib/flex'
-import { parseISODate, toISODate } from '../../lib/dates'
+import { parseISODate } from '../../lib/dates'
 import { PoseMeasure } from './PoseMeasure'
-import { FlexRoutine } from './FlexRoutine'
 
 const GOAL = 180
 const MEASURE_CADENCE_DAYS = 7
@@ -34,7 +33,8 @@ function Stat({ value, label }: { value: string; label: string }) {
   )
 }
 
-export function FlexTab() {
+/** Side-splits progress + angle logging, shown as a section of the Progress tab. */
+export function FlexProgress() {
   const { flexEntries, logFlex } = useData()
   const [angle, setAngle] = useState('')
   const [measuring, setMeasuring] = useState(false)
@@ -64,13 +64,13 @@ export function FlexTab() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-24">
-      <h2 className="text-xl font-bold">Side splits</h2>
+    <div className="flex flex-col gap-3">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Side splits</h3>
 
       {measureDue && (
         <div className="rounded-2xl bg-accent/15 p-3 text-sm text-accent">
           <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
-          Time to measure — take a photo in your widest split and enter the angle.
+          Time to measure — log today's split angle.
         </div>
       )}
 
@@ -110,15 +110,10 @@ export function FlexTab() {
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="flex h-32 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
+        <div className="flex h-28 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
           Log a couple measurements to see your progression
         </div>
       )}
-
-      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">
-        Today's routine
-      </h3>
-      <FlexRoutine />
 
       <div className="rounded-2xl bg-surface p-3">
         <p className="mb-2 text-sm font-medium text-neutral-300">Log a measurement</p>
@@ -145,22 +140,11 @@ export function FlexTab() {
         >
           <MdPhotoCamera aria-hidden /> Measure from photo (beta)
         </button>
-        <button
-          onClick={() => void logFlex(null, 'Stretch session (no measurement)')}
-          className="mt-2 min-h-[44px] w-full rounded-xl bg-surface-2 text-sm font-medium text-neutral-300 active:opacity-80"
-        >
-          Just stretched (no measurement)
-        </button>
       </div>
 
       {measuring && (
         <PoseMeasure onAngle={(deg) => setAngle(String(deg))} onClose={() => setMeasuring(false)} />
       )}
-
-      <p className="px-1 text-xs text-neutral-500">
-        Measured today: {lastMeasured === toISODate(new Date()) ? 'yes' : 'not yet'}. Auto angle-from-photo
-        (computer vision) is coming next.
-      </p>
     </div>
   )
 }

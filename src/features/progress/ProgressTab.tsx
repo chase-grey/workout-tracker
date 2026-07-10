@@ -12,6 +12,7 @@ import { useData } from '../../store/DataContext'
 import { ALL_EXERCISES } from '../../config/plan'
 import { availableExercises, exerciseSeries, filterRange, type Metric } from '../../lib/progress'
 import { GoalsPanel } from './GoalsPanel'
+import { FlexProgress } from '../flex/FlexProgress'
 
 const RANGES: { label: string; months: number | null }[] = [
   { label: '1M', months: 1 },
@@ -132,6 +133,8 @@ export function ProgressTab() {
         Body weight
       </h3>
       <Chart data={weightSeries} unit="lbs" />
+
+      <FlexProgress />
     </div>
   )
 }

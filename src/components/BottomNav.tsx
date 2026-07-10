@@ -1,18 +1,11 @@
 import type { IconType } from 'react-icons'
-import {
-  MdFitnessCenter,
-  MdInsights,
-  MdSelfImprovement,
-  MdChatBubbleOutline,
-  MdSettings,
-} from 'react-icons/md'
+import { MdFitnessCenter, MdInsights, MdChatBubbleOutline, MdSettings } from 'react-icons/md'
 
-export type Tab = 'today' | 'progress' | 'flex' | 'chat' | 'settings'
+export type Tab = 'today' | 'progress' | 'chat' | 'settings'
 
 const TABS: { id: Tab; Icon: IconType; label: string }[] = [
   { id: 'today', Icon: MdFitnessCenter, label: 'Today' },
   { id: 'progress', Icon: MdInsights, label: 'Progress' },
-  { id: 'flex', Icon: MdSelfImprovement, label: 'Flex' },
   { id: 'chat', Icon: MdChatBubbleOutline, label: 'Chat' },
   { id: 'settings', Icon: MdSettings, label: 'Settings' },
 ]
@@ -20,7 +13,7 @@ const TABS: { id: Tab; Icon: IconType; label: string }[] = [
 export function BottomNav({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   return (
     <nav
-      className="sticky bottom-0 z-30 grid grid-cols-5 border-t border-border bg-surface/95 backdrop-blur"
+      className="sticky bottom-0 z-30 grid grid-cols-4 border-t border-border bg-surface/95 backdrop-blur"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {TABS.map((t) => (

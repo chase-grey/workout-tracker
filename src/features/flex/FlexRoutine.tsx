@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { MdCheck } from 'react-icons/md'
-import { FLEX_ROUTINE } from '../../config/flexPlan'
 import { RestTimer } from '../../components/RestTimer'
 import { useData } from '../../store/DataContext'
 
 /** Guided stretch checklist. Set checkboxes are per-session (not persisted). */
 export function FlexRoutine() {
-  const { logFlex } = useData()
+  const { logFlex, flexPlan } = useData()
   const [done, setDone] = useState<Set<string>>(new Set())
   const [rest, setRest] = useState<number | null>(null)
   const [logged, setLogged] = useState(false)
@@ -32,7 +31,7 @@ export function FlexRoutine() {
 
   return (
     <div className="flex flex-col gap-3">
-      {FLEX_ROUTINE.map((block) => (
+      {flexPlan.map((block) => (
         <div key={block.label} className="rounded-2xl bg-surface p-3">
           <h4 className="text-sm font-semibold text-neutral-300">{block.label}</h4>
           {block.note && <p className="mt-0.5 text-xs text-neutral-500">{block.note}</p>}

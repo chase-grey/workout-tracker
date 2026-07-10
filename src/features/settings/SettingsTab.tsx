@@ -3,7 +3,10 @@ import { useData } from '../../store/DataContext'
 import { download, workoutsToCsv } from '../../lib/csv'
 import { ImportScreen } from './ImportScreen'
 import { PlanEditor } from './PlanEditor'
+import { FlexRoutineEditor } from './FlexRoutineEditor'
 import { PlateCalculator } from '../tools/PlateCalculator'
+
+const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
 const SYNC_LABEL: Record<string, string> = {
   idle: 'Synced',
@@ -18,6 +21,7 @@ export function SettingsTab() {
   const [saved, setSaved] = useState(false)
   const [importing, setImporting] = useState(false)
   const [editingPlan, setEditingPlan] = useState(false)
+  const [editingFlex, setEditingFlex] = useState(false)
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
 
@@ -59,16 +63,22 @@ export function SettingsTab() {
       </section>
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">Workout plan</label>
+        <label className="text-sm font-medium text-neutral-300">Plans</label>
         <button
           onClick={() => setEditingPlan(true)}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
           Edit Push / Pull plan
         </button>
+        <button
+          onClick={() => setEditingFlex(true)}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          Edit stretch routine
+        </button>
         <p className="text-xs text-neutral-500">
-          Customize exercises, sets, rep ranges, and rest. Targets during a workout auto-progress
-          from your history.
+          Customize exercises, sets, rep ranges, and rest. Or just tell the Chat assistant to change
+          either plan for you.
         </p>
       </section>
 
@@ -90,6 +100,7 @@ export function SettingsTab() {
 
       {importing && <ImportScreen onClose={() => setImporting(false)} />}
       {editingPlan && <PlanEditor onClose={() => setEditingPlan(false)} />}
+      {editingFlex && <FlexRoutineEditor onClose={() => setEditingFlex(false)} />}
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">OpenAI API key (for Chat)</label>
@@ -110,6 +121,18 @@ export function SettingsTab() {
         <p className="text-xs text-neutral-500">
           Stored on this device only; sent directly to OpenAI when you chat.
         </p>
+        <label className="mt-2 text-sm font-medium text-neutral-300">Chat model</label>
+        <select
+          value={settings.openAiModel ?? 'gpt-4o-mini'}
+          onChange={(e) => updateSettings({ ...settings, openAiModel: e.target.value })}
+          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        >
+          {MODELS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
       </section>
 
       <section className="flex flex-col gap-2">

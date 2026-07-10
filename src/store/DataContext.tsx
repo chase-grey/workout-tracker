@@ -8,6 +8,7 @@ import { sessionToRows } from '../lib/session'
 import { computeStreaks, isStreakAtRisk } from '../lib/streaks'
 import { toISODate } from '../lib/dates'
 import { QUICK_LOG_KEY, type Plan } from '../config/plan'
+import type { FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
@@ -18,6 +19,7 @@ type DataContextValue = {
   flexEntries: FlexEntry[]
   settings: Settings
   plan: Plan
+  flexPlan: FlexBlock[]
   sync: SyncState
   pendingWrites: number
   streaks: StreakState
@@ -30,6 +32,7 @@ type DataContextValue = {
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
   updatePlan: (p: Plan) => void
+  updateFlexPlan: (r: FlexBlock[]) => void
   refresh: () => Promise<void>
 }
 
@@ -41,6 +44,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [flexEntries, setFlexEntries] = useState<FlexEntry[]>(() => storage.loadFlex())
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
+  const [flexPlan, setFlexPlan] = useState<FlexBlock[]>(() => storage.loadFlexPlan())
   const [queue, setQueue] = useState<QueuedWrite[]>(() => storage.loadQueue())
   const [sync, setSync] = useState<SyncState>('idle')
 
@@ -227,6 +231,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue],
   )
 
+  // Flex routine persists per-device for now (not yet synced to the Sheet).
+  const updateFlexPlan = useCallback((r: FlexBlock[]) => {
+    setFlexPlan(r)
+    storage.saveFlexPlan(r)
+  }, [])
+
   const streaks = useMemo(() => computeStreaks(workouts), [workouts])
   const atRisk = useMemo(() => isStreakAtRisk(workouts), [workouts])
 
@@ -236,6 +246,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     flexEntries,
     settings,
     plan,
+    flexPlan,
     sync,
     pendingWrites: queue.length,
     streaks,
@@ -248,6 +259,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     importData,
     updateSettings,
     updatePlan,
+    updateFlexPlan,
     refresh,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

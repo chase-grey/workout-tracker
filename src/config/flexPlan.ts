@@ -18,7 +18,7 @@ export type FlexBlock = {
   exercises: FlexExercise[]
 }
 
-export const FLEX_ROUTINE: FlexBlock[] = [
+export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
   {
     label: 'Adductor superset',
     note: 'Alternate back-to-back: Tailor’s → Horse → Tailor’s → Horse → Tailor’s → Horse (3 rounds each).',
@@ -58,3 +58,6 @@ export const FLEX_ROUTINE: FlexBlock[] = [
     ],
   },
 ]
+
+/** Back-compat alias (some modules import FLEX_ROUTINE). */
+export const FLEX_ROUTINE = DEFAULT_FLEX_ROUTINE

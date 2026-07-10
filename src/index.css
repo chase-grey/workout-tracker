@@ -6,8 +6,8 @@
   --color-surface: #171717;
   --color-surface-2: #262626;
   --color-border: #333333;
-  --color-accent: #22c55e; /* green — primary CTAs, highlights, streaks */
-  --color-accent-2: #4ade80; /* brighter green — success / completed states */
+  --color-accent: #16a34a; /* dark green — primary CTAs, highlights, streaks */
+  --color-accent-2: #22c55e; /* medium green — success / completed states */
 }
 
 html,

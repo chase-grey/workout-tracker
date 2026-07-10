@@ -1,5 +1,6 @@
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
 import { DEFAULT_PLAN, type Plan } from '../config/plan'
+import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
 
 const KEYS = {
@@ -10,16 +11,19 @@ const KEYS = {
   cacheFlex: 'wt.cache.flex',
   queue: 'wt.queue',
   plan: 'wt.plan',
+  flexPlan: 'wt.flexplan',
 } as const
 
 export type Settings = {
   apiUrl: string
   openAiKey: string
+  /** OpenAI model for the chat assistant. */
+  openAiModel?: string
   /** ISO date of the last progress photo the user logged (for reminders). */
   lastProgressPhoto?: string
 }
 
-const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '' }
+const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }
 
 /** A write that failed to reach the backend and is waiting to be flushed. */
 export type QueuedWrite =
@@ -67,4 +71,7 @@ export const storage = {
 
   loadPlan: (): Plan => read(KEYS.plan, DEFAULT_PLAN),
   savePlan: (p: Plan) => write(KEYS.plan, p),
+
+  loadFlexPlan: (): FlexBlock[] => read(KEYS.flexPlan, DEFAULT_FLEX_ROUTINE),
+  saveFlexPlan: (r: FlexBlock[]) => write(KEYS.flexPlan, r),
 }

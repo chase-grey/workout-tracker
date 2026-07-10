@@ -6,6 +6,7 @@ import { WeightLogSheet } from './WeightLogSheet'
 import { StreakBar } from '../../components/StreakBar'
 import { Sparkline } from '../../components/Sparkline'
 import { WeeklySummary } from '../summary/WeeklySummary'
+import { StretchSession } from '../flex/StretchSession'
 import { parseISODate } from '../../lib/dates'
 import { MdPhotoCamera } from 'react-icons/md'
 
@@ -17,6 +18,7 @@ export function TodayTab() {
   const [showWeight, setShowWeight] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
+  const [stretching, setStretching] = useState(false)
 
   if (controls.session) {
     return (
@@ -29,6 +31,10 @@ export function TodayTab() {
         }}
       />
     )
+  }
+
+  if (stretching) {
+    return <StretchSession onClose={() => setStretching(false)} />
   }
 
   const recent = bodyWeights.slice(-7)
@@ -80,7 +86,7 @@ export function TodayTab() {
 
       <div className="flex flex-col gap-2">
         <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Start a workout
+          Start a session
         </p>
         <button
           onClick={() => controls.start('push')}
@@ -93,6 +99,12 @@ export function TodayTab() {
           className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
         >
           Pull + Legs Day
+        </button>
+        <button
+          onClick={() => setStretching(true)}
+          className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
+        >
+          Stretch (Side Splits)
         </button>
       </div>
 

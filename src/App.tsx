@@ -3,7 +3,6 @@ import { DataProvider } from './store/DataContext'
 import { BottomNav, type Tab } from './components/BottomNav'
 import { TodayTab } from './features/today/TodayTab'
 import { ProgressTab } from './features/progress/ProgressTab'
-import { FlexTab } from './features/flex/FlexTab'
 import { ChatTab } from './features/chat/ChatTab'
 import { SettingsTab } from './features/settings/SettingsTab'
 
@@ -19,7 +18,6 @@ export default function App() {
         >
           {tab === 'today' && <TodayTab />}
           {tab === 'progress' && <ProgressTab />}
-          {tab === 'flex' && <FlexTab />}
           {tab === 'chat' && <ChatTab />}
           {tab === 'settings' && <SettingsTab />}
         </main>

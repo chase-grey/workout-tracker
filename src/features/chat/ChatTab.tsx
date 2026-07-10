@@ -3,8 +3,10 @@ import { useData } from '../../store/DataContext'
 import { buildSystemPrompt } from '../../lib/chatPrompt'
 import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/openai'
 import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
+import { applyFlexEdits, type FlexEdit } from '../../lib/flexTools'
 import { repRangeLabel, type Plan } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
+import type { FlexBlock } from '../../config/flexPlan'
 import { MdVpnKey, MdBuild } from 'react-icons/md'
 
 type Turn = { role: 'user' | 'assistant' | 'system'; content: string; error?: boolean }
@@ -46,20 +48,63 @@ const UPDATE_PLAN_TOOL: Tool = {
   },
 }
 
-/** A compact snapshot of the current plan so the assistant knows exact keys. */
-function planSnapshot(plan: Plan): string {
-  const lines = ['CURRENT PLAN (use these exact keys with update_plan):']
+const UPDATE_FLEX_TOOL: Tool = {
+  type: 'function',
+  function: {
+    name: 'update_flex_routine',
+    description:
+      "Edit the user's side-splits stretch routine: change/add/remove a stretch, add/remove a block, or set a block note. Blocks are matched by label. Only call when the user asks to change their stretch routine.",
+    parameters: {
+      type: 'object',
+      properties: {
+        edits: {
+          type: 'array',
+          description: 'Edits applied in order.',
+          items: {
+            type: 'object',
+            properties: {
+              op: {
+                type: 'string',
+                enum: ['setExercise', 'addExercise', 'removeExercise', 'addBlock', 'removeBlock', 'setBlockNote'],
+              },
+              block: { type: 'string', description: 'block label' },
+              key: { type: 'string', description: 'stretch key (setExercise / removeExercise)' },
+              label: { type: 'string', description: 'new block label (addBlock)' },
+              note: { type: 'string', description: 'block note (setBlockNote / addBlock)' },
+              fields: { type: 'object', description: 'fields to change (setExercise): name, sets, maxSets, reps, tempo, restSec' },
+              exercise: { type: 'object', description: 'new stretch (addExercise): name, sets, maxSets, reps, tempo, restSec' },
+            },
+            required: ['op'],
+          },
+        },
+      },
+      required: ['edits'],
+    },
+  },
+}
+
+/** A compact snapshot of the current plans so the assistant knows exact keys. */
+function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
+  const lines = ['CURRENT WORKOUT PLAN (use these exact keys with update_plan):']
   for (const d of DAY_TYPES) {
     lines.push(`${plan[d].label} (${d}):`)
     for (const e of plan[d].exercises) {
       lines.push(`  key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s`)
     }
   }
+  lines.push('', 'CURRENT STRETCH ROUTINE (use block label + stretch key with update_flex_routine):')
+  for (const b of flexPlan) {
+    lines.push(`${b.label}:`)
+    for (const e of b.exercises) {
+      lines.push(`  key=${e.key} — ${e.name}, ${e.sets}x${e.reps}, ${e.tempo}, rest ${e.restSec}s`)
+    }
+  }
   return lines.join('\n')
 }
 
 export function ChatTab() {
-  const { workouts, bodyWeights, streaks, settings, plan, updatePlan } = useData()
+  const { workouts, bodyWeights, streaks, settings, plan, updatePlan, flexPlan, updateFlexPlan } =
+    useData()
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -83,7 +128,7 @@ export function ChatTab() {
     // Build the raw message history (system context + visible turns + new user).
     const messages: RawMessage[] = [
       { role: 'system', content: buildSystemPrompt({ today: new Date(), workouts, bodyWeights, streaks }) },
-      { role: 'system', content: planSnapshot(plan) },
+      { role: 'system', content: planSnapshot(plan, flexPlan) },
       ...priorTurns
         .filter((t) => t.role !== 'system')
         .map((t) => ({ role: t.role, content: t.content }) as RawMessage),
@@ -91,11 +136,15 @@ export function ChatTab() {
     ]
 
     let workingPlan = plan
+    let workingFlex = flexPlan
     const newTurns: Turn[] = []
     try {
-      // Tool loop: let the model call update_plan, apply it, feed results back.
+      // Tool loop: let the model call a tool, apply it, feed results back.
       for (let i = 0; i < 4; i++) {
-        const turn = await chatCompleteRaw(settings.openAiKey, messages, { tools: [UPDATE_PLAN_TOOL] })
+        const turn = await chatCompleteRaw(settings.openAiKey, messages, {
+          tools: [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL],
+          model: settings.openAiModel,
+        })
         messages.push(turn.message)
 
         if (turn.toolCalls.length === 0) {
@@ -105,19 +154,26 @@ export function ChatTab() {
 
         for (const call of turn.toolCalls) {
           let resultMsg = ''
-          if (call.name === 'update_plan') {
-            try {
+          try {
+            if (call.name === 'update_plan') {
               const parsed = JSON.parse(call.arguments) as { edits: PlanEdit[] }
               const res = applyPlanEdits(workingPlan, parsed.edits ?? [])
               workingPlan = res.plan
               updatePlan(res.plan)
               if (res.applied.length) newTurns.push({ role: 'system', content: res.applied.join('; ') })
               resultMsg = JSON.stringify({ applied: res.applied, errors: res.errors })
-            } catch (e) {
-              resultMsg = JSON.stringify({ error: e instanceof Error ? e.message : 'bad arguments' })
+            } else if (call.name === 'update_flex_routine') {
+              const parsed = JSON.parse(call.arguments) as { edits: FlexEdit[] }
+              const res = applyFlexEdits(workingFlex, parsed.edits ?? [])
+              workingFlex = res.routine
+              updateFlexPlan(res.routine)
+              if (res.applied.length) newTurns.push({ role: 'system', content: res.applied.join('; ') })
+              resultMsg = JSON.stringify({ applied: res.applied, errors: res.errors })
+            } else {
+              resultMsg = JSON.stringify({ error: `unknown tool ${call.name}` })
             }
-          } else {
-            resultMsg = JSON.stringify({ error: `unknown tool ${call.name}` })
+          } catch (e) {
+            resultMsg = JSON.stringify({ error: e instanceof Error ? e.message : 'bad arguments' })
           }
           messages.push({ role: 'tool', tool_call_id: call.id, content: resultMsg })
         }
