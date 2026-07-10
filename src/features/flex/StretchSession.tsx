@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { MdCheck, MdChevronLeft, MdChevronRight } from 'react-icons/md'
+import { MdCheck, MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { KebabMenu } from '../../components/KebabMenu'
@@ -7,18 +7,16 @@ import { estimateSecs, formatDuration } from '../../lib/estimate'
 import { storage } from '../../services/storage'
 import type { FlexExercise } from '../../config/flexPlan'
 
-type Step = { blockLabel: string; blockNote?: string; ex: FlexExercise; firstInBlock: boolean }
-const SEC_PER_REP = 5 // rough working time per stretch rep (tempo + hold)
+type Step = { blockLabel: string; blockNote?: string; ex: FlexExercise }
+const SEC_PER_REP = 5
 
-/** Guided, one-stretch-at-a-time flow for a side-splits session (from Today). */
 export function StretchSession({ onClose }: { onClose: () => void }) {
   const { flexPlan, logFlex } = useData()
   const [current, setCurrent] = useState(() => storage.loadStretch()?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(storage.loadStretch()?.done ?? []))
   const [rest, setRest] = useState<number | null>(null)
-  const [showJump, setShowJump] = useState(false)
+  const [showList, setShowList] = useState(false)
 
-  // Persist progress so an app-switch/reload resumes this stretch session.
   useEffect(() => {
     storage.saveStretch({ step: current, done: [...done] })
   }, [current, done])
@@ -26,9 +24,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const steps = useMemo<Step[]>(() => {
     const out: Step[] = []
     for (const block of flexPlan) {
-      block.exercises.forEach((ex, i) =>
-        out.push({ blockLabel: block.label, blockNote: block.note, ex, firstInBlock: i === 0 }),
-      )
+      block.exercises.forEach((ex) => out.push({ blockLabel: block.label, blockNote: block.note, ex }))
     }
     return out
   }, [flexPlan])
@@ -41,6 +37,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     for (let s = 0; s < maxSets; s++) if (done.has(`${i}:${s}`)) n++
     return n
   }
+  const isStepComplete = (i: number, maxSets: number) => maxSets > 0 && doneForStep(i, maxSets) === maxSets
 
   const totals = useMemo(() => {
     let d = 0
@@ -76,7 +73,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
 
   const step = steps[safeCurrent]
 
-  const toggle = (setIdx: number) => {
+  const toggleSet = (setIdx: number) => {
     const id = `${safeCurrent}:${setIdx}`
     setDone((prev) => {
       const next = new Set(prev)
@@ -84,6 +81,18 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       else {
         next.add(id)
         setRest(step.ex.restSec)
+      }
+      return next
+    })
+  }
+
+  const setStepComplete = (i: number, maxSets: number, complete: boolean) => {
+    setDone((prev) => {
+      const next = new Set(prev)
+      for (let s = 0; s < maxSets; s++) {
+        const id = `${i}:${s}`
+        if (complete) next.add(id)
+        else next.delete(id)
       }
       return next
     })
@@ -97,7 +106,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const atLast = safeCurrent >= N - 1
 
   return (
-    <div className="flex min-h-[100dvh] flex-col pb-4">
+    <div className="flex flex-col gap-3 pb-6">
       <header className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">Stretch session</h2>
@@ -107,113 +116,116 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         </div>
         <KebabMenu
           items={[
-            { label: 'Jump to stretch…', onClick: () => setShowJump(true) },
-            ...(atLast ? [] : [{ label: 'Skip this stretch', onClick: () => setCurrent((c) => c + 1) }]),
+            { label: 'Routine checklist', onClick: () => setShowList(true) },
             { label: 'Finish & log session', onClick: finish },
             { label: 'Exit without logging', danger: true, onClick: onClose },
           ]}
         />
       </header>
 
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
         <div
           className="h-full bg-accent transition-all"
           style={{ width: `${totals.total ? (totals.done / totals.total) * 100 : 0}%` }}
         />
       </div>
 
-      <p className="mt-3 px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+      <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
         {step.blockLabel}
       </p>
       {step.blockNote && <p className="px-1 text-xs text-neutral-500">{step.blockNote}</p>}
 
-      <div className="mt-2 flex-1">
-        <div className="rounded-2xl bg-surface p-4">
-          <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-lg font-semibold">{step.ex.name}</h3>
-            <span className="shrink-0 text-sm text-neutral-500">
-              {step.ex.sets}×{step.ex.reps}
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-accent-2">{step.ex.tempo}</p>
-          <p className="text-xs text-neutral-500">rest {step.ex.restSec}s between sets</p>
+      <div className="rounded-2xl bg-surface p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-lg font-semibold">{step.ex.name}</h3>
+          <span className="shrink-0 text-sm text-neutral-500">
+            {step.ex.sets}×{step.ex.reps}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-accent-2">{step.ex.tempo}</p>
+        <p className="text-xs text-neutral-500">rest {step.ex.restSec}s between sets</p>
 
-          <p className="mt-4 text-xs uppercase tracking-wide text-neutral-500">Mark each set done</p>
-          <div className="mt-2 flex gap-2">
-            {Array.from({ length: step.ex.maxSets }, (_, i) => {
-              const isDone = done.has(`${safeCurrent}:${i}`)
-              return (
-                <button
-                  key={i}
-                  onClick={() => toggle(i)}
-                  className={`flex min-h-[52px] flex-1 items-center justify-center rounded-xl text-lg font-semibold ${
-                    isDone ? 'bg-accent-2 text-black' : 'bg-surface-2 text-neutral-400'
-                  }`}
-                >
-                  {isDone ? <MdCheck aria-hidden /> : i + 1}
-                </button>
-              )
-            })}
-          </div>
+        <p className="mt-4 text-xs uppercase tracking-wide text-neutral-500">Mark each set done</p>
+        <div className="mt-2 flex gap-2">
+          {Array.from({ length: step.ex.maxSets }, (_, i) => {
+            const isDone = done.has(`${safeCurrent}:${i}`)
+            return (
+              <button
+                key={i}
+                onClick={() => toggleSet(i)}
+                className={`flex min-h-[52px] flex-1 items-center justify-center rounded-xl text-lg font-semibold ${
+                  isDone ? 'bg-accent-2 text-black' : 'bg-surface-2 text-neutral-400'
+                }`}
+              >
+                {isDone ? <MdCheck aria-hidden /> : i + 1}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      <div className="sticky bottom-0 mt-4 flex gap-2 bg-bg pt-2">
+      {atLast ? (
         <button
-          onClick={() => setCurrent((c) => Math.max(0, c - 1))}
-          disabled={safeCurrent === 0}
-          className="flex min-h-[52px] items-center justify-center rounded-2xl bg-surface px-4 font-semibold disabled:opacity-30"
+          onClick={finish}
+          className="mt-1 min-h-[52px] rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
         >
-          <MdChevronLeft className="text-2xl" aria-hidden />
+          Finish &amp; log session
         </button>
-        {atLast ? (
-          <button
-            onClick={finish}
-            className="min-h-[52px] flex-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
-          >
-            Finish &amp; log session
-          </button>
-        ) : (
-          <button
-            onClick={() => setCurrent((c) => Math.min(N - 1, c + 1))}
-            className="flex min-h-[52px] flex-1 items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
-          >
-            Next <MdChevronRight className="text-2xl" aria-hidden />
-          </button>
-        )}
-      </div>
+      ) : (
+        <button
+          onClick={() => setCurrent(safeCurrent + 1)}
+          className="mt-1 flex min-h-[52px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+        >
+          Next stretch <MdChevronRight className="text-2xl" aria-hidden />
+        </button>
+      )}
 
       {rest != null && <RestTimer seconds={rest} onClose={() => setRest(null)} />}
 
-      {showJump && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={() => setShowJump(false)}>
+      {showList && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={() => setShowList(false)}>
           <div
-            className="max-h-[70vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
+            className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-3 text-lg font-bold">Jump to stretch</h3>
+            <h3 className="mb-1 text-lg font-bold">Routine checklist</h3>
+            <p className="mb-3 text-xs text-neutral-500">Tap a name to jump; tap the circle to mark done.</p>
             <div className="flex flex-col gap-1">
-              {steps.map((s, i) => (
-                <button
-                  key={`${s.ex.key}-${i}`}
-                  onClick={() => {
-                    setCurrent(i)
-                    setShowJump(false)
-                  }}
-                  className={`flex items-center justify-between rounded-xl px-3 py-3 text-left ${
-                    i === safeCurrent ? 'bg-surface-2' : 'active:bg-surface-2'
-                  }`}
-                >
-                  <span>
-                    <span className="text-[10px] uppercase tracking-wide text-neutral-500">{s.blockLabel}</span>
-                    <span className="block font-medium">{s.ex.name}</span>
-                  </span>
-                  <span className="text-xs text-neutral-500 tabular-nums">
-                    {doneForStep(i, s.ex.maxSets)}/{s.ex.maxSets}
-                  </span>
-                </button>
-              ))}
+              {steps.map((s, i) => {
+                const complete = isStepComplete(i, s.ex.maxSets)
+                return (
+                  <div
+                    key={`${s.ex.key}-${i}`}
+                    className={`flex items-center gap-2 rounded-xl px-2 ${i === safeCurrent ? 'bg-surface-2' : ''}`}
+                  >
+                    <button
+                      onClick={() => {
+                        setCurrent(i)
+                        setShowList(false)
+                      }}
+                      className="flex-1 py-3 text-left active:opacity-70"
+                    >
+                      <span className="text-[10px] uppercase tracking-wide text-neutral-500">{s.blockLabel}</span>
+                      <span className="block font-medium">{s.ex.name}</span>
+                      <span className="text-xs text-neutral-500 tabular-nums">
+                        {doneForStep(i, s.ex.maxSets)}/{s.ex.maxSets} sets
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setStepComplete(i, s.ex.maxSets, !complete)}
+                      aria-label={complete ? 'mark incomplete' : 'mark complete'}
+                      className="p-2 text-2xl"
+                    >
+                      {complete ? (
+                        <MdCheckCircle className="text-accent-2" aria-hidden />
+                      ) : (
+                        <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
+                      )}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
