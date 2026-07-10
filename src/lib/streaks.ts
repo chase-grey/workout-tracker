@@ -15,16 +15,28 @@ import { enumerateWeeks, toISODate, weekStartISO } from './dates'
  *
  * `freezeCredits` in the result is the number of credits remaining (earned − spent).
  */
-export function computeStreaks(rows: WorkoutRow[], today: Date = new Date()): StreakState {
-  // First date seen per session id → the week that session belongs to.
-  const sessionWeek = new Map<string, string>()
-  for (const r of rows) {
-    if (!r.session_id) continue
-    if (!sessionWeek.has(r.session_id)) sessionWeek.set(r.session_id, weekStartISO(r.date))
+export function computeStreaks(
+  rows: WorkoutRow[],
+  today: Date = new Date(),
+  flexDates: string[] = [],
+): StreakState {
+  // A "session" is a distinct workout session_id OR a stretch day (flex date).
+  const perWeekSessions = new Map<string, Set<string>>()
+  const bump = (week: string, id: string) => {
+    const set = perWeekSessions.get(week) ?? new Set<string>()
+    set.add(id)
+    perWeekSessions.set(week, set)
   }
+  const seen = new Set<string>()
+  for (const r of rows) {
+    if (!r.session_id || seen.has(r.session_id)) continue
+    seen.add(r.session_id)
+    bump(weekStartISO(r.date), r.session_id)
+  }
+  for (const d of flexDates) bump(weekStartISO(d), `flex:${d}`)
 
   const perWeek = new Map<string, number>()
-  for (const wk of sessionWeek.values()) perWeek.set(wk, (perWeek.get(wk) ?? 0) + 1)
+  for (const [wk, set] of perWeekSessions) perWeek.set(wk, set.size)
 
   if (perWeek.size === 0) return { activeStreak: 0, doubleStreak: 0, freezeCredits: 0 }
 
@@ -68,9 +80,16 @@ export function computeStreaks(rows: WorkoutRow[], today: Date = new Date()): St
  * Whether the active streak is currently at risk: no workout logged yet this
  * (in-progress) week, and we're at/after `atRiskFromDay` (default Friday = 5).
  */
-export function isStreakAtRisk(rows: WorkoutRow[], today: Date = new Date(), atRiskFromDay = 5): boolean {
+export function isStreakAtRisk(
+  rows: WorkoutRow[],
+  today: Date = new Date(),
+  atRiskFromDay = 5,
+  flexDates: string[] = [],
+): boolean {
   const currentWeek = weekStartISO(toISODate(today))
-  const hasThisWeek = rows.some((r) => r.session_id && weekStartISO(r.date) === currentWeek)
+  const hasThisWeek =
+    rows.some((r) => r.session_id && weekStartISO(r.date) === currentWeek) ||
+    flexDates.some((d) => weekStartISO(d) === currentWeek)
   const dow = today.getDay() === 0 ? 7 : today.getDay() // Mon=1 … Sun=7
   return !hasThisWeek && dow >= atRiskFromDay
 }

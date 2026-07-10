@@ -9,7 +9,7 @@ import { computeStreaks, isStreakAtRisk } from '../lib/streaks'
 import { toISODate } from '../lib/dates'
 import { QUICK_LOG_KEY, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
-import type { FlexEntry } from '../lib/flex'
+import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
@@ -104,7 +104,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Best-effort extras — tolerate an older backend without these routes.
     try {
       const f = await api.fetchFlex()
-      if (Array.isArray(f)) persistFlex(f)
+      if (Array.isArray(f)) persistFlex(dedupeFlexByDate(f))
     } catch {
       /* ignore */
     }
@@ -178,7 +178,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const logFlex = useCallback(
     async (angleDeg: number | null, note?: string) => {
       const entry: FlexEntry = { date: toISODate(new Date()), angleDeg, note }
-      persistFlex([...storage.loadFlex(), entry])
+      persistFlex(dedupeFlexByDate([...storage.loadFlex(), entry]))
       try {
         await api.postFlex(entry)
       } catch {
@@ -237,8 +237,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     storage.saveFlexPlan(r)
   }, [])
 
-  const streaks = useMemo(() => computeStreaks(workouts), [workouts])
-  const atRisk = useMemo(() => isStreakAtRisk(workouts), [workouts])
+  const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
+  const streaks = useMemo(
+    () => computeStreaks(workouts, new Date(), flexDates),
+    [workouts, flexDates],
+  )
+  const atRisk = useMemo(
+    () => isStreakAtRisk(workouts, new Date(), 5, flexDates),
+    [workouts, flexDates],
+  )
 
   const value: DataContextValue = {
     workouts,

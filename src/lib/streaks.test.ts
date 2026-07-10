@@ -69,6 +69,18 @@ describe('computeStreaks', () => {
     const rows = [...week(3, 1)] // then two empty weeks, no credits
     expect(computeStreaks(rows, TODAY).activeStreak).toBe(0)
   })
+
+  it('counts stretch (flex) days toward streaks', () => {
+    const flex = [dayInWeek(0), dayInWeek(1)] // stretch this week + last week, no lifts
+    expect(computeStreaks([], TODAY, flex)).toMatchObject({ activeStreak: 2 })
+  })
+
+  it('a lift plus a stretch in the same week counts as a double', () => {
+    expect(computeStreaks([...week(0, 1)], TODAY, [dayInWeek(0)])).toMatchObject({
+      activeStreak: 1,
+      doubleStreak: 1,
+    })
+  })
 })
 
 describe('isStreakAtRisk', () => {

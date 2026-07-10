@@ -26,13 +26,17 @@ export function weeklySummary(
   workouts: WorkoutRow[],
   bodyWeights: BodyWeightEntry[],
   today: Date = new Date(),
+  flexDates: string[] = [],
 ): WeeklySummary {
   const thisWeekStart = weekStartISO(toISODate(today))
 
-  // --- Workout count: distinct session_id whose date is in this week. ---
+  // --- Activity count: distinct workout sessions + distinct stretch days this week. ---
   const thisWeekSessions = new Set<string>()
   for (const r of workouts) {
     if (weekStartISO(r.date) === thisWeekStart) thisWeekSessions.add(r.session_id)
+  }
+  for (const d of flexDates) {
+    if (weekStartISO(d) === thisWeekStart) thisWeekSessions.add(`flex:${d}`)
   }
   const workoutCount = thisWeekSessions.size
 

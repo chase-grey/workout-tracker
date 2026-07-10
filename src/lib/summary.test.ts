@@ -35,6 +35,13 @@ describe('weeklySummary', () => {
     expect(s.workoutCount).toBe(2)
   })
 
+  it('counts stretch (flex) days as activity too', () => {
+    // one workout this week + a stretch day this week = 2; a prior-week stretch ignored
+    const workouts: WorkoutRow[] = [row({ session_id: 'A', date: '2026-07-07', exercise: 'x' })]
+    const s = weeklySummary(workouts, [], TODAY, ['2026-07-08', '2026-06-30'])
+    expect(s.workoutCount).toBe(2)
+  })
+
   it('detects a PR when this week beats all prior weeks', () => {
     const workouts: WorkoutRow[] = [
       // prior week best: 100 x 5 => 100 * (1 + 5/30) ≈ 116.7

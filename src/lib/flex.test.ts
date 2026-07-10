@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { flexStats, type FlexEntry } from './flex'
+import { dedupeFlexByDate, flexStats, type FlexEntry } from './flex'
+
+describe('dedupeFlexByDate', () => {
+  it('keeps one entry per date, preferring a measured angle', () => {
+    const entries: FlexEntry[] = [
+      { date: '2026-07-06', angleDeg: null, note: 'Stretch routine' },
+      { date: '2026-07-06', angleDeg: null, note: 'Stretch routine' }, // dup marker
+      { date: '2026-07-06', angleDeg: 150 }, // a measured angle same day
+      { date: '2026-07-07', angleDeg: null },
+    ]
+    const out = dedupeFlexByDate(entries)
+    expect(out).toHaveLength(2)
+    expect(out.find((e) => e.date === '2026-07-06')?.angleDeg).toBe(150)
+  })
+})
 
 // Fixed "today": Wednesday, 2026-07-08. Its Mon–Sun week is 2026-07-06 … 2026-07-12.
 const TODAY = new Date(2026, 6, 8)

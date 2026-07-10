@@ -7,8 +7,13 @@ import { MdEmojiEvents } from 'react-icons/md'
  * new PRs, and body-weight trend. Self-contained — reads from `useData()`.
  */
 export function WeeklySummary() {
-  const { workouts, bodyWeights } = useData()
-  const summary = weeklySummary(workouts, bodyWeights)
+  const { workouts, bodyWeights, flexEntries } = useData()
+  const summary = weeklySummary(
+    workouts,
+    bodyWeights,
+    new Date(),
+    flexEntries.map((f) => f.date),
+  )
 
   const isEmpty = summary.workoutCount === 0 && summary.weightTrend === null
 
@@ -21,7 +26,7 @@ export function WeeklySummary() {
       ) : (
         <div className="mt-2 space-y-2">
           <p className="text-lg font-bold tabular-nums">
-            {summary.workoutCount} {summary.workoutCount === 1 ? 'workout' : 'workouts'}
+            {summary.workoutCount} {summary.workoutCount === 1 ? 'session' : 'sessions'}
           </p>
 
           {summary.prs.length > 0 ? (

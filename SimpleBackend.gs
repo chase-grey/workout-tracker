@@ -187,18 +187,35 @@ function getFlex(since) {
 function appendFlex(body) {
   const sh = sheet('flexibility', FLEX_HEADERS)
   const list = Array.isArray(body.entries) ? body.entries : [body]
-  const values = list
+  const rows = sh.getDataRange().getValues()
+
+  // Map existing date -> sheet row number (1-based) for upsert (one row per day).
+  const rowByDate = {}
+  for (let i = 1; i < rows.length; i++) {
+    const d = isoDate(rows[i][0])
+    if (d && !(d in rowByDate)) rowByDate[d] = i + 1
+  }
+
+  let saved = 0
+  list
     .filter(function (e) {
       return e && e.date
     })
-    .map(function (e) {
-      const a = e.angleDeg === null || e.angleDeg === undefined || e.angleDeg === '' ? '' : Number(e.angleDeg)
-      return [e.date, a, e.note || '']
+    .forEach(function (e) {
+      const angle =
+        e.angleDeg === null || e.angleDeg === undefined || e.angleDeg === '' ? '' : Number(e.angleDeg)
+      const existingRow = rowByDate[e.date]
+      if (existingRow) {
+        // Don't clobber a measured angle with a blank stretch-session marker.
+        const keepAngle = angle === '' ? sh.getRange(existingRow, 2).getValue() : angle
+        sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).setValues([[e.date, keepAngle, e.note || '']])
+      } else {
+        sh.appendRow([e.date, angle, e.note || ''])
+        rowByDate[e.date] = sh.getLastRow()
+      }
+      saved++
     })
-  if (values.length) {
-    sh.getRange(sh.getLastRow() + 1, 1, values.length, FLEX_HEADERS.length).setValues(values)
-  }
-  return { saved: values.length }
+  return { saved: saved }
 }
 
 function getPlan() {

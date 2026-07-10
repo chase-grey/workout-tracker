@@ -7,6 +7,19 @@ export type FlexEntry = {
   note?: string
 }
 
+/**
+ * Collapse to at most one entry per date (only one stretch session per day).
+ * When a date has multiple, prefer one with a measured angle, else the last seen.
+ */
+export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
+  const byDate = new Map<string, FlexEntry>()
+  for (const e of entries) {
+    const prev = byDate.get(e.date)
+    if (!prev || e.angleDeg != null || prev.angleDeg == null) byDate.set(e.date, e)
+  }
+  return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
 export type FlexStats = {
   sessionsThisWeek: number // entries whose date is in the current Mon–Sun week
   weeklyGoal: number // default 2
