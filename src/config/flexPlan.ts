@@ -15,6 +15,8 @@ export type FlexExercise = {
 export type FlexBlock = {
   label: string
   note?: string
+  /** If true (and 2+ exercises), sets are done round-robin across the exercises. */
+  superset?: boolean
   exercises: FlexExercise[]
 }
 
@@ -22,6 +24,7 @@ export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
   {
     label: 'Adductor superset',
     note: 'Alternate back-to-back: Tailor’s → Horse → Tailor’s → Horse → Tailor’s → Horse (3 rounds each).',
+    superset: true,
     exercises: [
       {
         key: 'tailors_pose',
