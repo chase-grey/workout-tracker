@@ -10,13 +10,25 @@ const TABS: { id: Tab; Icon: IconType; label: string }[] = [
   { id: 'settings', Icon: MdSettings, label: 'Settings' },
 ]
 
-export function BottomNav({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
+export function BottomNav({
+  active,
+  onChange,
+  showChat = true,
+}: {
+  active: Tab
+  onChange: (t: Tab) => void
+  showChat?: boolean
+}) {
+  const tabs = TABS.filter((t) => t.id !== 'chat' || showChat)
   return (
     <nav
-      className="sticky bottom-0 z-30 grid grid-cols-4 border-t border-border bg-surface/95 backdrop-blur"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="sticky bottom-0 z-30 grid border-t border-border bg-surface/95 backdrop-blur"
+      style={{
+        gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))`,
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
     >
-      {TABS.map((t) => (
+      {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}

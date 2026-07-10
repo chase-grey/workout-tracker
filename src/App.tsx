@@ -6,6 +6,13 @@ import { ProgressTab } from './features/progress/ProgressTab'
 import { ChatTab } from './features/chat/ChatTab'
 import { SettingsTab } from './features/settings/SettingsTab'
 
+// The chat can't reach the Epic proxy from a deployed phone (internal-only +
+// CORS + cert), so hide it there. Keep it on desktop, and in local dev (which
+// includes `dev:host` viewed from a phone, where the dev proxy makes it work).
+const isTouchDevice =
+  typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+const CHAT_ENABLED = import.meta.env.DEV || !isTouchDevice
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
 
@@ -18,10 +25,10 @@ export default function App() {
         >
           {tab === 'today' && <TodayTab />}
           {tab === 'progress' && <ProgressTab />}
-          {tab === 'chat' && <ChatTab />}
+          {tab === 'chat' && CHAT_ENABLED && <ChatTab />}
           {tab === 'settings' && <SettingsTab />}
         </main>
-        <BottomNav active={tab} onChange={setTab} />
+        <BottomNav active={tab} onChange={setTab} showChat={CHAT_ENABLED} />
       </div>
     </DataProvider>
   )
