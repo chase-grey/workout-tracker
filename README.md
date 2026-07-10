@@ -41,6 +41,13 @@ The chat can answer questions about your data and edit your plans. Two ways to p
      which injects the key server-side and relaxes TLS for `*.epic.com`. The key never enters
      the browser bundle. (`.env` is gitignored — never commit your key.)
 
+  **Using chat on your phone with the Epic key:** the deployed GitHub Pages site can't reach the
+  internal Epic proxy (internal-only + browser CORS + untrusted cert). Instead, run `npm run dev:host`
+  on your computer (computer on Epic wifi/VPN), then open the printed **Network** URL
+  (`http://<computer-ip>:5173/`) on your phone over the same wifi. Requests hop phone → your
+  computer's dev proxy → Epic proxy, so only the computer needs the Epic connection. On the deployed
+  site, use a standard OpenAI key in Settings instead.
+
 ## Deploy
 
 - **Frontend:** push to `main` → GitHub Actions builds and publishes to Pages
