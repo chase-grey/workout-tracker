@@ -8,6 +8,7 @@ import { Sparkline } from '../../components/Sparkline'
 import { WeeklySummary } from '../summary/WeeklySummary'
 import { StretchSession } from '../flex/StretchSession'
 import { parseISODate } from '../../lib/dates'
+import { storage } from '../../services/storage'
 import { MdPhotoCamera } from 'react-icons/md'
 
 const PHOTO_CADENCE_DAYS = 14
@@ -18,7 +19,7 @@ export function TodayTab() {
   const [showWeight, setShowWeight] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
-  const [stretching, setStretching] = useState(false)
+  const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
 
   if (controls.session) {
     return (
@@ -34,7 +35,14 @@ export function TodayTab() {
   }
 
   if (stretching) {
-    return <StretchSession onClose={() => setStretching(false)} />
+    return (
+      <StretchSession
+        onClose={() => {
+          storage.saveStretch(null)
+          setStretching(false)
+        }}
+      />
+    )
   }
 
   const recent = bodyWeights.slice(-7)
@@ -101,7 +109,10 @@ export function TodayTab() {
           Pull + Legs Day
         </button>
         <button
-          onClick={() => setStretching(true)}
+          onClick={() => {
+            if (!storage.loadStretch()) storage.saveStretch({ step: 0, done: [] })
+            setStretching(true)
+          }}
           className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
         >
           Stretch (Side Splits)

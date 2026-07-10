@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MdChevronLeft, MdChevronRight } from 'react-icons/md'
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
 import { nextTarget, type Target } from '../../lib/progression'
 import { estimateSecs, formatDuration, WORK_PER_SET_SEC } from '../../lib/estimate'
+import { storage } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { ExerciseCard } from './ExerciseCard'
 import { RestTimer } from '../../components/RestTimer'
@@ -18,13 +19,19 @@ type Props = {
 export function ActiveSession({ session, controls, onFinish }: Props) {
   const { plan, workouts } = useData()
   const [rest, setRest] = useState<number | null>(null)
-  const [current, setCurrent] = useState(0)
+  const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showJump, setShowJump] = useState(false)
 
   const day = plan[session.dayType]
   const exercises = day.exercises
   const N = exercises.length
-  const planned = exercises[Math.min(current, N - 1)]
+  const safeCurrent = Math.min(Math.max(0, current), N - 1)
+  const planned = exercises[safeCurrent]
+
+  // Persist the exercise position so an app-switch/reload resumes here.
+  useEffect(() => {
+    storage.saveActiveStep(safeCurrent)
+  }, [safeCurrent])
 
   const target: Target | undefined = useMemo(
     () =>
@@ -56,14 +63,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }, [exercises, session])
 
   const timeLeft = useMemo(() => {
-    const items = exercises.slice(current).map((e) => ({
+    const items = exercises.slice(safeCurrent).map((e) => ({
       remainingSets: Math.max(0, e.sets - doneCount(e.key)),
       workSec: WORK_PER_SET_SEC,
       restSec: e.restSec,
     }))
     return estimateSecs(items)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercises, current, session])
+  }, [exercises, safeCurrent, session])
 
   const log = session.exercises.find((e) => e.exercise === planned.key)
 
@@ -77,7 +84,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     onFinish(cleaned)
   }
 
-  const atLast = current >= N - 1
+  const atLast = safeCurrent >= N - 1
 
   return (
     <div className="flex min-h-[100dvh] flex-col pb-4">
@@ -85,7 +92,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         <div>
           <h2 className="text-xl font-bold">{day.label}</h2>
           <p className="text-sm text-neutral-500">
-            Exercise {current + 1} of {N} · {formatDuration(timeLeft)} left
+            Exercise {safeCurrent + 1} of {N} · {formatDuration(timeLeft)} left
           </p>
         </div>
         <KebabMenu
@@ -175,7 +182,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                     setShowJump(false)
                   }}
                   className={`flex items-center justify-between rounded-xl px-3 py-3 text-left ${
-                    i === current ? 'bg-surface-2' : 'active:bg-surface-2'
+                    i === safeCurrent ? 'bg-surface-2' : 'active:bg-surface-2'
                   }`}
                 >
                   <span>

@@ -12,7 +12,12 @@ const KEYS = {
   queue: 'wt.queue',
   plan: 'wt.plan',
   flexPlan: 'wt.flexplan',
+  activeStep: 'wt.activeStep',
+  stretch: 'wt.stretch',
 } as const
+
+/** In-progress stretch session UI state (so it survives an app switch/reload). */
+export type StretchState = { step: number; done: string[] }
 
 export type Settings = {
   apiUrl: string
@@ -74,4 +79,11 @@ export const storage = {
 
   loadFlexPlan: (): FlexBlock[] => read(KEYS.flexPlan, DEFAULT_FLEX_ROUTINE),
   saveFlexPlan: (r: FlexBlock[]) => write(KEYS.flexPlan, r),
+
+  loadActiveStep: (): number => read(KEYS.activeStep, 0),
+  saveActiveStep: (n: number) => write(KEYS.activeStep, n),
+
+  loadStretch: (): StretchState | null => read(KEYS.stretch, null),
+  saveStretch: (s: StretchState | null) =>
+    s ? write(KEYS.stretch, s) : localStorage.removeItem(KEYS.stretch),
 }

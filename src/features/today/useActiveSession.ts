@@ -22,6 +22,7 @@ export function useActiveSession() {
 
   const start = useCallback(
     (dayType: DayType) => {
+      storage.saveActiveStep(0)
       commit({
         sessionId: uuid(),
         date: toISODate(new Date()),
@@ -104,7 +105,10 @@ export function useActiveSession() {
     [mutateExercise],
   )
 
-  const clear = useCallback(() => commit(null), [commit])
+  const clear = useCallback(() => {
+    storage.saveActiveStep(0)
+    commit(null)
+  }, [commit])
 
   return { session, start, addSet, updateSet, removeSet, setNotes, clear }
 }

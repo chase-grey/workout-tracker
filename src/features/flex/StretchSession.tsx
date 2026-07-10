@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MdCheck, MdChevronLeft, MdChevronRight } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { KebabMenu } from '../../components/KebabMenu'
 import { estimateSecs, formatDuration } from '../../lib/estimate'
+import { storage } from '../../services/storage'
 import type { FlexExercise } from '../../config/flexPlan'
 
 type Step = { blockLabel: string; blockNote?: string; ex: FlexExercise; firstInBlock: boolean }
@@ -12,10 +13,15 @@ const SEC_PER_REP = 5 // rough working time per stretch rep (tempo + hold)
 /** Guided, one-stretch-at-a-time flow for a side-splits session (from Today). */
 export function StretchSession({ onClose }: { onClose: () => void }) {
   const { flexPlan, logFlex } = useData()
-  const [current, setCurrent] = useState(0)
-  const [done, setDone] = useState<Set<string>>(new Set())
+  const [current, setCurrent] = useState(() => storage.loadStretch()?.step ?? 0)
+  const [done, setDone] = useState<Set<string>>(() => new Set(storage.loadStretch()?.done ?? []))
   const [rest, setRest] = useState<number | null>(null)
   const [showJump, setShowJump] = useState(false)
+
+  // Persist progress so an app-switch/reload resumes this stretch session.
+  useEffect(() => {
+    storage.saveStretch({ step: current, done: [...done] })
+  }, [current, done])
 
   const steps = useMemo<Step[]>(() => {
     const out: Step[] = []
@@ -28,18 +34,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   }, [flexPlan])
 
   const N = steps.length
-  if (N === 0) {
-    return (
-      <div className="flex flex-col gap-4 pb-24 pt-16 text-center">
-        <p className="text-neutral-500">No stretches in your routine. Add some in Settings → Edit stretch routine.</p>
-        <button onClick={onClose} className="min-h-[44px] rounded-xl bg-surface font-medium">
-          Back
-        </button>
-      </div>
-    )
-  }
+  const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
-  const step = steps[Math.min(current, N - 1)]
   const doneForStep = (i: number, maxSets: number) => {
     let n = 0
     for (let s = 0; s < maxSets; s++) if (done.has(`${i}:${s}`)) n++
@@ -58,17 +54,30 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   }, [steps, done])
 
   const timeLeft = useMemo(() => {
-    const items = steps.slice(current).map((s, idx) => ({
-      remainingSets: s.ex.maxSets - doneForStep(current + idx, s.ex.maxSets),
+    const items = steps.slice(safeCurrent).map((s, idx) => ({
+      remainingSets: s.ex.maxSets - doneForStep(safeCurrent + idx, s.ex.maxSets),
       workSec: s.ex.reps * SEC_PER_REP,
       restSec: s.ex.restSec,
     }))
     return estimateSecs(items)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps, current, done])
+  }, [steps, safeCurrent, done])
+
+  if (N === 0) {
+    return (
+      <div className="flex flex-col gap-4 pb-24 pt-16 text-center">
+        <p className="text-neutral-500">No stretches in your routine. Add some in Settings → Edit stretch routine.</p>
+        <button onClick={onClose} className="min-h-[44px] rounded-xl bg-surface font-medium">
+          Back
+        </button>
+      </div>
+    )
+  }
+
+  const step = steps[safeCurrent]
 
   const toggle = (setIdx: number) => {
-    const id = `${current}:${setIdx}`
+    const id = `${safeCurrent}:${setIdx}`
     setDone((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -85,7 +94,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     onClose()
   }
 
-  const atLast = current >= N - 1
+  const atLast = safeCurrent >= N - 1
 
   return (
     <div className="flex min-h-[100dvh] flex-col pb-4">
@@ -93,7 +102,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         <div>
           <h2 className="text-xl font-bold">Stretch session</h2>
           <p className="text-sm text-neutral-500">
-            Stretch {current + 1} of {N} · {formatDuration(timeLeft)} left
+            Stretch {safeCurrent + 1} of {N} · {formatDuration(timeLeft)} left
           </p>
         </div>
         <KebabMenu
@@ -132,7 +141,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
           <p className="mt-4 text-xs uppercase tracking-wide text-neutral-500">Mark each set done</p>
           <div className="mt-2 flex gap-2">
             {Array.from({ length: step.ex.maxSets }, (_, i) => {
-              const isDone = done.has(`${current}:${i}`)
+              const isDone = done.has(`${safeCurrent}:${i}`)
               return (
                 <button
                   key={i}
@@ -152,7 +161,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       <div className="sticky bottom-0 mt-4 flex gap-2 bg-bg pt-2">
         <button
           onClick={() => setCurrent((c) => Math.max(0, c - 1))}
-          disabled={current === 0}
+          disabled={safeCurrent === 0}
           className="flex min-h-[52px] items-center justify-center rounded-2xl bg-surface px-4 font-semibold disabled:opacity-30"
         >
           <MdChevronLeft className="text-2xl" aria-hidden />
@@ -193,7 +202,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
                     setShowJump(false)
                   }}
                   className={`flex items-center justify-between rounded-xl px-3 py-3 text-left ${
-                    i === current ? 'bg-surface-2' : 'active:bg-surface-2'
+                    i === safeCurrent ? 'bg-surface-2' : 'active:bg-surface-2'
                   }`}
                 >
                   <span>
