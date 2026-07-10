@@ -1,6 +1,7 @@
 import type { BodyWeightEntry, WorkoutRow } from '../types'
 import type { Plan } from '../config/plan'
 import type { FlexEntry } from '../lib/flex'
+import type { CalorieEntry } from '../lib/calories'
 import { storage } from './storage'
 
 /**
@@ -64,4 +65,6 @@ export const api = {
   postFlex: (entry: FlexEntry) => post<{ saved: number }>('flexibility', entry),
   fetchPlan: () => get<Plan | null>('plan'),
   postPlan: (plan: Plan) => post<{ saved: number }>('plan', { plan }),
+  fetchCalories: (since?: string) => get<CalorieEntry[]>('calories', since ? { since } : {}),
+  postCalorie: (entry: CalorieEntry) => post<{ saved: number }>('calories', entry),
 }

@@ -46,7 +46,7 @@ const bodyWeights: BodyWeightEntry[] = [
   { date: '2026-01-01', weightLbs: 190 }, // excluded (too old)
 ]
 
-const streaks: StreakState = { activeStreak: 7, doubleStreak: 3, freezeCredits: 2 }
+const streaks: StreakState = { streak: 7, freezes: 2 }
 
 describe('buildSystemPrompt', () => {
   const prompt = buildSystemPrompt({ today, workouts, bodyWeights, streaks })
@@ -69,9 +69,8 @@ describe('buildSystemPrompt', () => {
   })
 
   it('includes the streak numbers', () => {
-    expect(prompt).toContain('7')
-    expect(prompt).toContain('3')
-    expect(prompt).toContain('2')
+    expect(prompt).toContain('Weekly-goal streak')
+    expect(prompt).toContain('freezes available: 2')
   })
 
   it('excludes workouts older than 90 days', () => {

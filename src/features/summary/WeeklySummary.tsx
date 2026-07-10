@@ -1,5 +1,6 @@
 import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
+import { caloriePR } from '../../lib/calories'
 import { MdEmojiEvents } from 'react-icons/md'
 
 /**
@@ -7,15 +8,16 @@ import { MdEmojiEvents } from 'react-icons/md'
  * new PRs, and body-weight trend. Self-contained — reads from `useData()`.
  */
 export function WeeklySummary() {
-  const { workouts, bodyWeights, flexEntries } = useData()
+  const { workouts, bodyWeights, flexEntries, calorieEntries } = useData()
   const summary = weeklySummary(
     workouts,
     bodyWeights,
     new Date(),
     flexEntries.map((f) => f.date),
   )
+  const calPR = caloriePR(calorieEntries)
 
-  const isEmpty = summary.workoutCount === 0 && summary.weightTrend === null
+  const isEmpty = summary.workoutCount === 0 && summary.weightTrend === null && !calPR
 
   return (
     <div className="rounded-2xl bg-surface p-4">
@@ -40,6 +42,13 @@ export function WeeklySummary() {
             </ul>
           ) : (
             <p className="text-sm text-neutral-500">No PRs yet this week</p>
+          )}
+
+          {calPR && (
+            <p className="text-sm text-accent-2">
+              <MdEmojiEvents className="inline align-text-bottom mr-1" aria-hidden />
+              Calories — {calPR.calories} cal (best bulk day!)
+            </p>
           )}
 
           {summary.weightTrend !== null && (

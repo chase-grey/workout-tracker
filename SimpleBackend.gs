@@ -34,6 +34,7 @@ const WORKOUT_HEADERS = [
 const BW_HEADERS = ['date', 'weight_lbs']
 const FLEX_HEADERS = ['date', 'angle_deg', 'note']
 const CONFIG_HEADERS = ['key', 'value']
+const CALORIE_HEADERS = ['date', 'calories', 'label']
 
 function doGet(e) {
   try {
@@ -44,6 +45,8 @@ function doGet(e) {
         return json(getBodyWeight(e.parameter.since))
       case 'flexibility':
         return json(getFlex(e.parameter.since))
+      case 'calories':
+        return json(getCalories(e.parameter.since))
       case 'plan':
         return json(getPlan())
       default:
@@ -65,6 +68,8 @@ function doPost(e) {
         return json(appendBodyWeight(body))
       case 'flexibility':
         return json(appendFlex(body))
+      case 'calories':
+        return json(appendCalories(body))
       case 'plan':
         return json(savePlan(body.plan))
       default:
@@ -216,6 +221,36 @@ function appendFlex(body) {
       saved++
     })
   return { saved: saved }
+}
+
+function getCalories(since) {
+  const sh = sheet('calories', CALORIE_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0]) continue
+    const date = isoDate(r[0])
+    if (since && date < since) continue
+    out.push({ date: date, calories: Number(r[1]) || 0, label: String(r[2] || '') })
+  }
+  return out
+}
+
+function appendCalories(body) {
+  const sh = sheet('calories', CALORIE_HEADERS)
+  const list = Array.isArray(body.entries) ? body.entries : [body]
+  const values = list
+    .filter(function (e) {
+      return e && e.date && isFinite(Number(e.calories))
+    })
+    .map(function (e) {
+      return [e.date, Number(e.calories), e.label || '']
+    })
+  if (values.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, values.length, CALORIE_HEADERS.length).setValues(values)
+  }
+  return { saved: values.length }
 }
 
 function getPlan() {

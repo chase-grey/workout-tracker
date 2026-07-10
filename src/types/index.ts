@@ -29,9 +29,10 @@ export type BodyWeightEntry = {
 }
 
 export type StreakState = {
-  activeStreak: number // weeks with >= 1 workout
-  doubleStreak: number // weeks with >= 2 workouts
-  freezeCredits: number
+  /** Consecutive weeks that hit the weekly goals (or were held with a freeze). */
+  streak: number
+  /** Streak-freeze credits available. */
+  freezes: number
 }
 
 /**

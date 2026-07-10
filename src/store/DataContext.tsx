@@ -5,11 +5,14 @@ import type { BodyWeightEntry, DayType, StreakState, WorkoutRow, WorkoutSession 
 import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { api } from '../services/api'
 import { sessionToRows } from '../lib/session'
-import { computeStreaks, isStreakAtRisk } from '../lib/streaks'
-import { toISODate } from '../lib/dates'
+import { toISODate, weekStartISO } from '../lib/dates'
 import { QUICK_LOG_KEY, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
+import { calorieHitDates, type CalorieEntry } from '../lib/calories'
+import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from '../lib/weeklyStreak'
+
+export type WeekProgress = { workouts: number; flex: number; calDays: number }
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
@@ -17,16 +20,19 @@ type DataContextValue = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
   flexEntries: FlexEntry[]
+  calorieEntries: CalorieEntry[]
   settings: Settings
   plan: Plan
   flexPlan: FlexBlock[]
   sync: SyncState
   pendingWrites: number
   streaks: StreakState
-  atRisk: boolean
+  weekProgress: WeekProgress
+  goals: WeeklyGoalConfig
   saveSession: (s: WorkoutSession) => Promise<void>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
   logFlex: (angleDeg: number | null, note?: string) => Promise<void>
+  logCalories: (calories: number, label?: string, date?: string) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
@@ -42,6 +48,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>(() => storage.loadWorkouts())
   const [bodyWeights, setBodyWeights] = useState<BodyWeightEntry[]>(() => storage.loadBodyWeights())
   const [flexEntries, setFlexEntries] = useState<FlexEntry[]>(() => storage.loadFlex())
+  const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(() => storage.loadCalories())
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [flexPlan, setFlexPlan] = useState<FlexBlock[]>(() => storage.loadFlexPlan())
@@ -59,6 +66,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const persistFlex = useCallback((e: FlexEntry[]) => {
     setFlexEntries(e)
     storage.saveFlex(e)
+  }, [])
+  const persistCalories = useCallback((e: CalorieEntry[]) => {
+    setCalorieEntries(e)
+    storage.saveCalories(e)
   }, [])
   const persistQueue = useCallback((q: QueuedWrite[]) => {
     setQueue(q)
@@ -78,6 +89,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (w.type === 'session') await api.postSession(w.rows)
         else if (w.type === 'bodyweight') await api.postBodyWeight(w.entry)
         else if (w.type === 'flex') await api.postFlex(w.entry)
+        else if (w.type === 'calorie') await api.postCalorie(w.entry)
         else if (w.type === 'plan') await api.postPlan(w.plan)
       } catch {
         remaining.push(w)
@@ -109,6 +121,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     try {
+      const c = await api.fetchCalories()
+      if (Array.isArray(c)) persistCalories(c)
+    } catch {
+      /* ignore */
+    }
+    try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
         setPlan(p)
@@ -117,7 +135,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [flush, persistWorkouts, persistWeights, persistFlex])
+  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories])
 
   // Initial sync + flush the queue whenever we come back online.
   useEffect(() => {
@@ -188,6 +206,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, persistFlex],
   )
 
+  const logCalories = useCallback(
+    async (calories: number, label?: string, date?: string) => {
+      const entry: CalorieEntry = { date: date ?? toISODate(new Date()), calories, label }
+      persistCalories([...storage.loadCalories(), entry])
+      try {
+        await api.postCalorie(entry)
+      } catch {
+        enqueue({ type: 'calorie', entry })
+      }
+    },
+    [enqueue, persistCalories],
+  )
+
   const quickLog = useCallback(
     async (dayType: DayType) => {
       const row: WorkoutRow = {
@@ -237,30 +268,47 @@ export function DataProvider({ children }: { children: ReactNode }) {
     storage.saveFlexPlan(r)
   }, [])
 
+  // Distinct workout-session dates (one per session_id).
+  const workoutDates = useMemo(() => {
+    const bySession = new Map<string, string>()
+    for (const r of workouts) if (r.session_id && !bySession.has(r.session_id)) bySession.set(r.session_id, r.date)
+    return [...bySession.values()]
+  }, [workouts])
   const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
+  const calHitDates = useMemo(() => calorieHitDates(calorieEntries), [calorieEntries])
+
   const streaks = useMemo(
-    () => computeStreaks(workouts, new Date(), flexDates),
-    [workouts, flexDates],
+    () => computeWeeklyStreak({ workoutDates, flexDates, calorieHitDates: calHitDates }),
+    [workoutDates, flexDates, calHitDates],
   )
-  const atRisk = useMemo(
-    () => isStreakAtRisk(workouts, new Date(), 5, flexDates),
-    [workouts, flexDates],
-  )
+
+  const weekProgress = useMemo<WeekProgress>(() => {
+    const wk = weekStartISO(toISODate(new Date()))
+    const inWeek = (d: string) => weekStartISO(d) === wk
+    return {
+      workouts: workoutDates.filter(inWeek).length,
+      flex: new Set(flexDates.filter(inWeek)).size,
+      calDays: calHitDates.filter(inWeek).length,
+    }
+  }, [workoutDates, flexDates, calHitDates])
 
   const value: DataContextValue = {
     workouts,
     bodyWeights,
     flexEntries,
+    calorieEntries,
     settings,
     plan,
     flexPlan,
     sync,
     pendingWrites: queue.length,
     streaks,
-    atRisk,
+    weekProgress,
+    goals: DEFAULT_WEEKLY_GOALS,
     saveSession,
     logBodyWeight,
     logFlex,
+    logCalories,
     quickLog,
     logProgressPhoto,
     importData,

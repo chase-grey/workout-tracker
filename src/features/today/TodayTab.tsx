@@ -3,7 +3,8 @@ import { useData } from '../../store/DataContext'
 import { useActiveSession } from './useActiveSession'
 import { ActiveSession } from './ActiveSession'
 import { WeightLogSheet } from './WeightLogSheet'
-import { StreakBar } from '../../components/StreakBar'
+import { HomeGoals } from './HomeGoals'
+import { CalorieLogger } from './CalorieLogger'
 import { Sparkline } from '../../components/Sparkline'
 import { WeeklySummary } from '../summary/WeeklySummary'
 import { StretchSession } from '../flex/StretchSession'
@@ -60,7 +61,7 @@ export function TodayTab() {
 
   return (
     <div className="flex flex-col gap-5 pb-24">
-      <StreakBar />
+      <HomeGoals />
 
       {photoDue && (
         <div className="rounded-2xl bg-accent/15 p-3">
@@ -153,6 +154,8 @@ export function TodayTab() {
           </button>
         </div>
       </div>
+
+      <CalorieLogger />
 
       <div className="rounded-2xl bg-surface p-4">
         <div className="flex items-center justify-between">

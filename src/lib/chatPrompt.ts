@@ -105,8 +105,7 @@ export function buildSystemPrompt(input: {
     renderBodyWeights(recentWeights),
     ``,
     `## Streaks`,
-    `Active streak (weeks with >=1 workout): ${streaks.activeStreak}`,
-    `Double streak (weeks with >=2 workouts): ${streaks.doubleStreak}`,
-    `Freeze credits: ${streaks.freezeCredits}`,
+    `Weekly-goal streak (weeks hitting 2 workouts + 2 flex + calories 6/7): ${streaks.streak}`,
+    `Streak freezes available: ${streaks.freezes}`,
   ].join('\n')
 }

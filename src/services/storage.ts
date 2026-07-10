@@ -2,6 +2,7 @@ import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
 import { DEFAULT_PLAN, type Plan } from '../config/plan'
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
+import type { CalorieEntry } from '../lib/calories'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -9,6 +10,7 @@ const KEYS = {
   cacheWorkouts: 'wt.cache.workouts',
   cacheBodyWeight: 'wt.cache.bodyweight',
   cacheFlex: 'wt.cache.flex',
+  cacheCalories: 'wt.cache.calories',
   queue: 'wt.queue',
   plan: 'wt.plan',
   flexPlan: 'wt.flexplan',
@@ -35,6 +37,7 @@ export type QueuedWrite =
   | { type: 'session'; rows: WorkoutRow[] }
   | { type: 'bodyweight'; entry: BodyWeightEntry }
   | { type: 'flex'; entry: FlexEntry }
+  | { type: 'calorie'; entry: CalorieEntry }
   | { type: 'plan'; plan: Plan }
 
 function read<T>(key: string, fallback: T): T {
@@ -70,6 +73,9 @@ export const storage = {
 
   loadFlex: (): FlexEntry[] => read(KEYS.cacheFlex, []),
   saveFlex: (entries: FlexEntry[]) => write(KEYS.cacheFlex, entries),
+
+  loadCalories: (): CalorieEntry[] => read(KEYS.cacheCalories, []),
+  saveCalories: (entries: CalorieEntry[]) => write(KEYS.cacheCalories, entries),
 
   loadQueue: (): QueuedWrite[] => read(KEYS.queue, []),
   saveQueue: (q: QueuedWrite[]) => write(KEYS.queue, q),

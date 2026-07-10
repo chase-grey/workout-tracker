@@ -1,0 +1,131 @@
+import { describe, it, expect } from 'vitest'
+import {
+  CALORIE_GOAL,
+  dayTotals,
+  totalForDate,
+  calorieHitDates,
+  caloriePR,
+  type CalorieEntry,
+} from './calories'
+
+// Fixed reference day: Friday 2026-07-10.
+// Its week (Mon–Sun) starts 2026-07-06; the prior week starts 2026-06-29.
+const TODAY = new Date(2026, 6, 10)
+const THIS_WEEK = '2026-07-08'
+const THIS_WEEK_2 = '2026-07-09'
+const PRIOR_WEEK = '2026-06-30'
+
+describe('dayTotals', () => {
+  it('sums multiple entries on the same date', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 1500 },
+      { date: '2026-07-08', calories: 2000 },
+      { date: '2026-07-09', calories: 1000 },
+    ]
+    const totals = dayTotals(entries)
+    expect(totals.get('2026-07-08')).toBe(3500)
+    expect(totals.get('2026-07-09')).toBe(1000)
+  })
+
+  it('ignores non-finite and negative calorie values', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 2000 },
+      { date: '2026-07-08', calories: -500 },
+      { date: '2026-07-08', calories: Number.NaN },
+      { date: '2026-07-08', calories: Number.POSITIVE_INFINITY },
+    ]
+    expect(dayTotals(entries).get('2026-07-08')).toBe(2000)
+  })
+})
+
+describe('totalForDate', () => {
+  it('returns the summed total for a date', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 1200 },
+      { date: '2026-07-08', calories: 900 },
+    ]
+    expect(totalForDate(entries, '2026-07-08')).toBe(2100)
+  })
+
+  it('returns 0 for a date with no entries', () => {
+    expect(totalForDate([], '2026-07-08')).toBe(0)
+  })
+})
+
+describe('calorieHitDates', () => {
+  it('returns only dates whose total meets or exceeds the goal, sorted ascending', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-09', calories: 4200 },
+      { date: '2026-07-07', calories: 3000 }, // under goal
+      { date: '2026-07-08', calories: 2000 },
+      { date: '2026-07-08', calories: 2000 }, // sums to 4000 -> exactly goal
+    ]
+    expect(calorieHitDates(entries)).toEqual(['2026-07-08', '2026-07-09'])
+  })
+
+  it('respects a custom goal', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 3000 },
+      { date: '2026-07-09', calories: 3500 },
+    ]
+    expect(calorieHitDates(entries, 3200)).toEqual(['2026-07-09'])
+  })
+})
+
+describe('caloriePR', () => {
+  it('returns the day when this week beats all prior days and is >= goal', () => {
+    const entries: CalorieEntry[] = [
+      { date: PRIOR_WEEK, calories: 4100 },
+      { date: THIS_WEEK, calories: 4500 },
+    ]
+    expect(caloriePR(entries, TODAY)).toEqual({ date: THIS_WEEK, calories: 4500 })
+  })
+
+  it('sums same-date entries for the PR day', () => {
+    const entries: CalorieEntry[] = [
+      { date: PRIOR_WEEK, calories: 3000 },
+      { date: THIS_WEEK, calories: 2500 },
+      { date: THIS_WEEK, calories: 2000 }, // total 4500
+    ]
+    expect(caloriePR(entries, TODAY)).toEqual({ date: THIS_WEEK, calories: 4500 })
+  })
+
+  it('prefers the latest date when this week has tied maxima', () => {
+    const entries: CalorieEntry[] = [
+      { date: THIS_WEEK, calories: 4200 },
+      { date: THIS_WEEK_2, calories: 4200 },
+    ]
+    expect(caloriePR(entries, TODAY)).toEqual({ date: THIS_WEEK_2, calories: 4200 })
+  })
+
+  it('returns null when this week does not beat a prior day', () => {
+    const entries: CalorieEntry[] = [
+      { date: PRIOR_WEEK, calories: 4800 },
+      { date: THIS_WEEK, calories: 4500 },
+    ]
+    expect(caloriePR(entries, TODAY)).toBeNull()
+  })
+
+  it('returns null when this week is under the goal', () => {
+    const entries: CalorieEntry[] = [
+      { date: PRIOR_WEEK, calories: 2000 },
+      { date: THIS_WEEK, calories: 3500 },
+    ]
+    expect(caloriePR(entries, TODAY)).toBeNull()
+  })
+
+  it('returns null when there is no prior data and this week is under goal', () => {
+    const entries: CalorieEntry[] = [{ date: THIS_WEEK, calories: 3500 }]
+    expect(caloriePR(entries, TODAY)).toBeNull()
+  })
+
+  it('returns the day when there is no prior data and this week is >= goal', () => {
+    const entries: CalorieEntry[] = [{ date: THIS_WEEK, calories: 4000 }]
+    expect(caloriePR(entries, TODAY)).toEqual({ date: THIS_WEEK, calories: 4000 })
+  })
+
+  it('uses CALORIE_GOAL as the default threshold', () => {
+    const entries: CalorieEntry[] = [{ date: THIS_WEEK, calories: CALORIE_GOAL }]
+    expect(caloriePR(entries, TODAY)).toEqual({ date: THIS_WEEK, calories: CALORIE_GOAL })
+  })
+})
