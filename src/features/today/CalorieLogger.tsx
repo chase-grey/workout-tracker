@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MdCheckCircle } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { CALORIE_GOAL, totalForDate } from '../../lib/calories'
+import { CALORIE_GOAL, caloriePaceFraction, totalForDate } from '../../lib/calories'
 import { mondayOf, toISODate } from '../../lib/dates'
 
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
@@ -23,6 +23,12 @@ export function CalorieLogger() {
   const pct = Math.min(selTotal / CALORIE_GOAL, 1) * 100
   const selLabel = selDate === today ? 'today' : `${selDate.slice(5)}`
 
+  // Pace marker: where you should be eating constantly across the 9am–9pm window.
+  const isToday = selDate === today
+  const pace = isToday ? caloriePaceFraction(new Date()) : null
+  const paceCal = pace != null ? Math.round(CALORIE_GOAL * pace) : null
+  const behind = paceCal != null && selTotal < paceCal ? paceCal - selTotal : 0
+
   const add = (cal: number, label: string) => {
     if (cal <= 0) return
     void logCalories(cal, label, selDate)
@@ -42,9 +48,23 @@ export function CalorieLogger() {
           / {CALORIE_GOAL}
         </p>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2">
-        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+      <div className="relative mt-2">
+        <div className="h-2.5 overflow-hidden rounded-full bg-surface-2">
+          <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+        </div>
+        {pace != null && pace > 0 && pace < 1 && (
+          <div
+            className="absolute -top-0.5 h-3.5 w-0.5 -translate-x-1/2 rounded bg-white"
+            style={{ left: `${pace * 100}%` }}
+            title="on-pace target for now"
+          />
+        )}
       </div>
+      {isToday && selTotal < CALORIE_GOAL && paceCal != null && paceCal > 0 && (
+        <p className={`mt-1 text-xs ${behind > 0 ? 'text-amber-400' : 'text-accent-2'}`}>
+          {behind > 0 ? `Behind pace by ${behind} cal` : 'On pace for today'}
+        </p>
+      )}
 
       {/* Mon–Sun week: tap a day to view/verify/backfill it. */}
       <div className="mt-3 flex gap-1">

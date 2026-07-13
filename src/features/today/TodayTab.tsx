@@ -9,10 +9,11 @@ import { StretchSession } from '../flex/StretchSession'
 import { storage } from '../../services/storage'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
+import { toISODate } from '../../lib/dates'
 import { MdPhotoCamera } from 'react-icons/md'
 
 export function TodayTab() {
-  const { saveSession, quickLog, logFlex, logProgressPhoto, settings, workouts, bodyWeights } =
+  const { saveSession, quickLog, logFlex, logProgressPhoto, updateSettings, settings, workouts, bodyWeights } =
     useData()
   const controls = useActiveSession()
   const [flash, setFlash] = useState<string | null>(null)
@@ -49,7 +50,15 @@ export function TodayTab() {
       .sort()
       .at(-1) ?? null
   const reminder = photoReminder({ lastPhoto, bodyWeights, workouts })
-  const photoDue = !photoDismissed && reminder.due
+  const snoozed = !!settings.photoSnoozeUntil && toISODate(new Date()) < settings.photoSnoozeUntil
+  const photoDue = !photoDismissed && !snoozed && reminder.due
+
+  const snoozePhotoAWeek = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    updateSettings({ ...settings, photoSnoozeUntil: toISODate(d) })
+    setPhotoDismissed(true)
+  }
 
   const flashMsg = (m: string) => {
     setFlash(m)
@@ -77,7 +86,7 @@ export function TodayTab() {
               I took it
             </button>
             <button
-              onClick={() => setPhotoDismissed(true)}
+              onClick={snoozePhotoAWeek}
               className="min-h-[40px] rounded-xl bg-surface px-3 text-sm text-neutral-400"
             >
               Later

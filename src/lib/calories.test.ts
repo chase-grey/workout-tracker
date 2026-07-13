@@ -1,12 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import {
   CALORIE_GOAL,
+  caloriePaceFraction,
   dayTotals,
   totalForDate,
   calorieHitDates,
   caloriePR,
   type CalorieEntry,
 } from './calories'
+
+describe('caloriePaceFraction', () => {
+  it('is 0 before the window and 1 after', () => {
+    expect(caloriePaceFraction(new Date(2026, 6, 13, 8, 0))).toBe(0)
+    expect(caloriePaceFraction(new Date(2026, 6, 13, 22, 0))).toBe(1)
+  })
+  it('is ~half at 3pm (midpoint of 9am–9pm)', () => {
+    expect(caloriePaceFraction(new Date(2026, 6, 13, 15, 0))).toBeCloseTo(0.5, 5)
+  })
+})
 
 // Fixed reference day: Friday 2026-07-10.
 // Its week (Mon–Sun) starts 2026-07-06; the prior week starts 2026-06-29.

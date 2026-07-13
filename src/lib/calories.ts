@@ -4,6 +4,21 @@ export type CalorieEntry = { date: string /* YYYY-MM-DD */; calories: number; la
 
 export const CALORIE_GOAL = 4000
 
+/** Eating window (hours) used to pace calories through the day. */
+export const EAT_START_HOUR = 9
+export const EAT_END_HOUR = 21
+
+/**
+ * Fraction of the eating window (default 9am–9pm) elapsed at `now`, clamped to
+ * 0..1. Multiply by the goal to get where you "should" be to finish on time.
+ */
+export function caloriePaceFraction(now: Date = new Date(), startHour = EAT_START_HOUR, endHour = EAT_END_HOUR): number {
+  const h = now.getHours() + now.getMinutes() / 60
+  if (h <= startHour) return 0
+  if (h >= endHour) return 1
+  return (h - startHour) / (endHour - startHour)
+}
+
 /** True when a calorie value is usable (finite and non-negative). */
 function isValidCalories(calories: number): boolean {
   return Number.isFinite(calories) && calories >= 0

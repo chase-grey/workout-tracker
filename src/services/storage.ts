@@ -29,6 +29,8 @@ export type Settings = {
   openAiModel?: string
   /** ISO date of the last progress photo the user logged (for reminders). */
   lastProgressPhoto?: string
+  /** ISO date before which the progress-photo reminder stays hidden ("Later"). */
+  photoSnoozeUntil?: string
 }
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }
