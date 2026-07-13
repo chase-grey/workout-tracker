@@ -1,17 +1,16 @@
 import { useState } from 'react'
 import { MdCheckCircle } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { CALORIE_PRESETS } from '../../config/calories'
 import { CALORIE_GOAL, totalForDate } from '../../lib/calories'
 import { mondayOf, toISODate } from '../../lib/dates'
 
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+const QUICK_ADDS = [100, 500, 1000]
 
 export function CalorieLogger() {
   const { calorieEntries, logCalories } = useData()
   const today = toISODate(new Date())
   const [selDate, setSelDate] = useState(today)
-  const [custom, setCustom] = useState('')
   const [flash, setFlash] = useState<string | null>(null)
 
   const monday = mondayOf(new Date())
@@ -33,12 +32,6 @@ export function CalorieLogger() {
     if (cal <= 0) return
     void logCalories(cal, label, selDate)
     flashMsg(`+${cal} cal → ${selLabel}`)
-  }
-  const addCustom = () => {
-    const n = Number(custom)
-    if (!Number.isFinite(n) || n <= 0) return
-    add(Math.round(n), 'Custom')
-    setCustom('')
   }
   const topUp = () => add(Math.max(0, CALORIE_GOAL - selTotal), 'Top up to goal')
 
@@ -85,35 +78,16 @@ export function CalorieLogger() {
         })}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {CALORIE_PRESETS.map((p) => (
+      <div className="mt-3 flex gap-2">
+        {QUICK_ADDS.map((cal) => (
           <button
-            key={p.label}
-            onClick={() => add(p.calories, p.label)}
-            className="min-h-[44px] flex-1 rounded-xl bg-surface-2 px-2 text-sm font-medium active:opacity-80"
+            key={cal}
+            onClick={() => add(cal, `+${cal}`)}
+            className="min-h-[48px] flex-1 rounded-xl bg-surface-2 text-base font-semibold active:opacity-80"
           >
-            {p.label}
-            <span className="block text-xs text-neutral-500">{p.calories} cal</span>
+            +{cal}
           </button>
         ))}
-      </div>
-
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          type="number"
-          inputMode="numeric"
-          placeholder="custom cal"
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          className="min-h-[44px] w-0 flex-1 rounded-xl bg-surface-2 px-3 text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-        <button
-          onClick={addCustom}
-          disabled={!custom.trim()}
-          className="min-h-[44px] rounded-xl bg-accent px-4 font-semibold text-black disabled:opacity-30"
-        >
-          Add
-        </button>
       </div>
 
       {selTotal < CALORIE_GOAL && (
