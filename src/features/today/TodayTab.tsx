@@ -8,9 +8,10 @@ import { WeeklySummary } from '../summary/WeeklySummary'
 import { StretchSession } from '../flex/StretchSession'
 import { parseISODate } from '../../lib/dates'
 import { storage } from '../../services/storage'
+import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { MdPhotoCamera } from 'react-icons/md'
 
-const PHOTO_CADENCE_DAYS = 14
+const PHOTO_CADENCE_DAYS = 21
 
 export function TodayTab() {
   const { saveSession, quickLog, logFlex, logProgressPhoto, settings } = useData()
@@ -43,10 +44,14 @@ export function TodayTab() {
     )
   }
 
-  const last = settings.lastProgressPhoto
-  const photoDue =
-    !photoDismissed &&
-    (!last || (Date.now() - parseISODate(last).getTime()) / 86400000 >= PHOTO_CADENCE_DAYS)
+  const lastPhoto = [settings.lastProgressPhoto, ...PROGRESS_PHOTO_HISTORY]
+    .filter((d): d is string => !!d)
+    .sort()
+    .at(-1)
+  const daysSincePhoto = lastPhoto
+    ? Math.floor((Date.now() - parseISODate(lastPhoto).getTime()) / 86400000)
+    : Infinity
+  const photoDue = !photoDismissed && daysSincePhoto >= PHOTO_CADENCE_DAYS
 
   const flashMsg = (m: string) => {
     setFlash(m)
@@ -61,7 +66,7 @@ export function TodayTab() {
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
             <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
-            Progress-photo time — you should be able to see changes by now.
+            Progress-photo time — last one was {Number.isFinite(daysSincePhoto) ? `${daysSincePhoto} days ago` : 'a while ago'}.
           </p>
           <div className="mt-2 flex gap-2">
             <button
