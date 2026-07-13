@@ -32,7 +32,7 @@ const WORKOUT_HEADERS = [
   'is_historical',
 ]
 const BW_HEADERS = ['date', 'weight_lbs']
-const FLEX_HEADERS = ['date', 'angle_deg', 'note']
+const FLEX_HEADERS = ['date', 'split_deg', 'tailors_left_deg', 'tailors_right_deg', 'note']
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label']
 
@@ -171,8 +171,39 @@ function appendBodyWeight(body) {
 
 /* ------------------------------------------------------- flexibility + plan */
 
+// Ensure the flexibility sheet uses the multi-angle schema, migrating the old
+// [date, angle_deg, note] layout in place (old angle_deg -> split_deg).
+function flexSheet() {
+  let sh = ss.getSheetByName('flexibility')
+  if (!sh) {
+    sh = ss.insertSheet('flexibility')
+    sh.getRange(1, 1, 1, FLEX_HEADERS.length).setValues([FLEX_HEADERS])
+    return sh
+  }
+  const header = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0]
+  if (header[1] === 'angle_deg') {
+    const data = sh.getDataRange().getValues()
+    const migrated = [FLEX_HEADERS]
+    for (let i = 1; i < data.length; i++) {
+      const r = data[i]
+      if (!r[0]) continue
+      migrated.push([r[0], r[1], '', '', r[2] || '']) // date, split_deg, tl, tr, note
+    }
+    sh.clearContents()
+    sh.getRange(1, 1, migrated.length, FLEX_HEADERS.length).setValues(migrated)
+  }
+  return sh
+}
+
+function numOrBlank(v) {
+  return v === null || v === undefined || v === '' ? '' : Number(v)
+}
+function numOrNull(v) {
+  return v === '' || v === null || v === undefined ? null : Number(v)
+}
+
 function getFlex(since) {
-  const sh = sheet('flexibility', FLEX_HEADERS)
+  const sh = flexSheet()
   const rows = sh.getDataRange().getValues()
   const out = []
   for (let i = 1; i < rows.length; i++) {
@@ -182,19 +213,20 @@ function getFlex(since) {
     if (since && date < since) continue
     out.push({
       date: date,
-      angleDeg: r[1] === '' || r[1] === null ? null : Number(r[1]),
-      note: String(r[2] || ''),
+      splitDeg: numOrNull(r[1]),
+      tailorsLeftDeg: numOrNull(r[2]),
+      tailorsRightDeg: numOrNull(r[3]),
+      note: String(r[4] || ''),
     })
   }
   return out
 }
 
 function appendFlex(body) {
-  const sh = sheet('flexibility', FLEX_HEADERS)
+  const sh = flexSheet()
   const list = Array.isArray(body.entries) ? body.entries : [body]
   const rows = sh.getDataRange().getValues()
 
-  // Map existing date -> sheet row number (1-based) for upsert (one row per day).
   const rowByDate = {}
   for (let i = 1; i < rows.length; i++) {
     const d = isoDate(rows[i][0])
@@ -207,15 +239,23 @@ function appendFlex(body) {
       return e && e.date
     })
     .forEach(function (e) {
-      const angle =
-        e.angleDeg === null || e.angleDeg === undefined || e.angleDeg === '' ? '' : Number(e.angleDeg)
       const existingRow = rowByDate[e.date]
       if (existingRow) {
-        // Don't clobber a measured angle with a blank stretch-session marker.
-        const keepAngle = angle === '' ? sh.getRange(existingRow, 2).getValue() : angle
-        sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).setValues([[e.date, keepAngle, e.note || '']])
+        // Merge: incoming non-null angle fields overwrite; nulls keep existing.
+        const cur = sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).getValues()[0]
+        const split = e.splitDeg == null ? cur[1] : Number(e.splitDeg)
+        const tl = e.tailorsLeftDeg == null ? cur[2] : Number(e.tailorsLeftDeg)
+        const tr = e.tailorsRightDeg == null ? cur[3] : Number(e.tailorsRightDeg)
+        const note = e.note ? e.note : cur[4] || ''
+        sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).setValues([[e.date, split, tl, tr, note]])
       } else {
-        sh.appendRow([e.date, angle, e.note || ''])
+        sh.appendRow([
+          e.date,
+          numOrBlank(e.splitDeg),
+          numOrBlank(e.tailorsLeftDeg),
+          numOrBlank(e.tailorsRightDeg),
+          e.note || '',
+        ])
         rowByDate[e.date] = sh.getLastRow()
       }
       saved++

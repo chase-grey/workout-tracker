@@ -4,6 +4,7 @@ import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu } from '../../components/KebabMenu'
+import { MeasureSheet } from './MeasureSheet'
 import { estimateSecs, formatDuration } from '../../lib/estimate'
 import { buildFlexSteps } from '../../lib/flexSteps'
 import { storage } from '../../services/storage'
@@ -17,6 +18,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState<Set<string>>(() => new Set(storage.loadStretch()?.done ?? []))
   const [rest, setRest] = useState<number | null>(null)
   const [showList, setShowList] = useState(false)
+  const [showMeasure, setShowMeasure] = useState(false)
 
   const steps = useMemo(() => buildFlexSteps(flexPlan), [flexPlan])
   const N = steps.length
@@ -60,7 +62,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const completeSetAndAdvance = () => {
     setDone((prev) => new Set(prev).add(step.stepKey))
     if (atLast) {
-      void logFlex(null, 'Stretch routine')
+      void logFlex({ note: 'Stretch routine' })
       onClose()
     } else {
       setRest(step.restSec)
@@ -79,11 +81,12 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         </div>
         <KebabMenu
           items={[
+            { label: 'Log measurement', onClick: () => setShowMeasure(true) },
             { label: 'Routine checklist', onClick: () => setShowList(true) },
             {
               label: 'Finish & log session',
               onClick: () => {
-                void logFlex(null, 'Stretch routine')
+                void logFlex({ note: 'Stretch routine' })
                 onClose()
               },
             },
@@ -117,6 +120,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       </button>
 
       {rest != null && <RestTimer seconds={rest} onClose={() => setRest(null)} />}
+      {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
 
       {showList && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={() => setShowList(false)}>

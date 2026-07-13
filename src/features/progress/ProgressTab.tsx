@@ -13,6 +13,7 @@ import { useData } from '../../store/DataContext'
 import { availableExercises, exerciseSeries, filterRange, type Metric, type Point } from '../../lib/progress'
 import { GoalsPanel } from './GoalsPanel'
 import { FlexProgress } from '../flex/FlexProgress'
+import { WeightLogSheet } from '../today/WeightLogSheet'
 
 const BENCH_COMBO = '__bench__'
 
@@ -118,6 +119,9 @@ export function ProgressTab() {
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [months, setMonths] = useState<number | null>(3)
+  const [showWeight, setShowWeight] = useState(false)
+
+  const latestWeight = bodyWeights.filter((b) => b.weightLbs >= 50).slice(-1)[0]
 
   const exerciseOptions = useMemo(
     () => [{ key: BENCH_COMBO, name: 'Bench press (flat + incline)' }, ...availableExercises(workouts)],
@@ -154,7 +158,17 @@ export function ProgressTab() {
 
       <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />
 
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Body weight</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
+          Body weight{latestWeight ? ` · ${latestWeight.weightLbs} lbs` : ''}
+        </h3>
+        <button
+          onClick={() => setShowWeight(true)}
+          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
+        >
+          Log weight
+        </button>
+      </div>
       <Chart data={weightSeries} unit="lbs" />
 
       <GoalsPanel />
@@ -175,6 +189,8 @@ export function ProgressTab() {
       {exercise === BENCH_COMBO ? <BenchChart data={benchSeries} unit={unit} /> : <Chart data={series} unit={unit} />}
 
       <FlexProgress />
+
+      {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
     </div>
   )
 }

@@ -14,6 +14,14 @@ import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
 
+/** A flexibility log: a stretch-session marker (angles omitted) and/or measurements. */
+export type FlexMeasurement = {
+  splitDeg?: number | null
+  tailorsLeftDeg?: number | null
+  tailorsRightDeg?: number | null
+  note?: string
+}
+
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
 type DataContextValue = {
@@ -31,7 +39,7 @@ type DataContextValue = {
   goals: WeeklyGoalConfig
   saveSession: (s: WorkoutSession) => Promise<void>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
-  logFlex: (angleDeg: number | null, note?: string) => Promise<void>
+  logFlex: (measurement: FlexMeasurement) => Promise<void>
   logCalories: (calories: number, label?: string, date?: string) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
   logProgressPhoto: () => void
@@ -194,8 +202,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const logFlex = useCallback(
-    async (angleDeg: number | null, note?: string) => {
-      const entry: FlexEntry = { date: toISODate(new Date()), angleDeg, note }
+    async (m: FlexMeasurement) => {
+      const entry: FlexEntry = {
+        date: toISODate(new Date()),
+        splitDeg: m.splitDeg ?? null,
+        tailorsLeftDeg: m.tailorsLeftDeg ?? null,
+        tailorsRightDeg: m.tailorsRightDeg ?? null,
+        note: m.note,
+      }
       persistFlex(dedupeFlexByDate([...storage.loadFlex(), entry]))
       try {
         await api.postFlex(entry)

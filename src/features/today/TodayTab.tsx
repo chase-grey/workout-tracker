@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { useActiveSession } from './useActiveSession'
 import { ActiveSession } from './ActiveSession'
-import { WeightLogSheet } from './WeightLogSheet'
 import { HomeGoals } from './HomeGoals'
 import { CalorieLogger } from './CalorieLogger'
-import { Sparkline } from '../../components/Sparkline'
 import { WeeklySummary } from '../summary/WeeklySummary'
 import { StretchSession } from '../flex/StretchSession'
 import { parseISODate } from '../../lib/dates'
@@ -15,9 +13,8 @@ import { MdPhotoCamera } from 'react-icons/md'
 const PHOTO_CADENCE_DAYS = 14
 
 export function TodayTab() {
-  const { bodyWeights, saveSession, quickLog, logFlex, logProgressPhoto, settings } = useData()
+  const { saveSession, quickLog, logFlex, logProgressPhoto, settings } = useData()
   const controls = useActiveSession()
-  const [showWeight, setShowWeight] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
   const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
@@ -45,9 +42,6 @@ export function TodayTab() {
       />
     )
   }
-
-  const recent = bodyWeights.slice(-7)
-  const latest = recent[recent.length - 1]
 
   const last = settings.lastProgressPhoto
   const photoDue =
@@ -145,7 +139,7 @@ export function TodayTab() {
           </button>
           <button
             onClick={() => {
-              void logFlex(null, 'Stretch session (quick log)')
+              void logFlex({ note: 'Stretch session (quick log)' })
               flashMsg('Stretch logged ✓')
             }}
             className="min-h-[48px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
@@ -157,27 +151,7 @@ export function TodayTab() {
 
       <CalorieLogger />
 
-      <div className="rounded-2xl bg-surface p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-neutral-500">Body weight</p>
-            <p className="text-2xl font-bold tabular-nums">
-              {latest ? `${latest.weightLbs} lbs` : '—'}
-            </p>
-          </div>
-          <Sparkline values={recent.map((r) => r.weightLbs)} />
-        </div>
-        <button
-          onClick={() => setShowWeight(true)}
-          className="mt-3 min-h-[44px] w-full rounded-xl bg-surface-2 font-medium active:opacity-80"
-        >
-          Log weight
-        </button>
-      </div>
-
       <WeeklySummary />
-
-      {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
     </div>
   )
 }

@@ -1,122 +1,122 @@
-import { toISODate, parseISODate, weekStartISO } from './dates'
+import { weekStartISO, toISODate } from './dates'
 
-/** A single side-splits flexibility log entry. */
+/** A single flexibility log entry, tracking multiple stretch angles. */
 export type FlexEntry = {
   date: string /* YYYY-MM-DD */
-  angleDeg: number | null
+  splitDeg: number | null /* side-split angle */
+  tailorsLeftDeg: number | null /* tailor's pose, left */
+  tailorsRightDeg: number | null /* tailor's pose, right */
   note?: string
 }
 
+/** The angle fields carried by a FlexEntry. */
+const ANGLE_FIELDS = ['splitDeg', 'tailorsLeftDeg', 'tailorsRightDeg'] as const
+type AngleField = (typeof ANGLE_FIELDS)[number]
+
 /**
- * Collapse to at most one entry per date (only one stretch session per day).
- * When a date has multiple, prefer one with a measured angle, else the last seen.
+ * Collapse to one merged entry per date. For each angle field, keep the latest
+ * non-null value seen for that date; keep the latest non-empty note. A date's
+ * entries are merged in input order, so later entries win. Sorted ascending by
+ * date.
  */
 export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
   const byDate = new Map<string, FlexEntry>()
   for (const e of entries) {
     const prev = byDate.get(e.date)
-    if (!prev || e.angleDeg != null || prev.angleDeg == null) byDate.set(e.date, e)
+    if (!prev) {
+      byDate.set(e.date, {
+        date: e.date,
+        splitDeg: e.splitDeg,
+        tailorsLeftDeg: e.tailorsLeftDeg,
+        tailorsRightDeg: e.tailorsRightDeg,
+        ...(e.note != null && e.note !== '' ? { note: e.note } : {}),
+      })
+      continue
+    }
+    for (const f of ANGLE_FIELDS) {
+      if (e[f] != null) prev[f] = e[f]
+    }
+    if (e.note != null && e.note !== '') prev.note = e.note
   }
   return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
+export type MetricStats = { latest: number | null; best: number | null }
+
 export type FlexStats = {
-  sessionsThisWeek: number // entries whose date is in the current Mon–Sun week
-  weeklyGoal: number // default 2
-  latestAngle: number | null // most recent entry that has a non-null angle
-  bestAngle: number | null // max non-null angle ever
-  goalDeg: number // default 180
-  slopePerWeek: number // least-squares slope of angle vs weeks
-  etaWeeks: number | null // weeks to reach goalDeg at current pace; null if not improving
-  etaDate: string | null // ISO; null if etaWeeks null
+  sessionsThisWeek: number /* distinct dates with an entry in the current Mon–Sun week */
+  weeklyGoal: number /* default 2 */
+  split: MetricStats
+  tailorsLeft: MetricStats
+  tailorsRight: MetricStats
 }
 
-const MS_PER_WEEK = 7 * 86400000
-
-function round3(n: number): number {
-  return Math.round(n * 1000) / 1000
+/** latest = value from the newest-dated entry with a non-null value; best = max non-null value. */
+function metricStats(entries: FlexEntry[], field: AngleField): MetricStats {
+  let latest: number | null = null
+  let latestDate: string | null = null
+  let best: number | null = null
+  for (const e of entries) {
+    const v = e[field]
+    if (v == null) continue
+    if (best == null || v > best) best = v
+    if (latestDate === null || e.date > latestDate) {
+      latestDate = e.date
+      latest = v
+    }
+  }
+  return { latest, best }
 }
 
 export function flexStats(
   entries: FlexEntry[],
   today: Date = new Date(),
-  opts?: { goalDeg?: number; weeklyGoal?: number },
+  opts?: { weeklyGoal?: number },
 ): FlexStats {
-  const goalDeg = opts?.goalDeg ?? 180
   const weeklyGoal = opts?.weeklyGoal ?? 2
+  const thisWeek = weekStartISO(toISODate(today))
 
-  const todayISO = toISODate(today)
-  const thisWeek = weekStartISO(todayISO)
-
-  // Sessions logged in the current Monday–Sunday week (angle optional).
-  const sessionsThisWeek = entries.filter(
-    (e) => weekStartISO(e.date) === thisWeek,
-  ).length
-
-  // Entries that carry an actual measurement.
-  const measured = entries.filter(
-    (e): e is FlexEntry & { angleDeg: number } => e.angleDeg != null,
-  )
-
-  // Best (max) angle ever recorded.
-  const bestAngle = measured.length
-    ? Math.max(...measured.map((e) => e.angleDeg))
-    : null
-
-  // Latest angle = the measured entry with the greatest date.
-  let latestAngle: number | null = null
-  let latestDate: string | null = null
-  for (const e of measured) {
-    if (latestDate === null || e.date > latestDate) {
-      latestDate = e.date
-      latestAngle = e.angleDeg
-    }
-  }
-
-  // Least-squares slope of angle (y) vs weeks-since-first-measurement (x).
-  let slopePerWeek = 0
-  if (measured.length >= 2) {
-    const firstDate = measured.reduce(
-      (min, e) => (e.date < min ? e.date : min),
-      measured[0].date,
-    )
-    const x0 = parseISODate(firstDate).getTime()
-    const pts = measured.map((e) => ({
-      x: (parseISODate(e.date).getTime() - x0) / MS_PER_WEEK,
-      y: e.angleDeg,
-    }))
-    const n = pts.length
-    const sumX = pts.reduce((s, p) => s + p.x, 0)
-    const sumY = pts.reduce((s, p) => s + p.y, 0)
-    const sumXY = pts.reduce((s, p) => s + p.x * p.y, 0)
-    const sumXX = pts.reduce((s, p) => s + p.x * p.x, 0)
-    const denom = n * sumXX - sumX * sumX
-    if (denom !== 0) {
-      slopePerWeek = round3((n * sumXY - sumX * sumY) / denom)
-    }
-  }
-
-  // ETA to goal.
-  let etaWeeks: number | null = null
-  let etaDate: string | null = null
-  if (latestAngle != null && latestAngle >= goalDeg) {
-    etaWeeks = 0
-    etaDate = todayISO
-  } else if (slopePerWeek > 0 && latestAngle != null) {
-    etaWeeks = (goalDeg - latestAngle) / slopePerWeek
-    const eta = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    eta.setDate(eta.getDate() + Math.round(etaWeeks * 7))
-    etaDate = toISODate(eta)
+  const inWeekDates = new Set<string>()
+  for (const e of entries) {
+    if (weekStartISO(e.date) === thisWeek) inWeekDates.add(e.date)
   }
 
   return {
-    sessionsThisWeek,
+    sessionsThisWeek: inWeekDates.size,
     weeklyGoal,
-    latestAngle,
-    bestAngle,
-    goalDeg,
-    slopePerWeek,
-    etaWeeks,
-    etaDate,
+    split: metricStats(entries, 'splitDeg'),
+    tailorsLeft: metricStats(entries, 'tailorsLeftDeg'),
+    tailorsRight: metricStats(entries, 'tailorsRightDeg'),
   }
+}
+
+/** Non-null splitDeg values as {date, value}, sorted ascending by date. */
+export function splitSeries(
+  entries: FlexEntry[],
+): { date: string; value: number }[] {
+  return entries
+    .filter((e): e is FlexEntry & { splitDeg: number } => e.splitDeg != null)
+    .map((e) => ({ date: e.date, value: e.splitDeg }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
+ * For each entry with at least one tailor's value, the average of the available
+ * left/right values. Sorted ascending by date.
+ */
+export function tailorsAvgSeries(
+  entries: FlexEntry[],
+): { date: string; value: number }[] {
+  const out: { date: string; value: number }[] = []
+  for (const e of entries) {
+    const vals: number[] = []
+    if (e.tailorsLeftDeg != null) vals.push(e.tailorsLeftDeg)
+    if (e.tailorsRightDeg != null) vals.push(e.tailorsRightDeg)
+    if (vals.length === 0) continue
+    out.push({
+      date: e.date,
+      value: vals.reduce((s, v) => s + v, 0) / vals.length,
+    })
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
 }
