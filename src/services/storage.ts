@@ -16,6 +16,7 @@ const KEYS = {
   flexPlan: 'wt.flexplan',
   activeStep: 'wt.activeStep',
   stretch: 'wt.stretch',
+  lastSync: 'wt.lastSync',
 } as const
 
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
@@ -76,6 +77,9 @@ export const storage = {
 
   loadCalories: (): CalorieEntry[] => read(KEYS.cacheCalories, []),
   saveCalories: (entries: CalorieEntry[]) => write(KEYS.cacheCalories, entries),
+
+  loadLastSync: (): string | null => read(KEYS.lastSync, null),
+  saveLastSync: (iso: string) => write(KEYS.lastSync, iso),
 
   loadQueue: (): QueuedWrite[] => read(KEYS.queue, []),
   saveQueue: (q: QueuedWrite[]) => write(KEYS.queue, q),

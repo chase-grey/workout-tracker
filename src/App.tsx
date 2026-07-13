@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DataProvider } from './store/DataContext'
 import { BottomNav, type Tab } from './components/BottomNav'
+import { ToastHost } from './components/ToastHost'
 import { TodayTab } from './features/today/TodayTab'
 import { ProgressTab } from './features/progress/ProgressTab'
 import { ChatTab } from './features/chat/ChatTab'
@@ -15,12 +16,19 @@ const CHAT_ENABLED = import.meta.env.DEV || !isTouchDevice
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
+  const mainRef = useRef<HTMLElement>(null)
+
+  // Scroll back to the top when switching tabs.
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 })
+  }, [tab])
 
   return (
     <DataProvider>
-      <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col">
+      <div className="mx-auto flex h-[100dvh] max-w-md flex-col">
         <main
-          className="flex-1 overflow-y-auto px-4 pb-6"
+          ref={mainRef}
+          className="flex-1 overflow-y-auto px-4 pb-4"
           style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top))' }}
         >
           {tab === 'today' && <TodayTab />}
@@ -30,6 +38,7 @@ export default function App() {
         </main>
         <BottomNav active={tab} onChange={setTab} showChat={CHAT_ENABLED} />
       </div>
+      <ToastHost />
     </DataProvider>
   )
 }

@@ -16,7 +16,7 @@ const SYNC_LABEL: Record<string, string> = {
 }
 
 export function SettingsTab() {
-  const { settings, updateSettings, refresh, sync, pendingWrites, workouts } = useData()
+  const { settings, updateSettings, refresh, sync, lastSync, pendingWrites, workouts } = useData()
   const [apiUrl, setApiUrl] = useState(settings.apiUrl)
   const [saved, setSaved] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -39,7 +39,7 @@ export function SettingsTab() {
   }
 
   return (
-    <div className="flex flex-col gap-6 pb-24">
+    <div className="flex flex-col gap-6 pb-4">
       <h2 className="text-xl font-bold">Settings</h2>
 
       <section className="flex flex-col gap-2">
@@ -59,6 +59,9 @@ export function SettingsTab() {
         <p className="text-xs text-neutral-500">
           Status: {SYNC_LABEL[sync] ?? sync}
           {pendingWrites > 0 && ` · ${pendingWrites} write${pendingWrites === 1 ? '' : 's'} queued`}
+        </p>
+        <p className="text-xs text-neutral-500">
+          Last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
         </p>
       </section>
 

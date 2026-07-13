@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow, WorkoutSession } from '../types'
@@ -24,6 +24,8 @@ export type FlexMeasurement = {
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
+export type Toast = { msg: string; ok: boolean }
+
 type DataContextValue = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
@@ -33,6 +35,8 @@ type DataContextValue = {
   plan: Plan
   flexPlan: FlexBlock[]
   sync: SyncState
+  lastSync: string | null
+  toast: Toast | null
   pendingWrites: number
   streaks: StreakState
   weekProgress: WeekProgress
@@ -62,6 +66,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [flexPlan, setFlexPlan] = useState<FlexBlock[]>(() => storage.loadFlexPlan())
   const [queue, setQueue] = useState<QueuedWrite[]>(() => storage.loadQueue())
   const [sync, setSync] = useState<SyncState>('idle')
+  const [lastSync, setLastSync] = useState<string | null>(() => storage.loadLastSync())
+  const [toast, setToast] = useState<Toast | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const notify = useCallback((msg: string, ok: boolean) => {
+    setToast({ msg, ok })
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2600)
+  }, [])
 
   const persistWorkouts = useCallback((rows: WorkoutRow[]) => {
     setWorkouts(rows)
@@ -118,6 +131,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistWorkouts(w)
       persistWeights(bw)
       setSync('idle')
+      const now = new Date().toISOString()
+      setLastSync(now)
+      storage.saveLastSync(now)
     } catch {
       setSync('error')
     }
@@ -159,11 +175,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistWorkouts([...storage.loadWorkouts(), ...rows]) // optimistic
       try {
         await api.postSession(rows)
+        notify('Workout saved', true)
       } catch {
         enqueue({ type: 'session', rows })
+        notify("Couldn't save — queued to retry", false)
       }
     },
-    [enqueue, persistWorkouts],
+    [enqueue, notify, persistWorkouts],
   )
 
   const logBodyWeight = useCallback(
@@ -172,22 +190,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistWeights([...storage.loadBodyWeights(), entry])
       try {
         await api.postBodyWeight(entry)
+        notify('Weight saved', true)
       } catch {
         enqueue({ type: 'bodyweight', entry })
+        notify("Couldn't save — queued to retry", false)
       }
     },
-    [enqueue, persistWeights],
+    [enqueue, notify, persistWeights],
   )
 
   const importData = useCallback(
     async (rows: WorkoutRow[], bws: BodyWeightEntry[]) => {
       if (rows.length) persistWorkouts([...storage.loadWorkouts(), ...rows])
       if (bws.length) persistWeights([...storage.loadBodyWeights(), ...bws])
+      let ok = true
       if (rows.length) {
         try {
           await api.postImport(rows)
         } catch {
           enqueue({ type: 'session', rows })
+          ok = false
         }
       }
       if (bws.length) {
@@ -195,10 +217,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await api.postBodyWeightBulk(bws)
         } catch {
           for (const entry of bws) enqueue({ type: 'bodyweight', entry })
+          ok = false
         }
       }
+      notify(ok ? 'Imported to sheet' : "Couldn't save import — queued to retry", ok)
     },
-    [enqueue, persistWorkouts, persistWeights],
+    [enqueue, notify, persistWorkouts, persistWeights],
   )
 
   const logFlex = useCallback(
@@ -213,11 +237,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistFlex(dedupeFlexByDate([...storage.loadFlex(), entry]))
       try {
         await api.postFlex(entry)
+        notify(m.splitDeg != null || m.tailorsLeftDeg != null || m.tailorsRightDeg != null ? 'Measurement saved' : 'Stretch logged', true)
       } catch {
         enqueue({ type: 'flex', entry })
+        notify("Couldn't save — queued to retry", false)
       }
     },
-    [enqueue, persistFlex],
+    [enqueue, notify, persistFlex],
   )
 
   const logCalories = useCallback(
@@ -226,11 +252,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistCalories([...storage.loadCalories(), entry])
       try {
         await api.postCalorie(entry)
+        notify(`+${calories} cal saved`, true)
       } catch {
         enqueue({ type: 'calorie', entry })
+        notify("Couldn't save — queued to retry", false)
       }
     },
-    [enqueue, persistCalories],
+    [enqueue, notify, persistCalories],
   )
 
   const quickLog = useCallback(
@@ -249,11 +277,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistWorkouts([...storage.loadWorkouts(), row])
       try {
         await api.postSession([row])
+        notify('Logged', true)
       } catch {
         enqueue({ type: 'session', rows: [row] })
+        notify("Couldn't save — queued to retry", false)
       }
     },
-    [enqueue, persistWorkouts],
+    [enqueue, notify, persistWorkouts],
   )
 
   const logProgressPhoto = useCallback(() => {
@@ -271,9 +301,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     (p: Plan) => {
       setPlan(p)
       storage.savePlan(p)
-      api.postPlan(p).catch(() => enqueue({ type: 'plan', plan: p }))
+      api.postPlan(p).then(
+        () => notify('Plan saved', true),
+        () => {
+          enqueue({ type: 'plan', plan: p })
+          notify("Couldn't save plan — queued to retry", false)
+        },
+      )
     },
-    [enqueue],
+    [enqueue, notify],
   )
 
   // Flex routine persists per-device for now (not yet synced to the Sheet).
@@ -315,6 +351,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     plan,
     flexPlan,
     sync,
+    lastSync,
+    toast,
     pendingWrites: queue.length,
     streaks,
     weekProgress,

@@ -153,7 +153,7 @@ export function ProgressTab() {
   const unit = metric === 'volume' ? 'vol' : 'lbs'
 
   return (
-    <div className="flex flex-col gap-4 pb-24">
+    <div className="flex flex-col gap-4 pb-4">
       <h2 className="text-xl font-bold">Progress</h2>
 
       <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />

@@ -11,7 +11,6 @@ export function CalorieLogger() {
   const { calorieEntries, logCalories } = useData()
   const today = toISODate(new Date())
   const [selDate, setSelDate] = useState(today)
-  const [flash, setFlash] = useState<string | null>(null)
 
   const monday = mondayOf(new Date())
   const week = Array.from({ length: 7 }, (_, i) => {
@@ -24,14 +23,9 @@ export function CalorieLogger() {
   const pct = Math.min(selTotal / CALORIE_GOAL, 1) * 100
   const selLabel = selDate === today ? 'today' : `${selDate.slice(5)}`
 
-  const flashMsg = (m: string) => {
-    setFlash(m)
-    setTimeout(() => setFlash(null), 1400)
-  }
   const add = (cal: number, label: string) => {
     if (cal <= 0) return
     void logCalories(cal, label, selDate)
-    flashMsg(`+${cal} cal → ${selLabel}`)
   }
   const topUp = () => add(Math.max(0, CALORIE_GOAL - selTotal), 'Top up to goal')
 
@@ -98,8 +92,6 @@ export function CalorieLogger() {
           Mark {selLabel} met (top up to {CALORIE_GOAL})
         </button>
       )}
-
-      {flash && <p className="mt-2 text-center text-sm text-accent-2">{flash}</p>}
     </div>
   )
 }

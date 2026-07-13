@@ -57,7 +57,7 @@ export function TodayTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5 pb-24">
+    <div className="flex flex-col gap-5 pb-4">
       <HomeGoals />
 
       {photoDue && (
@@ -123,28 +123,19 @@ export function TodayTab() {
         </p>
         <div className="flex gap-2">
           <button
-            onClick={() => {
-              void quickLog('push')
-              flashMsg('Push day logged ✓')
-            }}
+            onClick={() => void quickLog('push')}
             className="min-h-[48px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
           >
             Push
           </button>
           <button
-            onClick={() => {
-              void quickLog('pull')
-              flashMsg('Pull day logged ✓')
-            }}
+            onClick={() => void quickLog('pull')}
             className="min-h-[48px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
           >
             Pull
           </button>
           <button
-            onClick={() => {
-              void logFlex({ note: 'Stretch session (quick log)' })
-              flashMsg('Stretch logged ✓')
-            }}
+            onClick={() => void logFlex({ note: 'Stretch session (quick log)' })}
             className="min-h-[48px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
           >
             Stretch
