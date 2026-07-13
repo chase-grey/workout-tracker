@@ -6,15 +6,14 @@ import { HomeGoals } from './HomeGoals'
 import { CalorieLogger } from './CalorieLogger'
 import { WeeklySummary } from '../summary/WeeklySummary'
 import { StretchSession } from '../flex/StretchSession'
-import { parseISODate } from '../../lib/dates'
 import { storage } from '../../services/storage'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
+import { photoReminder } from '../../lib/photoReminder'
 import { MdPhotoCamera } from 'react-icons/md'
 
-const PHOTO_CADENCE_DAYS = 21
-
 export function TodayTab() {
-  const { saveSession, quickLog, logFlex, logProgressPhoto, settings } = useData()
+  const { saveSession, quickLog, logFlex, logProgressPhoto, settings, workouts, bodyWeights } =
+    useData()
   const controls = useActiveSession()
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
@@ -44,14 +43,13 @@ export function TodayTab() {
     )
   }
 
-  const lastPhoto = [settings.lastProgressPhoto, ...PROGRESS_PHOTO_HISTORY]
-    .filter((d): d is string => !!d)
-    .sort()
-    .at(-1)
-  const daysSincePhoto = lastPhoto
-    ? Math.floor((Date.now() - parseISODate(lastPhoto).getTime()) / 86400000)
-    : Infinity
-  const photoDue = !photoDismissed && daysSincePhoto >= PHOTO_CADENCE_DAYS
+  const lastPhoto =
+    [settings.lastProgressPhoto, ...PROGRESS_PHOTO_HISTORY]
+      .filter((d): d is string => !!d)
+      .sort()
+      .at(-1) ?? null
+  const reminder = photoReminder({ lastPhoto, bodyWeights, workouts })
+  const photoDue = !photoDismissed && reminder.due
 
   const flashMsg = (m: string) => {
     setFlash(m)
@@ -66,7 +64,7 @@ export function TodayTab() {
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
             <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
-            Progress-photo time — last one was {Number.isFinite(daysSincePhoto) ? `${daysSincePhoto} days ago` : 'a while ago'}.
+            Progress-photo time — {reminder.reason}.
           </p>
           <div className="mt-2 flex gap-2">
             <button
