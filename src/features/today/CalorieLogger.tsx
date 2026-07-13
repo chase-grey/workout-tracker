@@ -5,7 +5,7 @@ import { CALORIE_GOAL, caloriePaceFraction, totalForDate } from '../../lib/calor
 import { mondayOf, toISODate } from '../../lib/dates'
 
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-const QUICK_ADDS = [100, 500, 1000]
+const QUICK_ADDS = [100, 500, 1000, 4000]
 
 export function CalorieLogger() {
   const { calorieEntries, logCalories } = useData()
@@ -33,7 +33,6 @@ export function CalorieLogger() {
     if (cal <= 0) return
     void logCalories(cal, label, selDate)
   }
-  const topUp = () => add(Math.max(0, CALORIE_GOAL - selTotal), 'Top up to goal')
 
   return (
     <div className="rounded-2xl bg-surface p-4">
@@ -97,21 +96,12 @@ export function CalorieLogger() {
           <button
             key={cal}
             onClick={() => add(cal, `+${cal}`)}
-            className="min-h-[48px] flex-1 rounded-xl bg-surface-2 text-base font-semibold active:opacity-80"
+            className="min-h-[48px] flex-1 rounded-xl bg-surface-2 text-sm font-semibold active:opacity-80"
           >
             +{cal}
           </button>
         ))}
       </div>
-
-      {selTotal < CALORIE_GOAL && (
-        <button
-          onClick={topUp}
-          className="mt-2 min-h-[40px] w-full rounded-xl bg-surface-2 text-sm font-medium text-neutral-300 active:opacity-80"
-        >
-          Mark {selLabel} met (top up to {CALORIE_GOAL})
-        </button>
-      )}
     </div>
   )
 }

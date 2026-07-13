@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { useActiveSession } from './useActiveSession'
 import { ActiveSession } from './ActiveSession'
-import { HomeGoals } from './HomeGoals'
+import { ThisWeek } from './ThisWeek'
 import { CalorieLogger } from './CalorieLogger'
-import { WeeklySummary } from '../summary/WeeklySummary'
+import { WeightCard } from './WeightCard'
 import { StretchSession } from '../flex/StretchSession'
 import { storage } from '../../services/storage'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
@@ -13,7 +13,7 @@ import { toISODate } from '../../lib/dates'
 import { MdPhotoCamera } from 'react-icons/md'
 
 export function TodayTab() {
-  const { saveSession, quickLog, logFlex, logProgressPhoto, updateSettings, settings, workouts, bodyWeights } =
+  const { saveSession, quickLog, logProgressPhoto, updateSettings, settings, workouts, bodyWeights } =
     useData()
   const controls = useActiveSession()
   const [flash, setFlash] = useState<string | null>(null)
@@ -21,12 +21,17 @@ export function TodayTab() {
   const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
 
   if (controls.session) {
+    const dayType = controls.session.dayType
     return (
       <ActiveSession
         session={controls.session}
         controls={controls}
         onFinish={(s) => {
           void saveSession(s)
+          controls.clear()
+        }}
+        onSkip={() => {
+          void quickLog(dayType)
           controls.clear()
         }}
       />
@@ -67,8 +72,6 @@ export function TodayTab() {
 
   return (
     <div className="flex flex-col gap-5 pb-4">
-      <HomeGoals />
-
       {photoDue && (
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
@@ -99,13 +102,19 @@ export function TodayTab() {
         <div className="rounded-xl bg-accent-2/20 p-2 text-center text-sm text-accent-2">{flash}</div>
       )}
 
+      <ThisWeek />
+
+      <CalorieLogger />
+
+      <WeightCard />
+
       <div className="flex flex-col gap-2">
         <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
           Start a session
         </p>
         <button
           onClick={() => controls.start('push')}
-          className="min-h-[64px] rounded-2xl bg-accent text-xl font-bold text-black active:opacity-80"
+          className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
         >
           Push Day
         </button>
@@ -122,39 +131,9 @@ export function TodayTab() {
           }}
           className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
         >
-          Stretch (Side Splits)
+          Stretch
         </button>
       </div>
-
-      <div className="flex flex-col gap-2">
-        <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Quick log (no details)
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => void quickLog('push')}
-            className="min-h-[48px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
-          >
-            Push
-          </button>
-          <button
-            onClick={() => void quickLog('pull')}
-            className="min-h-[48px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
-          >
-            Pull
-          </button>
-          <button
-            onClick={() => void logFlex({ note: 'Stretch session (quick log)' })}
-            className="min-h-[48px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
-          >
-            Stretch
-          </button>
-        </div>
-      </div>
-
-      <CalorieLogger />
-
-      <WeeklySummary />
     </div>
   )
 }

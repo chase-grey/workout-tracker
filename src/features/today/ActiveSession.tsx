@@ -14,9 +14,10 @@ type Props = {
   session: WorkoutSession
   controls: ReturnType<typeof useActiveSession>
   onFinish: (s: WorkoutSession) => void
+  onSkip: () => void
 }
 
-export function ActiveSession({ session, controls, onFinish }: Props) {
+export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   const { plan, workouts } = useData()
   const [rest, setRest] = useState<number | null>(null)
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
@@ -105,6 +106,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         <KebabMenu
           items={[
             { label: 'Workout checklist', onClick: () => setShowList(true) },
+            { label: 'Skip logging details (mark done)', onClick: onSkip },
             { label: 'Finish workout now', onClick: finish },
             {
               label: 'Discard workout',

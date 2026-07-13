@@ -84,6 +84,13 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
             { label: 'Log measurement', onClick: () => setShowMeasure(true) },
             { label: 'Routine checklist', onClick: () => setShowList(true) },
             {
+              label: 'Skip logging details (mark done)',
+              onClick: () => {
+                void logFlex({ note: 'Stretch session' })
+                onClose()
+              },
+            },
+            {
               label: 'Finish & log session',
               onClick: () => {
                 void logFlex({ note: 'Stretch routine' })

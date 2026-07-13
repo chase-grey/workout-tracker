@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { enumerateWeeks, mondayOf, parseISODate, toISODate, weekStartISO } from './dates'
+import { enumerateWeeks, mondayOf, parseISODate, toISODate, weekElapsedFraction, weekStartISO } from './dates'
+
+describe('weekElapsedFraction', () => {
+  it('is 0 on Monday morning and ~0.5 mid-week', () => {
+    // 2026-06-15 is a Monday.
+    expect(weekElapsedFraction(new Date(2026, 5, 15, 0, 0))).toBeCloseTo(0, 2)
+    // Thursday midday ≈ 3.5/7 of the week.
+    expect(weekElapsedFraction(new Date(2026, 5, 18, 12, 0))).toBeCloseTo(0.5, 1)
+  })
+})
 
 describe('mondayOf', () => {
   it('always returns a Monday', () => {

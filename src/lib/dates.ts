@@ -27,6 +27,12 @@ export function weekStartISO(dateStr: string): string {
   return toISODate(mondayOf(parseISODate(dateStr)))
 }
 
+/** Fraction (0–1) of the current Mon–Sun week elapsed at `now`. */
+export function weekElapsedFraction(now: Date = new Date()): number {
+  const ms = now.getTime() - mondayOf(now).getTime()
+  return Math.min(1, Math.max(0, ms / (7 * 86400000)))
+}
+
 /** Every Monday ISO string from `startISO` through `endISO`, inclusive. */
 export function enumerateWeeks(startISO: string, endISO: string): string[] {
   const out: string[] = []
