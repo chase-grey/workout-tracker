@@ -26,8 +26,6 @@ export function CalorieLogger() {
   // Pace marker: where you should be eating constantly across the 9am–9pm window.
   const isToday = selDate === today
   const pace = isToday ? caloriePaceFraction(new Date()) : null
-  const paceCal = pace != null ? Math.round(CALORIE_GOAL * pace) : null
-  const behind = paceCal != null && selTotal < paceCal ? paceCal - selTotal : 0
 
   const add = (cal: number, label: string) => {
     if (cal <= 0) return
@@ -35,7 +33,7 @@ export function CalorieLogger() {
   }
 
   return (
-    <div className="rounded-2xl bg-surface p-4">
+    <div className="rounded-2xl bg-surface p-3">
       <div className="flex items-baseline justify-between">
         <p className="text-xs uppercase tracking-wider text-neutral-500">
           Calories · {selLabel}
@@ -59,11 +57,6 @@ export function CalorieLogger() {
           />
         )}
       </div>
-      {isToday && selTotal < CALORIE_GOAL && paceCal != null && paceCal > 0 && (
-        <p className={`mt-1 text-xs ${behind > 0 ? 'text-amber-400' : 'text-accent-2'}`}>
-          {behind > 0 ? `Behind pace by ${behind} cal` : 'On pace for today'}
-        </p>
-      )}
 
       {/* Mon–Sun week: tap a day to view/verify/backfill it. */}
       <div className="mt-3 flex gap-1">
@@ -91,12 +84,12 @@ export function CalorieLogger() {
         })}
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-2 flex gap-2">
         {QUICK_ADDS.map((cal) => (
           <button
             key={cal}
             onClick={() => add(cal, `+${cal}`)}
-            className="min-h-[48px] flex-1 rounded-xl bg-surface-2 text-sm font-semibold active:opacity-80"
+            className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-sm font-semibold active:opacity-80"
           >
             +{cal}
           </button>

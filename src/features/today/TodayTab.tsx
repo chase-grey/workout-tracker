@@ -71,7 +71,7 @@ export function TodayTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5 pb-4">
+    <div className="flex flex-col gap-3 pb-4">
       {photoDue && (
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
@@ -114,13 +114,13 @@ export function TodayTab() {
         </p>
         <button
           onClick={() => controls.start('push')}
-          className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
+          className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
           Push Day
         </button>
         <button
           onClick={() => controls.start('pull')}
-          className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
+          className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
           Pull + Legs Day
         </button>
@@ -129,7 +129,7 @@ export function TodayTab() {
             if (!storage.loadStretch()) storage.saveStretch({ step: 0, done: [] })
             setStretching(true)
           }}
-          className="min-h-[64px] rounded-2xl bg-surface text-xl font-bold active:bg-surface-2"
+          className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
           Stretch
         </button>

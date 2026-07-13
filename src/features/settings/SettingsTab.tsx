@@ -5,6 +5,7 @@ import { ImportScreen } from './ImportScreen'
 import { PlanEditor } from './PlanEditor'
 import { FlexRoutineEditor } from './FlexRoutineEditor'
 import { PlateCalculator } from '../tools/PlateCalculator'
+import { IS_DESKTOP } from '../../lib/device'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
@@ -79,10 +80,6 @@ export function SettingsTab() {
         >
           Edit stretch routine
         </button>
-        <p className="text-xs text-neutral-500">
-          Customize exercises, sets, rep ranges, and rest. Or just tell the Chat assistant to change
-          either plan for you.
-        </p>
       </section>
 
       <section className="flex flex-col gap-2">
@@ -105,50 +102,38 @@ export function SettingsTab() {
       {editingPlan && <PlanEditor onClose={() => setEditingPlan(false)} />}
       {editingFlex && <FlexRoutineEditor onClose={() => setEditingFlex(false)} />}
 
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">OpenAI API key (for Chat)</label>
-        <input
-          type="password"
-          value={openAiKey}
-          onChange={(e) => setOpenAiKey(e.target.value)}
-          placeholder="sk-…"
-          autoComplete="off"
-          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-        <button
-          onClick={saveKey}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          {keySaved ? 'Saved ✓' : 'Save key'}
-        </button>
-        <p className="text-xs text-neutral-500">
-          Stored on this device only; sent directly to OpenAI when you chat.
-        </p>
-        <label className="mt-2 text-sm font-medium text-neutral-300">Chat model</label>
-        <select
-          value={settings.openAiModel ?? 'gpt-4o-mini'}
-          onChange={(e) => updateSettings({ ...settings, openAiModel: e.target.value })}
-          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        >
-          {MODELS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </section>
+      <PlateCalculator />
 
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">Plate calculator</label>
-        <PlateCalculator />
-      </section>
-
-      <section className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-neutral-300">About</label>
-        <p className="text-xs text-neutral-500">
-          Workout Tracker · data stored in your Google Sheet via Apps Script.
-        </p>
-      </section>
+      {IS_DESKTOP && (
+        <section className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-neutral-300">OpenAI API key (for Chat)</label>
+          <input
+            type="password"
+            value={openAiKey}
+            onChange={(e) => setOpenAiKey(e.target.value)}
+            placeholder="sk-…"
+            autoComplete="off"
+            className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <button
+            onClick={saveKey}
+            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+          >
+            {keySaved ? 'Saved ✓' : 'Save key'}
+          </button>
+          <select
+            value={settings.openAiModel ?? 'gpt-4o-mini'}
+            onChange={(e) => updateSettings({ ...settings, openAiModel: e.target.value })}
+            className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+          >
+            {MODELS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </section>
+      )}
     </div>
   )
 }
