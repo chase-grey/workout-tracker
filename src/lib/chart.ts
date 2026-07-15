@@ -24,6 +24,10 @@ export function fmtDateLabel(ms: number): string {
   return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`
 }
 
+/** Line colors: bright green for the primary series, darker green for the second. */
+export const LINE_PRIMARY = '#22c55e'
+export const LINE_SECONDARY = '#15803d'
+
 /** Props for a time-scaled X axis over a numeric `t` timestamp key. */
 export const timeXAxis = {
   dataKey: 't',

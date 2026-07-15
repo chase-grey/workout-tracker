@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { availableExercises, exerciseSeries, filterRange, type Metric, type Point } from '../../lib/progress'
-import { fmtDateLabel, timeXAxis, withTime } from '../../lib/chart'
+import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
 import { GoalsPanel } from './GoalsPanel'
 import { FlexProgress } from '../flex/FlexProgress'
 import { WeightLogSheet } from '../today/WeightLogSheet'
@@ -81,7 +81,7 @@ function Chart({ data, unit }: { data: Point[]; unit: string }) {
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}
             formatter={(v) => [`${v} ${unit}`, '']}
           />
-          <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} />
+          <Line type="monotone" dataKey="value" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -117,8 +117,8 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
             formatter={(v, n) => [`${v} ${unit}`, n]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="flat" name="Flat" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} connectNulls />
-          <Line type="monotone" dataKey="incline" name="Incline" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          <Line type="monotone" dataKey="flat" name="Flat" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          <Line type="monotone" dataKey="incline" name="Incline" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>

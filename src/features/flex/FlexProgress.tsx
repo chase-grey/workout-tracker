@@ -13,7 +13,7 @@ import {
 import { useData } from '../../store/DataContext'
 import { flexStats, splitSeries } from '../../lib/flex'
 import { flexGoalPredictions, type FlexGoal } from '../../lib/flexPredict'
-import { fmtDateLabel, timeXAxis, withTime } from '../../lib/chart'
+import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
@@ -94,7 +94,7 @@ export function FlexProgress() {
                 formatter={(v) => [`${v}°`, 'split']}
               />
               <ReferenceLine y={180} stroke="#6b7280" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} />
+              <Line type="monotone" dataKey="value" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -125,8 +125,8 @@ export function FlexProgress() {
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={90} stroke="#6b7280" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="left" name="Left" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} connectNulls />
-              <Line type="monotone" dataKey="right" name="Right" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="left" name="Left" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="right" name="Right" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
