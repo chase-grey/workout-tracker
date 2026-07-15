@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { availableExercises, exerciseSeries, filterRange, type Metric, type Point } from '../../lib/progress'
+import { fmtDateLabel, timeXAxis, withTime } from '../../lib/chart'
 import { GoalsPanel } from './GoalsPanel'
 import { FlexProgress } from '../flex/FlexProgress'
 import { WeightLogSheet } from '../today/WeightLogSheet'
@@ -70,11 +71,16 @@ function Chart({ data, unit }: { data: Point[]; unit: string }) {
   return (
     <div className="rounded-2xl bg-surface p-2">
       <ResponsiveContainer width="100%" height={224}>
-        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <LineChart data={withTime(data)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
-          <XAxis dataKey="date" tick={axisTick} tickFormatter={(d: string) => d.slice(5)} />
+          <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={['auto', 'auto']} />
-          <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#a3a3a3' }} formatter={(v) => [`${v} ${unit}`, '']} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelStyle={{ color: '#a3a3a3' }}
+            labelFormatter={(ms) => fmtDateLabel(Number(ms))}
+            formatter={(v) => [`${v} ${unit}`, '']}
+          />
           <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} />
         </LineChart>
       </ResponsiveContainer>
@@ -100,11 +106,16 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   return (
     <div className="rounded-2xl bg-surface p-2">
       <ResponsiveContainer width="100%" height={224}>
-        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <LineChart data={withTime(data)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
-          <XAxis dataKey="date" tick={axisTick} tickFormatter={(d: string) => d.slice(5)} />
+          <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={['auto', 'auto']} />
-          <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#a3a3a3' }} formatter={(v, n) => [`${v} ${unit}`, n]} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelStyle={{ color: '#a3a3a3' }}
+            labelFormatter={(ms) => fmtDateLabel(Number(ms))}
+            formatter={(v, n) => [`${v} ${unit}`, n]}
+          />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Line type="monotone" dataKey="flat" name="Flat" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} connectNulls />
           <Line type="monotone" dataKey="incline" name="Incline" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} connectNulls />

@@ -10,8 +10,8 @@ import { splitSeries, tailorsAvgSeries, type FlexEntry } from './flex'
 /** Side-split goal angles (degrees), ascending. */
 export const SPLIT_GOALS = [100, 120, 150, 180] as const
 
-/** Tailor's-pose goal angles (degrees). */
-export const TAILORS_GOALS = [90] as const
+/** Tailor's-pose goal angles (degrees), ascending. */
+export const TAILORS_GOALS = [70, 80, 90] as const
 
 export type FlexGoal = {
   kind: 'split' | 'tailors'
