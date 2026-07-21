@@ -4,15 +4,11 @@ import { parseTempo, phaseScales } from '../lib/tempo'
 /**
  * An abstract, nature-inspired rhythm animation that paces a stretch's tempo
  * (like a breathing square). A shape expands/contracts through the tempo phases,
- * a ring sweeps to show how far into the current phase you are, and a live
- * countdown plus rep counter track where you are in the set.
+ * and a live countdown plus rep counter track where you are in the set.
  * A random visual variant is chosen per mount, so it varies for each stretch.
  */
 const VARIANTS = ['orb', 'square', 'rings', 'tide'] as const
 type Variant = (typeof VARIANTS)[number]
-
-const RING_R = 112
-const RING_C = 2 * Math.PI * RING_R
 
 function Shape({ variant, scale, secs }: { variant: Variant; scale: number; secs: number }) {
   const base = { transition: `transform ${secs}s ease-in-out`, transform: `scale(${scale})` }
@@ -105,7 +101,7 @@ export function RhythmGuide({ tempo, reps }: { tempo: string; reps?: number }) {
             {reps ? ` of ${reps}` : ''}
           </div>
           <div className="text-2xl font-semibold capitalize text-white">{phase.label}</div>
-          <div className="text-6xl font-bold tabular-nums leading-tight text-accent">{remaining}</div>
+          <div className="text-6xl font-bold tabular-nums leading-tight text-accent-2">{remaining}</div>
         </div>
       </div>
     </div>

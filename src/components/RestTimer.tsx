@@ -93,8 +93,6 @@ export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () =
           {label}
         </div>
       </div>
-
-      <p className="text-sm text-neutral-500">Tap anywhere when you're ready</p>
     </div>
   )
 }
