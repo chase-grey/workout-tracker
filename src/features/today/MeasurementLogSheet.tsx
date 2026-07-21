@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
-import { navyBodyFat, latestMeasurement } from '../../lib/bodyComp'
+import { navyBodyFat, latestMeasurement, type AbsVisibility } from '../../lib/bodyComp'
+
+const VISIBILITY_OPTIONS: { value: AbsVisibility; label: string }[] = [
+  { value: 'none', label: 'Not visible' },
+  { value: 'faint', label: 'Faint' },
+  { value: 'clear', label: 'Clear' },
+]
 
 /**
  * Log a body measurement (waist + neck, in inches). Neck prefills from the last
@@ -12,7 +18,8 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
   const last = latestMeasurement(measurements)
 
   const [waist, setWaist] = useState('')
-  const [neck, setNeck] = useState(last ? String(last.neckIn) : '')
+  const [neck, setNeck] = useState(last?.neckIn != null ? String(last.neckIn) : '')
+  const [visibility, setVisibility] = useState<AbsVisibility | null>(null)
 
   const waistN = Number(waist)
   const neckN = Number(neck)
@@ -26,7 +33,11 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
 
   const save = () => {
     if (!valid) return
-    void logMeasurement(waistN, neckN)
+    void logMeasurement({
+      waistIn: waistN,
+      neckIn: neckN,
+      ...(visibility ? { absVisibility: visibility } : {}),
+    })
     onClose()
   }
 
@@ -79,6 +90,28 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
             Set your height in Settings to estimate body fat %.
           </p>
         )}
+
+        <div className="mt-4">
+          <label className="mb-1 block text-xs uppercase tracking-wider text-neutral-500">
+            Abs visible? <span className="normal-case text-neutral-600">(optional)</span>
+          </label>
+          <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
+            {VISIBILITY_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                onClick={() => setVisibility((v) => (v === o.value ? null : o.value))}
+                className={`min-h-[40px] flex-1 rounded-lg px-2 text-sm font-medium ${
+                  visibility === o.value ? 'bg-accent text-black' : 'text-neutral-400'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-neutral-600">
+            Logging this builds your personal “BF% needed to see abs” curve.
+          </p>
+        </div>
 
         <button
           onClick={save}

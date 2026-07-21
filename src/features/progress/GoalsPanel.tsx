@@ -1,13 +1,23 @@
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
 import { exerciseSeries } from '../../lib/progress'
-import { bodyFatSeries, SIX_PACK_BF } from '../../lib/bodyComp'
+import {
+  bodyFatSeries,
+  personalSixPackTarget,
+  type VisibilityObservation,
+} from '../../lib/bodyComp'
 import { MdCelebration } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
   return `${m}/${d}/${y.slice(2)}`
+}
+
+const VIS_TEXT: Record<VisibilityObservation['visibility'], string> = {
+  none: 'abs not visible',
+  faint: 'abs faintly visible',
+  clear: 'abs clearly visible',
 }
 
 function GoalRow({
@@ -64,9 +74,13 @@ export function GoalsPanel() {
   // Bench your bodyweight: target = current bodyweight (moving goal).
   const benchGoal = project(benchPoints, currentBw || 999)
 
-  // Visible six-pack: driven by body-fat %, estimated from waist/neck + height.
+  // Visible six-pack: gated by BOTH body-fat % and ab-muscle thickness. The
+  // target is derived empirically from the leanest visibility observation
+  // (see personalSixPackTarget) rather than a fixed generic number.
   const bfPoints = bodyFatSeries(measurements, heightIn)
-  const bfGoal = project(bfPoints, SIX_PACK_BF)
+  const { target: bfTarget, leanest } = personalSixPackTarget(measurements, heightIn)
+  const bfGoal = project(bfPoints, bfTarget)
+  const deadbugReps = exerciseSeries(workouts, 'deadbug', 'reps')
 
   return (
     <div className="flex flex-col gap-3">
@@ -78,20 +92,53 @@ export function GoalsPanel() {
         unit="lbs"
         proj={benchGoal}
       />
-      {heightIn > 0 ? (
-        <GoalRow title={`Visible 6-pack (≤${SIX_PACK_BF}% body fat)`} unit="%" proj={bfGoal} />
-      ) : (
-        <div className="rounded-2xl bg-surface p-4">
-          <div className="flex items-baseline justify-between">
-            <h4 className="font-semibold">Visible 6-pack abs</h4>
-            <span className="text-sm text-neutral-400">≤{SIX_PACK_BF}% body fat</span>
-          </div>
-          <p className="mt-1 text-sm text-neutral-500">
-            Set your height in Settings, then log a waist &amp; neck measurement to project your
-            body-fat % toward a visible six-pack.
-          </p>
+      <div className="rounded-2xl bg-surface p-4">
+        <div className="flex items-baseline justify-between">
+          <h4 className="font-semibold">Visible 6-pack abs</h4>
+          <span className="text-sm text-neutral-400 tabular-nums">
+            {Number.isFinite(bfGoal.current) ? `${bfGoal.current}` : '—'} → {bfTarget}% BF
+          </span>
         </div>
-      )}
+
+        {bfGoal.onTrack && bfGoal.etaWeeks === 0 ? (
+          <p className="mt-1 text-sm text-accent-2">
+            <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
+            Leanness target reached — keep building abs!
+          </p>
+        ) : bfGoal.onTrack ? (
+          <p className="mt-1 text-sm text-accent-2">
+            On track · ETA {fmtDate(bfGoal.etaDate)} ({bfGoal.slopePerWeek > 0 ? '+' : ''}
+            {bfGoal.slopePerWeek} %/wk)
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-neutral-500">
+            {Number.isFinite(bfGoal.current)
+              ? 'Not trending down yet — log measurements as you lean out.'
+              : 'Log a measurement with ab visibility to project this.'}
+          </p>
+        )}
+
+        {leanest && (
+          <p className="mt-2 text-xs text-neutral-500">
+            Leanest logged: {leanest.bodyFat}% on {fmtDate(leanest.date)} → {VIS_TEXT[leanest.visibility]}.
+            {leanest.visibility !== 'clear' && ' Building ab muscle raises the BF% where they show.'}
+          </p>
+        )}
+
+        <p className="mt-1 text-xs text-neutral-500">
+          {deadbugReps.length > 0
+            ? `Ab work: deadbugs ${deadbugReps[0].value}${
+                deadbugReps.length > 1 ? ` → ${deadbugReps[deadbugReps.length - 1].value}` : ''
+              } reps/session.`
+            : 'Ab work: none logged — start an Abs / Core session to build ab muscle.'}
+        </p>
+
+        {heightIn === 0 && (
+          <p className="mt-1 text-xs text-neutral-600">
+            Set your height in Settings so tape measurements also feed this.
+          </p>
+        )}
+      </div>
     </div>
   )
 }

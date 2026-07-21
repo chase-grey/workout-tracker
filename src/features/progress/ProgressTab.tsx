@@ -16,7 +16,7 @@ import { GoalsPanel } from './GoalsPanel'
 import { FlexProgress } from '../flex/FlexProgress'
 import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
-import { bodyFatSeries, waistSeries, latestMeasurement, navyBodyFat } from '../../lib/bodyComp'
+import { bodyFatSeries, waistSeries, latestMeasurement, effectiveBodyFat } from '../../lib/bodyComp'
 
 const BENCH_COMBO = '__bench__'
 
@@ -146,10 +146,7 @@ export function ProgressTab() {
 
   const heightIn = settings.heightIn ?? 0
   const lastMeasure = latestMeasurement(measurements)
-  const latestBf =
-    lastMeasure && heightIn > 0
-      ? navyBodyFat(lastMeasure.waistIn, lastMeasure.neckIn, heightIn)
-      : null
+  const latestBf = lastMeasure ? effectiveBodyFat(lastMeasure, heightIn) : null
   const bodySeries = useMemo(
     () =>
       filterRange(
@@ -212,7 +209,7 @@ export function ProgressTab() {
           Body fat
           {latestBf != null
             ? ` · ${latestBf}%`
-            : lastMeasure
+            : lastMeasure?.waistIn != null
               ? ` · ${lastMeasure.waistIn}" waist`
               : ''}
         </h3>

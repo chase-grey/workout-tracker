@@ -5,6 +5,10 @@ import {
   waistSeries,
   bodyFatSeries,
   latestMeasurement,
+  effectiveBodyFat,
+  visibilityObservations,
+  personalSixPackTarget,
+  SIX_PACK_BF,
   type MeasurementEntry,
 } from './bodyComp'
 
@@ -91,5 +95,63 @@ describe('series helpers', () => {
   it('latestMeasurement returns the newest entry, or null when empty', () => {
     expect(latestMeasurement(entries)!.date).toBe('2026-03-01')
     expect(latestMeasurement([])).toBeNull()
+  })
+})
+
+describe('effectiveBodyFat', () => {
+  it('prefers a directly-known bodyFatPct over the tape estimate', () => {
+    const e: MeasurementEntry = { date: '2025-10-31', bodyFatPct: 11 }
+    expect(effectiveBodyFat(e, 70)).toBe(11)
+  })
+
+  it('falls back to the Navy estimate from waist/neck', () => {
+    const e: MeasurementEntry = { date: '2026-01-01', waistIn: 32, neckIn: 15 }
+    expect(effectiveBodyFat(e, 70)).toBe(navyBodyFat(32, 15, 70))
+  })
+
+  it('is null when neither a reading nor tape+height is available', () => {
+    expect(effectiveBodyFat({ date: '2026-01-01', waistIn: 32, neckIn: 15 }, 0)).toBeNull()
+    expect(effectiveBodyFat({ date: '2026-01-01' }, 70)).toBeNull()
+  })
+})
+
+describe('visibilityObservations + personalSixPackTarget', () => {
+  it('falls back to the generic target with no visibility data', () => {
+    const entries: MeasurementEntry[] = [{ date: '2026-01-01', waistIn: 32, neckIn: 15 }]
+    expect(visibilityObservations(entries, 70)).toEqual([])
+    expect(personalSixPackTarget(entries, 70).target).toBe(SIX_PACK_BF)
+  })
+
+  it('aims ~2% below the leanest point when abs were not visible there', () => {
+    const entries: MeasurementEntry[] = [
+      { date: '2025-10-31', bodyFatPct: 11, absVisibility: 'none' },
+    ]
+    const { target, leanest } = personalSixPackTarget(entries, 70)
+    expect(leanest!.bodyFat).toBe(11)
+    expect(target).toBe(9) // 11 - 2
+  })
+
+  it('aims ~1% below a faint observation', () => {
+    const entries: MeasurementEntry[] = [
+      { date: '2026-02-01', bodyFatPct: 10, absVisibility: 'faint' },
+    ]
+    expect(personalSixPackTarget(entries, 70).target).toBe(9)
+  })
+
+  it('holds at the BF% where abs were already clear', () => {
+    const entries: MeasurementEntry[] = [
+      { date: '2026-03-01', bodyFatPct: 9, absVisibility: 'clear' },
+    ]
+    expect(personalSixPackTarget(entries, 70).target).toBe(9)
+  })
+
+  it('uses the leanest observation across multiple entries', () => {
+    const entries: MeasurementEntry[] = [
+      { date: '2025-10-31', bodyFatPct: 11, absVisibility: 'none' },
+      { date: '2026-03-01', bodyFatPct: 9.5, absVisibility: 'faint' },
+    ]
+    const { target, leanest } = personalSixPackTarget(entries, 70)
+    expect(leanest!.bodyFat).toBe(9.5)
+    expect(target).toBe(8.5) // 9.5 - 1 (faint)
   })
 })

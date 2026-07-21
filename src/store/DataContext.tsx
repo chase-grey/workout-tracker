@@ -11,6 +11,7 @@ import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import { calorieHitDates, type CalorieEntry } from '../lib/calories'
 import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp'
+import { MEASUREMENT_HISTORY } from '../config/body'
 import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from '../lib/weeklyStreak'
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
@@ -47,7 +48,7 @@ type DataContextValue = {
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
   logFlex: (measurement: FlexMeasurement) => Promise<void>
   logCalories: (calories: number, label?: string, date?: string) => Promise<void>
-  logMeasurement: (waistIn: number, neckIn: number, note?: string, date?: string) => Promise<void>
+  logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
@@ -278,13 +279,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const logMeasurement = useCallback(
-    async (waistIn: number, neckIn: number, note?: string, date?: string) => {
-      const entry: MeasurementEntry = {
-        date: date ?? toISODate(new Date()),
-        waistIn,
-        neckIn,
-        ...(note ? { note } : {}),
-      }
+    async (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => {
+      const { date, ...rest } = m
+      const entry: MeasurementEntry = { date: date ?? toISODate(new Date()), ...rest }
       persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), entry]))
       try {
         await api.postMeasurement(entry)
@@ -382,12 +379,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [workoutDates, flexDates, calHitDates])
 
+  // Merge read-only historical anchors (e.g. the 2025-10-31 baseline) with logged
+  // measurements. Logged entries win on a shared date; history is never re-synced.
+  const allMeasurements = useMemo(
+    () => dedupeMeasurementsByDate([...MEASUREMENT_HISTORY, ...measurements]),
+    [measurements],
+  )
+
   const value: DataContextValue = {
     workouts,
     bodyWeights,
     flexEntries,
     calorieEntries,
-    measurements,
+    measurements: allMeasurements,
     settings,
     plan,
     flexPlan,
