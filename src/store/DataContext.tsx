@@ -9,11 +9,25 @@ import { toISODate, weekStartISO } from '../lib/dates'
 import { QUICK_LOG_KEY, withPlanDefaults, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
-import { calorieHitDates, type CalorieEntry } from '../lib/calories'
+import { calorieHitDates, CALORIE_GOAL, totalForDate, type CalorieEntry } from '../lib/calories'
 import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp'
 import { isSaneDuration, type SessionDuration } from '../lib/estimate'
 import { MEASUREMENT_HISTORY } from '../config/body'
 import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from '../lib/weeklyStreak'
+import { useCelebrate } from './CelebrationContext'
+import {
+  achievementCelebration,
+  calorieGoalCelebration,
+  composeCelebration,
+  currentWeekCounts,
+  detectPRs,
+  newlyEarned,
+  prCelebration,
+  stretchDoneCelebration,
+  workoutDoneCelebration,
+  type Celebration,
+  type WeekCounts,
+} from '../lib/celebration'
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
 
@@ -83,6 +97,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setToast({ msg, ok })
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 2600)
+  }, [])
+
+  const { celebrate } = useCelebrate()
+
+  // Weekly-goal celebrations earned when this-week counts move before → after.
+  const weeklyCelebrations = useCallback((before: WeekCounts, after: WeekCounts): Celebration[] => {
+    return newlyEarned(before, after, DEFAULT_WEEKLY_GOALS).map((k) =>
+      achievementCelebration(k, after, DEFAULT_WEEKLY_GOALS),
+    )
   }, [])
 
   const persistWorkouts = useCallback((rows: WorkoutRow[]) => {
@@ -203,8 +226,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const saveSession = useCallback(
     async (s: WorkoutSession) => {
+      const prev = storage.loadWorkouts()
       const rows = sessionToRows(s)
-      persistWorkouts([...storage.loadWorkouts(), ...rows]) // optimistic
+      const next = [...prev, ...rows]
+      persistWorkouts(next) // optimistic
       try {
         await api.postSession(rows)
         notify('Workout saved', true)
@@ -212,8 +237,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         enqueue({ type: 'session', rows })
         notify("Couldn't save — queued to retry", false)
       }
+      // Cheer: workout done + any all-time PRs + weekly goals crossed.
+      try {
+        const flexDates = storage.loadFlex().map((f) => f.date)
+        const cals = storage.loadCalories()
+        const before = currentWeekCounts(prev, flexDates, cals)
+        const after = currentWeekCounts(next, flexDates, cals)
+        celebrate(
+          composeCelebration([
+            rows.length ? workoutDoneCelebration(s.dayType) : null,
+            ...weeklyCelebrations(before, after),
+            prCelebration(detectPRs(prev, rows)),
+          ]),
+        )
+      } catch {
+        /* a missed cheer must never break a save */
+      }
     },
-    [enqueue, notify, persistWorkouts],
+    [celebrate, enqueue, notify, persistWorkouts, weeklyCelebrations],
   )
 
   const logBodyWeight = useCallback(
@@ -266,22 +307,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
         tailorsRightDeg: m.tailorsRightDeg ?? null,
         note: m.note,
       }
-      persistFlex(dedupeFlexByDate([...storage.loadFlex(), entry]))
+      const isMeasurement = m.splitDeg != null || m.tailorsLeftDeg != null || m.tailorsRightDeg != null
+      const prevFlex = storage.loadFlex()
+      const nextFlex = dedupeFlexByDate([...prevFlex, entry])
+      persistFlex(nextFlex)
       try {
         await api.postFlex(entry)
-        notify(m.splitDeg != null || m.tailorsLeftDeg != null || m.tailorsRightDeg != null ? 'Measurement saved' : 'Stretch logged', true)
+        notify(isMeasurement ? 'Measurement saved' : 'Stretch logged', true)
       } catch {
         enqueue({ type: 'flex', entry })
         notify("Couldn't save — queued to retry", false)
       }
+      // Only a completed stretch session cheers — a pure angle measurement doesn't.
+      if (!isMeasurement) {
+        try {
+          const workoutsNow = storage.loadWorkouts()
+          const cals = storage.loadCalories()
+          const before = currentWeekCounts(workoutsNow, prevFlex.map((f) => f.date), cals)
+          const after = currentWeekCounts(workoutsNow, nextFlex.map((f) => f.date), cals)
+          celebrate(composeCelebration([stretchDoneCelebration, ...weeklyCelebrations(before, after)]))
+        } catch {
+          /* a missed cheer must never break a save */
+        }
+      }
     },
-    [enqueue, notify, persistFlex],
+    [celebrate, enqueue, notify, persistFlex, weeklyCelebrations],
   )
 
   const logCalories = useCallback(
     async (calories: number, label?: string, date?: string) => {
       const entry: CalorieEntry = { date: date ?? toISODate(new Date()), calories, label }
-      persistCalories([...storage.loadCalories(), entry])
+      const prevCals = storage.loadCalories()
+      const nextCals = [...prevCals, entry]
+      persistCalories(nextCals)
       try {
         await api.postCalorie(entry)
         notify(`+${calories} cal saved`, true)
@@ -289,8 +347,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
         enqueue({ type: 'calorie', entry })
         notify("Couldn't save — queued to retry", false)
       }
+      // Cheer: this date's total just crossed the goal + any weekly calorie-day goal.
+      try {
+        const crossed =
+          totalForDate(prevCals, entry.date) < CALORIE_GOAL && totalForDate(nextCals, entry.date) >= CALORIE_GOAL
+        const workoutsNow = storage.loadWorkouts()
+        const flexDates = storage.loadFlex().map((f) => f.date)
+        const before = currentWeekCounts(workoutsNow, flexDates, prevCals)
+        const after = currentWeekCounts(workoutsNow, flexDates, nextCals)
+        celebrate(
+          composeCelebration([
+            crossed ? calorieGoalCelebration(CALORIE_GOAL) : null,
+            ...weeklyCelebrations(before, after),
+          ]),
+        )
+      } catch {
+        /* a missed cheer must never break a save */
+      }
     },
-    [enqueue, notify, persistCalories],
+    [celebrate, enqueue, notify, persistCalories, weeklyCelebrations],
   )
 
   const logMeasurement = useCallback(
@@ -338,7 +413,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         notes: 'Quick log (no details)',
         is_historical: false,
       }
-      persistWorkouts([...storage.loadWorkouts(), row])
+      const prev = storage.loadWorkouts()
+      const next = [...prev, row]
+      persistWorkouts(next)
       try {
         await api.postSession([row])
         notify('Logged', true)
@@ -346,8 +423,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         enqueue({ type: 'session', rows: [row] })
         notify("Couldn't save — queued to retry", false)
       }
+      try {
+        const flexDates = storage.loadFlex().map((f) => f.date)
+        const cals = storage.loadCalories()
+        const before = currentWeekCounts(prev, flexDates, cals)
+        const after = currentWeekCounts(next, flexDates, cals)
+        celebrate(composeCelebration([workoutDoneCelebration(dayType), ...weeklyCelebrations(before, after)]))
+      } catch {
+        /* a missed cheer must never break a save */
+      }
     },
-    [enqueue, notify, persistWorkouts],
+    [celebrate, enqueue, notify, persistWorkouts, weeklyCelebrations],
   )
 
   const logProgressPhoto = useCallback(() => {

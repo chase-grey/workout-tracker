@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DataProvider, useData } from './store/DataContext'
+import { CelebrationProvider } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
 import { ToastHost } from './components/ToastHost'
 import { TodayTab } from './features/today/TodayTab'
@@ -16,10 +17,12 @@ const CHAT_ENABLED = IS_DESKTOP
 
 export default function App() {
   return (
-    <DataProvider>
-      <AppShell />
-      <ToastHost />
-    </DataProvider>
+    <CelebrationProvider>
+      <DataProvider>
+        <AppShell />
+        <ToastHost />
+      </DataProvider>
+    </CelebrationProvider>
   )
 }
 

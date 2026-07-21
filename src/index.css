@@ -35,3 +35,109 @@ input[type='number']::-webkit-inner-spin-button {
 input[type='number'] {
   -moz-appearance: textfield;
 }
+
+/* ---- Celebration animations (see CelebrationOverlay) ---- */
+
+/* Confetti pieces rain from the top with per-piece drift + spin (CSS vars). */
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, -12vh, 0) rotate(0deg);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--dx, 0), 112vh, 0) rotate(var(--rot, 360deg));
+    opacity: 0;
+  }
+}
+.confetti-piece {
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.3, 0.1, 0.4, 1);
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
+}
+
+/* Card entrances. */
+@keyframes celebrate-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes celebrate-slide-up {
+  0% {
+    transform: translateY(48px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.celebrate-pop {
+  animation: celebrate-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.celebrate-slide-up {
+  animation: celebrate-slide-up 0.35s ease-out both;
+}
+
+/* Trophy shake (PRs) and the epic screen flash. */
+@keyframes celebrate-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-14deg);
+  }
+  40% {
+    transform: rotate(11deg);
+  }
+  60% {
+    transform: rotate(-7deg);
+  }
+  80% {
+    transform: rotate(4deg);
+  }
+}
+.celebrate-shake {
+  animation: celebrate-shake 0.7s ease-in-out 0.35s 2;
+  transform-origin: 50% 80%;
+}
+@keyframes celebrate-flash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.celebrate-flash {
+  animation: celebrate-flash 0.9s ease-out both;
+}
+
+/* Respect users who ask for less motion: keep the message, drop the fireworks. */
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece,
+  .celebrate-flash {
+    display: none;
+  }
+  .celebrate-pop,
+  .celebrate-slide-up,
+  .celebrate-shake {
+    animation: none;
+  }
+}
