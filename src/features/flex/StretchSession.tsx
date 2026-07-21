@@ -119,7 +119,6 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
         {step.blockLabel} · {step.reps} reps
       </p>
-      {step.blockNote && <p className="px-1 text-xs text-neutral-500">{step.blockNote}</p>}
 
       <RhythmGuide key={step.stepKey} tempo={step.tempo} reps={step.reps} />
 

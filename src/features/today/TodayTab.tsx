@@ -1,53 +1,23 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
-import { useActiveSession } from './useActiveSession'
-import { ActiveSession } from './ActiveSession'
 import { ThisWeek } from './ThisWeek'
 import { CalorieLogger } from './CalorieLogger'
 import { WeightCard } from './WeightCard'
-import { StretchSession } from '../flex/StretchSession'
-import { storage } from '../../services/storage'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
+import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 
-export function TodayTab() {
-  const { saveSession, quickLog, logProgressPhoto, updateSettings, settings, workouts, bodyWeights } =
-    useData()
-  const controls = useActiveSession()
+type Props = {
+  onStart: (dayType: DayType) => void
+  onStartStretch: () => void
+}
+
+export function TodayTab({ onStart, onStartStretch }: Props) {
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights } = useData()
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
-  const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
-
-  if (controls.session) {
-    const dayType = controls.session.dayType
-    return (
-      <ActiveSession
-        session={controls.session}
-        controls={controls}
-        onFinish={(s) => {
-          void saveSession(s)
-          controls.clear()
-        }}
-        onSkip={() => {
-          void quickLog(dayType)
-          controls.clear()
-        }}
-      />
-    )
-  }
-
-  if (stretching) {
-    return (
-      <StretchSession
-        onClose={() => {
-          storage.saveStretch(null)
-          setStretching(false)
-        }}
-      />
-    )
-  }
 
   const lastPhoto =
     [settings.lastProgressPhoto, ...PROGRESS_PHOTO_HISTORY]
@@ -113,22 +83,19 @@ export function TodayTab() {
           Start a session
         </p>
         <button
-          onClick={() => controls.start('push')}
+          onClick={() => onStart('push')}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
           Push Day
         </button>
         <button
-          onClick={() => controls.start('pull')}
+          onClick={() => onStart('pull')}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
           Pull + Legs Day
         </button>
         <button
-          onClick={() => {
-            if (!storage.loadStretch()) storage.saveStretch({ step: 0, done: [] })
-            setStretching(true)
-          }}
+          onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
           Stretch
