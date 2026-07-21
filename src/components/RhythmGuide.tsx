@@ -92,17 +92,17 @@ export function RhythmGuide({ tempo, reps }: { tempo: string; reps?: number }) {
   const remaining = Math.max(1, Math.ceil(phase.seconds * (1 - progress)))
 
   return (
-    <div className="flex items-center justify-center py-3">
-      <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
+    <div className="flex flex-col items-center py-3">
+      <div className="relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
         <Shape variant={variant} scale={scale} secs={phase.seconds} />
-        <div className="relative text-center">
-          <div className="text-sm font-medium uppercase tracking-wider text-neutral-400">
-            Rep {rep}
-            {reps ? ` of ${reps}` : ''}
-          </div>
-          <div className="text-2xl font-semibold capitalize text-white">{phase.label}</div>
-          <div className="text-6xl font-bold tabular-nums leading-tight text-accent-2">{remaining}</div>
+      </div>
+      <div className="mt-2 text-center">
+        <div className="text-sm font-medium uppercase tracking-wider text-neutral-400">
+          Rep {rep}
+          {reps ? ` of ${reps}` : ''}
         </div>
+        <div className="text-2xl font-semibold capitalize text-white">{phase.label}</div>
+        <div className="text-6xl font-bold tabular-nums leading-tight text-accent-2">{remaining}</div>
       </div>
     </div>
   )
