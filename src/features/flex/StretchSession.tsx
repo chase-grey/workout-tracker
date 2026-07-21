@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
-import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked } from 'react-icons/md'
+import { MdCheckCircle, MdChevronRight, MdPhotoCamera, MdRadioButtonUnchecked } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu } from '../../components/KebabMenu'
 import { MeasureSheet } from './MeasureSheet'
+import { CameraMeasure } from './CameraMeasure'
 import { estimateSecs, formatDuration } from '../../lib/estimate'
 import { buildFlexSteps } from '../../lib/flexSteps'
+import { type MeasureMode } from '../../lib/measure'
 import { storage } from '../../services/storage'
 
 const SEC_PER_REP = 5
+
+/** Which angle a stretch's photo measurement defaults to (user can switch). */
+const measureModeFor = (exKey: string): MeasureMode =>
+  exKey.toLowerCase().includes('tailor') ? 'tailors' : 'split'
 
 /** Guided, one-set-at-a-time stretch flow with a tempo rhythm animation. */
 export function StretchSession({ onClose }: { onClose: () => void }) {
@@ -19,6 +25,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const [rest, setRest] = useState<number | null>(null)
   const [showList, setShowList] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
+  const [showCamera, setShowCamera] = useState(false)
 
   const steps = useMemo(() => buildFlexSteps(flexPlan), [flexPlan])
   const N = steps.length
@@ -111,7 +118,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       </p>
       {step.blockNote && <p className="px-1 text-xs text-neutral-500">{step.blockNote}</p>}
 
-      <RhythmGuide key={step.stepKey} tempo={step.tempo} />
+      <RhythmGuide key={step.stepKey} tempo={step.tempo} reps={step.reps} />
 
       <button
         onClick={completeSetAndAdvance}
@@ -126,8 +133,25 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         )}
       </button>
 
+      <button
+        onClick={() => setShowCamera(true)}
+        className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-border bg-surface font-semibold text-neutral-200 active:opacity-80"
+      >
+        <MdPhotoCamera aria-hidden /> Measure with camera
+      </button>
+
       {rest != null && <RestTimer seconds={rest} onClose={() => setRest(null)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
+      {showCamera && (
+        <CameraMeasure
+          mode={measureModeFor(step.exKey)}
+          onClose={() => setShowCamera(false)}
+          onDone={(result) => {
+            void logFlex({ ...result, note: 'measurement' })
+            setShowCamera(false)
+          }}
+        />
+      )}
 
       {showList && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={() => setShowList(false)}>
