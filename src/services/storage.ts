@@ -31,6 +31,8 @@ export type Settings = {
   lastProgressPhoto?: string
   /** ISO date before which the progress-photo reminder stays hidden ("Later"). */
   photoSnoozeUntil?: string
+  /** Self-timer length (seconds) for the camera angle-measurement flow. */
+  measureTimerSec?: number
 }
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }

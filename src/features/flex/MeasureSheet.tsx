@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MdPhotoCamera } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { PoseMeasure } from './PoseMeasure'
+import { CameraMeasure } from './CameraMeasure'
 
 const num = (s: string): number | null => {
   const t = s.trim()
@@ -9,6 +9,8 @@ const num = (s: string): number | null => {
   const n = Number(t)
   return Number.isFinite(n) && n > 0 ? n : null
 }
+
+const deg = (n: number | null | undefined): string => (n != null ? String(n) : '')
 
 /** Log flexibility measurements (side split + tailor's L/R) during a session. */
 export function MeasureSheet({ onClose }: { onClose: () => void }) {
@@ -40,23 +42,22 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
       >
         <h2 className="mb-3 text-lg font-bold">Log measurement</h2>
 
+        <button
+          onClick={() => setMeasuring(true)}
+          className="mb-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-surface-2 font-semibold text-neutral-200 active:opacity-80"
+        >
+          <MdPhotoCamera aria-hidden /> Measure with camera
+        </button>
+
         <label className="mb-1 block text-sm text-neutral-300">Side split (°)</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            inputMode="decimal"
-            placeholder="e.g. 92"
-            value={split}
-            onChange={(e) => setSplit(e.target.value)}
-            className="min-h-[48px] w-0 flex-1 rounded-xl bg-surface-2 px-3 text-center text-lg tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <button
-            onClick={() => setMeasuring(true)}
-            className="flex min-h-[48px] items-center gap-1 rounded-xl bg-surface-2 px-3 text-sm text-neutral-300 active:opacity-80"
-          >
-            <MdPhotoCamera aria-hidden /> Photo
-          </button>
-        </div>
+        <input
+          type="number"
+          inputMode="decimal"
+          placeholder="e.g. 92"
+          value={split}
+          onChange={(e) => setSplit(e.target.value)}
+          className="min-h-[48px] w-full rounded-xl bg-surface-2 px-3 text-center text-lg tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+        />
 
         <div className="mt-3 flex gap-2">
           <div className="flex-1">
@@ -84,7 +85,8 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="mt-2 text-xs text-neutral-500">
-          Photo auto-angle works for the side split. Tailor's pose is entered manually for now.
+          Camera measures the split and tailor's pose. Drag the lines to fine-tune, then review the
+          numbers below before saving.
         </p>
 
         <button
@@ -97,7 +99,16 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
       </div>
 
       {measuring && (
-        <PoseMeasure onAngle={(deg) => setSplit(String(deg))} onClose={() => setMeasuring(false)} />
+        <CameraMeasure
+          mode="split"
+          onClose={() => setMeasuring(false)}
+          onDone={(result) => {
+            if (result.splitDeg != null) setSplit(deg(result.splitDeg))
+            if (result.tailorsLeftDeg != null) setLeft(deg(result.tailorsLeftDeg))
+            if (result.tailorsRightDeg != null) setRight(deg(result.tailorsRightDeg))
+            setMeasuring(false)
+          }}
+        />
       )}
     </div>
   )
