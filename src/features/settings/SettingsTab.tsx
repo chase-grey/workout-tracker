@@ -4,7 +4,6 @@ import { download, workoutsToCsv } from '../../lib/csv'
 import { ImportScreen } from './ImportScreen'
 import { PlanEditor } from './PlanEditor'
 import { FlexRoutineEditor } from './FlexRoutineEditor'
-import { PlateCalculator } from '../tools/PlateCalculator'
 import { IS_DESKTOP } from '../../lib/device'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
@@ -101,8 +100,6 @@ export function SettingsTab() {
       {importing && <ImportScreen onClose={() => setImporting(false)} />}
       {editingPlan && <PlanEditor onClose={() => setEditingPlan(false)} />}
       {editingFlex && <FlexRoutineEditor onClose={() => setEditingFlex(false)} />}
-
-      <PlateCalculator />
 
       {IS_DESKTOP && (
         <section className="flex flex-col gap-2">
