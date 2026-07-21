@@ -39,17 +39,25 @@ describe('anglesFromHandles', () => {
     expect(anglesFromHandles('split', h).splitDeg).toBeCloseTo(180, 0)
   })
 
-  it('tailors: horizontal legs vs. vertical spine are ~90° each', () => {
+  it('tailors: knees level with the center dot read ~90° off vertical', () => {
     const h: Handles = {
-      hipC: { x: 0.5, y: 0.6 },
-      shoulderC: { x: 0.5, y: 0.3 },
-      ankleC: { x: 0.5, y: 0.7 },
+      center: { x: 0.5, y: 0.7 },
       kneeL: { x: 0.3, y: 0.7 },
       kneeR: { x: 0.7, y: 0.7 },
     }
     const r = anglesFromHandles('tailors', h)
     expect(r.tailorsLeftDeg).toBeCloseTo(90, 0)
     expect(r.tailorsRightDeg).toBeCloseTo(90, 0)
+  })
+
+  it('tailors: a knee straight above the center dot reads ~0°', () => {
+    const h: Handles = {
+      center: { x: 0.5, y: 0.7 },
+      kneeL: { x: 0.5, y: 0.4 },
+      kneeR: { x: 0.7, y: 0.55 },
+    }
+    const r = anglesFromHandles('tailors', h)
+    expect(r.tailorsLeftDeg).toBeCloseTo(0, 0)
   })
 })
 

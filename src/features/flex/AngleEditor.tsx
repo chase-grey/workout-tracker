@@ -2,18 +2,13 @@ import { useRef, useState, type PointerEvent } from 'react'
 import {
   HANDLES,
   SEGMENTS,
+  ROLE_COLOR,
   MEASURE_LABEL,
   anglesFromHandles,
   type Handles,
   type MeasureMode,
   type MeasureResult,
 } from '../../lib/measure'
-
-const ROLE_COLOR: Record<'a' | 'b' | 'ref', string> = {
-  a: '#22c55e', // accent green — first angle arm
-  b: '#38bdf8', // sky — second angle arm
-  ref: '#e5e5e5', // neutral — spine reference line
-}
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
 
@@ -31,7 +26,7 @@ export function AngleEditor({
   mode: MeasureMode
   imageUrl: string
   initial: Handles
-  onSave: (result: MeasureResult) => void
+  onSave: (result: MeasureResult, handles: Handles) => void
   onCancel: () => void
 }) {
   const [handles, setHandles] = useState<Handles>(initial)
@@ -158,7 +153,7 @@ export function AngleEditor({
 
       <div className="border-t border-border p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         <button
-          onClick={() => onSave(result)}
+          onClick={() => onSave(result, handles)}
           className="min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
         >
           Save angle

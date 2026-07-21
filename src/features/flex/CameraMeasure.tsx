@@ -3,9 +3,13 @@ import { MdCameraAlt, MdCameraswitch, MdPhotoLibrary } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { detectPose } from '../../lib/pose'
 import {
+  HANDLES,
+  SEGMENTS,
+  ROLE_COLOR,
   MEASURE_LABEL,
   defaultHandles,
   handlesFromLandmarks,
+  summarizeResult,
   type Handles,
   type MeasureMode,
   type MeasureResult,
@@ -36,6 +40,121 @@ async function savePhoto(blob: Blob, name: string): Promise<void> {
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9))
+}
+
+/**
+ * Burn the measurement onto the photo: draw the same lines and dots the editor
+ * showed, label each line with its angle, and stamp a caption (pose + angles +
+ * date) so the saved image is self-explanatory. Returns a fresh JPEG blob, or
+ * null if the image can't be drawn (caller falls back to the raw photo).
+ */
+async function renderMeasuredPhoto(
+  imageUrl: string,
+  mode: MeasureMode,
+  handles: Handles,
+  result: MeasureResult,
+): Promise<Blob | null> {
+  const img = new Image()
+  img.src = imageUrl
+  try {
+    await img.decode()
+  } catch {
+    return null
+  }
+
+  const W = img.naturalWidth
+  const H = img.naturalHeight
+  if (!W || !H) return null
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  ctx.drawImage(img, 0, 0, W, H)
+
+  const unit = Math.min(W, H)
+  const lineW = Math.max(3, Math.round(unit * 0.007))
+  const dotR = lineW * 1.6
+  const px = (p: { x: number; y: number }) => ({ x: p.x * W, y: p.y * H })
+
+  // Angle lines.
+  ctx.lineCap = 'round'
+  for (const s of SEGMENTS[mode]) {
+    const a = handles[s.from]
+    const b = handles[s.to]
+    if (!a || !b) continue
+    const pa = px(a)
+    const pb = px(b)
+    ctx.beginPath()
+    ctx.moveTo(pa.x, pa.y)
+    ctx.lineTo(pb.x, pb.y)
+    ctx.strokeStyle = ROLE_COLOR[s.role]
+    ctx.lineWidth = lineW
+    ctx.stroke()
+  }
+
+  // Handle dots.
+  for (const spec of HANDLES[mode]) {
+    const p = handles[spec.key]
+    if (!p) continue
+    const c = px(p)
+    ctx.beginPath()
+    ctx.arc(c.x, c.y, dotR, 0, Math.PI * 2)
+    ctx.fillStyle = '#22c55e'
+    ctx.fill()
+    ctx.lineWidth = Math.max(1, lineW * 0.5)
+    ctx.strokeStyle = '#ffffff'
+    ctx.stroke()
+  }
+
+  // Per-line angle labels near the middle of each measured line.
+  const font = Math.round(unit * 0.05)
+  ctx.font = `bold ${font}px system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineJoin = 'round'
+  const stamp = (text: string, x: number, y: number) => {
+    ctx.lineWidth = Math.max(2, font * 0.18)
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)'
+    ctx.strokeText(text, x, y)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, x, y)
+  }
+  const labels =
+    mode === 'split'
+      ? [{ deg: result.splitDeg, from: 'hip', to: 'ankleL' }]
+      : [
+          { deg: result.tailorsLeftDeg, from: 'center', to: 'kneeL' },
+          { deg: result.tailorsRightDeg, from: 'center', to: 'kneeR' },
+        ]
+  for (const l of labels) {
+    const a = handles[l.from]
+    const b = handles[l.to]
+    if (!a || !b || l.deg == null) continue
+    const pa = px(a)
+    const pb = px(b)
+    stamp(`${l.deg}°`, (pa.x + pb.x) / 2, (pa.y + pb.y) / 2 - font * 0.6)
+  }
+
+  // Bottom caption: pose, angles, date.
+  const capH = Math.round(unit * 0.11)
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'
+  ctx.fillRect(0, H - capH, W, capH)
+  const capFont = Math.round(unit * 0.045)
+  ctx.font = `bold ${capFont}px system-ui, sans-serif`
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(
+    `${MEASURE_LABEL[mode]} · ${summarizeResult(mode, result)}`,
+    W / 2,
+    H - capH * 0.62,
+  )
+  ctx.font = `${Math.round(unit * 0.03)}px system-ui, sans-serif`
+  ctx.fillStyle = '#d4d4d4'
+  ctx.fillText(toISODate(new Date()), W / 2, H - capH * 0.24)
+
+  return canvasToBlob(canvas)
 }
 
 /**
@@ -183,11 +302,17 @@ export function CameraMeasure({
     }
   }
 
-  const handleSave = (result: MeasureResult) => {
-    if (blobRef.current) {
-      const name = `stretch-${toISODate(new Date())}-${mode}.jpg`
-      void savePhoto(blobRef.current, name).catch(() => {})
-    }
+  const handleSave = (result: MeasureResult, handles: Handles) => {
+    const name = `stretch-${toISODate(new Date())}-${mode}.jpg`
+    const raw = blobRef.current
+    const src = shot?.url
+    void (async () => {
+      // Save the photo with the angle lines + measurements burned in; fall back
+      // to the plain capture if compositing fails for any reason.
+      const composed = src ? await renderMeasuredPhoto(src, mode, handles, result).catch(() => null) : null
+      const out = composed ?? raw
+      if (out) await savePhoto(out, name).catch(() => {})
+    })()
     blobRef.current = null
     onDone(result)
   }

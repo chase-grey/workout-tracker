@@ -122,10 +122,11 @@ export function anglesFromHandles(mode: MeasureMode, h: Handles): MeasureResult 
   if (mode === 'split') {
     return { splitDeg: angleBetweenVectors(sub(h.ankleL, h.hip), sub(h.ankleR, h.hip)) }
   }
-  const spine = sub(h.shoulderC, h.hipC)
+  // Each knee line's angle off straight-up: knee directly overhead = 0°, knee
+  // dropped out to the side = 90° (bigger = more open hip).
   return {
-    tailorsLeftDeg: angleBetweenVectors(spine, sub(h.kneeL, h.ankleC)),
-    tailorsRightDeg: angleBetweenVectors(spine, sub(h.kneeR, h.ankleC)),
+    tailorsLeftDeg: angleBetweenVectors(UP, sub(h.kneeL, h.center)),
+    tailorsRightDeg: angleBetweenVectors(UP, sub(h.kneeR, h.center)),
   }
 }
 
