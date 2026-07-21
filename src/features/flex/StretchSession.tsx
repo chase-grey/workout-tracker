@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { MdCheckCircle, MdChevronRight, MdPhotoCamera, MdRadioButtonUnchecked } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
+import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu } from '../../components/KebabMenu'
 import { MeasureSheet } from './MeasureSheet'
@@ -26,6 +27,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const [showList, setShowList] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
+  const [paused, setPaused] = useState(false)
 
   const steps = useMemo(() => buildFlexSteps(flexPlan), [flexPlan])
   const N = steps.length
@@ -88,6 +90,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         </div>
         <KebabMenu
           items={[
+            { label: 'Pause routine', onClick: () => setPaused(true) },
             { label: 'Log measurement', onClick: () => setShowMeasure(true) },
             { label: 'Routine checklist', onClick: () => setShowList(true) },
             {
@@ -141,6 +144,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       </button>
 
       {rest != null && <RestTimer seconds={rest} onClose={() => setRest(null)} />}
+      {paused && <PauseOverlay label="Routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
       {showCamera && (
         <CameraMeasure

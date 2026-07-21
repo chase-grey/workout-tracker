@@ -8,6 +8,7 @@ import { storage } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { ExerciseCard } from './ExerciseCard'
 import { RestTimer } from '../../components/RestTimer'
+import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu } from '../../components/KebabMenu'
 
 type Props = {
@@ -22,6 +23,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   const [rest, setRest] = useState<number | null>(null)
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
+  const [paused, setPaused] = useState(false)
 
   const day = plan[session.dayType]
   const exercises = day.exercises
@@ -105,6 +107,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
         </div>
         <KebabMenu
           items={[
+            { label: 'Pause workout', onClick: () => setPaused(true) },
             { label: 'Workout checklist', onClick: () => setShowList(true) },
             { label: 'Skip logging details (mark done)', onClick: onSkip },
             { label: 'Finish workout now', onClick: finish },
@@ -160,6 +163,8 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
       )}
 
       {rest != null && <RestTimer seconds={rest} onClose={() => setRest(null)} />}
+
+      {paused && <PauseOverlay label="Workout paused" onResume={() => setPaused(false)} />}
 
       {showList && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={() => setShowList(false)}>
