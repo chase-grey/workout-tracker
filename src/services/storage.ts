@@ -1,9 +1,10 @@
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
-import { DEFAULT_PLAN, type Plan } from '../config/plan'
+import { DEFAULT_PLAN, withPlanDefaults, type Plan } from '../config/plan'
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
+import { isSaneDuration, type SessionDuration } from '../lib/estimate'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -19,7 +20,11 @@ const KEYS = {
   activeStep: 'wt.activeStep',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
+  durations: 'wt.durations',
 } as const
+
+/** Keep only the most recent N session durations so the median stays current. */
+const MAX_DURATION_HISTORY = 40
 
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
 export type StretchState = { step: number; done: string[] }
@@ -96,7 +101,7 @@ export const storage = {
   loadQueue: (): QueuedWrite[] => read(KEYS.queue, []),
   saveQueue: (q: QueuedWrite[]) => write(KEYS.queue, q),
 
-  loadPlan: (): Plan => read(KEYS.plan, DEFAULT_PLAN),
+  loadPlan: (): Plan => withPlanDefaults(read<Partial<Plan>>(KEYS.plan, DEFAULT_PLAN)),
   savePlan: (p: Plan) => write(KEYS.plan, p),
 
   loadFlexPlan: (): FlexBlock[] => read(KEYS.flexPlan, DEFAULT_FLEX_ROUTINE),
@@ -108,4 +113,12 @@ export const storage = {
   loadStretch: (): StretchState | null => read(KEYS.stretch, null),
   saveStretch: (s: StretchState | null) =>
     s ? write(KEYS.stretch, s) : localStorage.removeItem(KEYS.stretch),
+
+  loadDurations: (): SessionDuration[] => read(KEYS.durations, []),
+  /** Append a finished session's length, ignoring implausible values and trimming history. */
+  recordDuration: (entry: SessionDuration): void => {
+    if (!isSaneDuration(entry.seconds)) return
+    const next = [...read<SessionDuration[]>(KEYS.durations, []), entry].slice(-MAX_DURATION_HISTORY)
+    write(KEYS.durations, next)
+  },
 }

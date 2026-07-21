@@ -1,4 +1,4 @@
-export type DayType = 'push' | 'pull'
+export type DayType = 'push' | 'pull' | 'abs'
 
 export type SetLog = {
   setNumber: number
@@ -21,6 +21,8 @@ export type WorkoutSession = {
   dayType: DayType
   exercises: ExerciseLog[]
   isHistorical: boolean
+  /** ISO timestamp the session was started — used to learn typical durations. */
+  startedAt?: string
 }
 
 export type BodyWeightEntry = {

@@ -3,7 +3,8 @@ import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked } from 'react-ico
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
 import { nextTarget, type Target } from '../../lib/progression'
-import { estimateSecs, formatDuration, WORK_PER_SET_SEC } from '../../lib/estimate'
+import { formatDuration, remainingSecs, WORK_PER_SET_SEC } from '../../lib/estimate'
+import { toISODate } from '../../lib/dates'
 import { storage } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { ExerciseCard } from './ExerciseCard'
@@ -24,6 +25,9 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
   const [paused, setPaused] = useState(false)
+  // Learned session durations are device-local and only change on finish (which
+  // unmounts this view), so reading once at mount is enough.
+  const [durations] = useState(() => storage.loadDurations())
 
   const day = plan[session.dayType]
   const exercises = day.exercises
@@ -67,14 +71,20 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   }, [exercises, session])
 
   const timeLeft = useMemo(() => {
-    const items = exercises.slice(safeCurrent).map((e) => ({
+    const fallbackItems = exercises.slice(safeCurrent).map((e) => ({
       remainingSets: Math.max(0, e.sets - doneCount(e.key)),
       workSec: WORK_PER_SET_SEC,
       restSec: e.restSec,
     }))
-    return estimateSecs(items)
+    return remainingSecs({
+      history: durations,
+      dayType: session.dayType,
+      doneSets: totals.done,
+      totalSets: totals.all,
+      fallbackItems,
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercises, safeCurrent, session])
+  }, [exercises, safeCurrent, session, durations, totals])
 
   const log = logFor(planned.key)
 
@@ -85,6 +95,13 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   }
 
   const finish = () => {
+    if (session.startedAt) {
+      storage.recordDuration({
+        date: toISODate(new Date()),
+        dayType: session.dayType,
+        seconds: (Date.now() - new Date(session.startedAt).getTime()) / 1000,
+      })
+    }
     const cleaned: WorkoutSession = {
       ...session,
       exercises: session.exercises

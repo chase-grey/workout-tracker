@@ -28,6 +28,7 @@ export function useActiveSession() {
         date: toISODate(new Date()),
         dayType,
         isHistorical: false,
+        startedAt: new Date().toISOString(),
         exercises: plan[dayType].exercises.map((e) => {
           const target = nextTarget(workouts, e.key, {
             repMin: e.repMin,
