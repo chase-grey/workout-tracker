@@ -24,6 +24,17 @@ export function SettingsTab() {
   const [editingFlex, setEditingFlex] = useState(false)
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
+  const initialHeight = settings.heightIn ?? 0
+  const [heightFt, setHeightFt] = useState(initialHeight ? String(Math.floor(initialHeight / 12)) : '')
+  const [heightIn, setHeightIn] = useState(initialHeight ? String(initialHeight % 12) : '')
+  const [heightSaved, setHeightSaved] = useState(false)
+
+  const saveHeight = () => {
+    const total = (Number(heightFt) || 0) * 12 + (Number(heightIn) || 0)
+    updateSettings({ ...settings, heightIn: total > 0 ? total : undefined })
+    setHeightSaved(true)
+    setTimeout(() => setHeightSaved(false), 1500)
+  }
 
   const save = () => {
     updateSettings({ ...settings, apiUrl: apiUrl.trim() })

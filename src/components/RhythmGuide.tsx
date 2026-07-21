@@ -20,20 +20,20 @@ function Shape({ variant, scale, secs }: { variant: Variant; scale: number; secs
     case 'square':
       return (
         <div
-          className="absolute h-44 w-44 rounded-[2rem] bg-accent/25 ring-1 ring-accent/40"
+          className="absolute h-[73%] w-[73%] rounded-[14%] bg-accent/25 ring-1 ring-accent/40"
           style={{ transition: `transform ${secs}s ease-in-out`, transform: `scale(${scale}) rotate(${(scale - 0.55) * 25}deg)` }}
         />
       )
     case 'rings':
       return (
         <>
-          {[11, 8, 5].map((rem, i) => (
+          {[73, 53, 33].map((pct, i) => (
             <div
               key={i}
               className="absolute rounded-full border border-accent/40"
               style={{
-                width: `${rem}rem`,
-                height: `${rem}rem`,
+                width: `${pct}%`,
+                height: `${pct}%`,
                 transition: `transform ${secs}s ease-in-out`,
                 transform: `scale(${scale})`,
               }}
@@ -43,7 +43,7 @@ function Shape({ variant, scale, secs }: { variant: Variant; scale: number; secs
       )
     case 'tide':
       return (
-        <div className="absolute h-44 w-44 overflow-hidden rounded-full ring-1 ring-accent/40">
+        <div className="absolute h-[73%] w-[73%] overflow-hidden rounded-full ring-1 ring-accent/40">
           <div
             className="absolute bottom-0 left-0 w-full bg-accent/30"
             style={{ height: `${scale * 100}%`, transition: `height ${secs}s ease-in-out` }}
@@ -52,7 +52,7 @@ function Shape({ variant, scale, secs }: { variant: Variant; scale: number; secs
       )
     case 'orb':
     default:
-      return <div className="absolute h-44 w-44 rounded-full bg-accent/25 ring-1 ring-accent/40" style={base} />
+      return <div className="absolute h-[73%] w-[73%] rounded-full bg-accent/25 ring-1 ring-accent/40" style={base} />
   }
 }
 
@@ -96,8 +96,8 @@ export function RhythmGuide({ tempo, reps }: { tempo: string; reps?: number }) {
   const remaining = Math.max(1, Math.ceil(phase.seconds * (1 - progress)))
 
   return (
-    <div className="flex items-center justify-center py-2">
-      <div className="relative flex h-60 w-60 items-center justify-center">
+    <div className="flex items-center justify-center py-3">
+      <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
         {/* Per-phase progress ring: sweeps from empty to full over the phase's duration. */}
         <svg viewBox="0 0 240 240" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>
           <circle cx="120" cy="120" r={RING_R} fill="none" strokeWidth="4" className="stroke-surface-2" />
@@ -114,12 +114,12 @@ export function RhythmGuide({ tempo, reps }: { tempo: string; reps?: number }) {
         </svg>
         <Shape variant={variant} scale={scale} secs={phase.seconds} />
         <div className="relative text-center">
-          <div className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+          <div className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Rep {rep}
             {reps ? ` of ${reps}` : ''}
           </div>
-          <div className="text-lg font-semibold capitalize text-white">{phase.label}</div>
-          <div className="text-4xl font-bold tabular-nums leading-tight text-accent">{remaining}</div>
+          <div className="text-2xl font-semibold capitalize text-white">{phase.label}</div>
+          <div className="text-6xl font-bold tabular-nums leading-tight text-accent">{remaining}</div>
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { DEFAULT_PLAN, type Plan } from '../config/plan'
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
+import type { MeasurementEntry } from '../lib/bodyComp'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -11,6 +12,7 @@ const KEYS = {
   cacheBodyWeight: 'wt.cache.bodyweight',
   cacheFlex: 'wt.cache.flex',
   cacheCalories: 'wt.cache.calories',
+  cacheMeasurements: 'wt.cache.measurements',
   queue: 'wt.queue',
   plan: 'wt.plan',
   flexPlan: 'wt.flexplan',
@@ -33,6 +35,8 @@ export type Settings = {
   photoSnoozeUntil?: string
   /** Self-timer length (seconds) for the camera angle-measurement flow. */
   measureTimerSec?: number
+  /** Height in inches — fixed input for the Navy body-fat estimate. */
+  heightIn?: number
 }
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }
@@ -43,6 +47,7 @@ export type QueuedWrite =
   | { type: 'bodyweight'; entry: BodyWeightEntry }
   | { type: 'flex'; entry: FlexEntry }
   | { type: 'calorie'; entry: CalorieEntry }
+  | { type: 'measurement'; entry: MeasurementEntry }
   | { type: 'plan'; plan: Plan }
 
 function read<T>(key: string, fallback: T): T {
@@ -81,6 +86,9 @@ export const storage = {
 
   loadCalories: (): CalorieEntry[] => read(KEYS.cacheCalories, []),
   saveCalories: (entries: CalorieEntry[]) => write(KEYS.cacheCalories, entries),
+
+  loadMeasurements: (): MeasurementEntry[] => read(KEYS.cacheMeasurements, []),
+  saveMeasurements: (entries: MeasurementEntry[]) => write(KEYS.cacheMeasurements, entries),
 
   loadLastSync: (): string | null => read(KEYS.lastSync, null),
   saveLastSync: (iso: string) => write(KEYS.lastSync, iso),

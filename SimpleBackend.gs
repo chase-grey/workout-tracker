@@ -6,16 +6,19 @@
  * app's Settings (or VITE_API_URL at build time).
  *
  * Tabs (created automatically on first write):
- *   workouts:    session_id, date, day_type, exercise, set_number,
- *                weight_lbs, reps, notes, is_historical
- *   body_weight: date, weight_lbs
+ *   workouts:     session_id, date, day_type, exercise, set_number,
+ *                 weight_lbs, reps, notes, is_historical
+ *   body_weight:  date, weight_lbs
+ *   measurements: date, waist_in, neck_in, note
  *
  * Routes:
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
  *   GET  ?route=bodyweight[&since=YYYY-MM-DD]
- *   POST ?route=session      body: { rows: WorkoutRow[] }
- *   POST ?route=import       body: { rows: WorkoutRow[] }   (historical)
- *   POST ?route=bodyweight   body: { date, weightLbs }
+ *   GET  ?route=measurements[&since=YYYY-MM-DD]
+ *   POST ?route=session       body: { rows: WorkoutRow[] }
+ *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
+ *   POST ?route=bodyweight    body: { date, weightLbs }
+ *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  */
 
 const ss = SpreadsheetApp.getActiveSpreadsheet()
@@ -35,6 +38,7 @@ const BW_HEADERS = ['date', 'weight_lbs']
 const FLEX_HEADERS = ['date', 'split_deg', 'tailors_left_deg', 'tailors_right_deg', 'note']
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label']
+const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
 
 function doGet(e) {
   try {
@@ -47,6 +51,8 @@ function doGet(e) {
         return json(getFlex(e.parameter.since))
       case 'calories':
         return json(getCalories(e.parameter.since))
+      case 'measurements':
+        return json(getMeasurements(e.parameter.since))
       case 'plan':
         return json(getPlan())
       default:
@@ -70,6 +76,8 @@ function doPost(e) {
         return json(appendFlex(body))
       case 'calories':
         return json(appendCalories(body))
+      case 'measurements':
+        return json(appendMeasurements(body))
       case 'plan':
         return json(savePlan(body.plan))
       default:
@@ -291,6 +299,56 @@ function appendCalories(body) {
     sh.getRange(sh.getLastRow() + 1, 1, values.length, CALORIE_HEADERS.length).setValues(values)
   }
   return { saved: values.length }
+}
+
+function getMeasurements(since) {
+  const sh = sheet('measurements', MEASUREMENT_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0]) continue
+    const date = isoDate(r[0])
+    if (since && date < since) continue
+    out.push({
+      date: date,
+      waistIn: Number(r[1]),
+      neckIn: Number(r[2]),
+      note: String(r[3] || ''),
+    })
+  }
+  return out
+}
+
+// Upsert by date: a new measurement for an existing date overwrites that row.
+function appendMeasurements(body) {
+  const sh = sheet('measurements', MEASUREMENT_HEADERS)
+  const list = Array.isArray(body.entries) ? body.entries : [body]
+  const rows = sh.getDataRange().getValues()
+
+  const rowByDate = {}
+  for (let i = 1; i < rows.length; i++) {
+    const d = isoDate(rows[i][0])
+    if (d && !(d in rowByDate)) rowByDate[d] = i + 1
+  }
+
+  let saved = 0
+  list
+    .filter(function (e) {
+      return e && e.date && isFinite(Number(e.waistIn)) && isFinite(Number(e.neckIn))
+    })
+    .forEach(function (e) {
+      const values = [e.date, Number(e.waistIn), Number(e.neckIn), e.note || '']
+      const existingRow = rowByDate[e.date]
+      if (existingRow) {
+        sh.getRange(existingRow, 1, 1, MEASUREMENT_HEADERS.length).setValues([values])
+      } else {
+        sh.appendRow(values)
+        rowByDate[e.date] = sh.getLastRow()
+      }
+      saved++
+    })
+  return { saved: saved }
 }
 
 function getPlan() {

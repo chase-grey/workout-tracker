@@ -10,6 +10,7 @@ import { QUICK_LOG_KEY, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import { calorieHitDates, type CalorieEntry } from '../lib/calories'
+import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp'
 import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from '../lib/weeklyStreak'
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
@@ -31,6 +32,7 @@ type DataContextValue = {
   bodyWeights: BodyWeightEntry[]
   flexEntries: FlexEntry[]
   calorieEntries: CalorieEntry[]
+  measurements: MeasurementEntry[]
   settings: Settings
   plan: Plan
   flexPlan: FlexBlock[]
@@ -45,6 +47,7 @@ type DataContextValue = {
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
   logFlex: (measurement: FlexMeasurement) => Promise<void>
   logCalories: (calories: number, label?: string, date?: string) => Promise<void>
+  logMeasurement: (waistIn: number, neckIn: number, note?: string, date?: string) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
@@ -61,6 +64,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [bodyWeights, setBodyWeights] = useState<BodyWeightEntry[]>(() => storage.loadBodyWeights())
   const [flexEntries, setFlexEntries] = useState<FlexEntry[]>(() => storage.loadFlex())
   const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(() => storage.loadCalories())
+  const [measurements, setMeasurements] = useState<MeasurementEntry[]>(() => storage.loadMeasurements())
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [flexPlan, setFlexPlan] = useState<FlexBlock[]>(() => storage.loadFlexPlan())
@@ -92,6 +96,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setCalorieEntries(e)
     storage.saveCalories(e)
   }, [])
+  const persistMeasurements = useCallback((e: MeasurementEntry[]) => {
+    setMeasurements(e)
+    storage.saveMeasurements(e)
+  }, [])
   const persistQueue = useCallback((q: QueuedWrite[]) => {
     setQueue(q)
     storage.saveQueue(q)
@@ -111,6 +119,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         else if (w.type === 'bodyweight') await api.postBodyWeight(w.entry)
         else if (w.type === 'flex') await api.postFlex(w.entry)
         else if (w.type === 'calorie') await api.postCalorie(w.entry)
+        else if (w.type === 'measurement') await api.postMeasurement(w.entry)
         else if (w.type === 'plan') await api.postPlan(w.plan)
       } catch {
         remaining.push(w)
@@ -151,6 +160,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     try {
+      const m = await api.fetchMeasurements()
+      if (Array.isArray(m)) persistMeasurements(dedupeMeasurementsByDate(m))
+    } catch {
+      /* ignore */
+    }
+    try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
         setPlan(p)
@@ -159,7 +174,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories])
+  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements])
 
   // Initial sync + flush the queue whenever we come back online.
   useEffect(() => {
@@ -261,6 +276,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, notify, persistCalories],
   )
 
+  const logMeasurement = useCallback(
+    async (waistIn: number, neckIn: number, note?: string, date?: string) => {
+      const entry: MeasurementEntry = {
+        date: date ?? toISODate(new Date()),
+        waistIn,
+        neckIn,
+        ...(note ? { note } : {}),
+      }
+      persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), entry]))
+      try {
+        await api.postMeasurement(entry)
+        notify('Measurement saved', true)
+      } catch {
+        enqueue({ type: 'measurement', entry })
+        notify("Couldn't save — queued to retry", false)
+      }
+    },
+    [enqueue, notify, persistMeasurements],
+  )
+
   const quickLog = useCallback(
     async (dayType: DayType) => {
       const row: WorkoutRow = {
@@ -347,6 +382,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     bodyWeights,
     flexEntries,
     calorieEntries,
+    measurements,
     settings,
     plan,
     flexPlan,
@@ -361,6 +397,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logBodyWeight,
     logFlex,
     logCalories,
+    logMeasurement,
     quickLog,
     logProgressPhoto,
     importData,
