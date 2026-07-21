@@ -25,8 +25,10 @@ export function phaseScales(phases: TempoPhase[]): number[] {
   return phases.map((p) => {
     const l = p.label.toLowerCase()
     if (/\b(down|push|lower|descend|in|contract)\b/.test(l)) cur = MIN
-    else if (/\b(up|rise|return|release|out|expand|extend)\b/.test(l)) cur = MAX
-    else if (/\b(hold|hang|pause|bottom|top|stay)\b/.test(l)) {
+    // "hang"/"release" is the passive ease-off phase — grow back toward the top
+    // so a two-phase push/hang stretch (e.g. the pancake) visibly breathes.
+    else if (/\b(up|rise|return|release|out|expand|extend|hang)\b/.test(l)) cur = MAX
+    else if (/\b(hold|pause|bottom|top|stay)\b/.test(l)) {
       /* keep current */
     } else cur = cur === MAX ? MIN : MAX
     return cur

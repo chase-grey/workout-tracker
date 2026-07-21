@@ -10,9 +10,9 @@ const RING_C = 2 * Math.PI * RING_R
  * come back and it reflects the real elapsed time. Counts into overtime until
  * dismissed. No system notifications by design.
  *
- * Alongside the numeric clock, a large ring drains over the rest period and a
- * slow breathing orb pulses behind it — a calm, glanceable cue for how much
- * rest is left that reads from across the room.
+ * A large ring drains over the rest period with a slow breathing orb pulsing
+ * behind it — a calm, glanceable cue for how much rest is left — and the numeric
+ * countdown sits at the bottom of the screen.
  */
 export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () => void }) {
   const endRef = useRef<number>(Date.now() + seconds * 1000)
@@ -56,42 +56,42 @@ export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () =
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-black px-6"
+      className="fixed inset-0 z-50 flex flex-col items-center bg-black px-6"
       onClick={onClose}
     >
-      <p className="text-sm uppercase tracking-widest text-neutral-500">Rest</p>
-
-      <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
-        {/* Breathing orb — a calm pace cue behind the clock. */}
-        <div
-          className={`absolute h-[62%] w-[62%] rounded-full ring-1 ${over ? 'bg-accent-2/15 ring-accent-2/30' : 'bg-accent/15 ring-accent/30'}`}
-          style={{ transition: 'transform 4s ease-in-out', transform: `scale(${breatheIn ? 1.06 : 0.86})` }}
-        />
-
-        {/* Rest progress ring: full at the start, empty when rest is up. */}
-        <svg viewBox="0 0 240 240" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>
-          <circle cx="120" cy="120" r={RING_R} fill="none" strokeWidth="4" className="stroke-surface-2" />
-          <circle
-            cx="120"
-            cy="120"
-            r={RING_R}
-            fill="none"
-            strokeWidth="6"
-            strokeLinecap="round"
-            className={over ? 'stroke-accent-2' : 'stroke-accent'}
-            style={{
-              strokeDasharray: RING_C,
-              strokeDashoffset: RING_C * (1 - (over ? 1 : fraction)),
-              transition: 'stroke-dashoffset 250ms linear',
-            }}
+      <div className="flex flex-1 items-center justify-center">
+        <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
+          {/* Breathing orb — a calm pace cue. */}
+          <div
+            className={`absolute h-[62%] w-[62%] rounded-full ring-1 ${over ? 'bg-accent-2/15 ring-accent-2/30' : 'bg-accent/15 ring-accent/30'}`}
+            style={{ transition: 'transform 4s ease-in-out', transform: `scale(${breatheIn ? 1.06 : 0.86})` }}
           />
-        </svg>
 
-        <div
-          className={`relative font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-white'}`}
-        >
-          {label}
+          {/* Rest progress ring: full at the start, empty when rest is up. */}
+          <svg viewBox="0 0 240 240" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>
+            <circle cx="120" cy="120" r={RING_R} fill="none" strokeWidth="4" className="stroke-surface-2" />
+            <circle
+              cx="120"
+              cy="120"
+              r={RING_R}
+              fill="none"
+              strokeWidth="6"
+              strokeLinecap="round"
+              className={over ? 'stroke-accent-2' : 'stroke-accent'}
+              style={{
+                strokeDasharray: RING_C,
+                strokeDashoffset: RING_C * (1 - (over ? 1 : fraction)),
+                transition: 'stroke-dashoffset 250ms linear',
+              }}
+            />
+          </svg>
         </div>
+      </div>
+
+      <div
+        className={`pb-[calc(2rem+env(safe-area-inset-bottom))] font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-white'}`}
+      >
+        {label}
       </div>
     </div>
   )

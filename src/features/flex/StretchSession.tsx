@@ -23,6 +23,16 @@ const GET_READY_SEC = 5
 const measureModeFor = (exKey: string): MeasureMode =>
   exKey.toLowerCase().includes('tailor') ? 'tailors' : 'split'
 
+/**
+ * Only tailor's pose and horse squats have a meaningful camera-measurable angle
+ * (tailor's angle / straddle split). The pancake hang has none, so we hide the
+ * "Measure with camera" button there.
+ */
+const canMeasureFor = (exKey: string): boolean => {
+  const k = exKey.toLowerCase()
+  return k.includes('tailor') || k.includes('horse')
+}
+
 /** Guided, one-set-at-a-time stretch flow with a tempo rhythm animation. */
 export function StretchSession({ onClose }: { onClose: () => void }) {
   const { flexPlan, logFlex, durations, logSessionDuration } = useData()
@@ -172,12 +182,14 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         )}
       </button>
 
-      <button
-        onClick={() => setShowCamera(true)}
-        className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-border bg-surface font-semibold text-neutral-200 active:opacity-80"
-      >
-        <MdPhotoCamera aria-hidden /> Measure with camera
-      </button>
+      {canMeasureFor(step.exKey) && (
+        <button
+          onClick={() => setShowCamera(true)}
+          className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-border bg-surface font-semibold text-neutral-200 active:opacity-80"
+        >
+          <MdPhotoCamera aria-hidden /> Measure with camera
+        </button>
+      )}
 
       {rest != null && (
         <RestTimer

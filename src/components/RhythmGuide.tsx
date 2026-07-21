@@ -106,7 +106,6 @@ export function RhythmGuide({ tempo, reps, running = true }: { tempo: string; re
   // motion flows continuously and the first phase animates from its start point.
   const from = scales[(i - 1 + scales.length) % scales.length]
   const scale = from + (scales[i] - from) * easeInOut(progress)
-  const remaining = Math.max(1, Math.ceil(phase.seconds * (1 - progress)))
 
   return (
     <div className="flex flex-col items-center py-3">
@@ -114,12 +113,13 @@ export function RhythmGuide({ tempo, reps, running = true }: { tempo: string; re
         <Shape variant={variant} scale={scale} />
       </div>
       <div className="mt-2 text-center">
-        <div className="text-sm font-medium uppercase tracking-wider text-neutral-400">
+        {/* Rep count is the primary tracker now that the seconds readout is gone
+            — the shape's motion paces each phase, so keep the number big + bright. */}
+        <div className="text-5xl font-bold tabular-nums leading-tight text-accent-2">
           Rep {rep}
-          {reps ? ` of ${reps}` : ''}
+          {reps ? <span className="text-3xl text-neutral-400"> / {reps}</span> : ''}
         </div>
-        <div className="text-2xl font-semibold capitalize text-white">{phase.label}</div>
-        <div className="text-6xl font-bold tabular-nums leading-tight text-accent-2">{remaining}</div>
+        <div className="mt-1 text-2xl font-semibold capitalize text-white">{phase.label}</div>
       </div>
     </div>
   )
