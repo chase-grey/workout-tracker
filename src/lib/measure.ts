@@ -29,6 +29,16 @@ export type HandleSpec = { key: string; label: string }
 /** A line to draw between two handles, with a color role. */
 export type Segment = { from: string; to: string; role: 'a' | 'b' | 'ref' }
 
+/** Colors each segment/handle role is drawn in (shared by editor + saved photo). */
+export const ROLE_COLOR: Record<Segment['role'], string> = {
+  a: '#22c55e', // accent green — left arm
+  b: '#38bdf8', // sky — right arm
+  ref: '#e5e5e5', // neutral — reference line
+}
+
+/** Straight up in image coords (y grows downward), the vertical we measure off. */
+export const UP: Pt = { x: 0, y: -1 }
+
 export const MEASURE_LABEL: Record<MeasureMode, string> = {
   split: 'Side split',
   tailors: "Tailor's pose",
@@ -41,10 +51,10 @@ export const HANDLES: Record<MeasureMode, HandleSpec[]> = {
     { key: 'ankleL', label: 'Left ankle' },
     { key: 'ankleR', label: 'Right ankle' },
   ],
+  // Tailor's is measured off vertical, so no spine reference line: each knee
+  // line runs from the tip of that knee down to a single dot between the feet.
   tailors: [
-    { key: 'hipC', label: 'Hips' },
-    { key: 'shoulderC', label: 'Shoulders' },
-    { key: 'ankleC', label: 'Ankles' },
+    { key: 'center', label: 'Between feet' },
     { key: 'kneeL', label: 'Left knee' },
     { key: 'kneeR', label: 'Right knee' },
   ],
@@ -57,9 +67,8 @@ export const SEGMENTS: Record<MeasureMode, Segment[]> = {
     { from: 'hip', to: 'ankleR', role: 'b' },
   ],
   tailors: [
-    { from: 'hipC', to: 'shoulderC', role: 'ref' },
-    { from: 'ankleC', to: 'kneeL', role: 'a' },
-    { from: 'ankleC', to: 'kneeR', role: 'b' },
+    { from: 'center', to: 'kneeL', role: 'a' },
+    { from: 'center', to: 'kneeR', role: 'b' },
   ],
 }
 
@@ -73,11 +82,9 @@ export function defaultHandles(mode: MeasureMode): Handles {
     }
   }
   return {
-    hipC: { x: 0.5, y: 0.55 },
-    shoulderC: { x: 0.5, y: 0.3 },
-    ankleC: { x: 0.5, y: 0.72 },
-    kneeL: { x: 0.35, y: 0.62 },
-    kneeR: { x: 0.65, y: 0.62 },
+    center: { x: 0.5, y: 0.72 },
+    kneeL: { x: 0.35, y: 0.55 },
+    kneeR: { x: 0.65, y: 0.55 },
   }
 }
 
@@ -99,21 +106,10 @@ export function handlesFromLandmarks(mode: MeasureMode, lms: Pt[]): Handles | nu
     }
   }
 
-  const need = [
-    POSE.LEFT_SHOULDER,
-    POSE.RIGHT_SHOULDER,
-    POSE.LEFT_HIP,
-    POSE.RIGHT_HIP,
-    POSE.LEFT_KNEE,
-    POSE.RIGHT_KNEE,
-    POSE.LEFT_ANKLE,
-    POSE.RIGHT_ANKLE,
-  ]
+  const need = [POSE.LEFT_KNEE, POSE.RIGHT_KNEE, POSE.LEFT_ANKLE, POSE.RIGHT_ANKLE]
   if (need.some((i) => at(i) === undefined)) return null
   return {
-    hipC: midpoint(lms[POSE.LEFT_HIP], lms[POSE.RIGHT_HIP]),
-    shoulderC: midpoint(lms[POSE.LEFT_SHOULDER], lms[POSE.RIGHT_SHOULDER]),
-    ankleC: midpoint(lms[POSE.LEFT_ANKLE], lms[POSE.RIGHT_ANKLE]),
+    center: midpoint(lms[POSE.LEFT_ANKLE], lms[POSE.RIGHT_ANKLE]),
     kneeL: { x: lms[POSE.LEFT_KNEE].x, y: lms[POSE.LEFT_KNEE].y },
     kneeR: { x: lms[POSE.RIGHT_KNEE].x, y: lms[POSE.RIGHT_KNEE].y },
   }

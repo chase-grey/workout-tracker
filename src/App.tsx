@@ -36,7 +36,8 @@ function AppShell() {
   }, [tab])
 
   const startStretch = () => {
-    if (!storage.loadStretch()) storage.saveStretch({ step: 0, done: [] })
+    if (!storage.loadStretch())
+      storage.saveStretch({ step: 0, done: [], startedAt: new Date().toISOString() })
     setStretching(true)
   }
 

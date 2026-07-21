@@ -4,7 +4,7 @@ import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
-import { isSaneDuration, type SessionDuration } from '../lib/estimate'
+import type { SessionDuration } from '../lib/estimate'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -14,20 +14,17 @@ const KEYS = {
   cacheFlex: 'wt.cache.flex',
   cacheCalories: 'wt.cache.calories',
   cacheMeasurements: 'wt.cache.measurements',
+  cacheDurations: 'wt.cache.durations',
   queue: 'wt.queue',
   plan: 'wt.plan',
   flexPlan: 'wt.flexplan',
   activeStep: 'wt.activeStep',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
-  durations: 'wt.durations',
 } as const
 
-/** Keep only the most recent N session durations so the median stays current. */
-const MAX_DURATION_HISTORY = 40
-
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
-export type StretchState = { step: number; done: string[] }
+export type StretchState = { step: number; done: string[]; startedAt?: string }
 
 export type Settings = {
   apiUrl: string
@@ -53,6 +50,7 @@ export type QueuedWrite =
   | { type: 'flex'; entry: FlexEntry }
   | { type: 'calorie'; entry: CalorieEntry }
   | { type: 'measurement'; entry: MeasurementEntry }
+  | { type: 'duration'; entry: SessionDuration }
   | { type: 'plan'; plan: Plan }
 
 function read<T>(key: string, fallback: T): T {
@@ -95,6 +93,9 @@ export const storage = {
   loadMeasurements: (): MeasurementEntry[] => read(KEYS.cacheMeasurements, []),
   saveMeasurements: (entries: MeasurementEntry[]) => write(KEYS.cacheMeasurements, entries),
 
+  loadDurations: (): SessionDuration[] => read(KEYS.cacheDurations, []),
+  saveDurations: (entries: SessionDuration[]) => write(KEYS.cacheDurations, entries),
+
   loadLastSync: (): string | null => read(KEYS.lastSync, null),
   saveLastSync: (iso: string) => write(KEYS.lastSync, iso),
 
@@ -113,12 +114,4 @@ export const storage = {
   loadStretch: (): StretchState | null => read(KEYS.stretch, null),
   saveStretch: (s: StretchState | null) =>
     s ? write(KEYS.stretch, s) : localStorage.removeItem(KEYS.stretch),
-
-  loadDurations: (): SessionDuration[] => read(KEYS.durations, []),
-  /** Append a finished session's length, ignoring implausible values and trimming history. */
-  recordDuration: (entry: SessionDuration): void => {
-    if (!isSaneDuration(entry.seconds)) return
-    const next = [...read<SessionDuration[]>(KEYS.durations, []), entry].slice(-MAX_DURATION_HISTORY)
-    write(KEYS.durations, next)
-  },
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked } from 'react-icons/md'
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
@@ -20,14 +20,15 @@ type Props = {
 }
 
 export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
-  const { plan, workouts } = useData()
+  const { plan, workouts, durations, logSessionDuration } = useData()
   const [rest, setRest] = useState<number | null>(null)
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
   const [paused, setPaused] = useState(false)
-  // Learned session durations are device-local and only change on finish (which
-  // unmounts this view), so reading once at mount is enough.
-  const [durations] = useState(() => storage.loadDurations())
+  // Accumulated time spent on the rest-timer screen (the "resting" slice of the
+  // session). restStartRef marks when the current rest overlay opened.
+  const restAccumSec = useRef(0)
+  const restStartRef = useRef(0)
 
   const day = plan[session.dayType]
   const exercises = day.exercises
@@ -78,9 +79,9 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     }))
     return remainingSecs({
       history: durations,
-      dayType: session.dayType,
-      doneSets: totals.done,
-      totalSets: totals.all,
+      sel: { kind: 'workout', dayType: session.dayType },
+      doneSteps: totals.done,
+      totalSteps: totals.all,
       fallbackItems,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,10 +97,12 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
 
   const finish = () => {
     if (session.startedAt) {
-      storage.recordDuration({
+      void logSessionDuration({
         date: toISODate(new Date()),
+        kind: 'workout',
         dayType: session.dayType,
-        seconds: (Date.now() - new Date(session.startedAt).getTime()) / 1000,
+        totalSec: (Date.now() - new Date(session.startedAt).getTime()) / 1000,
+        restSec: restAccumSec.current,
       })
     }
     const cleaned: WorkoutSession = {
@@ -159,7 +162,10 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
           onUpdateSet={(i, patch) => controls.updateSet(planned.key, i, patch)}
           onRemoveSet={(i) => controls.removeSet(planned.key, i)}
           onSetNotes={(notes) => controls.setNotes(planned.key, notes)}
-          onRest={(sec) => setRest(sec)}
+          onRest={(sec) => {
+            restStartRef.current = Date.now()
+            setRest(sec)
+          }}
         />
       )}
 
@@ -179,7 +185,16 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
         </button>
       )}
 
-      {rest != null && <RestTimer seconds={rest} onClose={() => setRest(null)} />}
+      {rest != null && (
+        <RestTimer
+          seconds={rest}
+          onClose={() => {
+            if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
+            restStartRef.current = 0
+            setRest(null)
+          }}
+        />
+      )}
 
       {paused && <PauseOverlay label="Workout paused" onResume={() => setPaused(false)} />}
 

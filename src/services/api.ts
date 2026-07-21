@@ -3,6 +3,7 @@ import type { Plan } from '../config/plan'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
+import type { SessionDuration } from '../lib/estimate'
 import { storage } from './storage'
 
 /**
@@ -71,4 +72,6 @@ export const api = {
   fetchMeasurements: (since?: string) =>
     get<MeasurementEntry[]>('measurements', since ? { since } : {}),
   postMeasurement: (entry: MeasurementEntry) => post<{ saved: number }>('measurements', entry),
+  fetchDurations: (since?: string) => get<SessionDuration[]>('durations', since ? { since } : {}),
+  postDuration: (entry: SessionDuration) => post<{ saved: number }>('durations', entry),
 }

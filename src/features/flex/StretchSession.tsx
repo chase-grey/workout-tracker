@@ -1,18 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdCheckCircle, MdChevronRight, MdPhotoCamera, MdRadioButtonUnchecked } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
+import { GetReady } from '../../components/GetReady'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu } from '../../components/KebabMenu'
 import { MeasureSheet } from './MeasureSheet'
 import { CameraMeasure } from './CameraMeasure'
-import { estimateSecs, formatDuration } from '../../lib/estimate'
+import { formatDuration, remainingSecs } from '../../lib/estimate'
 import { buildFlexSteps } from '../../lib/flexSteps'
 import { type MeasureMode } from '../../lib/measure'
 import { storage } from '../../services/storage'
+import { toISODate } from '../../lib/dates'
 
 const SEC_PER_REP = 5
+
+/** Seconds to get into position after rest, before the next stretch's pace starts. */
+const GET_READY_SEC = 5
 
 /** Which angle a stretch's photo measurement defaults to (user can switch). */
 const measureModeFor = (exKey: string): MeasureMode =>
@@ -20,31 +25,54 @@ const measureModeFor = (exKey: string): MeasureMode =>
 
 /** Guided, one-set-at-a-time stretch flow with a tempo rhythm animation. */
 export function StretchSession({ onClose }: { onClose: () => void }) {
-  const { flexPlan, logFlex } = useData()
+  const { flexPlan, logFlex, durations, logSessionDuration } = useData()
   const [current, setCurrent] = useState(() => storage.loadStretch()?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(storage.loadStretch()?.done ?? []))
   const [rest, setRest] = useState<number | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const [showList, setShowList] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
   const [paused, setPaused] = useState(false)
+  // When the routine began (persisted so a resumed session still measures its
+  // full length) and accumulated time spent on the rest screen.
+  const [startedAt] = useState(() => storage.loadStretch()?.startedAt)
+  const restAccumSec = useRef(0)
+  const restStartRef = useRef(0)
 
   const steps = useMemo(() => buildFlexSteps(flexPlan), [flexPlan])
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
   useEffect(() => {
-    storage.saveStretch({ step: safeCurrent, done: [...done] })
-  }, [safeCurrent, done])
+    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt })
+  }, [safeCurrent, done, startedAt])
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
   const timeLeft = useMemo(() => {
-    const items = steps
+    const fallbackItems = steps
       .filter((s) => !done.has(s.stepKey))
       .map((s) => ({ remainingSets: 1, workSec: s.reps * SEC_PER_REP, restSec: s.restSec }))
-    return estimateSecs(items)
-  }, [steps, done])
+    return remainingSecs({
+      history: durations,
+      sel: { kind: 'stretch' },
+      doneSteps: completed,
+      totalSteps: N,
+      fallbackItems,
+    })
+  }, [steps, done, durations, completed, N])
+
+  // Record the finished routine's length once, for time-left learning + reporting.
+  const recordDuration = () => {
+    if (!startedAt) return
+    void logSessionDuration({
+      date: toISODate(new Date()),
+      kind: 'stretch',
+      totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,
+      restSec: restAccumSec.current,
+    })
+  }
 
   if (N === 0) {
     return (
@@ -71,9 +99,11 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const completeSetAndAdvance = () => {
     setDone((prev) => new Set(prev).add(step.stepKey))
     if (atLast) {
+      recordDuration()
       void logFlex({ note: 'Stretch routine' })
       onClose()
     } else {
+      restStartRef.current = Date.now()
       setRest(step.restSec)
       setCurrent(safeCurrent + 1)
     }
@@ -96,6 +126,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
             {
               label: 'Skip logging details (mark done)',
               onClick: () => {
+                recordDuration()
                 void logFlex({ note: 'Stretch session' })
                 onClose()
               },
@@ -103,6 +134,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
             {
               label: 'Finish & log session',
               onClick: () => {
+                recordDuration()
                 void logFlex({ note: 'Stretch routine' })
                 onClose()
               },
@@ -120,7 +152,12 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         {step.blockLabel} · {step.reps} reps
       </p>
 
-      <RhythmGuide key={step.stepKey} tempo={step.tempo} reps={step.reps} />
+      <RhythmGuide
+        key={step.stepKey}
+        tempo={step.tempo}
+        reps={step.reps}
+        running={rest == null && !preparing && !paused}
+      />
 
       <button
         onClick={completeSetAndAdvance}
@@ -142,7 +179,18 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         <MdPhotoCamera aria-hidden /> Measure with camera
       </button>
 
-      {rest != null && <RestTimer seconds={rest} onClose={() => setRest(null)} />}
+      {rest != null && (
+        <RestTimer
+          seconds={rest}
+          onClose={() => {
+            if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
+            restStartRef.current = 0
+            setRest(null)
+            setPreparing(true)
+          }}
+        />
+      )}
+      {preparing && <GetReady seconds={GET_READY_SEC} onDone={() => setPreparing(false)} />}
       {paused && <PauseOverlay label="Routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
       {showCamera && (

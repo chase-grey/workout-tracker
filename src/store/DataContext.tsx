@@ -11,6 +11,7 @@ import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import { calorieHitDates, type CalorieEntry } from '../lib/calories'
 import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp'
+import { isSaneDuration, type SessionDuration } from '../lib/estimate'
 import { MEASUREMENT_HISTORY } from '../config/body'
 import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from '../lib/weeklyStreak'
 
@@ -34,6 +35,7 @@ type DataContextValue = {
   flexEntries: FlexEntry[]
   calorieEntries: CalorieEntry[]
   measurements: MeasurementEntry[]
+  durations: SessionDuration[]
   settings: Settings
   plan: Plan
   flexPlan: FlexBlock[]
@@ -49,6 +51,7 @@ type DataContextValue = {
   logFlex: (measurement: FlexMeasurement) => Promise<void>
   logCalories: (calories: number, label?: string, date?: string) => Promise<void>
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
+  logSessionDuration: (entry: SessionDuration) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
@@ -66,6 +69,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [flexEntries, setFlexEntries] = useState<FlexEntry[]>(() => storage.loadFlex())
   const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(() => storage.loadCalories())
   const [measurements, setMeasurements] = useState<MeasurementEntry[]>(() => storage.loadMeasurements())
+  const [durations, setDurations] = useState<SessionDuration[]>(() => storage.loadDurations())
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [flexPlan, setFlexPlan] = useState<FlexBlock[]>(() => storage.loadFlexPlan())
@@ -101,6 +105,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setMeasurements(e)
     storage.saveMeasurements(e)
   }, [])
+  const persistDurations = useCallback((e: SessionDuration[]) => {
+    setDurations(e)
+    storage.saveDurations(e)
+  }, [])
   const persistQueue = useCallback((q: QueuedWrite[]) => {
     setQueue(q)
     storage.saveQueue(q)
@@ -121,6 +129,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         else if (w.type === 'flex') await api.postFlex(w.entry)
         else if (w.type === 'calorie') await api.postCalorie(w.entry)
         else if (w.type === 'measurement') await api.postMeasurement(w.entry)
+        else if (w.type === 'duration') await api.postDuration(w.entry)
         else if (w.type === 'plan') await api.postPlan(w.plan)
       } catch {
         remaining.push(w)
@@ -167,6 +176,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     try {
+      const d = await api.fetchDurations()
+      if (Array.isArray(d)) persistDurations(d)
+    } catch {
+      /* ignore */
+    }
+    try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
         const merged = withPlanDefaults(p)
@@ -176,7 +191,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements])
+  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations])
 
   // Initial sync + flush the queue whenever we come back online.
   useEffect(() => {
@@ -294,6 +309,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, notify, persistMeasurements],
   )
 
+  // Records a finished session's length for time-left learning + time-spent
+  // reporting. Silent (the workout/stretch save already toasts) and drops
+  // implausible durations so a backgrounded session can't skew the numbers.
+  const logSessionDuration = useCallback(
+    async (entry: SessionDuration) => {
+      if (!isSaneDuration(entry.totalSec)) return
+      persistDurations([...storage.loadDurations(), entry])
+      try {
+        await api.postDuration(entry)
+      } catch {
+        enqueue({ type: 'duration', entry })
+      }
+    },
+    [enqueue, persistDurations],
+  )
+
   const quickLog = useCallback(
     async (dayType: DayType) => {
       const row: WorkoutRow = {
@@ -392,6 +423,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     flexEntries,
     calorieEntries,
     measurements: allMeasurements,
+    durations,
     settings,
     plan,
     flexPlan,
@@ -407,6 +439,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logFlex,
     logCalories,
     logMeasurement,
+    logSessionDuration,
     quickLog,
     logProgressPhoto,
     importData,

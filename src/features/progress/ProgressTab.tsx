@@ -14,6 +14,7 @@ import { availableExercises, exerciseSeries, filterRange, type Metric, type Poin
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
 import { GoalsPanel } from './GoalsPanel'
 import { FlexProgress } from '../flex/FlexProgress'
+import { TimeSpent } from './TimeSpent'
 import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
 import { bodyFatSeries, waistSeries, latestMeasurement, effectiveBodyFat } from '../../lib/bodyComp'
@@ -247,6 +248,8 @@ export function ProgressTab() {
       {exercise === BENCH_COMBO ? <BenchChart data={benchSeries} unit={unit} /> : <Chart data={series} unit={unit} />}
 
       <FlexProgress />
+
+      <TimeSpent months={months} />
 
       {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
       {showMeasure && <MeasurementLogSheet onClose={() => setShowMeasure(false)} />}

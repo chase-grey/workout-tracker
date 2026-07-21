@@ -1,0 +1,150 @@
+import { useMemo } from 'react'
+import {
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { useData } from '../../store/DataContext'
+import {
+  activityTotals,
+  filterDurationsByMonths,
+  monthlyActivity,
+  secToMin,
+} from '../../lib/activityTime'
+
+/** Distinct hues for the three buckets — green work, deep-green stretch, amber rest. */
+const COLORS = { workout: '#22c55e', stretch: '#15803d', rest: '#f59e0b' } as const
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "2026-07" → "Jul '26". */
+function monthLabel(m: string): string {
+  const [y, mo] = m.split('-')
+  return `${MONTH_ABBR[Number(mo) - 1] ?? mo} '${y.slice(2)}`
+}
+
+/** Seconds → "1h 20m" / "45m". */
+function fmtHm(sec: number): string {
+  const min = secToMin(sec)
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  if (h === 0) return `${m}m`
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
+const axisTick = { fill: '#737373', fontSize: 11 }
+const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+
+export function TimeSpent({ months }: { months: number | null }) {
+  const { durations } = useData()
+
+  const inRange = useMemo(() => filterDurationsByMonths(durations, months), [durations, months])
+  const totals = useMemo(() => activityTotals(inRange), [inRange])
+  const grandTotal = totals.workoutSec + totals.stretchSec + totals.restSec
+
+  const pieData = useMemo(
+    () =>
+      [
+        { key: 'workout', name: 'Working out', sec: totals.workoutSec, fill: COLORS.workout },
+        { key: 'stretch', name: 'Stretching', sec: totals.stretchSec, fill: COLORS.stretch },
+        { key: 'rest', name: 'Resting', sec: totals.restSec, fill: COLORS.rest },
+      ].filter((d) => d.sec > 0),
+    [totals],
+  )
+
+  const monthly = useMemo(
+    () =>
+      monthlyActivity(inRange).map((m) => ({
+        month: monthLabel(m.month),
+        workout: secToMin(m.workoutSec),
+        stretch: secToMin(m.stretchSec),
+        rest: secToMin(m.restSec),
+      })),
+    [inRange],
+  )
+
+  return (
+    <>
+      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">
+        Time spent{grandTotal > 0 ? ` · ${fmtHm(grandTotal)}` : ''}
+      </h3>
+
+      {grandTotal === 0 ? (
+        <div className="flex h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
+          No sessions logged yet in this range — finish a workout or stretch to start tracking time.
+        </div>
+      ) : (
+        <>
+          <div className="rounded-2xl bg-surface p-2">
+            <ResponsiveContainer width="100%" height={224}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="sec"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={54}
+                  outerRadius={82}
+                  paddingAngle={2}
+                  stroke="none"
+                >
+                  {pieData.map((d) => (
+                    <Cell key={d.key} fill={d.fill} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v, n) => [fmtHm(Number(v)), n]}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: 12 }}
+                  formatter={(value, entry) => {
+                    // recharts payload carries the slice's datum
+                    const sec = (entry?.payload as { sec?: number } | undefined)?.sec ?? 0
+                    return (
+                      <span className="text-neutral-300">
+                        {value} · {fmtHm(sec)}
+                      </span>
+                    )
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {monthly.length > 1 && (
+            <div className="rounded-2xl bg-surface p-2">
+              <ResponsiveContainer width="100%" height={224}>
+                <LineChart data={monthly} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+                  <CartesianGrid stroke="#262626" vertical={false} />
+                  <XAxis dataKey="month" tick={axisTick} />
+                  <YAxis tick={axisTick} width={40} unit="m" />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    labelStyle={{ color: '#a3a3a3' }}
+                    formatter={(v, n) => [`${v} min`, n]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="workout" name="Working out" stroke={COLORS.workout} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="stretch" name="Stretching" stroke={COLORS.stretch} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="rest" name="Resting" stroke={COLORS.rest} strokeWidth={2} dot={{ r: 2 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  )
+}

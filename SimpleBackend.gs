@@ -10,15 +10,18 @@
  *                 weight_lbs, reps, notes, is_historical
  *   body_weight:  date, weight_lbs
  *   measurements: date, waist_in, neck_in, note
+ *   durations:    date, kind, day_type, total_sec, rest_sec
  *
  * Routes:
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
  *   GET  ?route=bodyweight[&since=YYYY-MM-DD]
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
+ *   GET  ?route=durations[&since=YYYY-MM-DD]
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
+ *   POST ?route=durations     body: { date, kind, dayType, totalSec, restSec } (append)
  */
 
 const ss = SpreadsheetApp.getActiveSpreadsheet()
@@ -39,6 +42,7 @@ const FLEX_HEADERS = ['date', 'split_deg', 'tailors_left_deg', 'tailors_right_de
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
+const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec']
 
 function doGet(e) {
   try {
@@ -53,6 +57,8 @@ function doGet(e) {
         return json(getCalories(e.parameter.since))
       case 'measurements':
         return json(getMeasurements(e.parameter.since))
+      case 'durations':
+        return json(getDurations(e.parameter.since))
       case 'plan':
         return json(getPlan())
       default:
@@ -78,6 +84,8 @@ function doPost(e) {
         return json(appendCalories(body))
       case 'measurements':
         return json(appendMeasurements(body))
+      case 'durations':
+        return json(appendDurations(body))
       case 'plan':
         return json(savePlan(body.plan))
       default:
@@ -349,6 +357,44 @@ function appendMeasurements(body) {
       saved++
     })
   return { saved: saved }
+}
+
+function getDurations(since) {
+  const sh = sheet('durations', DURATION_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0]) continue
+    const date = isoDate(r[0])
+    if (since && date < since) continue
+    const entry = {
+      date: date,
+      kind: String(r[1] || 'workout'),
+      totalSec: Number(r[3]) || 0,
+      restSec: Number(r[4]) || 0,
+    }
+    if (r[2]) entry.dayType = String(r[2]) // omit for stretches
+    out.push(entry)
+  }
+  return out
+}
+
+// Append-only: each finished session is its own event (multiple per day allowed).
+function appendDurations(body) {
+  const sh = sheet('durations', DURATION_HEADERS)
+  const list = Array.isArray(body.entries) ? body.entries : [body]
+  const values = list
+    .filter(function (e) {
+      return e && e.date && isFinite(Number(e.totalSec)) && Number(e.totalSec) > 0
+    })
+    .map(function (e) {
+      return [e.date, e.kind || 'workout', e.dayType || '', Number(e.totalSec), Number(e.restSec) || 0]
+    })
+  if (values.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, values.length, DURATION_HEADERS.length).setValues(values)
+  }
+  return { saved: values.length }
 }
 
 function getPlan() {

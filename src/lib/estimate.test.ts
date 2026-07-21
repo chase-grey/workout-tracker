@@ -47,30 +47,42 @@ describe('isSaneDuration', () => {
   })
 })
 
-const dur = (dayType: 'push' | 'pull', seconds: number): SessionDuration => ({
+const wd = (dayType: 'push' | 'pull', totalSec: number, restSec = 0): SessionDuration => ({
   date: '2026-07-21',
+  kind: 'workout',
   dayType,
-  seconds,
+  totalSec,
+  restSec,
+})
+const sd = (totalSec: number, restSec = 0): SessionDuration => ({
+  date: '2026-07-21',
+  kind: 'stretch',
+  totalSec,
+  restSec,
 })
 
 describe('medianTotalSec', () => {
-  it('returns null until there are enough samples for that day type', () => {
-    const history = [dur('push', 3000), dur('push', 3600)]
-    expect(medianTotalSec(history, 'push')).toBeNull()
+  it('returns null until there are enough matching samples', () => {
+    expect(medianTotalSec([wd('push', 3000), wd('push', 3600)], { kind: 'workout', dayType: 'push' })).toBeNull()
   })
   it('returns the median once enough samples exist', () => {
-    const history = [dur('push', 3000), dur('push', 3600), dur('push', 4200)]
-    expect(medianTotalSec(history, 'push')).toBe(3600)
+    const history = [wd('push', 3000), wd('push', 3600), wd('push', 4200)]
+    expect(medianTotalSec(history, { kind: 'workout', dayType: 'push' })).toBe(3600)
   })
-  it('ignores implausible durations and other day types', () => {
+  it('separates workout day types and ignores other kinds and insane values', () => {
     const history = [
-      dur('push', 3000),
-      dur('push', 3600),
-      dur('push', 4200),
-      dur('push', 10), // too short — ignored
-      dur('pull', 1800), // wrong day — ignored
+      wd('push', 3000),
+      wd('push', 3600),
+      wd('push', 4200),
+      wd('push', 10), // too short — ignored
+      wd('pull', 1800), // wrong day type — ignored for push
+      sd(1200), // stretch — ignored for workout
     ]
-    expect(medianTotalSec(history, 'push')).toBe(3600)
+    expect(medianTotalSec(history, { kind: 'workout', dayType: 'push' })).toBe(3600)
+  })
+  it('pools all stretches (no day type)', () => {
+    const history = [sd(600), sd(900), sd(1200), wd('push', 3600)]
+    expect(medianTotalSec(history, { kind: 'stretch' })).toBe(900)
   })
 })
 
@@ -80,27 +92,39 @@ describe('remainingSecs', () => {
   it('falls back to the structural estimate without enough history', () => {
     expect(
       remainingSecs({
-        history: [dur('push', 3600)],
-        dayType: 'push',
-        doneSets: 0,
-        totalSets: 10,
+        history: [wd('push', 3600)],
+        sel: { kind: 'workout', dayType: 'push' },
+        doneSteps: 0,
+        totalSteps: 10,
         fallbackItems,
       }),
     ).toBe(500)
   })
 
-  it('scales the learned median by the fraction of sets remaining', () => {
-    const history = [dur('push', 3000), dur('push', 3600), dur('push', 4200)] // median 3600
-    // 4 of 10 sets done → 60% remaining → 2160s
+  it('scales the learned median by the fraction of steps remaining', () => {
+    const history = [wd('push', 3000), wd('push', 3600), wd('push', 4200)] // median 3600
+    // 4 of 10 done → 60% remaining → 2160s
     expect(
-      remainingSecs({ history, dayType: 'push', doneSets: 4, totalSets: 10, fallbackItems }),
+      remainingSecs({
+        history,
+        sel: { kind: 'workout', dayType: 'push' },
+        doneSteps: 4,
+        totalSteps: 10,
+        fallbackItems,
+      }),
     ).toBe(2160)
   })
 
-  it('returns 0 when all sets are done', () => {
-    const history = [dur('push', 3000), dur('push', 3600), dur('push', 4200)]
+  it('returns 0 when everything is done', () => {
+    const history = [sd(600), sd(900), sd(1200)] // median 900
     expect(
-      remainingSecs({ history, dayType: 'push', doneSets: 10, totalSets: 10, fallbackItems }),
+      remainingSecs({
+        history,
+        sel: { kind: 'stretch' },
+        doneSteps: 8,
+        totalSteps: 8,
+        fallbackItems,
+      }),
     ).toBe(0)
   })
 })

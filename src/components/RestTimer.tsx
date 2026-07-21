@@ -56,7 +56,7 @@ export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () =
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-black/95 px-6"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-black px-6"
       onClick={onClose}
     >
       <p className="text-sm uppercase tracking-widest text-neutral-500">Rest</p>
