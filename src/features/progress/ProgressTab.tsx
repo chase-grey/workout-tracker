@@ -15,6 +15,8 @@ import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from 
 import { GoalsPanel } from './GoalsPanel'
 import { FlexProgress } from '../flex/FlexProgress'
 import { WeightLogSheet } from '../today/WeightLogSheet'
+import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
+import { bodyFatSeries, waistSeries, latestMeasurement, navyBodyFat } from '../../lib/bodyComp'
 
 const BENCH_COMBO = '__bench__'
 
@@ -125,14 +127,36 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   )
 }
 
+const BODY_METRICS: { label: string; value: 'bf' | 'waist' }[] = [
+  { label: 'Body fat %', value: 'bf' },
+  { label: 'Waist', value: 'waist' },
+]
+
 export function ProgressTab() {
-  const { workouts, bodyWeights } = useData()
+  const { workouts, bodyWeights, measurements, settings } = useData()
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [months, setMonths] = useState<number | null>(3)
   const [showWeight, setShowWeight] = useState(false)
+  const [showMeasure, setShowMeasure] = useState(false)
+  const [bodyMetric, setBodyMetric] = useState<'bf' | 'waist'>('bf')
 
   const latestWeight = bodyWeights.filter((b) => b.weightLbs >= 50).slice(-1)[0]
+
+  const heightIn = settings.heightIn ?? 0
+  const lastMeasure = latestMeasurement(measurements)
+  const latestBf =
+    lastMeasure && heightIn > 0
+      ? navyBodyFat(lastMeasure.waistIn, lastMeasure.neckIn, heightIn)
+      : null
+  const bodySeries = useMemo(
+    () =>
+      filterRange(
+        bodyMetric === 'bf' ? bodyFatSeries(measurements, heightIn) : waistSeries(measurements),
+        months,
+      ),
+    [measurements, heightIn, bodyMetric, months],
+  )
 
   const exerciseOptions = useMemo(
     () => [{ key: BENCH_COMBO, name: 'Bench press (flat + incline)' }, ...availableExercises(workouts)],
@@ -182,6 +206,31 @@ export function ProgressTab() {
       </div>
       <Chart data={weightSeries} unit="lbs" />
 
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
+          Body fat
+          {latestBf != null
+            ? ` · ${latestBf}%`
+            : lastMeasure
+              ? ` · ${lastMeasure.waistIn}" waist`
+              : ''}
+        </h3>
+        <button
+          onClick={() => setShowMeasure(true)}
+          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
+        >
+          Log measurement
+        </button>
+      </div>
+      <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
+      {bodyMetric === 'bf' && heightIn === 0 ? (
+        <div className="flex h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
+          Set your height in Settings to estimate body fat % from your measurements.
+        </div>
+      ) : (
+        <Chart data={bodySeries} unit={bodyMetric === 'bf' ? '%' : 'in'} />
+      )}
+
       <GoalsPanel />
 
       <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">Lifts</h3>
@@ -202,6 +251,7 @@ export function ProgressTab() {
       <FlexProgress />
 
       {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
+      {showMeasure && <MeasurementLogSheet onClose={() => setShowMeasure(false)} />}
     </div>
   )
 }

@@ -93,6 +93,37 @@ export function SettingsTab() {
       </section>
 
       <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">Height</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            value={heightFt}
+            onChange={(e) => setHeightFt(e.target.value)}
+            placeholder="5"
+            className="min-h-[44px] w-0 flex-1 rounded-xl bg-surface px-3 text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <span className="text-sm text-neutral-500">ft</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={heightIn}
+            onChange={(e) => setHeightIn(e.target.value)}
+            placeholder="10"
+            className="min-h-[44px] w-0 flex-1 rounded-xl bg-surface px-3 text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <span className="text-sm text-neutral-500">in</span>
+        </div>
+        <button
+          onClick={saveHeight}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          {heightSaved ? 'Saved ✓' : 'Save height'}
+        </button>
+        <p className="text-xs text-neutral-500">Used to estimate body fat % from waist &amp; neck.</p>
+      </section>
+
+      <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">Data</label>
         <button
           onClick={() => setImporting(true)}

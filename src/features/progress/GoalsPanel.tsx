@@ -1,6 +1,7 @@
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
 import { exerciseSeries } from '../../lib/progress'
+import { bodyFatSeries, SIX_PACK_BF } from '../../lib/bodyComp'
 import { MdCelebration } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -47,7 +48,8 @@ function GoalRow({
 }
 
 export function GoalsPanel() {
-  const { workouts, bodyWeights } = useData()
+  const { workouts, bodyWeights, measurements, settings } = useData()
+  const heightIn = settings.heightIn ?? 0
 
   // Guard against implausible weigh-ins (e.g. stray test rows) skewing the fit.
   const bwPoints = bodyWeights
@@ -62,6 +64,10 @@ export function GoalsPanel() {
   // Bench your bodyweight: target = current bodyweight (moving goal).
   const benchGoal = project(benchPoints, currentBw || 999)
 
+  // Visible six-pack: driven by body-fat %, estimated from waist/neck + height.
+  const bfPoints = bodyFatSeries(measurements, heightIn)
+  const bfGoal = project(bfPoints, SIX_PACK_BF)
+
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Goals</h3>
@@ -72,16 +78,20 @@ export function GoalsPanel() {
         unit="lbs"
         proj={benchGoal}
       />
-      <div className="rounded-2xl bg-surface p-4">
-        <div className="flex items-baseline justify-between">
-          <h4 className="font-semibold">Visible 6-pack abs</h4>
-          <span className="text-sm text-neutral-400">photo milestone</span>
+      {heightIn > 0 ? (
+        <GoalRow title={`Visible 6-pack (≤${SIX_PACK_BF}% body fat)`} unit="%" proj={bfGoal} />
+      ) : (
+        <div className="rounded-2xl bg-surface p-4">
+          <div className="flex items-baseline justify-between">
+            <h4 className="font-semibold">Visible 6-pack abs</h4>
+            <span className="text-sm text-neutral-400">≤{SIX_PACK_BF}% body fat</span>
+          </div>
+          <p className="mt-1 text-sm text-neutral-500">
+            Set your height in Settings, then log a waist &amp; neck measurement to project your
+            body-fat % toward a visible six-pack.
+          </p>
         </div>
-        <p className="mt-1 text-sm text-neutral-500">
-          Not predictable from lifts (it's driven by body-fat %). Keep body weight in range, train abs,
-          and use the progress-photo reminders on the Today tab to judge it.
-        </p>
-      </div>
+      )}
     </div>
   )
 }

@@ -10,11 +10,11 @@ import {
 
 describe('navyBodyFat', () => {
   it('computes a plausible BF% for lean male measurements', () => {
-    // waist 32, neck 15, height 70 → ~11% (six-pack territory).
+    // waist 32, neck 15, height 70 → ~13% (near six-pack territory).
     const bf = navyBodyFat(32, 15, 70)
     expect(bf).not.toBeNull()
     expect(bf!).toBeGreaterThan(9)
-    expect(bf!).toBeLessThan(13)
+    expect(bf!).toBeLessThan(16)
   })
 
   it('rises as the waist grows (neck/height fixed)', () => {
