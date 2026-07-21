@@ -76,16 +76,17 @@ export function RhythmGuide({ tempo, reps }: { tempo: string; reps?: number }) {
       if (elapsed >= dur) {
         const next = (idx + 1) % phases.length
         setIdx(next)
-        // A full pass through every phase is one rep. Cap at the target so the
-        // counter reads "10 of 10" rather than overshooting once you're done.
-        if (next === 0) setRep((r) => (reps ? Math.min(r + 1, reps) : r + 1))
+        // A full pass through every phase is one rep. Keep counting past the
+        // target — the goal is shown for reference, but reps continue until you
+        // tap done.
+        if (next === 0) setRep((r) => r + 1)
       } else {
         raf = requestAnimationFrame(tick)
       }
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [idx, phases, reps])
+  }, [idx, phases])
 
   if (phases.length === 0) return null
 
