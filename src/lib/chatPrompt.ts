@@ -1,8 +1,6 @@
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types'
-import { PLAN, exerciseName, repRangeLabel } from '../config/plan'
+import { PLAN, DAY_TYPES, exerciseName, repRangeLabel } from '../config/plan'
 import { toISODate, parseISODate } from './dates'
-
-const DAY_TYPES: DayType[] = ['push', 'pull']
 
 /** Format one set as "weightxreps" (e.g. "135x8"), or "BWxreps" when weight is blank. */
 function formatSet(row: WorkoutRow): string {

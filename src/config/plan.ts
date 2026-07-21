@@ -36,7 +36,7 @@ export type DayPlan = {
 
 export type Plan = Record<DayType, DayPlan>
 
-export const DAY_TYPES: DayType[] = ['push', 'pull']
+export const DAY_TYPES: DayType[] = ['push', 'pull', 'abs']
 
 /** Marker exercise key for a detail-less "I trained" quick log (excluded from charts). */
 export const QUICK_LOG_KEY = '__quicklog__'
@@ -77,6 +77,17 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'hammer_curl', name: 'Hammer Curl', sets: 3, repMin: 12, repMax: 12, restSec: 60, increment: 5, group: 'Biceps' },
     ],
   },
+  // A short, dedicated core session you can run any day. Bodyweight moves
+  // progress by reps (the progression engine climbs toward repMax), so doing
+  // more reps over time is the signal that you're building ab muscle.
+  abs: {
+    type: 'abs',
+    label: 'Abs / Core',
+    required: false,
+    exercises: [
+      { key: 'deadbug', name: 'Dead Bug', sets: 4, repMin: 10, repMax: 20, restSec: 60, bodyweight: true, group: 'Core' },
+    ],
+  },
 }
 
 /** Human-readable rep range, e.g. "6–10" or "12". */
@@ -84,11 +95,21 @@ export function repRangeLabel(e: Pick<PlannedExercise, 'repMin' | 'repMax'>): st
   return e.repMin === e.repMax ? `${e.repMin}` : `${e.repMin}–${e.repMax}`
 }
 
-/** All exercises across both days of the DEFAULT plan, for import matching + name fallback. */
+/** All exercises across every day of the DEFAULT plan, for import matching + name fallback. */
 export const ALL_EXERCISES: PlannedExercise[] = [
   ...DEFAULT_PLAN.push.exercises,
   ...DEFAULT_PLAN.pull.exercises,
+  ...DEFAULT_PLAN.abs.exercises,
 ]
+
+/**
+ * Merge a stored/fetched plan onto the defaults so a plan saved before a new
+ * day type existed (e.g. `abs`) still gains that day. Stored days win; missing
+ * days fall back to the default.
+ */
+export function withPlanDefaults(p: Partial<Plan> | null | undefined): Plan {
+  return { ...DEFAULT_PLAN, ...(p ?? {}) }
+}
 
 /** Lookup an exercise's display name by key, falling back to the key itself. */
 export function exerciseName(key: string): string {

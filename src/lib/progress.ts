@@ -3,7 +3,7 @@ import { ALL_EXERCISES, QUICK_LOG_KEY } from '../config/plan'
 import { epley1RM } from './epley'
 import { parseISODate } from './dates'
 
-export type Metric = '1rm' | 'weight' | 'volume'
+export type Metric = '1rm' | 'weight' | 'volume' | 'reps'
 export type Point = { date: string; value: number }
 
 /** One data point per session for a given exercise, sorted oldest → newest. */
@@ -21,6 +21,10 @@ export function exerciseSeries(rows: WorkoutRow[], exerciseKey: string, metric: 
     let value = 0
     if (metric === 'volume') {
       value = g.sets.reduce((s, x) => s + (x.w ?? 0) * x.reps, 0)
+    } else if (metric === 'reps') {
+      // Total reps in the session — the growth signal for bodyweight work
+      // (deadbugs, hanging leg raises) where weight-based metrics stay flat.
+      value = g.sets.reduce((s, x) => s + x.reps, 0)
     } else {
       for (const x of g.sets) {
         if (x.w == null) continue

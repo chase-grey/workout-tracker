@@ -31,6 +31,7 @@ const METRICS: { label: string; value: Metric }[] = [
   { label: 'Est. 1RM', value: '1rm' },
   { label: 'Top set', value: 'weight' },
   { label: 'Volume', value: 'volume' },
+  { label: 'Reps', value: 'reps' },
 ]
 
 function Pills<T extends string | number | null>({
@@ -185,7 +186,7 @@ export function ProgressTab() {
     [workouts, metric, months],
   )
 
-  const unit = metric === 'volume' ? 'vol' : 'lbs'
+  const unit = metric === 'volume' ? 'vol' : metric === 'reps' ? 'reps' : 'lbs'
 
   return (
     <div className="flex flex-col gap-4 pb-4">

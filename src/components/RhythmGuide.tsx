@@ -20,7 +20,7 @@ function Shape({ variant, scale, secs }: { variant: Variant; scale: number; secs
     case 'square':
       return (
         <div
-          className="absolute h-[73%] w-[73%] rounded-[14%] bg-accent/25 ring-1 ring-accent/40"
+          className="absolute h-[73%] w-[73%] rounded-[14%] bg-accent-2/25 ring-1 ring-accent-2/40"
           style={{ transition: `transform ${secs}s ease-in-out`, transform: `scale(${scale}) rotate(${(scale - 0.55) * 25}deg)` }}
         />
       )
@@ -30,7 +30,7 @@ function Shape({ variant, scale, secs }: { variant: Variant; scale: number; secs
           {[73, 53, 33].map((pct, i) => (
             <div
               key={i}
-              className="absolute rounded-full border border-accent/40"
+              className="absolute rounded-full border border-accent-2/40"
               style={{
                 width: `${pct}%`,
                 height: `${pct}%`,
@@ -43,16 +43,16 @@ function Shape({ variant, scale, secs }: { variant: Variant; scale: number; secs
       )
     case 'tide':
       return (
-        <div className="absolute h-[73%] w-[73%] overflow-hidden rounded-full ring-1 ring-accent/40">
+        <div className="absolute h-[73%] w-[73%] overflow-hidden rounded-full ring-1 ring-accent-2/40">
           <div
-            className="absolute bottom-0 left-0 w-full bg-accent/30"
+            className="absolute bottom-0 left-0 w-full bg-accent-2/30"
             style={{ height: `${scale * 100}%`, transition: `height ${secs}s ease-in-out` }}
           />
         </div>
       )
     case 'orb':
     default:
-      return <div className="absolute h-[73%] w-[73%] rounded-full bg-accent/25 ring-1 ring-accent/40" style={base} />
+      return <div className="absolute h-[73%] w-[73%] rounded-full bg-accent-2/25 ring-1 ring-accent-2/40" style={base} />
   }
 }
 
@@ -98,20 +98,6 @@ export function RhythmGuide({ tempo, reps }: { tempo: string; reps?: number }) {
   return (
     <div className="flex items-center justify-center py-3">
       <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
-        {/* Per-phase progress ring: sweeps from empty to full over the phase's duration. */}
-        <svg viewBox="0 0 240 240" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>
-          <circle cx="120" cy="120" r={RING_R} fill="none" strokeWidth="4" className="stroke-surface-2" />
-          <circle
-            cx="120"
-            cy="120"
-            r={RING_R}
-            fill="none"
-            strokeWidth="4"
-            strokeLinecap="round"
-            className="stroke-accent"
-            style={{ strokeDasharray: RING_C, strokeDashoffset: RING_C * (1 - progress) }}
-          />
-        </svg>
         <Shape variant={variant} scale={scale} secs={phase.seconds} />
         <div className="relative text-center">
           <div className="text-sm font-medium uppercase tracking-wider text-neutral-400">

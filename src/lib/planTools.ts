@@ -54,7 +54,7 @@ function isValidNumber(value: unknown): value is number {
 }
 
 function isValidDay(plan: Plan, day: unknown): day is DayType {
-  return (day === 'push' || day === 'pull') && day in plan
+  return (day === 'push' || day === 'pull' || day === 'abs') && day in plan
 }
 
 /** Slugify a name into a stable key: lowercase, non-alnum -> '_', trimmed underscores. */

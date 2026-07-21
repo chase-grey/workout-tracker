@@ -6,7 +6,7 @@ import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { api } from '../services/api'
 import { sessionToRows } from '../lib/session'
 import { toISODate, weekStartISO } from '../lib/dates'
-import { QUICK_LOG_KEY, type Plan } from '../config/plan'
+import { QUICK_LOG_KEY, withPlanDefaults, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import { calorieHitDates, type CalorieEntry } from '../lib/calories'
@@ -168,8 +168,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
-        setPlan(p)
-        storage.savePlan(p)
+        const merged = withPlanDefaults(p)
+        setPlan(merged)
+        storage.savePlan(merged)
       }
     } catch {
       /* ignore */
@@ -353,10 +354,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     storage.saveFlexPlan(r)
   }, [])
 
-  // Distinct workout-session dates (one per session_id).
+  // Distinct workout-session dates (one per session_id). Abs/core sessions are
+  // supplemental and excluded so they don't inflate the weekly workout goal.
   const workoutDates = useMemo(() => {
     const bySession = new Map<string, string>()
-    for (const r of workouts) if (r.session_id && !bySession.has(r.session_id)) bySession.set(r.session_id, r.date)
+    for (const r of workouts) {
+      if (r.day_type === 'abs') continue
+      if (r.session_id && !bySession.has(r.session_id)) bySession.set(r.session_id, r.date)
+    }
     return [...bySession.values()]
   }, [workouts])
   const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
