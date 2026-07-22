@@ -87,7 +87,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   if (N === 0) {
     return (
       <div className="flex flex-col gap-4 pb-24 pt-16 text-center">
-        <p className="text-neutral-500">No stretches in your routine. Add some in Settings → Edit stretch routine.</p>
+        <p className="text-neutral-500">No stretches in your routine.</p>
         <button onClick={onClose} className="min-h-[44px] rounded-xl bg-surface font-medium">
           Back
         </button>
@@ -223,8 +223,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-1 text-lg font-bold">Routine checklist</h3>
-            <p className="mb-3 text-xs text-neutral-500">Tap a set to jump; tap the circle to mark it done.</p>
+            <h3 className="mb-3 text-lg font-bold">Routine checklist</h3>
             <div className="flex flex-col gap-1">
               {steps.map((s, i) => {
                 const isDone = done.has(s.stepKey)

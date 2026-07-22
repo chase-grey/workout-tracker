@@ -205,8 +205,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-1 text-lg font-bold">Workout checklist</h3>
-            <p className="mb-3 text-xs text-neutral-500">Tap a name to jump; tap the circle to mark done.</p>
+            <h3 className="mb-3 text-lg font-bold">Workout checklist</h3>
             <div className="flex flex-col gap-1">
               {exercises.map((e, i) => {
                 const complete = isComplete(e.key)

@@ -97,7 +97,7 @@ export function GoalsPanel() {
       />
       <div className="rounded-2xl bg-surface p-4">
         <div className="flex items-baseline justify-between">
-          <h4 className="font-semibold">Visible 6-pack abs</h4>
+          <h4 className="font-semibold">6-pack abs</h4>
           <span className="text-sm text-neutral-400 tabular-nums">
             {Number.isFinite(bfGoal.current) ? `${bfGoal.current}` : '—'} → {bfTarget}% BF
           </span>
@@ -123,23 +123,20 @@ export function GoalsPanel() {
 
         {leanest && (
           <p className="mt-2 text-xs text-neutral-500">
-            Leanest logged: {leanest.bodyFat}% on {fmtDate(leanest.date)} → {VIS_TEXT[leanest.visibility]}.
-            {leanest.visibility !== 'clear' && ' Building ab muscle raises the BF% where they show.'}
+            Leanest: {leanest.bodyFat}% ({fmtDate(leanest.date)}), {VIS_TEXT[leanest.visibility]}.
           </p>
         )}
 
         <p className="mt-1 text-xs text-neutral-500">
           {absReps.length > 0
-            ? `Ab work: ${absReps[0].value}${
+            ? `Abs: ${absReps[0].value}${
                 absReps.length > 1 ? ` → ${absReps[absReps.length - 1].value}` : ''
-              } reps/session.`
-            : 'Ab work: none logged — do your core exercises or start a Core session to build ab muscle.'}
+              } reps/session`
+            : 'Abs: none logged'}
         </p>
 
         {heightIn === 0 && (
-          <p className="mt-1 text-xs text-neutral-600">
-            Set your height in Settings so tape measurements also feed this.
-          </p>
+          <p className="mt-1 text-xs text-neutral-600">Set height in Settings.</p>
         )}
       </div>
     </div>
