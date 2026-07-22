@@ -98,7 +98,7 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
           onClick={() => onStart('abs')}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
-          Abs / Core
+          Core
         </button>
         <button
           onClick={onStartStretch}

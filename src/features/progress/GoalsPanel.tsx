@@ -130,7 +130,7 @@ export function GoalsPanel() {
             ? `Ab work: deadbugs ${deadbugReps[0].value}${
                 deadbugReps.length > 1 ? ` → ${deadbugReps[deadbugReps.length - 1].value}` : ''
               } reps/session.`
-            : 'Ab work: none logged — start an Abs / Core session to build ab muscle.'}
+            : 'Ab work: none logged — start a Core session to build ab muscle.'}
         </p>
 
         {heightIn === 0 && (

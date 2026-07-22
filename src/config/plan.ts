@@ -82,7 +82,7 @@ export const DEFAULT_PLAN: Plan = {
   // more reps over time is the signal that you're building ab muscle.
   abs: {
     type: 'abs',
-    label: 'Abs / Core',
+    label: 'Core',
     required: false,
     exercises: [
       { key: 'deadbug', name: 'Dead Bug', sets: 4, repMin: 10, repMax: 20, restSec: 60, bodyweight: true, group: 'Core' },
