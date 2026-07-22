@@ -1,6 +1,7 @@
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
-import { exerciseSeries } from '../../lib/progress'
+import { exerciseSeries, combinedRepsSeries } from '../../lib/progress'
+import { absExerciseKeys } from '../../config/plan'
 import {
   bodyFatSeries,
   personalSixPackTarget,
@@ -58,7 +59,7 @@ function GoalRow({
 }
 
 export function GoalsPanel() {
-  const { workouts, bodyWeights, measurements, settings } = useData()
+  const { workouts, bodyWeights, measurements, settings, plan } = useData()
   const heightIn = settings.heightIn ?? 0
 
   // Guard against implausible weigh-ins (e.g. stray test rows) skewing the fit.
@@ -80,7 +81,9 @@ export function GoalsPanel() {
   const bfPoints = bodyFatSeries(measurements, heightIn)
   const { target: bfTarget, leanest } = personalSixPackTarget(measurements, heightIn)
   const bfGoal = project(bfPoints, bfTarget)
-  const deadbugReps = exerciseSeries(workouts, 'deadbug', 'reps')
+  // Ab work = total reps across ALL core exercises (cable crunch, hanging leg
+  // raise, deadbug, …), not just the dedicated Core-day move.
+  const absReps = combinedRepsSeries(workouts, absExerciseKeys(plan))
 
   return (
     <div className="flex flex-col gap-3">
@@ -126,11 +129,11 @@ export function GoalsPanel() {
         )}
 
         <p className="mt-1 text-xs text-neutral-500">
-          {deadbugReps.length > 0
-            ? `Ab work: deadbugs ${deadbugReps[0].value}${
-                deadbugReps.length > 1 ? ` → ${deadbugReps[deadbugReps.length - 1].value}` : ''
+          {absReps.length > 0
+            ? `Ab work: ${absReps[0].value}${
+                absReps.length > 1 ? ` → ${absReps[absReps.length - 1].value}` : ''
               } reps/session.`
-            : 'Ab work: none logged — start a Core session to build ab muscle.'}
+            : 'Ab work: none logged — do your core exercises or start a Core session to build ab muscle.'}
         </p>
 
         {heightIn === 0 && (

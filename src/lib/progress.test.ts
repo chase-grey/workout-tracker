@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { availableExercises, exerciseSeries, filterRange } from './progress'
-import { ALL_EXERCISES } from '../config/plan'
+import { availableExercises, combinedRepsSeries, exerciseSeries, filterRange } from './progress'
+import { ALL_EXERCISES, DEFAULT_PLAN, absExerciseKeys } from '../config/plan'
 import type { WorkoutRow } from '../types'
 
 function r(session: string, date: string, weight: number | null, reps: number): WorkoutRow {
@@ -67,6 +67,40 @@ describe('availableExercises', () => {
     const planCount = ALL_EXERCISES.length
     expect(list.slice(0, planCount).map((x) => x.key)).toEqual(ALL_EXERCISES.map((e) => e.key))
     expect(list[planCount]).toEqual({ key: 'prayer_curls', name: 'Prayer Curls' })
+  })
+})
+
+describe('absExerciseKeys', () => {
+  it('collects every Abs/Core exercise across all days, not just the Core day', () => {
+    const keys = absExerciseKeys(DEFAULT_PLAN)
+    // Push-day ab work + the dedicated Core-day move all count.
+    expect(keys.has('cable_crunch')).toBe(true)
+    expect(keys.has('hanging_leg_raise')).toBe(true)
+    expect(keys.has('deadbug')).toBe(true)
+    // Non-core work is excluded.
+    expect(keys.has('flat_bench')).toBe(false)
+    expect(keys.has('barbell_squat')).toBe(false)
+  })
+})
+
+describe('combinedRepsSeries', () => {
+  it('sums reps across all matching keys per session, ignoring others', () => {
+    const w: WorkoutRow[] = [
+      { ...r('s1', '2026-01-01', 50, 12), exercise: 'cable_crunch' },
+      { ...r('s1', '2026-01-01', null, 10), exercise: 'hanging_leg_raise' },
+      { ...r('s1', '2026-01-01', 100, 8), exercise: 'flat_bench' }, // not core
+      { ...r('s2', '2026-02-01', null, 20), exercise: 'deadbug' },
+    ]
+    const keys = new Set(['cable_crunch', 'hanging_leg_raise', 'deadbug'])
+    const s = combinedRepsSeries(w, keys)
+    expect(s).toEqual([
+      { date: '2026-01-01', value: 22 }, // 12 + 10, bench ignored
+      { date: '2026-02-01', value: 20 },
+    ])
+  })
+
+  it('returns empty when no core work is logged', () => {
+    expect(combinedRepsSeries(rows, new Set(['deadbug']))).toEqual([])
   })
 })
 

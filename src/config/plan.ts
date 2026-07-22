@@ -116,5 +116,22 @@ export function exerciseName(key: string): string {
   return ALL_EXERCISES.find((e) => e.key === key)?.name ?? key
 }
 
+/**
+ * Keys of every exercise that trains the core, across all days of the plan —
+ * matched by group ("Abs" or "Core") so ab work counts wherever it's logged
+ * (e.g. cable crunches / hanging leg raises on Push day, or a Core session),
+ * not just the dedicated Core-day move. Derived from the live plan so edits and
+ * added ab exercises are picked up automatically.
+ */
+export function absExerciseKeys(plan: Plan): Set<string> {
+  const keys = new Set<string>()
+  for (const day of Object.values(plan)) {
+    for (const e of day.exercises) {
+      if (/^(abs|core)$/i.test(e.group)) keys.add(e.key)
+    }
+  }
+  return keys
+}
+
 /** Backwards-compatible alias for modules still importing PLAN. */
 export const PLAN = DEFAULT_PLAN

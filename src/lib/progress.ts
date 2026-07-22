@@ -37,6 +37,25 @@ export function exerciseSeries(rows: WorkoutRow[], exerciseKey: string, metric: 
   return points.sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
+/**
+ * One point per session summing total reps across a *set* of exercise keys —
+ * e.g. all core moves combined, so ab work shows up regardless of which ab
+ * exercise (cable crunch, hanging leg raise, deadbug) was logged that session.
+ */
+export function combinedRepsSeries(rows: WorkoutRow[], keys: Set<string>): Point[] {
+  const bySession = new Map<string, { date: string; reps: number }>()
+  for (const r of rows) {
+    if (!keys.has(r.exercise)) continue
+    const key = r.session_id || r.date
+    const g = bySession.get(key) ?? { date: r.date, reps: 0 }
+    g.reps += r.reps
+    bySession.set(key, g)
+  }
+  return [...bySession.values()]
+    .map((g) => ({ date: g.date, value: g.reps }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
 /** Prettify a slug/free-text key into a Title Case display name. */
 function prettifyKey(key: string): string {
   return key
