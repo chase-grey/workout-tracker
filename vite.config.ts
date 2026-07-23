@@ -5,9 +5,21 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import http from 'node:http'
 import https from 'node:https'
+import { execSync } from 'node:child_process'
 
 // Repo name — used as the GitHub Pages base path in production.
 const REPO = 'workout-tracker'
+
+// Build stamp baked into the bundle so Settings can show exactly which build is
+// running — the quickest way to tell whether a phone is on a stale cached copy.
+const COMMIT = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim()
+  } catch {
+    return 'unknown'
+  }
+})()
+const BUILD_TIME = new Date().toISOString()
 
 /**
  * POST JSON to an upstream. Internal Epic hosts present a cert Node doesn't trust
@@ -118,6 +130,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: mode === 'production' ? `/${REPO}/` : '/',
+    define: {
+      __APP_COMMIT__: JSON.stringify(COMMIT),
+      __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    },
     plugins: [
       react(),
       tailwindcss(),

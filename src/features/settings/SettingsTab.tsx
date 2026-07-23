@@ -5,6 +5,7 @@ import { ImportScreen } from './ImportScreen'
 import { PlanEditor } from './PlanEditor'
 import { FlexRoutineEditor } from './FlexRoutineEditor'
 import { IS_DESKTOP } from '../../lib/device'
+import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
@@ -173,6 +174,23 @@ export function SettingsTab() {
           </select>
         </section>
       )}
+
+      <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">Build</label>
+        <p className="text-xs text-neutral-500">
+          Version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
+          {new Date(APP_BUILD_TIME).toLocaleString()}
+        </p>
+        <button
+          onClick={() => void checkForUpdate()}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          Check for updates &amp; reload
+        </button>
+        <p className="text-xs text-neutral-500">
+          If a change you expected isn&apos;t showing, tap this — a phone can stay on an old cached copy.
+        </p>
+      </section>
     </div>
   )
 }
