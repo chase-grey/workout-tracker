@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   CALORIE_GOAL,
   caloriePaceFraction,
+  calorieSurplusSeries,
   dayTotals,
   totalForDate,
   calorieHitDates,
@@ -132,6 +133,53 @@ describe('calorieHitDates', () => {
       { date: '2026-07-09', calories: 3500 },
     ]
     expect(calorieHitDates(entries, 3200)).toEqual(['2026-07-09'])
+  })
+})
+
+describe('calorieSurplusSeries', () => {
+  it('reports each day as surplus above/below goal, averaged over the trailing 7 days', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-06', calories: 4500 }, // +500
+      { date: '2026-07-07', calories: 3500 }, // −500
+      { date: '2026-07-08', calories: 4000 }, // 0
+    ]
+    // 07-06: avg(+500) = +500
+    // 07-07: avg(+500, −500) = 0
+    // 07-08: avg(+500, −500, 0) = 0
+    expect(calorieSurplusSeries(entries)).toEqual([
+      { date: '2026-07-06', value: 500 },
+      { date: '2026-07-07', value: 0 },
+      { date: '2026-07-08', value: 0 },
+    ])
+  })
+
+  it('sums same-date entries before comparing to goal', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 2500 },
+      { date: '2026-07-08', calories: 2000 }, // total 4500 -> +500
+    ]
+    expect(calorieSurplusSeries(entries)).toEqual([{ date: '2026-07-08', value: 500 }])
+  })
+
+  it('skips unlogged days rather than counting them as a deficit', () => {
+    // A gap of >7 days: the later day averages only itself, not a phantom zero.
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-01', calories: 4200 }, // +200
+      { date: '2026-07-20', calories: 3800 }, // −200, window has only this day
+    ]
+    expect(calorieSurplusSeries(entries)).toEqual([
+      { date: '2026-07-01', value: 200 },
+      { date: '2026-07-20', value: -200 },
+    ])
+  })
+
+  it('respects a custom goal', () => {
+    const entries: CalorieEntry[] = [{ date: '2026-07-08', calories: 3500 }]
+    expect(calorieSurplusSeries(entries, 3000)).toEqual([{ date: '2026-07-08', value: 500 }])
+  })
+
+  it('returns an empty series when there are no entries', () => {
+    expect(calorieSurplusSeries([])).toEqual([])
   })
 })
 

@@ -1,4 +1,4 @@
-import { toISODate, weekStartISO } from './dates'
+import { parseISODate, toISODate, weekStartISO } from './dates'
 
 export type CalorieEntry = { date: string /* YYYY-MM-DD */; calories: number; label?: string }
 
@@ -116,4 +116,36 @@ export function caloriePR(
     return { date: thisWeekMaxDate, calories: thisWeekMax }
   }
   return null
+}
+
+/**
+ * A trailing 7-day rolling average of daily surplus (intake − goal), one point
+ * per logged calorie day, sorted oldest → newest. Centered on zero: positive =
+ * eating above goal (feeding a bulk), negative = deficit. The average is taken
+ * over *logged* days in the trailing 7-calendar-day window — unlogged days are
+ * skipped rather than counted as a zero-intake deficit, so gaps don't drag the
+ * trend down. Smooths spiky day-to-day intake into a trend that tracks how body
+ * weight / body fat actually respond, for overlaying on the progress charts.
+ */
+export function calorieSurplusSeries(
+  entries: CalorieEntry[],
+  goal: number = CALORIE_GOAL,
+): { date: string; value: number }[] {
+  const totals = dayTotals(entries)
+  const dated = [...totals.entries()]
+    .map(([date, total]) => ({ date, t: parseISODate(date).getTime(), total }))
+    .sort((a, b) => a.t - b.t)
+
+  const WINDOW_MS = 6 * 24 * 60 * 60 * 1000 // 6 days back + the day itself = 7
+  return dated.map(({ date, t }) => {
+    let sum = 0
+    let n = 0
+    for (const d of dated) {
+      if (d.t >= t - WINDOW_MS && d.t <= t) {
+        sum += d.total - goal
+        n++
+      }
+    }
+    return { date, value: Math.round(sum / n) }
+  })
 }

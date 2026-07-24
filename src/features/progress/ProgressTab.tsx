@@ -4,6 +4,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,6 +12,7 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { availableExercises, exerciseSeries, filterRange, type Metric, type Point } from '../../lib/progress'
+import { calorieSurplusSeries } from '../../lib/calories'
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
 import { GoalsPanel } from './GoalsPanel'
 import { FlexProgress } from '../flex/FlexProgress'
@@ -63,7 +65,27 @@ function Pills<T extends string | number | null>({
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
-function Chart({ data, unit }: { data: Point[]; unit: string }) {
+/** Merge a metric series with a calorie-surplus series into one row per date. */
+function mergeCalories(data: Point[], calories: Point[]) {
+  const m = new Map<string, { date: string; value?: number; cal?: number }>()
+  for (const p of data) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), value: p.value })
+  for (const p of calories) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), cal: p.value })
+  return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+function Chart({
+  data,
+  unit,
+  label,
+  calories,
+}: {
+  data: Point[]
+  unit: string
+  /** Series name shown in the legend/tooltip when the calorie overlay is on. */
+  label?: string
+  /** Optional 7-day-avg calorie surplus (intake − goal) to overlay on a right axis. */
+  calories?: Point[]
+}) {
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
@@ -71,20 +93,61 @@ function Chart({ data, unit }: { data: Point[]; unit: string }) {
       </div>
     )
   }
+  const overlay = calories != null && calories.length > 0
+  const rows = withTime(overlay ? mergeCalories(data, calories) : data)
   return (
     <div className="rounded-2xl bg-surface p-2">
       <ResponsiveContainer width="100%" height={224}>
-        <LineChart data={withTime(data)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <LineChart data={rows} margin={{ top: 8, right: overlay ? 0 : 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
-          <YAxis tick={axisTick} width={40} domain={['auto', 'auto']} />
+          <YAxis yAxisId="left" tick={axisTick} width={40} domain={['auto', 'auto']} />
+          {overlay && (
+            <YAxis
+              yAxisId="cal"
+              orientation="right"
+              tick={axisTick}
+              width={44}
+              domain={['auto', 'auto']}
+              tickFormatter={(v) => (v > 0 ? `+${v}` : String(v))}
+            />
+          )}
           <Tooltip
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}
-            formatter={(v) => [`${v} ${unit}`, '']}
+            formatter={(v, n) =>
+              n === 'cal'
+                ? [`${Number(v) > 0 ? '+' : ''}${v} cal/day`, 'vs goal (7d avg)']
+                : [`${v} ${unit}`, label ?? '']
+            }
           />
-          <Line type="monotone" dataKey="value" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} />
+          {overlay && (
+            <>
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <ReferenceLine yAxisId="cal" y={0} stroke="#404040" strokeDasharray="3 3" />
+              <Line
+                yAxisId="cal"
+                type="monotone"
+                dataKey="cal"
+                name="Cal surplus"
+                stroke={LINE_SECONDARY}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
+            </>
+          )}
+          <Line
+            yAxisId="left"
+            type="monotone"
+            dataKey="value"
+            name={label}
+            stroke={LINE_PRIMARY}
+            strokeWidth={2}
+            dot={{ r: 2 }}
+            connectNulls
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -134,7 +197,7 @@ const BODY_METRICS: { label: string; value: 'bf' | 'waist' }[] = [
 ]
 
 export function ProgressTab() {
-  const { workouts, bodyWeights, measurements, settings } = useData()
+  const { workouts, bodyWeights, measurements, settings, calorieEntries } = useData()
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [months, setMonths] = useState<number | null>(null)
@@ -154,6 +217,11 @@ export function ProgressTab() {
         months,
       ),
     [measurements, heightIn, bodyMetric, months],
+  )
+
+  const calorieSurplus = useMemo(
+    () => filterRange(calorieSurplusSeries(calorieEntries), months),
+    [calorieEntries, months],
   )
 
   const exerciseOptions = useMemo(
@@ -202,7 +270,7 @@ export function ProgressTab() {
           Log weight
         </button>
       </div>
-      <Chart data={weightSeries} unit="lbs" />
+      <Chart data={weightSeries} unit="lbs" label="Weight" calories={calorieSurplus} />
 
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
@@ -226,7 +294,12 @@ export function ProgressTab() {
           Set your height in Settings to estimate body fat % from your measurements.
         </div>
       ) : (
-        <Chart data={bodySeries} unit={bodyMetric === 'bf' ? '%' : 'in'} />
+        <Chart
+          data={bodySeries}
+          unit={bodyMetric === 'bf' ? '%' : 'in'}
+          label={bodyMetric === 'bf' ? 'Body fat' : 'Waist'}
+          calories={calorieSurplus}
+        />
       )}
 
       <GoalsPanel />
