@@ -22,7 +22,6 @@ import { bodyFatSeries, waistSeries, latestMeasurement, effectiveBodyFat } from 
 const BENCH_COMBO = '__bench__'
 
 const RANGES: { label: string; months: number | null }[] = [
-  { label: '1M', months: 1 },
   { label: '3M', months: 3 },
   { label: '6M', months: 6 },
   { label: 'All', months: null },
@@ -138,7 +137,7 @@ export function ProgressTab() {
   const { workouts, bodyWeights, measurements, settings } = useData()
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
-  const [months, setMonths] = useState<number | null>(3)
+  const [months, setMonths] = useState<number | null>(null)
   const [showWeight, setShowWeight] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [bodyMetric, setBodyMetric] = useState<'bf' | 'waist'>('bf')
