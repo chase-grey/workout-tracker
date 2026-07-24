@@ -20,6 +20,17 @@ import { TimeSpent } from './TimeSpent'
 import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
 import { bodyFatSeries, waistSeries, latestMeasurement, effectiveBodyFat } from '../../lib/bodyComp'
+import { ReviewOverlay } from '../../components/ReviewOverlay'
+import {
+  buildReview,
+  monthKeyOf,
+  prevMonthKey,
+  prevYearKey,
+  reviewHasData,
+  yearKeyOf,
+  type Review,
+  type ReviewKind,
+} from '../../lib/review'
 
 const BENCH_COMBO = '__bench__'
 
@@ -197,13 +208,37 @@ const BODY_METRICS: { label: string; value: 'bf' | 'waist' }[] = [
 ]
 
 export function ProgressTab() {
-  const { workouts, bodyWeights, measurements, settings, calorieEntries } = useData()
+  const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries } = useData()
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [months, setMonths] = useState<number | null>(null)
   const [showWeight, setShowWeight] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [bodyMetric, setBodyMetric] = useState<'bf' | 'waist'>('bf')
+  const [recap, setRecap] = useState<Review | null>(null)
+
+  const reviewData = useMemo(
+    () => ({
+      workouts,
+      flexDates: flexEntries.map((f) => f.date),
+      calorieEntries,
+      bodyWeights,
+    }),
+    [workouts, flexEntries, calorieEntries, bodyWeights],
+  )
+
+  // Open the recap for the most recently completed period; fall back to the
+  // current period (to-date) when the last one has no data yet.
+  const openRecap = (kind: ReviewKind) => {
+    const now = new Date()
+    const last = kind === 'month' ? prevMonthKey(now) : prevYearKey(now)
+    const key = reviewHasData(reviewData, kind, last)
+      ? last
+      : kind === 'month'
+        ? monthKeyOf(now)
+        : yearKeyOf(now)
+    setRecap(buildReview(reviewData, kind, key))
+  }
 
   const latestWeight = bodyWeights.filter((b) => b.weightLbs >= 50).slice(-1)[0]
 
@@ -256,6 +291,21 @@ export function ProgressTab() {
   return (
     <div className="flex flex-col gap-4 pb-4">
       <h2 className="text-xl font-bold">Progress</h2>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => openRecap('month')}
+          className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
+        >
+          Month in review
+        </button>
+        <button
+          onClick={() => openRecap('year')}
+          className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
+        >
+          Year in review
+        </button>
+      </div>
 
       <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />
 
@@ -325,6 +375,7 @@ export function ProgressTab() {
 
       {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
       {showMeasure && <MeasurementLogSheet onClose={() => setShowMeasure(false)} />}
+      {recap && <ReviewOverlay review={recap} onClose={() => setRecap(null)} />}
     </div>
   )
 }

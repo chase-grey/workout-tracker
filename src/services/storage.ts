@@ -41,6 +41,10 @@ export type Settings = {
   heightIn?: number
   /** True once the first-run setup (height prompt) has been completed or skipped. */
   setupComplete?: boolean
+  /** `YYYY-MM` of the month whose recap has already been shown (month-in-review). */
+  lastReviewedMonth?: string
+  /** `YYYY` of the year whose recap has already been shown (year-in-review). */
+  lastReviewedYear?: string
 }
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }

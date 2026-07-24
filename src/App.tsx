@@ -3,6 +3,8 @@ import { DataProvider, useData } from './store/DataContext'
 import { CelebrationProvider } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
 import { ToastHost } from './components/ToastHost'
+import { ReviewOverlay } from './components/ReviewOverlay'
+import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
 import { ProgressTab } from './features/progress/ProgressTab'
 import { ChatTab } from './features/chat/ChatTab'
@@ -30,14 +32,48 @@ export default function App() {
 function AppShell() {
   const [tab, setTab] = useState<Tab>('today')
   const mainRef = useRef<HTMLElement>(null)
-  const { saveSession, quickLog, settings } = useData()
+  const { saveSession, quickLog, settings, updateSettings } = useData()
   const controls = useActiveSession()
   const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
+  const [review, setReview] = useState<Review | null>(null)
 
   // Scroll back to the top when switching tabs.
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 })
   }, [tab])
+
+  // Month/year in review, once per new period. On the feature's first run the
+  // markers are unset — seed them to the current period so we never backfill a
+  // surprise recap; from then on a recap shows on the first open of a new month
+  // or year. Reads from storage (the cache is loaded synchronously) so it runs
+  // on mount without waiting for the background sync.
+  useEffect(() => {
+    const s = storage.loadSettings()
+    const now = new Date()
+    if (s.lastReviewedMonth == null || s.lastReviewedYear == null) {
+      updateSettings({ ...s, lastReviewedMonth: monthKeyOf(now), lastReviewedYear: yearKeyOf(now) })
+      return
+    }
+    const data = {
+      workouts: storage.loadWorkouts(),
+      flexDates: storage.loadFlex().map((f) => f.date),
+      calorieEntries: storage.loadCalories(),
+      bodyWeights: storage.loadBodyWeights(),
+    }
+    const pending = pendingReview(s, data, now)
+    if (pending) setReview(buildReview(data, pending.kind, pending.periodKey))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const dismissReview = () => {
+    const s = storage.loadSettings()
+    const now = new Date()
+    const next = { ...s, lastReviewedMonth: monthKeyOf(now) }
+    // A year recap subsumes the month that just closed, so mark both reviewed.
+    if (review?.kind === 'year') next.lastReviewedYear = yearKeyOf(now)
+    updateSettings(next)
+    setReview(null)
+  }
 
   // First-run: capture height once before showing the app. Existing users who
   // already set a height are never prompted.
@@ -99,6 +135,7 @@ function AppShell() {
         {content}
       </main>
       {!immersive && <BottomNav active={tab} onChange={setTab} showChat={CHAT_ENABLED} />}
+      {review && <ReviewOverlay review={review} onClose={dismissReview} />}
     </div>
   )
 }

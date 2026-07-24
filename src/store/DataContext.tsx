@@ -35,6 +35,7 @@ import {
   type Celebration,
   type WeekCounts,
 } from '../lib/celebration'
+import { newRecords, type RecordSnapshot } from '../lib/records'
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
 
@@ -253,10 +254,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const cals = storage.loadCalories()
         const before = currentWeekCounts(prev, flexDates, cals)
         const after = currentWeekCounts(next, flexDates, cals)
+        const beforeRec: RecordSnapshot = { workouts: prev, flexDates, calorieEntries: cals }
+        const afterRec: RecordSnapshot = { workouts: next, flexDates, calorieEntries: cals }
         celebrate(
           composeCelebration([
             rows.length ? workoutDoneCelebration(s.dayType) : null,
             ...weeklyCelebrations(before, after),
+            ...newRecords(beforeRec, afterRec),
             prCelebration(detectPRs(prev, rows)),
           ]),
         )
@@ -333,9 +337,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
           const workoutsNow = storage.loadWorkouts()
           const cals = storage.loadCalories()
-          const before = currentWeekCounts(workoutsNow, prevFlex.map((f) => f.date), cals)
-          const after = currentWeekCounts(workoutsNow, nextFlex.map((f) => f.date), cals)
-          celebrate(composeCelebration([stretchDoneCelebration, ...weeklyCelebrations(before, after)]))
+          const beforeFlexDates = prevFlex.map((f) => f.date)
+          const afterFlexDates = nextFlex.map((f) => f.date)
+          const before = currentWeekCounts(workoutsNow, beforeFlexDates, cals)
+          const after = currentWeekCounts(workoutsNow, afterFlexDates, cals)
+          const beforeRec: RecordSnapshot = { workouts: workoutsNow, flexDates: beforeFlexDates, calorieEntries: cals }
+          const afterRec: RecordSnapshot = { workouts: workoutsNow, flexDates: afterFlexDates, calorieEntries: cals }
+          celebrate(
+            composeCelebration([
+              stretchDoneCelebration,
+              ...weeklyCelebrations(before, after),
+              ...newRecords(beforeRec, afterRec),
+            ]),
+          )
         } catch {
           /* a missed cheer must never break a save */
         }
@@ -376,10 +390,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const flexDates = storage.loadFlex().map((f) => f.date)
         const before = currentWeekCounts(workoutsNow, flexDates, prevCals)
         const after = currentWeekCounts(workoutsNow, flexDates, nextCals)
+        const beforeRec: RecordSnapshot = { workouts: workoutsNow, flexDates, calorieEntries: prevCals }
+        const afterRec: RecordSnapshot = { workouts: workoutsNow, flexDates, calorieEntries: nextCals }
         celebrate(
           composeCelebration([
             crossed ? calorieGoalCelebration(CALORIE_GOAL) : null,
             ...weeklyCelebrations(before, after),
+            ...newRecords(beforeRec, afterRec),
           ]),
         )
       } catch {
@@ -449,7 +466,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const cals = storage.loadCalories()
         const before = currentWeekCounts(prev, flexDates, cals)
         const after = currentWeekCounts(next, flexDates, cals)
-        celebrate(composeCelebration([workoutDoneCelebration(dayType), ...weeklyCelebrations(before, after)]))
+        const beforeRec: RecordSnapshot = { workouts: prev, flexDates, calorieEntries: cals }
+        const afterRec: RecordSnapshot = { workouts: next, flexDates, calorieEntries: cals }
+        celebrate(
+          composeCelebration([
+            workoutDoneCelebration(dayType),
+            ...weeklyCelebrations(before, after),
+            ...newRecords(beforeRec, afterRec),
+          ]),
+        )
       } catch {
         /* a missed cheer must never break a save */
       }
