@@ -11,7 +11,7 @@ const VISIBILITY_OPTIONS: { value: AbsVisibility; label: string }[] = [
 /**
  * Log a body measurement (waist + neck, in inches). Neck prefills from the last
  * measurement since it barely changes. Shows the live Navy body-fat estimate
- * when a height is set in Settings.
+ * when a height was set during first-run setup.
  */
 export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
   const { measurements, settings, logMeasurement } = useData()
@@ -87,7 +87,7 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
           </p>
         ) : (
           <p className="mt-4 text-center text-sm text-neutral-500">
-            Set your height in Settings to estimate body fat %.
+            Add your height at setup to estimate body fat %.
           </p>
         )}
 

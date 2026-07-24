@@ -6,6 +6,8 @@ import { PlanEditor } from './PlanEditor'
 import { FlexRoutineEditor } from './FlexRoutineEditor'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
+import { DAY_TYPES } from '../../config/plan'
+import type { DayType } from '../../types'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
@@ -17,25 +19,14 @@ const SYNC_LABEL: Record<string, string> = {
 }
 
 export function SettingsTab() {
-  const { settings, updateSettings, refresh, sync, lastSync, pendingWrites, workouts } = useData()
+  const { settings, updateSettings, refresh, sync, lastSync, pendingWrites, workouts, plan } = useData()
   const [apiUrl, setApiUrl] = useState(settings.apiUrl)
   const [saved, setSaved] = useState(false)
   const [importing, setImporting] = useState(false)
-  const [editingPlan, setEditingPlan] = useState(false)
+  const [editingPlan, setEditingPlan] = useState<DayType | null>(null)
   const [editingFlex, setEditingFlex] = useState(false)
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
-  const initialHeight = settings.heightIn ?? 0
-  const [heightFt, setHeightFt] = useState(initialHeight ? String(Math.floor(initialHeight / 12)) : '')
-  const [heightIn, setHeightIn] = useState(initialHeight ? String(initialHeight % 12) : '')
-  const [heightSaved, setHeightSaved] = useState(false)
-
-  const saveHeight = () => {
-    const total = (Number(heightFt) || 0) * 12 + (Number(heightIn) || 0)
-    updateSettings({ ...settings, heightIn: total > 0 ? total : undefined })
-    setHeightSaved(true)
-    setTimeout(() => setHeightSaved(false), 1500)
-  }
 
   const save = () => {
     updateSettings({ ...settings, apiUrl: apiUrl.trim() })
@@ -79,49 +70,21 @@ export function SettingsTab() {
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">Plans</label>
-        <button
-          onClick={() => setEditingPlan(true)}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          Edit Push / Pull plan
-        </button>
+        {DAY_TYPES.map((t) => (
+          <button
+            key={t}
+            onClick={() => setEditingPlan(t)}
+            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+          >
+            Edit {plan[t].label}
+          </button>
+        ))}
         <button
           onClick={() => setEditingFlex(true)}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
-          Edit stretch routine
+          Edit Stretch
         </button>
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">Height</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            inputMode="numeric"
-            value={heightFt}
-            onChange={(e) => setHeightFt(e.target.value)}
-            placeholder="5"
-            className="min-h-[44px] w-0 flex-1 rounded-xl bg-surface px-3 text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <span className="text-sm text-neutral-500">ft</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={heightIn}
-            onChange={(e) => setHeightIn(e.target.value)}
-            placeholder="10"
-            className="min-h-[44px] w-0 flex-1 rounded-xl bg-surface px-3 text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <span className="text-sm text-neutral-500">in</span>
-        </div>
-        <button
-          onClick={saveHeight}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          {heightSaved ? 'Saved ✓' : 'Save height'}
-        </button>
-        <p className="text-xs text-neutral-500">Used to estimate body fat % from waist &amp; neck.</p>
       </section>
 
       <section className="flex flex-col gap-2">
@@ -141,7 +104,7 @@ export function SettingsTab() {
       </section>
 
       {importing && <ImportScreen onClose={() => setImporting(false)} />}
-      {editingPlan && <PlanEditor onClose={() => setEditingPlan(false)} />}
+      {editingPlan && <PlanEditor day={editingPlan} onClose={() => setEditingPlan(null)} />}
       {editingFlex && <FlexRoutineEditor onClose={() => setEditingFlex(false)} />}
 
       {IS_DESKTOP && (
@@ -187,9 +150,6 @@ export function SettingsTab() {
         >
           Check for updates &amp; reload
         </button>
-        <p className="text-xs text-neutral-500">
-          If a change you expected isn&apos;t showing, tap this — a phone can stay on an old cached copy.
-        </p>
       </section>
     </div>
   )

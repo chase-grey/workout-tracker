@@ -44,7 +44,7 @@ export const QUICK_LOG_KEY = '__quicklog__'
 export const DEFAULT_PLAN: Plan = {
   push: {
     type: 'push',
-    label: 'Push Day',
+    label: 'Push',
     required: true,
     exercises: [
       { key: 'cable_crunch', name: 'Cable Crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'Abs' },
@@ -63,7 +63,7 @@ export const DEFAULT_PLAN: Plan = {
   },
   pull: {
     type: 'pull',
-    label: 'Pull + Legs Day',
+    label: 'Pull + Legs',
     required: false,
     exercises: [
       { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repMin: 6, repMax: 8, restSec: 180, increment: 5, group: 'Legs' },
@@ -103,12 +103,31 @@ export const ALL_EXERCISES: PlannedExercise[] = [
 ]
 
 /**
+ * Day labels the defaults used to ship with. A plan saved under an old name
+ * keeps that label forever, so a rename here would never reach a device that
+ * had already stored one — these get upgraded to the current default instead.
+ * A label the user actually chose is left alone.
+ */
+const LEGACY_LABELS: Record<DayType, string[]> = {
+  push: ['Push Day'],
+  pull: ['Pull + Legs Day'],
+  abs: ['Abs / Core'],
+}
+
+/**
  * Merge a stored/fetched plan onto the defaults so a plan saved before a new
  * day type existed (e.g. `abs`) still gains that day. Stored days win; missing
  * days fall back to the default.
  */
 export function withPlanDefaults(p: Partial<Plan> | null | undefined): Plan {
-  return { ...DEFAULT_PLAN, ...(p ?? {}) }
+  const merged = { ...DEFAULT_PLAN, ...(p ?? {}) }
+  for (const type of DAY_TYPES) {
+    const day = merged[type]
+    if (LEGACY_LABELS[type].includes(day.label)) {
+      merged[type] = { ...day, label: DEFAULT_PLAN[type].label }
+    }
+  }
+  return merged
 }
 
 /** Lookup an exercise's display name by key, falling back to the key itself. */

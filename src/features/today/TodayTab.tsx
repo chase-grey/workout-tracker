@@ -6,6 +6,7 @@ import { WeightCard } from './WeightCard'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
+import { DAY_TYPES } from '../../config/plan'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 
@@ -15,7 +16,7 @@ type Props = {
 }
 
 export function TodayTab({ onStart, onStartStretch }: Props) {
-  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights } = useData()
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan } = useData()
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
 
@@ -82,24 +83,15 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
         <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
           Start a session
         </p>
-        <button
-          onClick={() => onStart('push')}
-          className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
-        >
-          Push Day
-        </button>
-        <button
-          onClick={() => onStart('pull')}
-          className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
-        >
-          Pull + Legs Day
-        </button>
-        <button
-          onClick={() => onStart('abs')}
-          className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
-        >
-          Core
-        </button>
+        {DAY_TYPES.map((t) => (
+          <button
+            key={t}
+            onClick={() => onStart(t)}
+            className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
+          >
+            {plan[t].label}
+          </button>
+        ))}
         <button
           onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"

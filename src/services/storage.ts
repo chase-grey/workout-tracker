@@ -39,6 +39,8 @@ export type Settings = {
   measureTimerSec?: number
   /** Height in inches — fixed input for the Navy body-fat estimate. */
   heightIn?: number
+  /** True once the first-run setup (height prompt) has been completed or skipped. */
+  setupComplete?: boolean
 }
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }

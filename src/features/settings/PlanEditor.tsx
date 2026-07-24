@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
-import { DAY_TYPES, DEFAULT_PLAN, type PlannedExercise, type Plan } from '../../config/plan'
+import { DEFAULT_PLAN, type PlannedExercise, type Plan } from '../../config/plan'
 import type { DayType } from '../../types'
 
 const clone = (p: Plan): Plan => JSON.parse(JSON.stringify(p))
@@ -36,10 +36,10 @@ function NumberField({
   )
 }
 
-export function PlanEditor({ onClose }: { onClose: () => void }) {
+/** Edits a single day of the plan; Settings opens one editor per day. */
+export function PlanEditor({ day, onClose }: { day: DayType; onClose: () => void }) {
   const { plan, updatePlan } = useData()
   const [draft, setDraft] = useState<Plan>(() => clone(plan))
-  const [day, setDay] = useState<DayType>('push')
 
   const exercises = draft[day].exercises
 
@@ -71,11 +71,16 @@ export function PlanEditor({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-lg font-bold">Edit plan</h2>
+        <h2 className="text-lg font-bold">Edit {draft[day].label}</h2>
         <div className="flex gap-2">
           <button
             onClick={() => {
-              if (confirm('Reset both days to the default plan?')) setDraft(clone(DEFAULT_PLAN))
+              if (confirm(`Reset ${draft[day].label} to the default plan?`))
+                setDraft((d) => {
+                  const next = clone(d)
+                  next[day] = clone(DEFAULT_PLAN)[day]
+                  return next
+                })
             }}
             className="min-h-[44px] px-2 text-sm text-neutral-400"
           >
@@ -87,23 +92,9 @@ export function PlanEditor({ onClose }: { onClose: () => void }) {
         </div>
       </header>
 
-      <div className="flex gap-1 p-3">
-        {DAY_TYPES.map((t) => (
-          <button
-            key={t}
-            onClick={() => setDay(t)}
-            className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold ${
-              t === day ? 'bg-accent text-black' : 'bg-surface text-neutral-400'
-            }`}
-          >
-            {draft[t].label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-3 pb-24">
+      <div className="flex-1 overflow-y-auto px-3 pt-3 pb-24">
         <label className="mb-3 flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Day label</span>
+          <span className="text-xs text-neutral-500">Name</span>
           <input
             value={draft[day].label}
             onChange={(e) =>
