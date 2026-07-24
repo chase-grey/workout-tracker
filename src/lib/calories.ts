@@ -39,6 +39,35 @@ export function totalForDate(entries: CalorieEntry[], date: string): number {
   return dayTotals(entries).get(date) ?? 0
 }
 
+/**
+ * Replace every entry for `date` with a single running-total entry. Used when
+ * logging: a day's calories are stored as one total row, not one row per tap,
+ * so the same-day quick-adds collapse into a single entry that we upsert.
+ */
+export function setDayTotal(entries: CalorieEntry[], date: string, total: number): CalorieEntry[] {
+  return [...entries.filter((e) => e.date !== date), { date, calories: total }]
+}
+
+/**
+ * Merge two calorie lists into one entry per date. Daily calories are a running
+ * total that only climbs as you log more, so the higher total for a shared date
+ * wins: an in-flight local tap the server hasn't stored yet is never clobbered
+ * by a stale fetch, and a larger total logged on another device still syncs in.
+ * (There is no "decrease" path in the UI; a downward correction would be masked
+ * until the server echoes the lower value.) Also collapses legacy multi-row
+ * dates into a single total, so a refreshed cache self-migrates.
+ */
+export function mergeCaloriesByDate(a: CalorieEntry[], b: CalorieEntry[]): CalorieEntry[] {
+  const aTotals = dayTotals(a)
+  const bTotals = dayTotals(b)
+  const dates = new Set<string>([...aTotals.keys(), ...bTotals.keys()])
+  const out: CalorieEntry[] = []
+  for (const date of dates) {
+    out.push({ date, calories: Math.max(aTotals.get(date) ?? 0, bTotals.get(date) ?? 0) })
+  }
+  return out.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))
+}
+
 /** Distinct dates whose summed total meets or exceeds `goal`, sorted ascending. */
 export function calorieHitDates(entries: CalorieEntry[], goal: number = CALORIE_GOAL): string[] {
   const hits: string[] = []

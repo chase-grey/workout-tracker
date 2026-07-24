@@ -9,7 +9,14 @@ import { toISODate, weekStartISO } from '../lib/dates'
 import { QUICK_LOG_KEY, withPlanDefaults, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
-import { calorieHitDates, CALORIE_GOAL, totalForDate, type CalorieEntry } from '../lib/calories'
+import {
+  calorieHitDates,
+  CALORIE_GOAL,
+  mergeCaloriesByDate,
+  setDayTotal,
+  totalForDate,
+  type CalorieEntry,
+} from '../lib/calories'
 import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp'
 import { isSaneDuration, type SessionDuration } from '../lib/estimate'
 import { MEASUREMENT_HISTORY } from '../config/body'
@@ -63,7 +70,7 @@ type DataContextValue = {
   saveSession: (s: WorkoutSession) => Promise<void>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
   logFlex: (measurement: FlexMeasurement) => Promise<void>
-  logCalories: (calories: number, label?: string, date?: string) => Promise<void>
+  logCalories: (calories: number, date?: string) => Promise<void>
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
@@ -188,7 +195,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     try {
       const c = await api.fetchCalories()
-      if (Array.isArray(c)) persistCalories(c)
+      // Merge (higher daily total wins) rather than replace, so a fetch can't
+      // clobber optimistic taps the server hasn't recorded yet.
+      if (Array.isArray(c)) persistCalories(mergeCaloriesByDate(storage.loadCalories(), c))
     } catch {
       /* ignore */
     }
@@ -335,16 +344,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const logCalories = useCallback(
-    async (calories: number, label?: string, date?: string) => {
-      const entry: CalorieEntry = { date: date ?? toISODate(new Date()), calories, label }
+    // `calories` is the amount to add; a day is stored as one running-total entry.
+    async (calories: number, date?: string) => {
+      const day = date ?? toISODate(new Date())
       const prevCals = storage.loadCalories()
-      const nextCals = [...prevCals, entry]
+      const newTotal = totalForDate(prevCals, day) + calories
+      const entry: CalorieEntry = { date: day, calories: newTotal }
+      const nextCals = setDayTotal(prevCals, day, newTotal)
       persistCalories(nextCals)
+      // The queue holds at most the newest running total per date, so a stale
+      // earlier total can never overwrite a newer one when the queue is flushed.
+      const queueSansDay = storage.loadQueue().filter(
+        (w) => !(w.type === 'calorie' && w.entry.date === day),
+      )
       try {
         await api.postCalorie(entry)
+        persistQueue(queueSansDay)
         notify(`+${calories} cal saved`, true)
       } catch {
-        enqueue({ type: 'calorie', entry })
+        persistQueue([...queueSansDay, { type: 'calorie', entry }])
         notify("Couldn't save — queued to retry", false)
       }
       // Cheer: this date's total just crossed the goal + any weekly calorie-day goal.
@@ -365,7 +383,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         /* a missed cheer must never break a save */
       }
     },
-    [celebrate, enqueue, notify, persistCalories, weeklyCelebrations],
+    [celebrate, notify, persistCalories, persistQueue, weeklyCelebrations],
   )
 
   const logMeasurement = useCallback(

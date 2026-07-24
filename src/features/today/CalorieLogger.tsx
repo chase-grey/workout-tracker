@@ -27,9 +27,9 @@ export function CalorieLogger() {
   const isToday = selDate === today
   const pace = isToday ? caloriePaceFraction(new Date()) : null
 
-  const add = (cal: number, label: string) => {
+  const add = (cal: number) => {
     if (cal <= 0) return
-    void logCalories(cal, label, selDate)
+    void logCalories(cal, selDate)
   }
 
   return (
@@ -88,7 +88,7 @@ export function CalorieLogger() {
         {QUICK_ADDS.map((cal) => (
           <button
             key={cal}
-            onClick={() => add(cal, `+${cal}`)}
+            onClick={() => add(cal)}
             className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-sm font-semibold active:opacity-80"
           >
             +{cal}

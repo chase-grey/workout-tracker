@@ -6,6 +6,8 @@ import {
   totalForDate,
   calorieHitDates,
   caloriePR,
+  setDayTotal,
+  mergeCaloriesByDate,
   type CalorieEntry,
 } from './calories'
 
@@ -60,6 +62,50 @@ describe('totalForDate', () => {
 
   it('returns 0 for a date with no entries', () => {
     expect(totalForDate([], '2026-07-08')).toBe(0)
+  })
+})
+
+describe('setDayTotal', () => {
+  it('replaces every entry for the date with a single running total', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 500 },
+      { date: '2026-07-08', calories: 300 },
+      { date: '2026-07-09', calories: 1000 },
+    ]
+    const next = setDayTotal(entries, '2026-07-08', 900)
+    expect(next.filter((e) => e.date === '2026-07-08')).toEqual([{ date: '2026-07-08', calories: 900 }])
+    expect(totalForDate(next, '2026-07-09')).toBe(1000)
+  })
+
+  it('adds a new date that had no prior entry', () => {
+    const next = setDayTotal([], '2026-07-08', 500)
+    expect(next).toEqual([{ date: '2026-07-08', calories: 500 }])
+  })
+})
+
+describe('mergeCaloriesByDate', () => {
+  it('keeps the higher total per shared date and collapses to one entry per date', () => {
+    const local: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 800 }, // optimistic, ahead of server
+      { date: '2026-07-09', calories: 1000 },
+    ]
+    const server: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 500 }, // stale
+      { date: '2026-07-10', calories: 4000 }, // another device
+    ]
+    expect(mergeCaloriesByDate(local, server)).toEqual([
+      { date: '2026-07-08', calories: 800 },
+      { date: '2026-07-09', calories: 1000 },
+      { date: '2026-07-10', calories: 4000 },
+    ])
+  })
+
+  it('collapses legacy multi-row server dates into one summed total', () => {
+    const server: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 500 },
+      { date: '2026-07-08', calories: 300 },
+    ]
+    expect(mergeCaloriesByDate([], server)).toEqual([{ date: '2026-07-08', calories: 800 }])
   })
 })
 

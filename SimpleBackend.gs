@@ -20,6 +20,7 @@
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
+ *   POST ?route=calories      body: { date, calories, label } (upsert by date; calories = running daily total)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  *   POST ?route=durations     body: { date, kind, dayType, totalSec, restSec } (append)
  */
@@ -293,20 +294,42 @@ function getCalories(since) {
   return out
 }
 
+// Upsert by date: a day's calories are stored as a single running total, so a
+// new value for a date overwrites that date's row. Any extra legacy rows for
+// the date (from the old per-tap append model) are removed, so touching an old
+// date self-migrates it to one total row.
 function appendCalories(body) {
   const sh = sheet('calories', CALORIE_HEADERS)
   const list = Array.isArray(body.entries) ? body.entries : [body]
-  const values = list
-    .filter(function (e) {
-      return e && e.date && isFinite(Number(e.calories))
-    })
-    .map(function (e) {
-      return [e.date, Number(e.calories), e.label || '']
-    })
-  if (values.length) {
-    sh.getRange(sh.getLastRow() + 1, 1, values.length, CALORIE_HEADERS.length).setValues(values)
+  let saved = 0
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i]
+    if (!e || !e.date || !isFinite(Number(e.calories))) continue
+    upsertCalorieDate(sh, e.date, Number(e.calories), e.label || '')
+    saved++
   }
-  return { saved: values.length }
+  return { saved: saved }
+}
+
+function upsertCalorieDate(sh, date, calories, label) {
+  const rows = sh.getDataRange().getValues()
+  let firstRow = -1
+  const extraRows = []
+  for (let r = 1; r < rows.length; r++) {
+    if (rows[r][0] && isoDate(rows[r][0]) === date) {
+      if (firstRow === -1) firstRow = r + 1 // 1-based sheet row
+      else extraRows.push(r + 1)
+    }
+  }
+  if (firstRow === -1) {
+    sh.appendRow([date, calories, label])
+    return
+  }
+  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label]])
+  // Delete leftover legacy rows bottom-up so earlier indices stay valid.
+  for (let k = extraRows.length - 1; k >= 0; k--) {
+    sh.deleteRow(extraRows[k])
+  }
 }
 
 function getMeasurements(since) {
