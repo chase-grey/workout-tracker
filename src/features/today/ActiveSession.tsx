@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked } from 'react-icons/md'
+import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
+import { repRangeLabel, type PlannedExercise } from '../../config/plan'
 import { nextTarget, type Target } from '../../lib/progression'
 import { formatDuration, remainingSecs, WORK_PER_SET_SEC } from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
 import { storage } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
-import { ExerciseCard } from './ExerciseCard'
 import { RestTimer } from '../../components/RestTimer'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu } from '../../components/KebabMenu'
@@ -19,11 +19,35 @@ type Props = {
   onSkip: () => void
 }
 
+/** One set of one exercise — the unit the guided workout flow steps through. */
+type SetStep = {
+  ex: PlannedExercise
+  exIndex: number
+  setIndex: number
+  setCount: number
+  stepKey: string
+}
+
+function toWeight(v: string): number | null {
+  const t = v.trim()
+  if (t === '') return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+function targetLabel(target: Target | undefined): string | null {
+  if (!target) return null
+  if (target.weightLbs == null) return `Target ${target.reps} reps`
+  return `Target ${target.weightLbs} × ${target.reps}`
+}
+
+/** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
 export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   const { plan, workouts, durations, logSessionDuration } = useData()
   const [rest, setRest] = useState<number | null>(null)
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
   const [paused, setPaused] = useState(false)
   // Accumulated time spent on the rest-timer screen (the "resting" slice of the
   // session). restStartRef marks when the current rest overlay opened.
@@ -32,26 +56,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
 
   const day = plan[session.dayType]
   const exercises = day.exercises
-  const N = exercises.length
-  const safeCurrent = Math.min(Math.max(0, current), N - 1)
-  const planned = exercises[safeCurrent]
-
-  useEffect(() => {
-    storage.saveActiveStep(safeCurrent)
-  }, [safeCurrent])
-
-  const target: Target | undefined = useMemo(
-    () =>
-      planned
-        ? nextTarget(workouts, planned.key, {
-            repMin: planned.repMin,
-            repMax: planned.repMax,
-            bodyweight: planned.bodyweight,
-            increment: planned.increment,
-          })
-        : undefined,
-    [planned, workouts],
-  )
 
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
   const doneCount = (key: string) => logFor(key)?.sets.filter((s) => s.done && s.reps > 0).length ?? 0
@@ -60,22 +64,59 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     return !!log && log.sets.length > 0 && log.sets.every((s) => s.done && s.reps > 0)
   }
 
+  // Flatten the workout into individual set-steps, one screen each. Driven by the
+  // live log's set counts so an added/removed set reshapes the flow immediately.
+  const steps = useMemo(() => {
+    const out: SetStep[] = []
+    exercises.forEach((ex, exIndex) => {
+      const count = logFor(ex.key)?.sets.length ?? ex.sets
+      for (let s = 0; s < count; s++) {
+        out.push({ ex, exIndex, setIndex: s, setCount: count, stepKey: `${ex.key}:${s}` })
+      }
+    })
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercises, session])
+
+  const N = steps.length
+  const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
+  const step = steps[safeCurrent]
+  const planned = step.ex
+  const log = logFor(planned.key)
+  const set = log?.sets[step.setIndex]
+  const atLast = safeCurrent >= N - 1
+
+  useEffect(() => {
+    storage.saveActiveStep(safeCurrent)
+  }, [safeCurrent])
+
+  const target: Target | undefined = useMemo(
+    () =>
+      nextTarget(workouts, planned.key, {
+        repMin: planned.repMin,
+        repMax: planned.repMax,
+        bodyweight: planned.bodyweight,
+        increment: planned.increment,
+      }),
+    [planned, workouts],
+  )
+
   const totals = useMemo(() => {
     let done = 0
     let all = 0
     for (const e of exercises) {
       done += doneCount(e.key)
-      all += e.sets
+      all += logFor(e.key)?.sets.length ?? e.sets
     }
     return { done, all }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, session])
 
   const timeLeft = useMemo(() => {
-    const fallbackItems = exercises.slice(safeCurrent).map((e) => ({
-      remainingSets: Math.max(0, e.sets - doneCount(e.key)),
+    const fallbackItems = steps.slice(safeCurrent).map((s) => ({
+      remainingSets: 1,
       workSec: WORK_PER_SET_SEC,
-      restSec: e.restSec,
+      restSec: s.ex.restSec,
     }))
     return remainingSecs({
       history: durations,
@@ -85,9 +126,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
       fallbackItems,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercises, safeCurrent, session, durations, totals])
-
-  const log = logFor(planned.key)
+  }, [steps, safeCurrent, session, durations, totals])
 
   const setExerciseComplete = (key: string, complete: boolean) => {
     const l = logFor(key)
@@ -114,15 +153,28 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     onFinish(cleaned)
   }
 
-  const atLast = safeCurrent >= N - 1
+  // Mark the current set done and either rest into the next set or finish.
+  const completeSetAndAdvance = () => {
+    controls.updateSet(planned.key, step.setIndex, { done: true })
+    if (atLast) {
+      finish()
+    } else {
+      restStartRef.current = Date.now()
+      setRest(planned.restSec)
+      setCurrent(safeCurrent + 1)
+    }
+  }
+
+  const hint = targetLabel(target)
+  const restLabel = planned.restSec >= 60 ? `${planned.restSec / 60} min` : `${planned.restSec}s`
 
   return (
     <div className="flex flex-col gap-3 pb-6">
       <header className="flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-xl font-bold">{day.label}</h2>
+          <h2 className="text-xl font-bold">{planned.name}</h2>
           <p className="text-sm text-neutral-500">
-            Exercise {safeCurrent + 1} of {N} · {formatDuration(timeLeft)} left
+            Set {step.setIndex + 1} of {step.setCount} · {formatDuration(timeLeft)} left
           </p>
         </div>
         <KebabMenu
@@ -150,40 +202,84 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
       </div>
 
       <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        {planned.group}
+        {planned.group} · {planned.sets}×{repRangeLabel(planned)} · rest {restLabel}
       </p>
 
-      {log && (
-        <ExerciseCard
-          planned={planned}
-          target={target}
-          log={log}
-          onAddSet={() => controls.addSet(planned.key, target)}
-          onUpdateSet={(i, patch) => controls.updateSet(planned.key, i, patch)}
-          onRemoveSet={(i) => controls.removeSet(planned.key, i)}
-          onSetNotes={(notes) => controls.setNotes(planned.key, notes)}
-          onRest={(sec) => {
-            restStartRef.current = Date.now()
-            setRest(sec)
-          }}
-        />
+      {set && (
+        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
+          {hint && (
+            <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
+              <MdTrackChanges aria-hidden />
+              {hint}
+            </p>
+          )}
+          <div className="flex items-end justify-center gap-3">
+            <label className="flex flex-1 flex-col items-center gap-1">
+              <span className="text-xs uppercase tracking-wide text-neutral-500">
+                {planned.bodyweight ? 'Added lbs' : 'Weight'}
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder={planned.bodyweight ? 'BW' : 'lbs'}
+                value={set.weightLbs ?? ''}
+                onChange={(e) => controls.updateSet(planned.key, step.setIndex, { weightLbs: toWeight(e.target.value) })}
+                className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </label>
+            <span className="pb-5 text-2xl text-neutral-600">×</span>
+            <label className="flex flex-1 flex-col items-center gap-1">
+              <span className="text-xs uppercase tracking-wide text-neutral-500">Reps</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="reps"
+                value={set.reps || ''}
+                onChange={(e) => controls.updateSet(planned.key, step.setIndex, { reps: Number(e.target.value) || 0 })}
+                className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </label>
+          </div>
+
+          <div className="flex items-center justify-center gap-4 text-sm">
+            <button
+              onClick={() => controls.addSet(planned.key, target)}
+              className="text-neutral-400 active:text-neutral-200"
+            >
+              + Add set
+            </button>
+            <button
+              onClick={() => setShowNotes((s) => !s)}
+              className="text-neutral-500 active:text-neutral-300"
+            >
+              Notes
+            </button>
+          </div>
+
+          {showNotes && (
+            <textarea
+              value={log?.notes ?? ''}
+              onChange={(e) => controls.setNotes(planned.key, e.target.value)}
+              placeholder="Optional notes…"
+              rows={2}
+              className="w-full rounded-xl bg-surface-2 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          )}
+        </div>
       )}
 
-      {atLast ? (
-        <button
-          onClick={finish}
-          className="mt-1 min-h-[52px] rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
-        >
-          Finish workout
-        </button>
-      ) : (
-        <button
-          onClick={() => setCurrent(safeCurrent + 1)}
-          className="mt-1 flex min-h-[52px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
-        >
-          Next exercise <MdChevronRight className="text-2xl" aria-hidden />
-        </button>
-      )}
+      <button
+        onClick={completeSetAndAdvance}
+        className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+      >
+        {atLast ? (
+          'Finish workout'
+        ) : (
+          <>
+            Set done — rest <MdChevronRight className="text-2xl" aria-hidden />
+          </>
+        )}
+      </button>
 
       {rest != null && (
         <RestTimer
@@ -210,14 +306,15 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
             <div className="flex flex-col gap-1">
               {exercises.map((e, i) => {
                 const complete = isComplete(e.key)
+                const firstStep = steps.findIndex((s) => s.exIndex === i)
                 return (
                   <div
                     key={e.key}
-                    className={`flex items-center gap-2 rounded-xl px-2 ${i === safeCurrent ? 'bg-surface-2' : ''}`}
+                    className={`flex items-center gap-2 rounded-xl px-2 ${step.exIndex === i ? 'bg-surface-2' : ''}`}
                   >
                     <button
                       onClick={() => {
-                        setCurrent(i)
+                        if (firstStep >= 0) setCurrent(firstStep)
                         setShowList(false)
                       }}
                       className="flex-1 py-3 text-left active:opacity-70"
@@ -225,7 +322,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
                       <span className="text-[10px] uppercase tracking-wide text-neutral-500">{e.group}</span>
                       <span className="block font-medium">{e.name}</span>
                       <span className="text-xs text-neutral-500 tabular-nums">
-                        {doneCount(e.key)}/{e.sets} sets
+                        {doneCount(e.key)}/{logFor(e.key)?.sets.length ?? e.sets} sets
                       </span>
                     </button>
                     <button
