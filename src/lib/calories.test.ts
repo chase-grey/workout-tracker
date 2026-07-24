@@ -84,20 +84,26 @@ describe('setDayTotal', () => {
 })
 
 describe('mergeCaloriesByDate', () => {
-  it('keeps the higher total per shared date and collapses to one entry per date', () => {
+  it('local wins for shared dates; server only adds dates local is missing', () => {
     const local: CalorieEntry[] = [
       { date: '2026-07-08', calories: 800 }, // optimistic, ahead of server
       { date: '2026-07-09', calories: 1000 },
     ]
     const server: CalorieEntry[] = [
-      { date: '2026-07-08', calories: 500 }, // stale
-      { date: '2026-07-10', calories: 4000 }, // another device
+      { date: '2026-07-08', calories: 500 }, // stale — must not win
+      { date: '2026-07-10', calories: 4000 }, // local hasn't seen this date
     ]
     expect(mergeCaloriesByDate(local, server)).toEqual([
       { date: '2026-07-08', calories: 800 },
       { date: '2026-07-09', calories: 1000 },
       { date: '2026-07-10', calories: 4000 },
     ])
+  })
+
+  it('keeps a local decrease that the server has not caught up to yet', () => {
+    const local: CalorieEntry[] = [{ date: '2026-07-08', calories: 3900 }] // after −100
+    const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 4000 }] // pre-correction
+    expect(mergeCaloriesByDate(local, server)).toEqual([{ date: '2026-07-08', calories: 3900 }])
   })
 
   it('collapses legacy multi-row server dates into one summed total', () => {

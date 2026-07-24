@@ -5,7 +5,7 @@ import { CALORIE_GOAL, caloriePaceFraction, totalForDate } from '../../lib/calor
 import { mondayOf, toISODate } from '../../lib/dates'
 
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-const QUICK_ADDS = [100, 500, 1000, 4000]
+const QUICK_ADDS = [100, 500, 4000]
 
 export function CalorieLogger() {
   const { calorieEntries, logCalories } = useData()
@@ -28,7 +28,7 @@ export function CalorieLogger() {
   const pace = isToday ? caloriePaceFraction(new Date()) : null
 
   const add = (cal: number) => {
-    if (cal <= 0) return
+    if (cal === 0) return
     void logCalories(cal, selDate)
   }
 
@@ -94,6 +94,12 @@ export function CalorieLogger() {
             +{cal}
           </button>
         ))}
+        <button
+          onClick={() => add(-100)}
+          className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-sm font-semibold active:opacity-80"
+        >
+          −100
+        </button>
       </div>
     </div>
   )

@@ -195,8 +195,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     try {
       const c = await api.fetchCalories()
-      // Merge (higher daily total wins) rather than replace, so a fetch can't
-      // clobber optimistic taps the server hasn't recorded yet.
+      // Merge rather than replace: this device's local total wins for any date
+      // it already has, so a fetch can't clobber optimistic taps (including a
+      // −100 correction) the server hasn't recorded yet.
       if (Array.isArray(c)) persistCalories(mergeCaloriesByDate(storage.loadCalories(), c))
     } catch {
       /* ignore */
@@ -348,7 +349,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (calories: number, date?: string) => {
       const day = date ?? toISODate(new Date())
       const prevCals = storage.loadCalories()
-      const newTotal = totalForDate(prevCals, day) + calories
+      // `calories` may be negative (a −100 correction); never let a day go below 0.
+      const newTotal = Math.max(0, totalForDate(prevCals, day) + calories)
       const entry: CalorieEntry = { date: day, calories: newTotal }
       const nextCals = setDayTotal(prevCals, day, newTotal)
       persistCalories(nextCals)
@@ -357,10 +359,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const queueSansDay = storage.loadQueue().filter(
         (w) => !(w.type === 'calorie' && w.entry.date === day),
       )
+      const signed = calories >= 0 ? `+${calories}` : `${calories}`
       try {
         await api.postCalorie(entry)
         persistQueue(queueSansDay)
-        notify(`+${calories} cal saved`, true)
+        notify(`${signed} cal saved`, true)
       } catch {
         persistQueue([...queueSansDay, { type: 'calorie', entry }])
         notify("Couldn't save — queued to retry", false)

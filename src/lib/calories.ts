@@ -49,21 +49,25 @@ export function setDayTotal(entries: CalorieEntry[], date: string, total: number
 }
 
 /**
- * Merge two calorie lists into one entry per date. Daily calories are a running
- * total that only climbs as you log more, so the higher total for a shared date
- * wins: an in-flight local tap the server hasn't stored yet is never clobbered
- * by a stale fetch, and a larger total logged on another device still syncs in.
- * (There is no "decrease" path in the UI; a downward correction would be masked
- * until the server echoes the lower value.) Also collapses legacy multi-row
- * dates into a single total, so a refreshed cache self-migrates.
+ * Merge `local` calorie state with a `server` fetch into one entry per date.
+ * `local` wins for any date it already has, and the server only contributes
+ * dates the local cache is missing. Because a day's total can now move down
+ * (the −100 correction) as well as up, we can't assume the higher value is the
+ * newer one — so the logging device's own state is authoritative for dates it
+ * has touched, and an in-flight tap the server hasn't stored yet is never
+ * clobbered by a stale fetch. (Trade-off: a same-date edit made on another
+ * device won't overwrite this device's cached value until the cache is cleared;
+ * acceptable for a single-logging-device app.) Totals are summed per date, so
+ * legacy multi-row dates collapse to a single entry and the cache self-migrates.
  */
-export function mergeCaloriesByDate(a: CalorieEntry[], b: CalorieEntry[]): CalorieEntry[] {
-  const aTotals = dayTotals(a)
-  const bTotals = dayTotals(b)
-  const dates = new Set<string>([...aTotals.keys(), ...bTotals.keys()])
+export function mergeCaloriesByDate(local: CalorieEntry[], server: CalorieEntry[]): CalorieEntry[] {
+  const localTotals = dayTotals(local)
+  const serverTotals = dayTotals(server)
+  const dates = new Set<string>([...localTotals.keys(), ...serverTotals.keys()])
   const out: CalorieEntry[] = []
   for (const date of dates) {
-    out.push({ date, calories: Math.max(aTotals.get(date) ?? 0, bTotals.get(date) ?? 0) })
+    const total = localTotals.has(date) ? localTotals.get(date)! : serverTotals.get(date)!
+    out.push({ date, calories: total })
   }
   return out.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))
 }

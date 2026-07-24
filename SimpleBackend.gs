@@ -305,7 +305,9 @@ function appendCalories(body) {
   for (let i = 0; i < list.length; i++) {
     const e = list[i]
     if (!e || !e.date || !isFinite(Number(e.calories))) continue
-    upsertCalorieDate(sh, e.date, Number(e.calories), e.label || '')
+    // A day's total is a running value that can be corrected down (the −100
+    // button); never store a negative total.
+    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '')
     saved++
   }
   return { saved: saved }
