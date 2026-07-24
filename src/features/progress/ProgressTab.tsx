@@ -94,7 +94,7 @@ function Chart({
     )
   }
   const overlay = calories != null && calories.length > 0
-  const rows = withTime(overlay ? mergeCalories(data, calories) : data)
+  const rows = overlay ? withTime(mergeCalories(data, calories)) : withTime(data)
   return (
     <div className="rounded-2xl bg-surface p-2">
       <ResponsiveContainer width="100%" height={224}>
