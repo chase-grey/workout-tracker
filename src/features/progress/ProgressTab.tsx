@@ -217,6 +217,12 @@ export function ProgressTab() {
   const [bodyMetric, setBodyMetric] = useState<'bf' | 'waist'>('bf')
   const [recap, setRecap] = useState<Review | null>(null)
 
+  // The recap buttons are a treat, not clutter: show "Month in review" only on
+  // the 1st of the month, and "Year in review" only during the first week of January.
+  const today = new Date()
+  const showMonthReview = today.getDate() === 1
+  const showYearReview = today.getMonth() === 0 && today.getDate() <= 7
+
   const reviewData = useMemo(
     () => ({
       workouts,
@@ -292,20 +298,26 @@ export function ProgressTab() {
     <div className="flex flex-col gap-4 pb-4">
       <h2 className="text-xl font-bold">Progress</h2>
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => openRecap('month')}
-          className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
-        >
-          Month in review
-        </button>
-        <button
-          onClick={() => openRecap('year')}
-          className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
-        >
-          Year in review
-        </button>
-      </div>
+      {(showMonthReview || showYearReview) && (
+        <div className="flex gap-2">
+          {showMonthReview && (
+            <button
+              onClick={() => openRecap('month')}
+              className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
+            >
+              Month in review
+            </button>
+          )}
+          {showYearReview && (
+            <button
+              onClick={() => openRecap('year')}
+              className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
+            >
+              Year in review
+            </button>
+          )}
+        </div>
+      )}
 
       <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />
 
