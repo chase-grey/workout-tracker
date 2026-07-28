@@ -19,7 +19,14 @@ import {
   type CalorieEntry,
 } from '../lib/calories'
 import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp'
-import { isSaneDuration, type SessionDuration } from '../lib/estimate'
+import {
+  applySessionSamples,
+  isSaneDuration,
+  type ExerciseAverages,
+  type SessionDuration,
+  type SessionTimeSamples,
+} from '../lib/estimate'
+import { sessionChallenges, metBaselines, type ChallengeOpts } from '../lib/challenge'
 import { MEASUREMENT_HISTORY } from '../config/body'
 import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from '../lib/weeklyStreak'
 import { useCelebrate } from './CelebrationContext'
@@ -30,15 +37,32 @@ import {
   currentWeekCounts,
   detectPRs,
   newlyEarned,
-  prCelebration,
   stretchDoneCelebration,
   workoutDoneCelebration,
   type Celebration,
+  type PR,
   type WeekCounts,
 } from '../lib/celebration'
 import { newRecords, type RecordSnapshot } from '../lib/records'
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
+
+/** Wall-clock split of a finished workout, measured by the guided flow. */
+export type SessionDurationInput = { totalSec: number; restSec: number }
+
+/**
+ * Everything the full-screen workout-finish recap needs: PRs and new baselines
+ * hit this session (the headline), the time split, and the "ambient" weekly-goal
+ * / all-time-record celebration to play once the recap is dismissed.
+ */
+export type WorkoutFinishSummary = {
+  prs: PR[]
+  baselines: string[]
+  totalSec: number
+  activeSec: number
+  restSec: number
+  ambient: Celebration | null
+}
 
 /** A flexibility log: a stretch-session marker (angles omitted) and/or measurements. */
 export type FlexMeasurement = {
@@ -59,6 +83,7 @@ type DataContextValue = {
   calorieEntries: CalorieEntry[]
   measurements: MeasurementEntry[]
   durations: SessionDuration[]
+  exerciseAverages: ExerciseAverages
   settings: Settings
   plan: Plan
   flexPlan: FlexBlock[]
@@ -69,12 +94,13 @@ type DataContextValue = {
   streaks: StreakState
   weekProgress: WeekProgress
   goals: WeeklyGoalConfig
-  saveSession: (s: WorkoutSession) => Promise<void>
+  saveSession: (s: WorkoutSession, duration?: SessionDurationInput) => Promise<WorkoutFinishSummary>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
   logFlex: (measurement: FlexMeasurement) => Promise<void>
   logCalories: (calories: number, date?: string) => Promise<void>
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
+  logExerciseTimes: (samples: SessionTimeSamples) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
   logCore: (reps: number[]) => Promise<void>
   logProgressPhoto: () => void
@@ -94,6 +120,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(() => storage.loadCalories())
   const [measurements, setMeasurements] = useState<MeasurementEntry[]>(() => storage.loadMeasurements())
   const [durations, setDurations] = useState<SessionDuration[]>(() => storage.loadDurations())
+  const [exerciseAverages, setExerciseAverages] = useState<ExerciseAverages>(() =>
+    storage.loadExerciseAverages(),
+  )
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [flexPlan, setFlexPlan] = useState<FlexBlock[]>(() => storage.loadFlexPlan())
@@ -142,6 +171,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setDurations(e)
     storage.saveDurations(e)
   }, [])
+  const persistExerciseAverages = useCallback((a: ExerciseAverages) => {
+    setExerciseAverages(a)
+    storage.saveExerciseAverages(a)
+  }, [])
   const persistQueue = useCallback((q: QueuedWrite[]) => {
     setQueue(q)
     storage.saveQueue(q)
@@ -163,6 +196,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         else if (w.type === 'calorie') await api.postCalorie(w.entry)
         else if (w.type === 'measurement') await api.postMeasurement(w.entry)
         else if (w.type === 'duration') await api.postDuration(w.entry)
+        else if (w.type === 'exerciseTimes') await api.postExerciseTimes(w.samples)
         else if (w.type === 'plan') await api.postPlan(w.plan)
       } catch {
         remaining.push(w)
@@ -218,6 +252,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     try {
+      const ex = await api.fetchExerciseTimes()
+      // The backend is authoritative for the rolling averages; replace local.
+      if (ex && typeof ex === 'object' && ex.active) persistExerciseAverages(ex)
+    } catch {
+      /* ignore — an older backend won't have this route */
+    }
+    try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
         const merged = withPlanDefaults(p)
@@ -227,7 +268,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations])
+  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations, persistExerciseAverages])
 
   // Initial sync + flush the queue whenever we come back online.
   useEffect(() => {
@@ -237,20 +278,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('online', onOnline)
   }, [refresh, flush])
 
+  // Progression inputs per exercise key, from the live plan — for challenge
+  // detection (which lifts the session was asked to beat, and whether it did).
+  const challengeOptsByKey = useMemo(() => {
+    const m = new Map<string, ChallengeOpts>()
+    for (const day of Object.values(plan)) {
+      for (const e of day.exercises) {
+        m.set(e.key, { repMin: e.repMin, repMax: e.repMax, bodyweight: e.bodyweight, increment: e.increment })
+      }
+    }
+    return m
+  }, [plan])
+
   const saveSession = useCallback(
-    async (s: WorkoutSession) => {
+    async (s: WorkoutSession, duration?: SessionDurationInput): Promise<WorkoutFinishSummary> => {
       const prev = storage.loadWorkouts()
       const rows = sessionToRows(s)
       const next = [...prev, ...rows]
       persistWorkouts(next) // optimistic
-      try {
-        await api.postSession(rows)
-        notify('Workout saved', true)
-      } catch {
-        enqueue({ type: 'session', rows })
-        notify("Couldn't save — queued to retry", false)
-      }
-      // Cheer: workout done + any all-time PRs + weekly goals crossed.
+
+      // Persist to the backend in the background so the finish recap can show
+      // immediately (offline still falls back to the retry queue).
+      void api.postSession(rows).then(
+        () => notify('Workout saved', true),
+        () => {
+          enqueue({ type: 'session', rows })
+          notify("Couldn't save — queued to retry", false)
+        },
+      )
+
+      // Headline achievements shown in the finish recap.
+      const prs = detectPRs(prev, rows)
+      const baselines = metBaselines(sessionChallenges(prev, rows, challengeOptsByKey))
+
+      // "Ambient" wins (weekly goals, all-time records) are handed back to play
+      // as a transient celebration once the recap is dismissed — the recap owns
+      // the PR / baseline moment, so those aren't duplicated here.
+      let ambient: Celebration | null = null
       try {
         const flexDates = storage.loadFlex().map((f) => f.date)
         const cals = storage.loadCalories()
@@ -258,19 +322,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const after = currentWeekCounts(next, flexDates, cals)
         const beforeRec: RecordSnapshot = { workouts: prev, flexDates, calorieEntries: cals }
         const afterRec: RecordSnapshot = { workouts: next, flexDates, calorieEntries: cals }
-        celebrate(
-          composeCelebration([
-            rows.length ? workoutDoneCelebration(s.dayType) : null,
-            ...weeklyCelebrations(before, after),
-            ...newRecords(beforeRec, afterRec),
-            prCelebration(detectPRs(prev, rows)),
-          ]),
-        )
+        ambient = composeCelebration([
+          ...weeklyCelebrations(before, after),
+          ...newRecords(beforeRec, afterRec),
+        ])
       } catch {
         /* a missed cheer must never break a save */
       }
+
+      const totalSec = duration?.totalSec ?? 0
+      const restSec = Math.max(0, Math.min(duration?.restSec ?? 0, totalSec))
+      return { prs, baselines, totalSec, activeSec: totalSec - restSec, restSec, ambient }
     },
-    [celebrate, enqueue, notify, persistWorkouts, weeklyCelebrations],
+    [challengeOptsByKey, enqueue, notify, persistWorkouts, weeklyCelebrations],
   )
 
   const logBodyWeight = useCallback(
@@ -440,6 +504,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, persistDurations],
   )
 
+  // Folds a finished workout's per-exercise active times + rests into the
+  // rolling averages that drive the time-left estimate. Optimistically updates
+  // the local copy so the next session estimates well even before the backend
+  // round-trips; a later fetch replaces it with the authoritative averages.
+  const logExerciseTimes = useCallback(
+    async (samples: SessionTimeSamples) => {
+      if (samples.exercises.length === 0 && !(samples.restCount > 0)) return
+      persistExerciseAverages(applySessionSamples(storage.loadExerciseAverages(), samples))
+      try {
+        await api.postExerciseTimes(samples)
+      } catch {
+        enqueue({ type: 'exerciseTimes', samples })
+      }
+    },
+    [enqueue, persistExerciseAverages],
+  )
+
   const quickLog = useCallback(
     async (dayType: DayType) => {
       const row: WorkoutRow = {
@@ -585,6 +666,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     calorieEntries,
     measurements: allMeasurements,
     durations,
+    exerciseAverages,
     settings,
     plan,
     flexPlan,
@@ -601,6 +683,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logCalories,
     logMeasurement,
     logSessionDuration,
+    logExerciseTimes,
     quickLog,
     logCore,
     logProgressPhoto,

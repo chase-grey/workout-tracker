@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { DataProvider, useData } from './store/DataContext'
-import { CelebrationProvider } from './store/CelebrationContext'
+import { DataProvider, useData, type WorkoutFinishSummary } from './store/DataContext'
+import { CelebrationProvider, useCelebrate } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
 import { ToastHost } from './components/ToastHost'
 import { ReviewOverlay } from './components/ReviewOverlay'
+import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
 import { ProgressTab } from './features/progress/ProgressTab'
@@ -33,9 +34,11 @@ function AppShell() {
   const [tab, setTab] = useState<Tab>('today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, quickLog, settings, updateSettings } = useData()
+  const { celebrate } = useCelebrate()
   const controls = useActiveSession()
   const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
   const [review, setReview] = useState<Review | null>(null)
+  const [finishSummary, setFinishSummary] = useState<WorkoutFinishSummary | null>(null)
 
   // Scroll back to the top when switching tabs.
   useEffect(() => {
@@ -86,7 +89,14 @@ function AppShell() {
   }
 
   // Workouts and stretches take over the whole screen (no tabs / bottom nav).
-  const immersive = controls.session != null || stretching
+  const immersive = controls.session != null || stretching || finishSummary != null
+
+  const dismissFinish = () => {
+    const ambient = finishSummary?.ambient ?? null
+    setFinishSummary(null)
+    // Any weekly-goal / all-time-record wins ride in after the recap closes.
+    if (ambient) celebrate(ambient)
+  }
 
   let content
   if (controls.session) {
@@ -95,8 +105,9 @@ function AppShell() {
       <ActiveSession
         session={controls.session}
         controls={controls}
-        onFinish={(s) => {
-          void saveSession(s)
+        onFinish={(s, duration) => {
+          // Show the full-screen recap first, then return to Today on dismiss.
+          void saveSession(s, duration).then((summary) => setFinishSummary(summary))
           controls.clear()
         }}
         onSkip={() => {
@@ -136,6 +147,7 @@ function AppShell() {
       </main>
       {!immersive && <BottomNav active={tab} onChange={setTab} showChat={CHAT_ENABLED} />}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
+      {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}
     </div>
   )
 }

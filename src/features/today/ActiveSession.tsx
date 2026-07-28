@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
+import { MdBolt, MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
 import { repRangeLabel, type PlannedExercise } from '../../config/plan'
 import { nextTarget, type Target } from '../../lib/progression'
+import { isChallenge } from '../../lib/challenge'
 import { restBeforeNextSet } from '../../lib/rest'
-import { formatDuration, remainingSecs, WORK_PER_SET_SEC } from '../../lib/estimate'
+import {
+  formatDuration,
+  remainingWorkoutSecs,
+  WORK_PER_SET_SEC,
+  type ExerciseTimeSample,
+} from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
 import { storage } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
@@ -16,9 +22,13 @@ import { KebabMenu } from '../../components/KebabMenu'
 type Props = {
   session: WorkoutSession
   controls: ReturnType<typeof useActiveSession>
-  onFinish: (s: WorkoutSession) => void
+  onFinish: (s: WorkoutSession, duration: { totalSec: number; restSec: number }) => void
   onSkip: () => void
 }
+
+/** Reject per-set active times outside this range (app left open / mis-taps). */
+const MIN_SET_ACTIVE_SEC = 3
+const MAX_SET_ACTIVE_SEC = 20 * 60
 
 /** One set of one exercise — the unit the guided workout flow steps through. */
 type SetStep = {
@@ -53,7 +63,7 @@ function targetLabel(target: Target | undefined): string | null {
 
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
 export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
-  const { plan, workouts, durations, logSessionDuration } = useData()
+  const { plan, workouts, exerciseAverages, logSessionDuration, logExerciseTimes } = useData()
   const [rest, setRest] = useState<RestInfo | null>(null)
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
@@ -62,6 +72,13 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   // session). restStartRef marks when the current rest overlay opened.
   const restAccumSec = useRef(0)
   const restStartRef = useRef(0)
+  // Per-exercise active-time learning: activeStartRef marks when the current set
+  // screen became active; accumulators sum active seconds + set counts per
+  // exercise, and restCount tracks how many rest intervals were taken.
+  const activeStartRef = useRef(Date.now())
+  const activeAccum = useRef(new Map<string, number>())
+  const activeSets = useRef(new Map<string, number>())
+  const restCount = useRef(0)
 
   const day = plan[session.dayType]
   const exercises = day.exercises
@@ -110,6 +127,12 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     [planned, workouts],
   )
 
+  // A "challenge" set: the prefilled target is a genuine step up from last time.
+  const challenging = useMemo(
+    () => (target ? isChallenge(workouts, planned.key, target) : false),
+    [target, workouts, planned.key],
+  )
+
   const totals = useMemo(() => {
     let done = 0
     let all = 0
@@ -122,20 +145,16 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   }, [exercises, session])
 
   const timeLeft = useMemo(() => {
-    const fallbackItems = steps.slice(safeCurrent).map((s) => ({
-      remainingSets: 1,
-      workSec: WORK_PER_SET_SEC,
-      restSec: s.ex.restSec,
+    // Remaining sets from the current step onward, each priced by its exercise's
+    // learned average active time + pooled rest (structural fallbacks day one).
+    const remaining = steps.slice(safeCurrent).map((s) => ({
+      exercise: s.ex.key,
+      fallbackActiveSec: WORK_PER_SET_SEC,
+      fallbackRestSec: s.ex.restSec,
     }))
-    return remainingSecs({
-      history: durations,
-      sel: { kind: 'workout', dayType: session.dayType },
-      doneSteps: totals.done,
-      totalSteps: totals.all,
-      fallbackItems,
-    })
+    return remainingWorkoutSecs(exerciseAverages, remaining)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps, safeCurrent, session, durations, totals])
+  }, [steps, safeCurrent, exerciseAverages])
 
   const setExerciseComplete = (key: string, complete: boolean) => {
     const l = logFor(key)
@@ -143,34 +162,61 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     l.sets.forEach((_, i) => controls.updateSet(key, i, { done: complete }))
   }
 
+  // Attribute the time spent on the current set screen to its exercise, so the
+  // per-exercise averages learn how long each move really takes. Rejects out-of-
+  // range slices (app left open, instant mis-tap) so they can't skew the average.
+  const recordActiveForCurrent = (exerciseKey: string) => {
+    if (!activeStartRef.current) return
+    const sec = (Date.now() - activeStartRef.current) / 1000
+    activeStartRef.current = 0
+    if (sec < MIN_SET_ACTIVE_SEC || sec > MAX_SET_ACTIVE_SEC) return
+    activeAccum.current.set(exerciseKey, (activeAccum.current.get(exerciseKey) ?? 0) + sec)
+    activeSets.current.set(exerciseKey, (activeSets.current.get(exerciseKey) ?? 0) + 1)
+  }
+
   const finish = () => {
+    const totalSec = session.startedAt
+      ? (Date.now() - new Date(session.startedAt).getTime()) / 1000
+      : 0
+    const restSec = restAccumSec.current
     if (session.startedAt) {
       void logSessionDuration({
         date: toISODate(new Date()),
         kind: 'workout',
         dayType: session.dayType,
-        totalSec: (Date.now() - new Date(session.startedAt).getTime()) / 1000,
-        restSec: restAccumSec.current,
+        totalSec,
+        restSec,
       })
     }
+    // Fold this session's per-exercise active times + rests into the estimator.
+    const exercises: ExerciseTimeSample[] = []
+    for (const [ex, totalActiveSec] of activeAccum.current) {
+      const sets = activeSets.current.get(ex) ?? 0
+      if (sets > 0) exercises.push({ exercise: ex, totalActiveSec, sets })
+    }
+    void logExerciseTimes({ exercises, restTotalSec: restSec, restCount: restCount.current })
+
     const cleaned: WorkoutSession = {
       ...session,
       exercises: session.exercises
         .map((ex) => ({ ...ex, sets: ex.sets.filter((s) => s.done && s.reps > 0) }))
         .filter((ex) => ex.sets.length > 0),
     }
-    onFinish(cleaned)
+    onFinish(cleaned, { totalSec, restSec })
   }
 
-  // Accumulate the just-ended rest slice, then dismiss the overlay.
+  // Accumulate the just-ended rest slice, then dismiss the overlay. The next set
+  // screen is now active, so start its active-time clock.
   const closeRest = () => {
     if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
     restStartRef.current = 0
+    activeStartRef.current = Date.now()
     setRest(null)
   }
 
   // Mark the current set done and either rest into the next set or finish.
   const completeSetAndAdvance = () => {
+    recordActiveForCurrent(planned.key)
     controls.updateSet(planned.key, step.setIndex, { done: true })
     if (atLast) {
       finish()
@@ -184,6 +230,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     }
     const nextIsNewExercise = !!nextStep && nextStep.ex.key !== planned.key
     restStartRef.current = Date.now()
+    restCount.current += 1
     setRest({
       // Full inter-set rest within an exercise, but a shorter transition rest
       // (sized to the next exercise, capped) when moving to a different move.
@@ -207,6 +254,8 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   }
 
   const hint = targetLabel(target)
+  const challengeLabel =
+    target && (target.weightLbs == null ? `${target.reps} reps` : `${target.weightLbs} × ${target.reps}`)
   const restLabel = planned.restSec >= 60 ? `${planned.restSec / 60} min` : `${planned.restSec}s`
 
   return (
@@ -253,11 +302,18 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
 
       {set && (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
-          {hint && (
-            <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
-              <MdTrackChanges aria-hidden />
-              {hint}
+          {challenging && challengeLabel ? (
+            <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
+              <MdBolt aria-hidden />
+              Challenge · Push for {challengeLabel}
             </p>
+          ) : (
+            hint && (
+              <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
+                <MdTrackChanges aria-hidden />
+                {hint}
+              </p>
+            )
           )}
           <div className="flex items-end justify-center gap-3">
             <label className="flex flex-1 flex-col items-center gap-1">
