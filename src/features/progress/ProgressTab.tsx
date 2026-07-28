@@ -15,6 +15,7 @@ import { availableExercises, exerciseSeries, filterRange, type Metric, type Poin
 import { calorieSurplusSeries } from '../../lib/calories'
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
 import { GoalsPanel } from './GoalsPanel'
+import { MuscleAvatar } from './MuscleAvatar'
 import { FlexProgress } from '../flex/FlexProgress'
 import { TimeSpent } from './TimeSpent'
 import { WeightLogSheet } from '../today/WeightLogSheet'
@@ -365,6 +366,8 @@ export function ProgressTab() {
       )}
 
       <GoalsPanel />
+
+      <MuscleAvatar />
 
       <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">Lifts</h3>
       <select
