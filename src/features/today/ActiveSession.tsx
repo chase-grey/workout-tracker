@@ -4,6 +4,7 @@ import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
 import { repRangeLabel, type PlannedExercise } from '../../config/plan'
 import { nextTarget, type Target } from '../../lib/progression'
+import { restBeforeNextSet } from '../../lib/rest'
 import { formatDuration, remainingSecs, WORK_PER_SET_SEC } from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
 import { storage } from '../../services/storage'
@@ -184,7 +185,13 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     const nextIsNewExercise = !!nextStep && nextStep.ex.key !== planned.key
     restStartRef.current = Date.now()
     setRest({
-      seconds: planned.restSec,
+      // Full inter-set rest within an exercise, but a shorter transition rest
+      // (sized to the next exercise, capped) when moving to a different move.
+      seconds: restBeforeNextSet({
+        currentRestSec: planned.restSec,
+        sameExercise: !nextIsNewExercise,
+        nextRestSec: nextStep ? nextStep.ex.restSec : null,
+      }),
       exKey: planned.key,
       isLastSetOfExercise: step.setIndex === step.setCount - 1,
       upNext: nextIsNewExercise ? `Up next: ${nextStep!.ex.name}` : null,
