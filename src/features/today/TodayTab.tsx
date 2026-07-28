@@ -96,7 +96,7 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
           onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
-          Stretch
+          Stretch + Core
         </button>
       </div>
     </div>

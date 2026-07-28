@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MdCheckCircle, MdChevronRight, MdPhotoCamera, MdRadioButtonUnchecked } from 'react-icons/md'
+import { MdCheckCircle, MdChevronRight, MdPhotoCamera, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { GetReady } from '../../components/GetReady'
@@ -9,10 +9,12 @@ import { KebabMenu } from '../../components/KebabMenu'
 import { MeasureSheet } from './MeasureSheet'
 import { CameraMeasure } from './CameraMeasure'
 import { formatDuration, remainingSecs } from '../../lib/estimate'
-import { buildFlexSteps } from '../../lib/flexSteps'
+import { buildSessionSteps, type CoreSetStep } from '../../lib/flexSteps'
 import { type MeasureMode } from '../../lib/measure'
 import { storage } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
+import { DEAD_BUG, repRangeLabel } from '../../config/plan'
+import { nextTarget } from '../../lib/progression'
 
 const SEC_PER_REP = 5
 
@@ -33,11 +35,16 @@ const canMeasureFor = (exKey: string): boolean => {
   return k.includes('tailor') || k.includes('horse')
 }
 
-/** Guided, one-set-at-a-time stretch flow with a tempo rhythm animation. */
+/**
+ * Guided, one-set-at-a-time Stretch + Core flow: the mobility routine (with a
+ * tempo rhythm animation) followed by a dead-bug core block whose reps are
+ * logged as workout rows. Finishing counts as a stretch/flex day.
+ */
 export function StretchSession({ onClose }: { onClose: () => void }) {
-  const { flexPlan, logFlex, durations, logSessionDuration } = useData()
+  const { flexPlan, workouts, logFlex, logCore, durations, logSessionDuration } = useData()
   const [current, setCurrent] = useState(() => storage.loadStretch()?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(storage.loadStretch()?.done ?? []))
+  const [coreReps, setCoreReps] = useState<Record<number, number>>(() => storage.loadStretch()?.coreReps ?? {})
   const [rest, setRest] = useState<number | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [showList, setShowList] = useState(false)
@@ -50,20 +57,37 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const restAccumSec = useRef(0)
   const restStartRef = useRef(0)
 
-  const steps = useMemo(() => buildFlexSteps(flexPlan), [flexPlan])
+  const steps = useMemo(() => buildSessionSteps(flexPlan), [flexPlan])
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
+  // Progression target reps for the dead-bug sets (prefilled, editable).
+  const coreTarget = useMemo(
+    () =>
+      nextTarget(workouts, DEAD_BUG.key, {
+        repMin: DEAD_BUG.repMin,
+        repMax: DEAD_BUG.repMax,
+        bodyweight: DEAD_BUG.bodyweight,
+        increment: DEAD_BUG.increment,
+      }).reps,
+    [workouts],
+  )
+  const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget
+
   useEffect(() => {
-    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt })
-  }, [safeCurrent, done, startedAt])
+    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt, coreReps })
+  }, [safeCurrent, done, startedAt, coreReps])
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
   const timeLeft = useMemo(() => {
     const fallbackItems = steps
       .filter((s) => !done.has(s.stepKey))
-      .map((s) => ({ remainingSets: 1, workSec: s.reps * SEC_PER_REP, restSec: s.restSec }))
+      .map((s) => ({
+        remainingSets: 1,
+        workSec: (s.kind === 'flex' ? s.reps : coreTarget) * SEC_PER_REP,
+        restSec: s.restSec,
+      }))
     return remainingSecs({
       history: durations,
       sel: { kind: 'stretch' },
@@ -71,7 +95,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       totalSteps: N,
       fallbackItems,
     })
-  }, [steps, done, durations, completed, N])
+  }, [steps, done, durations, completed, N, coreTarget])
 
   // Record the finished routine's length once, for time-left learning + reporting.
   const recordDuration = () => {
@@ -82,6 +106,19 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,
       restSec: restAccumSec.current,
     })
+  }
+
+  // Finish the session: log the completed dead-bug sets as workout rows (reps)
+  // and record the stretch/flex day. `doneSet` is passed explicitly so the set
+  // just completed is included without waiting for the state update.
+  const finishWith = (doneSet: Set<string>) => {
+    recordDuration()
+    const reps = steps
+      .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
+      .map((s) => coreRepsFor(s.round))
+    void logCore(reps)
+    void logFlex({ note: 'Stretch + Core' })
+    onClose()
   }
 
   if (N === 0) {
@@ -107,11 +144,10 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     })
 
   const completeSetAndAdvance = () => {
-    setDone((prev) => new Set(prev).add(step.stepKey))
+    const nextDone = new Set(done).add(step.stepKey)
+    setDone(nextDone)
     if (atLast) {
-      recordDuration()
-      void logFlex({ note: 'Stretch routine' })
-      onClose()
+      finishWith(nextDone)
     } else {
       restStartRef.current = Date.now()
       setRest(step.restSec)
@@ -123,6 +159,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col gap-3 pb-6">
       <header className="flex items-start justify-between gap-2">
         <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Stretch + Core</p>
           <h2 className="text-xl font-bold">{step.exName}</h2>
           <p className="text-sm text-neutral-500">
             Set {step.round + 1} of {step.maxSets} · {formatDuration(timeLeft)} left
@@ -137,17 +174,13 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
               label: 'Skip logging details (mark done)',
               onClick: () => {
                 recordDuration()
-                void logFlex({ note: 'Stretch session' })
+                void logFlex({ note: 'Stretch + Core' })
                 onClose()
               },
             },
             {
               label: 'Finish & log session',
-              onClick: () => {
-                recordDuration()
-                void logFlex({ note: 'Stretch routine' })
-                onClose()
-              },
+              onClick: () => finishWith(done),
             },
             { label: 'Exit without logging', danger: true, onClick: onClose },
           ]}
@@ -159,15 +192,37 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       </div>
 
       <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        {step.blockLabel} · {step.reps} reps
+        {step.blockLabel} · {step.kind === 'flex' ? `${step.reps} reps` : `${repRangeLabel(step)} reps`}
       </p>
 
-      <RhythmGuide
-        key={step.stepKey}
-        tempo={step.tempo}
-        reps={step.reps}
-        running={rest == null && !preparing && !paused}
-      />
+      {step.kind === 'flex' ? (
+        <RhythmGuide
+          key={step.stepKey}
+          tempo={step.tempo}
+          reps={step.reps}
+          running={rest == null && !preparing && !paused}
+        />
+      ) : (
+        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
+          <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
+            <MdTrackChanges aria-hidden />
+            Target {coreTarget} reps
+          </p>
+          <label className="mx-auto flex flex-col items-center gap-1">
+            <span className="text-xs uppercase tracking-wide text-neutral-500">Reps</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="reps"
+              value={coreRepsFor(step.round) || ''}
+              onChange={(e) =>
+                setCoreReps((prev) => ({ ...prev, [step.round]: Number(e.target.value) || 0 }))
+              }
+              className="min-h-[64px] w-40 rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </label>
+        </div>
+      )}
 
       <button
         onClick={completeSetAndAdvance}
@@ -182,7 +237,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         )}
       </button>
 
-      {canMeasureFor(step.exKey) && (
+      {step.kind === 'flex' && canMeasureFor(step.exKey) && (
         <button
           onClick={() => setShowCamera(true)}
           className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-border bg-surface font-semibold text-neutral-200 active:opacity-80"
@@ -205,7 +260,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       {preparing && <GetReady seconds={GET_READY_SEC} onDone={() => setPreparing(false)} />}
       {paused && <PauseOverlay label="Routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
-      {showCamera && (
+      {showCamera && step.kind === 'flex' && (
         <CameraMeasure
           mode={measureModeFor(step.exKey)}
           onClose={() => setShowCamera(false)}

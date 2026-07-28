@@ -1,7 +1,9 @@
 import type { FlexBlock } from '../config/flexPlan'
+import { DEAD_BUG } from '../config/plan'
 
 /** One set of one stretch — the unit the guided stretch flow steps through. */
 export type FlexSetStep = {
+  kind: 'flex'
   blockLabel: string
   blockNote?: string
   exKey: string
@@ -15,6 +17,27 @@ export type FlexSetStep = {
 }
 
 /**
+ * One set of dead-bug core work appended after the mobility flow. Unlike a
+ * stretch, the user enters the reps performed and each set is logged as a
+ * workout row (see DataContext.logCore), so it feeds the reps progress chart.
+ */
+export type CoreSetStep = {
+  kind: 'core'
+  blockLabel: string
+  exKey: string
+  exName: string
+  repMin: number
+  repMax: number
+  restSec: number
+  round: number // 0-based set number
+  maxSets: number
+  stepKey: string
+}
+
+/** A step in the Stretch + Core session: a mobility set or a dead-bug set. */
+export type SessionStep = FlexSetStep | CoreSetStep
+
+/**
  * Flatten a routine into individual set-steps. For a superset block (2+
  * exercises), sets are interleaved round-robin — e.g. Tailor's set 1, Horse
  * set 1, Tailor's set 2, Horse set 2, … — matching how they're actually done.
@@ -24,6 +47,7 @@ export function buildFlexSteps(plan: FlexBlock[]): FlexSetStep[] {
   const steps: FlexSetStep[] = []
   plan.forEach((block, bi) => {
     const mk = (ex: FlexBlock['exercises'][number], round: number): FlexSetStep => ({
+      kind: 'flex',
       blockLabel: block.label,
       blockNote: block.note,
       exKey: ex.key,
@@ -48,4 +72,29 @@ export function buildFlexSteps(plan: FlexBlock[]): FlexSetStep[] {
     }
   })
   return steps
+}
+
+/** The dead-bug core sets appended to every Stretch + Core session. */
+export function buildDeadBugSteps(): CoreSetStep[] {
+  const steps: CoreSetStep[] = []
+  for (let r = 0; r < DEAD_BUG.sets; r++) {
+    steps.push({
+      kind: 'core',
+      blockLabel: DEAD_BUG.group,
+      exKey: DEAD_BUG.key,
+      exName: DEAD_BUG.name,
+      repMin: DEAD_BUG.repMin,
+      repMax: DEAD_BUG.repMax,
+      restSec: DEAD_BUG.restSec,
+      round: r,
+      maxSets: DEAD_BUG.sets,
+      stepKey: `core:${DEAD_BUG.key}:${r}`,
+    })
+  }
+  return steps
+}
+
+/** The full guided flow: the mobility routine, then the dead-bug core block. */
+export function buildSessionSteps(plan: FlexBlock[]): SessionStep[] {
+  return [...buildFlexSteps(plan), ...buildDeadBugSteps()]
 }

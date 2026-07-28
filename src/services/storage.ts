@@ -24,7 +24,13 @@ const KEYS = {
 } as const
 
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
-export type StretchState = { step: number; done: string[]; startedAt?: string }
+export type StretchState = {
+  step: number
+  done: string[]
+  startedAt?: string
+  /** Reps entered per dead-bug core set, keyed by 0-based set index. */
+  coreReps?: Record<number, number>
+}
 
 export type Settings = {
   apiUrl: string

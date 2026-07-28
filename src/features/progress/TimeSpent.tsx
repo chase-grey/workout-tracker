@@ -54,7 +54,7 @@ export function TimeSpent({ months }: { months: number | null }) {
     () =>
       [
         { key: 'workout', name: 'Working out', sec: totals.workoutSec, fill: COLORS.workout },
-        { key: 'stretch', name: 'Stretching', sec: totals.stretchSec, fill: COLORS.stretch },
+        { key: 'stretch', name: 'Stretch + Core', sec: totals.stretchSec, fill: COLORS.stretch },
         { key: 'rest', name: 'Resting', sec: totals.restSec, fill: COLORS.rest },
       ].filter((d) => d.sec > 0),
     [totals],
@@ -137,7 +137,7 @@ export function TimeSpent({ months }: { months: number | null }) {
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Line type="monotone" dataKey="workout" name="Working out" stroke={COLORS.workout} strokeWidth={2} dot={{ r: 2 }} />
-                  <Line type="monotone" dataKey="stretch" name="Stretching" stroke={COLORS.stretch} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="stretch" name="Stretch + Core" stroke={COLORS.stretch} strokeWidth={2} dot={{ r: 2 }} />
                   <Line type="monotone" dataKey="rest" name="Resting" stroke={COLORS.rest} strokeWidth={2} dot={{ r: 2 }} />
                 </LineChart>
               </ResponsiveContainer>

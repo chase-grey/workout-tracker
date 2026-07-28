@@ -173,7 +173,7 @@ export function GoalsPanel() {
             ? `Ab work: ${absReps[0].value}${
                 absReps.length > 1 ? ` → ${absReps[absReps.length - 1].value}` : ''
               } reps/session.`
-            : 'Ab work: none logged — do your core exercises or start a Core session to build ab muscle.'}
+            : 'Ab work: none logged — do your core exercises or a Stretch + Core session to build ab muscle.'}
         </p>
 
         {heightIn === 0 && (
