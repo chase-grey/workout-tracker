@@ -1,6 +1,7 @@
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
 import { exerciseSeries, combinedRepsSeries } from '../../lib/progress'
+import { squatBodyweightGoal } from '../../lib/squatGoal'
 import { absExerciseKeys } from '../../config/plan'
 import {
   bodyFatSeries,
@@ -75,6 +76,13 @@ export function GoalsPanel() {
   // Bench your bodyweight: target = current bodyweight (moving goal).
   const benchGoal = project(benchPoints, currentBw || 999)
 
+  // Squat 1.5× bodyweight: est-1RM (Epley, top logged squat set) vs a moving
+  // target of 1.5× the latest weigh-in, with a 1× milestone along the way.
+  const squatPoints = exerciseSeries(workouts, 'barbell_squat', '1rm')
+  const squatEst1RM = squatPoints.length ? squatPoints[squatPoints.length - 1].value : 0
+  const squat = squatBodyweightGoal(squatEst1RM, currentBw)
+  const squatProj = project(squatPoints, squat.target || 999)
+
   // Visible six-pack: gated by BOTH body-fat % and ab-muscle thickness. The
   // target is derived empirically from the leanest visibility observation
   // (see personalSixPackTarget) rather than a fixed generic number.
@@ -95,6 +103,38 @@ export function GoalsPanel() {
         unit="lbs"
         proj={benchGoal}
       />
+
+      <div className="rounded-2xl bg-surface p-4">
+        <div className="flex items-baseline justify-between">
+          <h4 className="font-semibold">Squat 1.5× bodyweight</h4>
+          <span className="text-sm text-neutral-400 tabular-nums">
+            {squat.est1RM || '—'} → {squat.target || '—'} lbs
+          </span>
+        </div>
+
+        {squat.hitTarget ? (
+          <p className="mt-1 text-sm text-accent-2">
+            <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
+            1.5× bodyweight squat — done!
+          </p>
+        ) : squatProj.onTrack ? (
+          <p className="mt-1 text-sm text-accent-2">
+            On track · ETA {fmtDate(squatProj.etaDate)} ({squatProj.slopePerWeek > 0 ? '+' : ''}
+            {squatProj.slopePerWeek} lbs/wk)
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-neutral-500">
+            {squat.est1RM ? 'Not trending toward this yet — keep at it.' : 'Log a Barbell Squat to project this.'}
+          </p>
+        )}
+
+        <p className="mt-2 text-xs text-neutral-500 tabular-nums">
+          {squat.bodyweight
+            ? `${squat.multiple}× bodyweight · 1× ${squat.milestone}${squat.hitMilestone ? ' ✓' : ''} · 1.5× ${squat.target}`
+            : 'Log a weigh-in to set your squat targets.'}
+        </p>
+      </div>
+
       <div className="rounded-2xl bg-surface p-4">
         <div className="flex items-baseline justify-between">
           <h4 className="font-semibold">Visible 6-pack abs</h4>
