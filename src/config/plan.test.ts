@@ -1,12 +1,23 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_PLAN, withPlanDefaults, type Plan } from './plan'
+import { DAY_TYPES, DEFAULT_PLAN, withPlanDefaults, type Plan } from './plan'
 
 describe('withPlanDefaults', () => {
-  it('adds a missing day type from the defaults', () => {
-    const stored = { push: DEFAULT_PLAN.push, pull: DEFAULT_PLAN.pull } as Partial<Plan>
+  it('keeps only the current day types and fills any missing one from the defaults', () => {
+    const stored = { push: DEFAULT_PLAN.push } as Partial<Plan>
     const merged = withPlanDefaults(stored)
-    expect(merged.abs).toBeDefined()
-    expect(merged.abs.exercises.length).toBeGreaterThan(0)
+    expect(Object.keys(merged).sort()).toEqual([...DAY_TYPES].sort())
+    expect(merged.pull.exercises.length).toBeGreaterThan(0)
+  })
+
+  it('drops a stored day type that no longer exists (the removed Core/abs day)', () => {
+    // A plan saved back when the standalone Core day still shipped.
+    const stored = {
+      ...DEFAULT_PLAN,
+      abs: { type: 'abs', label: 'Abs / Core', required: false, exercises: [] },
+    } as unknown as Partial<Plan>
+    const merged = withPlanDefaults(stored)
+    expect('abs' in merged).toBe(false)
+    expect(Object.keys(merged).sort()).toEqual([...DAY_TYPES].sort())
   })
 
   it('merges newly shipped exercises into a stored day near their neighbour', () => {

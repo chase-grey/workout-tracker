@@ -12,6 +12,7 @@ import type { BodyWeightEntry, WorkoutRow } from '../types'
 import type { CalorieEntry } from './calories'
 import { calorieHitDates, dayTotals } from './calories'
 import { epley1RM } from './epley'
+import { trainingSessions } from './session'
 
 export type ReviewData = {
   workouts: WorkoutRow[]
@@ -27,7 +28,6 @@ type InPeriod = (dateISO: string) => boolean
 
 export type PeriodStats = {
   workouts: number
-  absSessions: number
   stretches: number
   calorieDays: number
   totalCalories: number
@@ -96,18 +96,9 @@ function periodLabel(kind: ReviewKind, periodKey: string): string {
 // Stats.
 // ---------------------------------------------------------------------------
 
-/** Distinct sessions in the period, split into training (non-abs) and core. */
-function sessionCounts(workouts: WorkoutRow[], inPeriod: InPeriod): { workouts: number; abs: number } {
-  const seen = new Set<string>()
-  let training = 0
-  let abs = 0
-  for (const r of workouts) {
-    if (!r.session_id || seen.has(r.session_id) || !inPeriod(r.date)) continue
-    seen.add(r.session_id)
-    if (r.day_type === 'abs') abs += 1
-    else training += 1
-  }
-  return { workouts: training, abs }
+/** Distinct training sessions (supplemental core-only sessions excluded) in the period. */
+function sessionCounts(workouts: WorkoutRow[], inPeriod: InPeriod): number {
+  return trainingSessions(workouts).filter((s) => inPeriod(s.date)).length
 }
 
 /** Count of exercises whose all-time best est-1RM was achieved inside the period. */
@@ -130,7 +121,7 @@ function prsInPeriod(workouts: WorkoutRow[], inPeriod: InPeriod): number {
 }
 
 export function periodStats(data: ReviewData, inPeriod: InPeriod): PeriodStats {
-  const { workouts: training, abs } = sessionCounts(data.workouts, inPeriod)
+  const training = sessionCounts(data.workouts, inPeriod)
   const stretches = new Set(data.flexDates.filter(inPeriod)).size
   const calorieDays = calorieHitDates(data.calorieEntries).filter(inPeriod).length
 
@@ -152,7 +143,6 @@ export function periodStats(data: ReviewData, inPeriod: InPeriod): PeriodStats {
 
   return {
     workouts: training,
-    absSessions: abs,
     stretches,
     calorieDays,
     totalCalories,
@@ -232,7 +222,6 @@ function buildStory(kind: ReviewKind, stats: PeriodStats, marks: Superlative[]):
   if (stats.workouts > 0 || stats.stretches > 0) {
     const bits: string[] = []
     if (stats.workouts > 0) bits.push(`${stats.workouts} workout${stats.workouts === 1 ? '' : 's'}`)
-    if (stats.absSessions > 0) bits.push(`${stats.absSessions} core session${stats.absSessions === 1 ? '' : 's'}`)
     if (stats.stretches > 0) bits.push(`${stats.stretches} stretch session${stats.stretches === 1 ? '' : 's'}`)
     parts.push(`You put in ${joinList(bits)} this ${label}.`)
   } else {

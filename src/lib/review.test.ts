@@ -40,7 +40,11 @@ const inMonth = (key: string) => (d: string) => d.slice(0, 7) === key
 describe('periodStats', () => {
   it('tallies a month of activity', () => {
     const d = data({
-      workouts: [session('2026-06-02', 'push'), session('2026-06-05', 'pull'), session('2026-06-09', 'abs')],
+      workouts: [
+        session('2026-06-02', 'push'),
+        session('2026-06-05', 'pull'),
+        { ...session('2026-06-09', 'push'), exercise: 'deadbug' }, // supplemental core-only session
+      ],
       flexDates: ['2026-06-03', '2026-06-10', '2026-06-10'], // dup collapses
       calorieEntries: [cal('2026-06-02', 4200), cal('2026-06-03', 4500), cal('2026-06-04', 3000)],
       bodyWeights: [
@@ -49,8 +53,7 @@ describe('periodStats', () => {
       ],
     })
     const s = periodStats(d, inMonth('2026-06'))
-    expect(s.workouts).toBe(2) // abs excluded from the training count
-    expect(s.absSessions).toBe(1)
+    expect(s.workouts).toBe(2) // the core-only session is excluded from the training count
     expect(s.stretches).toBe(2)
     expect(s.calorieDays).toBe(2)
     expect(s.bestCalorieDay).toBe(4500)

@@ -1,4 +1,4 @@
-export type DayType = 'push' | 'pull' | 'abs'
+export type DayType = 'push' | 'pull'
 
 export type SetLog = {
   setNumber: number

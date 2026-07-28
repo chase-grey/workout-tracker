@@ -4,7 +4,8 @@ import { v4 as uuid } from 'uuid'
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow, WorkoutSession } from '../types'
 import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { api } from '../services/api'
-import { sessionToRows } from '../lib/session'
+import { sessionToRows, trainingSessions } from '../lib/session'
+import { DEAD_BUG } from '../config/plan'
 import { toISODate, weekStartISO } from '../lib/dates'
 import { QUICK_LOG_KEY, withPlanDefaults, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
@@ -75,6 +76,7 @@ type DataContextValue = {
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   quickLog: (dayType: DayType) => Promise<void>
+  logCore: (reps: number[]) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
@@ -482,6 +484,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [celebrate, enqueue, notify, persistWorkouts, weeklyCelebrations],
   )
 
+  // Logs the dead-bug sets done during a Stretch + Core session as workout rows
+  // (one shared session_id, reps per set) under the Dead Bug key, so they feed
+  // the reps chart and core-progress series. Silent — the stretch save toasts —
+  // and no celebration: these are supplemental and don't count as a workout
+  // (trainingSessions excludes a session whose only exercise is a supplemental
+  // core move). The day_type is cosmetic here for the same reason.
+  const logCore = useCallback(
+    async (reps: number[]) => {
+      const done = reps.filter((r) => r > 0)
+      if (done.length === 0) return
+      const sessionId = uuid()
+      const date = toISODate(new Date())
+      const rows: WorkoutRow[] = done.map((r, i) => ({
+        session_id: sessionId,
+        date,
+        day_type: 'push',
+        exercise: DEAD_BUG.key,
+        set_number: i + 1,
+        weight_lbs: null,
+        reps: r,
+        notes: '',
+        is_historical: false,
+      }))
+      persistWorkouts([...storage.loadWorkouts(), ...rows])
+      try {
+        await api.postSession(rows)
+      } catch {
+        enqueue({ type: 'session', rows })
+      }
+    },
+    [enqueue, persistWorkouts],
+  )
+
   const logProgressPhoto = useCallback(() => {
     const next = { ...storage.loadSettings(), lastProgressPhoto: toISODate(new Date()) }
     setSettings(next)
@@ -514,16 +549,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     storage.saveFlexPlan(r)
   }, [])
 
-  // Distinct workout-session dates (one per session_id). Abs/core sessions are
-  // supplemental and excluded so they don't inflate the weekly workout goal.
-  const workoutDates = useMemo(() => {
-    const bySession = new Map<string, string>()
-    for (const r of workouts) {
-      if (r.day_type === 'abs') continue
-      if (r.session_id && !bySession.has(r.session_id)) bySession.set(r.session_id, r.date)
-    }
-    return [...bySession.values()]
-  }, [workouts])
+  // Distinct workout-session dates (one per session_id). Supplemental core-only
+  // sessions (dead bugs done with a stretch) are excluded so they don't inflate
+  // the weekly workout goal.
+  const workoutDates = useMemo(() => trainingSessions(workouts).map((s) => s.date), [workouts])
   const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
   const calHitDates = useMemo(() => calorieHitDates(calorieEntries), [calorieEntries])
 
@@ -573,6 +602,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logMeasurement,
     logSessionDuration,
     quickLog,
+    logCore,
     logProgressPhoto,
     importData,
     updateSettings,

@@ -36,10 +36,28 @@ export type DayPlan = {
 
 export type Plan = Record<DayType, DayPlan>
 
-export const DAY_TYPES: DayType[] = ['push', 'pull', 'abs']
+export const DAY_TYPES: DayType[] = ['push', 'pull']
 
 /** Marker exercise key for a detail-less "I trained" quick log (excluded from charts). */
 export const QUICK_LOG_KEY = '__quicklog__'
+
+/**
+ * Dead Bug — core work folded into the Stretch + Core session (it no longer has
+ * a standalone day). Each set is still logged as a workout row under this key so
+ * historical dead-bug data and the 'reps' progress chart stay continuous, but a
+ * session made up only of this move is supplemental and never counts toward the
+ * weekly workout goal (see SUPPLEMENTAL_EXERCISE_KEYS).
+ */
+export const DEAD_BUG: PlannedExercise = {
+  key: 'deadbug',
+  name: 'Dead Bug',
+  sets: 4,
+  repMin: 10,
+  repMax: 20,
+  restSec: 60,
+  bodyweight: true,
+  group: 'Core',
+}
 
 export const DEFAULT_PLAN: Plan = {
   push: {
@@ -79,17 +97,6 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'hammer_curl', name: 'Hammer Curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'Biceps' },
     ],
   },
-  // A short, dedicated core session you can run any day. Bodyweight moves
-  // progress by reps (the progression engine climbs toward repMax), so doing
-  // more reps over time is the signal that you're building ab muscle.
-  abs: {
-    type: 'abs',
-    label: 'Core',
-    required: false,
-    exercises: [
-      { key: 'deadbug', name: 'Dead Bug', sets: 4, repMin: 10, repMax: 20, restSec: 60, bodyweight: true, group: 'Core' },
-    ],
-  },
 }
 
 /** Human-readable rep range, e.g. "6–10" or "12". */
@@ -97,11 +104,15 @@ export function repRangeLabel(e: Pick<PlannedExercise, 'repMin' | 'repMax'>): st
   return e.repMin === e.repMax ? `${e.repMin}` : `${e.repMin}–${e.repMax}`
 }
 
-/** All exercises across every day of the DEFAULT plan, for import matching + name fallback. */
+/**
+ * All exercises across every day of the DEFAULT plan, for import matching + name
+ * fallback. Dead Bug is appended even though it's no longer a plan day, so its
+ * key still resolves to "Dead Bug" in charts, the AI prompt, and records.
+ */
 export const ALL_EXERCISES: PlannedExercise[] = [
   ...DEFAULT_PLAN.push.exercises,
   ...DEFAULT_PLAN.pull.exercises,
-  ...DEFAULT_PLAN.abs.exercises,
+  DEAD_BUG,
 ]
 
 /**
@@ -113,7 +124,6 @@ export const ALL_EXERCISES: PlannedExercise[] = [
 const LEGACY_LABELS: Record<DayType, string[]> = {
   push: ['Push Day'],
   pull: ['Pull + Legs Day'],
-  abs: ['Abs / Core'],
 }
 
 /**
@@ -144,18 +154,20 @@ function mergeDayExercises(defaults: PlannedExercise[], stored: PlannedExercise[
 }
 
 /**
- * Merge a stored/fetched plan onto the defaults so a plan saved before a new
- * day type existed (e.g. `abs`) still gains that day, and a day saved before a
- * new exercise shipped still gains that exercise. Stored days/exercises win;
- * missing ones fall back to the default.
+ * Merge a stored/fetched plan onto the defaults so a day saved before a new
+ * exercise shipped still gains that exercise. Stored days/exercises win; missing
+ * ones fall back to the default. Only the current DAY_TYPES are kept, so a plan
+ * saved with a now-removed day (e.g. the old standalone `abs`/Core day) has that
+ * day silently dropped rather than resurfacing a stale button.
  */
 export function withPlanDefaults(p: Partial<Plan> | null | undefined): Plan {
-  const merged = { ...DEFAULT_PLAN, ...(p ?? {}) }
+  const stored = (p ?? {}) as Partial<Record<string, DayPlan>>
+  const merged = {} as Plan
   for (const type of DAY_TYPES) {
-    const day = merged[type]
+    const storedDay = stored[type]
+    const day = storedDay ?? DEFAULT_PLAN[type]
     // A day taken from storage keeps its exercises but gains any new defaults.
-    const isStoredDay = merged[type] !== DEFAULT_PLAN[type]
-    const exercises = isStoredDay
+    const exercises = storedDay
       ? mergeDayExercises(DEFAULT_PLAN[type].exercises, day.exercises)
       : day.exercises
     const label = LEGACY_LABELS[type].includes(day.label) ? DEFAULT_PLAN[type].label : day.label
@@ -177,7 +189,9 @@ export function exerciseName(key: string): string {
  * added ab exercises are picked up automatically.
  */
 export function absExerciseKeys(plan: Plan): Set<string> {
-  const keys = new Set<string>()
+  // Dead Bug lives in the Stretch + Core session now, not the plan, so seed it
+  // explicitly to keep its reps in the combined core series.
+  const keys = new Set<string>([DEAD_BUG.key])
   for (const day of Object.values(plan)) {
     for (const e of day.exercises) {
       if (/^(abs|core)$/i.test(e.group)) keys.add(e.key)

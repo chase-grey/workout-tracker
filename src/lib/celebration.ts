@@ -12,6 +12,7 @@ import { calorieHitDates } from './calories'
 import { epley1RM } from './epley'
 import { toISODate, weekStartISO } from './dates'
 import { exerciseName } from '../config/plan'
+import { trainingSessions } from './session'
 import type { WeeklyGoalConfig } from './weeklyStreak'
 
 /** Energy level, quietest → loudest. PRs are the loudest thing there is. */
@@ -92,7 +93,8 @@ export type WeekCounts = { workouts: number; flex: number; calDays: number }
 
 /**
  * This-week counts, mirroring DataContext's derivation exactly: distinct
- * non-abs workout-session dates, distinct stretch dates, and calorie-goal days.
+ * training workout-session dates (supplemental core-only sessions excluded),
+ * distinct stretch dates, and calorie-goal days.
  */
 export function currentWeekCounts(
   workouts: WorkoutRow[],
@@ -103,14 +105,8 @@ export function currentWeekCounts(
   const wk = weekStartISO(toISODate(today))
   const inWeek = (d: string) => weekStartISO(d) === wk
 
-  const sessionDate = new Map<string, string>()
-  for (const r of workouts) {
-    if (r.day_type === 'abs') continue
-    if (r.session_id && !sessionDate.has(r.session_id)) sessionDate.set(r.session_id, r.date)
-  }
-
   return {
-    workouts: [...sessionDate.values()].filter(inWeek).length,
+    workouts: trainingSessions(workouts).filter((s) => inWeek(s.date)).length,
     flex: new Set(flexDates.filter(inWeek)).size,
     calDays: calorieHitDates(calorieEntries).filter(inWeek).length,
   }
@@ -224,16 +220,14 @@ export function achievementCelebration(
 // Daily completions (the quiet, nice ones).
 // ---------------------------------------------------------------------------
 
-export function workoutDoneCelebration(dayType: WorkoutRow['day_type']): Celebration {
-  return dayType === 'abs'
-    ? { tier: 'small', title: 'Core session done', subtitle: 'Abs in the books.', icon: 'check' }
-    : { tier: 'small', title: 'Workout complete', subtitle: 'Logged and done. Nice work.', icon: 'check' }
+export function workoutDoneCelebration(_dayType: WorkoutRow['day_type']): Celebration {
+  return { tier: 'small', title: 'Workout complete', subtitle: 'Logged and done. Nice work.', icon: 'check' }
 }
 
 export const stretchDoneCelebration: Celebration = {
   tier: 'small',
-  title: 'Stretch session done',
-  subtitle: 'Loose and limber. Well done.',
+  title: 'Stretch + Core done',
+  subtitle: 'Loose, limber, and braced. Well done.',
   icon: 'check',
 }
 

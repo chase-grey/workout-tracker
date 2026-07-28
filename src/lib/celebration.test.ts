@@ -65,12 +65,12 @@ describe('detectPRs', () => {
 })
 
 describe('currentWeekCounts', () => {
-  it('counts distinct non-abs sessions, stretch days, and calorie-goal days this week', () => {
+  it('counts distinct training sessions, stretch days, and calorie-goal days this week', () => {
     const workouts = [
       row({ session_id: 'a', date: '2026-07-20' }),
       row({ session_id: 'a', date: '2026-07-20' }), // same session — counts once
       row({ session_id: 'b', date: '2026-07-21' }),
-      row({ session_id: 'c', date: '2026-07-21', day_type: 'abs' }), // abs excluded
+      row({ session_id: 'c', date: '2026-07-21', exercise: 'deadbug' }), // core-only, supplemental → excluded
       row({ session_id: 'd', date: '2026-07-10' }), // prior week
     ]
     const flexDates = ['2026-07-20', '2026-07-20', '2026-07-13']

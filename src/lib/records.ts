@@ -20,6 +20,7 @@ import type { DayType, WorkoutRow } from '../types'
 import type { Celebration } from './celebration'
 import { CALORIE_GOAL, calorieHitDates, dayTotals, type CalorieEntry } from './calories'
 import { parseISODate, toISODate, weekStartISO } from './dates'
+import { trainingSessions } from './session'
 
 /** The data an action might have changed, snapshotted before and after. */
 export type RecordSnapshot = {
@@ -28,7 +29,7 @@ export type RecordSnapshot = {
   calorieEntries: CalorieEntry[]
 }
 
-const DAY_TYPE_NAME: Record<DayType, string> = { push: 'Push', pull: 'Pull', abs: 'Core' }
+const DAY_TYPE_NAME: Record<DayType, string> = { push: 'Push', pull: 'Pull' }
 
 const MS_PER_DAY = 86_400_000
 
@@ -65,15 +66,14 @@ function crossedRecord(before: PeriodValue, after: PeriodValue): boolean {
   return after.priorBest > 0 && after.current > after.priorBest && before.current <= before.priorBest
 }
 
-/** Distinct workout sessions per Mon–Sun week, keeping only day types `keep` allows. */
+/**
+ * Distinct training sessions per Mon–Sun week, keeping only day types `keep`
+ * allows. Supplemental core-only sessions (dead bugs done with a stretch) are
+ * already excluded by trainingSessions.
+ */
 function sessionsByWeek(workouts: WorkoutRow[], keep: (d: DayType) => boolean): Map<string, number> {
-  const firstDate = new Map<string, { date: string; dayType: DayType }>()
-  for (const r of workouts) {
-    if (!r.session_id || firstDate.has(r.session_id)) continue
-    firstDate.set(r.session_id, { date: r.date, dayType: r.day_type })
-  }
   const byWeek = new Map<string, number>()
-  for (const { date, dayType } of firstDate.values()) {
+  for (const { date, dayType } of trainingSessions(workouts)) {
     if (!keep(dayType)) continue
     const wk = weekStartISO(date)
     byWeek.set(wk, (byWeek.get(wk) ?? 0) + 1)
@@ -205,10 +205,9 @@ export function newRecords(
 
   // Weekly session-count records: total workouts + each day type + stretches.
   const sessionDefs: { name: string; keep: (d: DayType) => boolean }[] = [
-    { name: 'workouts', keep: (d) => d !== 'abs' },
+    { name: 'workouts', keep: () => true },
     { name: `${DAY_TYPE_NAME.push} sessions`, keep: (d) => d === 'push' },
     { name: `${DAY_TYPE_NAME.pull} sessions`, keep: (d) => d === 'pull' },
-    { name: `${DAY_TYPE_NAME.abs} sessions`, keep: (d) => d === 'abs' },
   ]
   for (const def of sessionDefs) {
     const b = periodValue(sessionsByWeek(before.workouts, def.keep), wk)
