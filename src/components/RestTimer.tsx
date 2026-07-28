@@ -12,12 +12,26 @@ const RING_C = 2 * Math.PI * RING_R
  *
  * A large ring drains over the rest period with a slow breathing orb pulsing
  * behind it — a calm, glanceable cue for how much rest is left — and the numeric
- * countdown sits at the bottom of the screen.
+ * countdown sits at the bottom of the screen. Optional `upNext` / `timeLeftLabel`
+ * give the resting user a heads-up on what's coming and how much workout is left,
+ * and `onAddSet` surfaces an "Add another set" action during an exercise's final
+ * rest.
  */
-export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () => void }) {
+export function RestTimer({
+  seconds,
+  onClose,
+  upNext,
+  timeLeftLabel,
+  onAddSet,
+}: {
+  seconds: number
+  onClose: () => void
+  upNext?: string | null
+  timeLeftLabel?: string | null
+  onAddSet?: () => void
+}) {
   const endRef = useRef<number>(Date.now() + seconds * 1000)
   const [remaining, setRemaining] = useState(seconds)
-  const [breatheIn, setBreatheIn] = useState(true)
   const buzzed = useRef(false)
 
   useEffect(() => {
@@ -42,12 +56,6 @@ export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () =
     }
   }, [])
 
-  // Slow ~4s in / 4s out breathe for the orb behind the clock.
-  useEffect(() => {
-    const id = setInterval(() => setBreatheIn((b) => !b), 4000)
-    return () => clearInterval(id)
-  }, [])
-
   const over = remaining < 0
   const abs = Math.abs(remaining)
   const label = `${over ? '+' : ''}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, '0')}`
@@ -59,12 +67,18 @@ export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () =
       className="fixed inset-0 z-50 flex flex-col items-center bg-black px-6"
       onClick={onClose}
     >
+      {(upNext || timeLeftLabel) && (
+        <div className="pt-[calc(1.5rem+env(safe-area-inset-top))] text-center">
+          {upNext && <p className="text-base font-semibold text-neutral-200">{upNext}</p>}
+          {timeLeftLabel && <p className="text-xs text-neutral-500">{timeLeftLabel} left</p>}
+        </div>
+      )}
+
       <div className="flex flex-1 items-center justify-center">
         <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
           {/* Breathing orb — a calm pace cue. */}
           <div
-            className={`absolute h-[62%] w-[62%] rounded-full ring-1 ${over ? 'bg-accent-2/15 ring-accent-2/30' : 'bg-accent/15 ring-accent/30'}`}
-            style={{ transition: 'transform 4s ease-in-out', transform: `scale(${breatheIn ? 1.06 : 0.86})` }}
+            className={`rest-orb absolute h-[62%] w-[62%] rounded-full ring-1 ${over ? 'bg-accent-2/15 ring-accent-2/30' : 'bg-accent/15 ring-accent/30'}`}
           />
 
           {/* Rest progress ring: full at the start, empty when rest is up. */}
@@ -88,10 +102,21 @@ export function RestTimer({ seconds, onClose }: { seconds: number; onClose: () =
         </div>
       </div>
 
-      <div
-        className={`pb-[calc(2rem+env(safe-area-inset-bottom))] font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-white'}`}
-      >
-        {label}
+      <div className="flex flex-col items-center gap-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+        {onAddSet && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onAddSet()
+            }}
+            className="min-h-[44px] rounded-2xl border border-border bg-surface px-5 font-semibold text-neutral-200 active:opacity-80"
+          >
+            Add another set
+          </button>
+        )}
+        <div className={`font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-white'}`}>
+          {label}
+        </div>
       </div>
     </div>
   )

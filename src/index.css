@@ -36,6 +36,29 @@ input[type='number'] {
   -moz-appearance: textfield;
 }
 
+/* ---- Rest timer breathing orb (see RestTimer) ---- */
+
+/* A slow, self-contained breathe so the orb pulses regardless of how often the
+   parent re-renders — driven purely by CSS rather than a JS interval. */
+@keyframes rest-breathe {
+  0%,
+  100% {
+    transform: scale(0.86);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+.rest-orb {
+  animation: rest-breathe 8s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rest-orb {
+    animation: none;
+  }
+}
+
 /* ---- Celebration animations (see CelebrationOverlay) ---- */
 
 /* Confetti pieces rain from the top with per-piece drift + spin (CSS vars). */
