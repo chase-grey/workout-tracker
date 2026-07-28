@@ -2,7 +2,7 @@ import { MdAcUnit, MdCheckCircle, MdEmojiEvents, MdLocalFireDepartment, MdStar }
 import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
-import { weekElapsedFraction } from '../../lib/dates'
+import { weekCompletedDaysFraction } from '../../lib/dates'
 
 function MetricBar({ label, value, goal, suffix }: { label: string; value: number; goal: number; suffix?: string }) {
   const met = value >= goal
@@ -43,7 +43,7 @@ export function ThisWeek() {
     3
   const checkpointFrac =
     (goals.halfWorkouts / goals.workouts + goals.halfFlex / goals.flex + goals.halfCalDays / goals.calDays) / 3
-  const pace = weekElapsedFraction()
+  const pace = weekCompletedDaysFraction()
 
   return (
     <div className="rounded-2xl bg-surface p-3">
