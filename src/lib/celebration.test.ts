@@ -3,6 +3,7 @@ import type { WorkoutRow } from '../types'
 import { DEFAULT_WEEKLY_GOALS } from './weeklyStreak'
 import {
   achievementCelebration,
+  baselineCelebration,
   checkpointFraction,
   composeCelebration,
   currentWeekCounts,
@@ -31,8 +32,11 @@ function row(p: Partial<WorkoutRow> = {}): WorkoutRow {
 }
 
 describe('detectPRs', () => {
-  it('flags an all-time est-1RM PR', () => {
-    const prev = [row({ exercise: 'flat_bench', weight_lbs: 100, reps: 5 })]
+  it('flags an all-time est-1RM PR once a lift has ≥2 days of history', () => {
+    const prev = [
+      row({ exercise: 'flat_bench', date: '2026-07-14', weight_lbs: 100, reps: 5 }),
+      row({ exercise: 'flat_bench', date: '2026-07-18', weight_lbs: 100, reps: 5 }),
+    ]
     const added = [row({ exercise: 'flat_bench', weight_lbs: 100, reps: 8 })]
     const prs = detectPRs(prev, added)
     expect(prs).toHaveLength(1)
@@ -43,16 +47,38 @@ describe('detectPRs', () => {
     expect(detectPRs([], [row({ exercise: 'flat_bench', weight_lbs: 135, reps: 5 })])).toHaveLength(0)
   })
 
+  it('does not crown a PR when the lift has only ONE day of history', () => {
+    // A real prior best exists, but on a single day — no genuine baseline yet.
+    const prev = [row({ exercise: 'flat_bench', date: '2026-07-18', weight_lbs: 100, reps: 5 })]
+    const added = [row({ exercise: 'flat_bench', weight_lbs: 100, reps: 10 })]
+    expect(detectPRs(prev, added)).toHaveLength(0)
+  })
+
+  it('counts distinct days, not distinct rows on the same day', () => {
+    // Two sets, same day → still only one day of history → no PR.
+    const prev = [
+      row({ exercise: 'flat_bench', date: '2026-07-18', set_number: 1, weight_lbs: 100, reps: 5 }),
+      row({ exercise: 'flat_bench', date: '2026-07-18', set_number: 2, weight_lbs: 105, reps: 5 }),
+    ]
+    const added = [row({ exercise: 'flat_bench', weight_lbs: 150, reps: 5 })]
+    expect(detectPRs(prev, added)).toHaveLength(0)
+  })
+
   it('ignores sets that fail to beat the prior best', () => {
-    const prev = [row({ exercise: 'flat_bench', weight_lbs: 200, reps: 5 })]
+    const prev = [
+      row({ exercise: 'flat_bench', date: '2026-07-14', weight_lbs: 200, reps: 5 }),
+      row({ exercise: 'flat_bench', date: '2026-07-18', weight_lbs: 200, reps: 5 }),
+    ]
     const added = [row({ exercise: 'flat_bench', weight_lbs: 135, reps: 5 })]
     expect(detectPRs(prev, added)).toHaveLength(0)
   })
 
   it('sorts multiple PRs heaviest first', () => {
     const prev = [
-      row({ exercise: 'flat_bench', weight_lbs: 100, reps: 5 }),
-      row({ exercise: 'squat', weight_lbs: 100, reps: 5 }),
+      row({ exercise: 'flat_bench', date: '2026-07-14', weight_lbs: 100, reps: 5 }),
+      row({ exercise: 'flat_bench', date: '2026-07-18', weight_lbs: 100, reps: 5 }),
+      row({ exercise: 'squat', date: '2026-07-14', weight_lbs: 100, reps: 5 }),
+      row({ exercise: 'squat', date: '2026-07-18', weight_lbs: 100, reps: 5 }),
     ]
     const added = [
       row({ exercise: 'flat_bench', weight_lbs: 140, reps: 5 }),
@@ -61,6 +87,19 @@ describe('detectPRs', () => {
     const prs = detectPRs(prev, added)
     expect(prs).toHaveLength(2)
     expect(prs[0].est1RM).toBeGreaterThan(prs[1].est1RM)
+  })
+})
+
+describe('baselineCelebration', () => {
+  it('is null when nothing was beaten', () => {
+    expect(baselineCelebration([])).toBeNull()
+  })
+
+  it('leads with the first name and lists the rest as details', () => {
+    const c = baselineCelebration(['Bench', 'Squat'])
+    expect(c?.tier).toBe('medium')
+    expect(c?.title).toBe('New baselines set')
+    expect(c?.details).toEqual(['Squat'])
   })
 })
 

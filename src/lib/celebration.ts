@@ -45,10 +45,16 @@ const round1 = (n: number): number => Math.round(n * 10) / 10
 
 export type PR = { exercise: string; est1RM: number }
 
+/** Distinct-day requirement so a lift with almost no history can't crown a PR. */
+export const MIN_PR_HISTORY_DAYS = 2
+
 /**
  * All-time est-1RM PRs set by `added` rows, judged against every `prev` row.
  * A PR requires a prior best (>0) to beat, so the first-ever entry for a lift
- * (or a fresh import) isn't counted as a PR. Sorted heaviest first.
+ * (or a fresh import) isn't counted as a PR. It additionally requires at least
+ * MIN_PR_HISTORY_DAYS distinct prior workout days for that lift, so a lift with
+ * only a single day of history can't crown a PR (which feels silly — there's no
+ * real baseline yet). Sorted heaviest first.
  */
 export function detectPRs(prev: WorkoutRow[], added: WorkoutRow[]): PR[] {
   const bestBy = (rows: WorkoutRow[]): Map<string, number> => {
@@ -61,15 +67,44 @@ export function detectPRs(prev: WorkoutRow[], added: WorkoutRow[]): PR[] {
     return m
   }
 
+  // Distinct prior workout DAYS per lift (only weighted rows form a baseline).
+  const priorDays = new Map<string, Set<string>>()
+  for (const r of prev) {
+    if (r.weight_lbs == null) continue
+    const set = priorDays.get(r.exercise) ?? new Set<string>()
+    set.add(r.date)
+    priorDays.set(r.exercise, set)
+  }
+
   const priorBest = bestBy(prev)
   const addedBest = bestBy(added)
 
   const prs: PR[] = []
   for (const [key, best] of addedBest) {
     const prior = priorBest.get(key) ?? 0
-    if (prior > 0 && best > prior) prs.push({ exercise: exerciseName(key), est1RM: round1(best) })
+    const days = priorDays.get(key)?.size ?? 0
+    if (prior > 0 && days >= MIN_PR_HISTORY_DAYS && best > prior) {
+      prs.push({ exercise: exerciseName(key), est1RM: round1(best) })
+    }
   }
   return prs.sort((a, b) => b.est1RM - a.est1RM)
+}
+
+/**
+ * A medium celebration for beating this session's progressive-overload
+ * challenge on one or more lifts — a new baseline the plan will build on next
+ * time. `names` are the exercise display names whose challenge was met.
+ */
+export function baselineCelebration(names: string[]): Celebration | null {
+  if (names.length === 0) return null
+  const [top, ...rest] = names
+  return {
+    tier: 'medium',
+    title: names.length > 1 ? 'New baselines set' : 'New baseline set',
+    subtitle: `${top} — you beat last session.`,
+    details: rest.length ? rest : undefined,
+    icon: 'flag',
+  }
 }
 
 /** A single epic celebration summarizing one or more PRs. */
