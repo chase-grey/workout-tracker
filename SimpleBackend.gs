@@ -10,19 +10,25 @@
  *                 weight_lbs, reps, notes, is_historical
  *   body_weight:  date, weight_lbs
  *   measurements: date, waist_in, neck_in, note
- *   durations:    date, kind, day_type, total_sec, rest_sec
+ *   durations:    date, kind, day_type, total_sec, rest_sec  (per-session; feeds Time-spent report)
+ *   exercise_times: exercise, avg_active_sec, n  (per-exercise rolling averages
+ *                 for time-left estimates; a sentinel exercise "__rest__" row
+ *                 holds the pooled average rest per interval)
  *
  * Routes:
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
  *   GET  ?route=bodyweight[&since=YYYY-MM-DD]
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
  *   GET  ?route=durations[&since=YYYY-MM-DD]
+ *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, rest: {avgSec,n} }
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
  *   POST ?route=calories      body: { date, calories, label } (upsert by date; calories = running daily total)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  *   POST ?route=durations     body: { date, kind, dayType, totalSec, restSec } (append)
+ *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restCount }
+ *                 (folds a finished session's per-set active times + rests into the rolling averages)
  */
 
 const ss = SpreadsheetApp.getActiveSpreadsheet()
@@ -44,6 +50,9 @@ const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
 const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec']
+const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
+// Sentinel "exercise" key whose row stores the pooled average rest per interval.
+const REST_KEY = '__rest__'
 
 function doGet(e) {
   try {
@@ -60,6 +69,8 @@ function doGet(e) {
         return json(getMeasurements(e.parameter.since))
       case 'durations':
         return json(getDurations(e.parameter.since))
+      case 'exercise_times':
+        return json(getExerciseTimes())
       case 'plan':
         return json(getPlan())
       default:
@@ -87,6 +98,8 @@ function doPost(e) {
         return json(appendMeasurements(body))
       case 'durations':
         return json(appendDurations(body))
+      case 'exercise_times':
+        return json(foldExerciseTimes(body))
       case 'plan':
         return json(savePlan(body.plan))
       default:
@@ -420,6 +433,72 @@ function appendDurations(body) {
     sh.getRange(sh.getLastRow() + 1, 1, values.length, DURATION_HEADERS.length).setValues(values)
   }
   return { saved: values.length }
+}
+
+/* ---------------------------------------------- per-exercise time averages */
+
+// Returns { active: { exerciseKey: {avgSec, n} }, rest: {avgSec, n} }. The
+// sentinel REST_KEY row (if present) supplies the pooled rest average.
+function getExerciseTimes() {
+  const sh = sheet('exercise_times', EXERCISE_TIME_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const active = {}
+  let rest = { avgSec: 0, n: 0 }
+  for (let i = 1; i < rows.length; i++) {
+    const key = String(rows[i][0] || '')
+    if (!key) continue
+    const entry = { avgSec: Number(rows[i][1]) || 0, n: Number(rows[i][2]) || 0 }
+    if (key === REST_KEY) rest = entry
+    else active[key] = entry
+  }
+  return { active: active, rest: rest }
+}
+
+// Folds a finished session's samples into the rolling averages. For each
+// exercise the running mean over all set-samples is exact:
+//   newAvg = (avg*n + totalActiveSec) / (n + sets); n += sets
+// The pooled rest row is folded the same way over rest intervals. Upserts one
+// row per exercise key (plus the REST_KEY row).
+function foldExerciseTimes(body) {
+  const sh = sheet('exercise_times', EXERCISE_TIME_HEADERS)
+  const list = Array.isArray(body.exercises) ? body.exercises : []
+
+  const rows = sh.getDataRange().getValues()
+  const rowByKey = {}
+  for (let i = 1; i < rows.length; i++) {
+    const key = String(rows[i][0] || '')
+    if (key && !(key in rowByKey)) rowByKey[key] = i + 1 // 1-based sheet row
+  }
+
+  function upsert(key, addSumSec, addCount) {
+    if (!key || !(addCount > 0) || !isFinite(Number(addSumSec)) || Number(addSumSec) < 0) return
+    const existingRow = rowByKey[key]
+    let avg = 0
+    let n = 0
+    if (existingRow) {
+      const cur = sh.getRange(existingRow, 1, 1, EXERCISE_TIME_HEADERS.length).getValues()[0]
+      avg = Number(cur[1]) || 0
+      n = Number(cur[2]) || 0
+    }
+    const newN = n + Number(addCount)
+    const newAvg = (avg * n + Number(addSumSec)) / newN
+    if (existingRow) {
+      sh.getRange(existingRow, 1, 1, EXERCISE_TIME_HEADERS.length).setValues([[key, newAvg, newN]])
+    } else {
+      sh.appendRow([key, newAvg, newN])
+      rowByKey[key] = sh.getLastRow()
+    }
+  }
+
+  let saved = 0
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i]
+    if (!e || !e.exercise || !(Number(e.sets) > 0)) continue
+    upsert(String(e.exercise), Number(e.totalActiveSec), Number(e.sets))
+    saved++
+  }
+  if (Number(body.restCount) > 0) upsert(REST_KEY, Number(body.restTotalSec), Number(body.restCount))
+  return { saved: saved }
 }
 
 function getPlan() {

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applySessionSamples,
+  EMPTY_EXERCISE_AVERAGES,
   estimateSecs,
+  foldAvg,
   formatDuration,
   isSaneDuration,
   median,
   medianTotalSec,
   remainingSecs,
+  remainingWorkoutSecs,
+  type ExerciseAverages,
   type SessionDuration,
 } from './estimate'
 
@@ -126,5 +131,92 @@ describe('remainingSecs', () => {
         fallbackItems,
       }),
     ).toBe(0)
+  })
+})
+
+describe('foldAvg', () => {
+  it('is the running mean when folding single samples one at a time', () => {
+    let a = foldAvg({ avgSec: 0, n: 0 }, 30, 1)
+    expect(a).toEqual({ avgSec: 30, n: 1 })
+    a = foldAvg(a, 60, 1) // mean of 30,60
+    expect(a).toEqual({ avgSec: 45, n: 2 })
+    a = foldAvg(a, 90, 1) // mean of 30,60,90
+    expect(a).toEqual({ avgSec: 60, n: 3 })
+  })
+
+  it('folding a summed batch equals folding each sample separately', () => {
+    const batched = foldAvg({ avgSec: 0, n: 0 }, 30 + 60 + 90, 3)
+    expect(batched).toEqual({ avgSec: 60, n: 3 })
+  })
+
+  it('ignores a non-positive count', () => {
+    const prev = { avgSec: 40, n: 2 }
+    expect(foldAvg(prev, 100, 0)).toBe(prev)
+  })
+})
+
+describe('applySessionSamples', () => {
+  it('folds per-exercise active time and pooled rest', () => {
+    const next = applySessionSamples(EMPTY_EXERCISE_AVERAGES, {
+      exercises: [
+        { exercise: 'bench', totalActiveSec: 120, sets: 3 }, // 40/set
+        { exercise: 'squat', totalActiveSec: 200, sets: 4 }, // 50/set
+      ],
+      restTotalSec: 600,
+      restCount: 6, // 100/rest
+    })
+    expect(next.active.bench).toEqual({ avgSec: 40, n: 3 })
+    expect(next.active.squat).toEqual({ avgSec: 50, n: 4 })
+    expect(next.rest).toEqual({ avgSec: 100, n: 6 })
+  })
+
+  it('accumulates across sessions', () => {
+    const a = applySessionSamples(EMPTY_EXERCISE_AVERAGES, {
+      exercises: [{ exercise: 'bench', totalActiveSec: 120, sets: 3 }], // 40/set
+      restTotalSec: 0,
+      restCount: 0,
+    })
+    const b = applySessionSamples(a, {
+      exercises: [{ exercise: 'bench', totalActiveSec: 120, sets: 1 }], // one 120s set
+      restTotalSec: 0,
+      restCount: 0,
+    })
+    // running mean of 40,40,40,120 = 60 over n=4
+    expect(b.active.bench).toEqual({ avgSec: 60, n: 4 })
+  })
+
+  it('skips bad samples without crashing', () => {
+    const next = applySessionSamples(EMPTY_EXERCISE_AVERAGES, {
+      exercises: [
+        { exercise: '', totalActiveSec: 100, sets: 2 },
+        { exercise: 'bench', totalActiveSec: 100, sets: 0 },
+        { exercise: 'squat', totalActiveSec: NaN, sets: 2 },
+      ],
+      restTotalSec: 100,
+      restCount: 0,
+    })
+    expect(next).toEqual(EMPTY_EXERCISE_AVERAGES)
+  })
+})
+
+describe('remainingWorkoutSecs', () => {
+  const steps = [
+    { exercise: 'bench', fallbackActiveSec: 40, fallbackRestSec: 120 },
+    { exercise: 'bench', fallbackActiveSec: 40, fallbackRestSec: 120 },
+    { exercise: 'fly', fallbackActiveSec: 40, fallbackRestSec: 60 },
+  ]
+
+  it('uses structural fallbacks on day one (no averages)', () => {
+    // (40+120) + (40+120) + (40+60) = 420
+    expect(remainingWorkoutSecs(EMPTY_EXERCISE_AVERAGES, steps)).toBe(420)
+  })
+
+  it('prefers learned active + pooled rest where available', () => {
+    const averages: ExerciseAverages = {
+      active: { bench: { avgSec: 55, n: 9 } }, // fly has no history → fallback 40
+      rest: { avgSec: 90, n: 12 }, // pooled rest overrides prescribed rest
+    }
+    // (55+90) + (55+90) + (40+90) = 420
+    expect(remainingWorkoutSecs(averages, steps)).toBe(420)
   })
 })

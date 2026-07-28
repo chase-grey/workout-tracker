@@ -4,7 +4,7 @@ import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
-import type { SessionDuration } from '../lib/estimate'
+import { EMPTY_EXERCISE_AVERAGES, type ExerciseAverages, type SessionDuration, type SessionTimeSamples } from '../lib/estimate'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -15,6 +15,7 @@ const KEYS = {
   cacheCalories: 'wt.cache.calories',
   cacheMeasurements: 'wt.cache.measurements',
   cacheDurations: 'wt.cache.durations',
+  cacheExerciseAverages: 'wt.cache.exerciseAverages',
   queue: 'wt.queue',
   plan: 'wt.plan',
   flexPlan: 'wt.flexplan',
@@ -63,6 +64,7 @@ export type QueuedWrite =
   | { type: 'calorie'; entry: CalorieEntry }
   | { type: 'measurement'; entry: MeasurementEntry }
   | { type: 'duration'; entry: SessionDuration }
+  | { type: 'exerciseTimes'; samples: SessionTimeSamples }
   | { type: 'plan'; plan: Plan }
 
 function read<T>(key: string, fallback: T): T {
@@ -107,6 +109,9 @@ export const storage = {
 
   loadDurations: (): SessionDuration[] => read(KEYS.cacheDurations, []),
   saveDurations: (entries: SessionDuration[]) => write(KEYS.cacheDurations, entries),
+
+  loadExerciseAverages: (): ExerciseAverages => read(KEYS.cacheExerciseAverages, EMPTY_EXERCISE_AVERAGES),
+  saveExerciseAverages: (a: ExerciseAverages) => write(KEYS.cacheExerciseAverages, a),
 
   loadLastSync: (): string | null => read(KEYS.lastSync, null),
   saveLastSync: (iso: string) => write(KEYS.lastSync, iso),
