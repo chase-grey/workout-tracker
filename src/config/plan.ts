@@ -48,17 +48,18 @@ export const DEFAULT_PLAN: Plan = {
     required: true,
     exercises: [
       { key: 'cable_crunch', name: 'Cable Crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'Abs' },
-      { key: 'hanging_leg_raise', name: 'Hanging Leg Raise', sets: 3, repMin: 10, repMax: 12, restSec: 60, bodyweight: true, group: 'Abs' },
+      { key: 'hanging_leg_raise', name: 'Hanging Leg Raise', sets: 3, repMin: 10, repMax: 15, restSec: 60, bodyweight: true, group: 'Abs' },
 
-      { key: 'incline_bench', name: 'Incline Bench Press', sets: 4, repMin: 6, repMax: 10, restSec: 180, increment: 5, group: 'Chest' },
-      { key: 'flat_bench', name: 'Flat Bench Press', sets: 3, repMin: 8, repMax: 10, restSec: 120, increment: 5, group: 'Chest' },
-      { key: 'iso_chest', name: 'Chest Fly / Pec Deck', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 2.5, group: 'Chest' },
+      { key: 'incline_bench', name: 'Incline Bench Press', sets: 4, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'Chest' },
+      { key: 'flat_bench', name: 'Flat Bench Press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'Chest' },
+      { key: 'iso_chest', name: 'Chest Fly / Pec Deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'Chest' },
 
-      { key: 'db_overhead_press', name: 'Dumbbell Overhead Press', sets: 3, repMin: 8, repMax: 10, restSec: 90, increment: 5, group: 'Shoulders & Triceps' },
-      { key: 'tricep_pushdown', name: 'Tricep Pushdown', sets: 2, repMin: 12, repMax: 12, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
-      { key: 'overhead_tricep_ext', name: 'Overhead Tricep Extension', sets: 2, repMin: 12, repMax: 12, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
+      { key: 'db_overhead_press', name: 'Dumbbell Overhead Press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'Shoulders & Triceps' },
+      { key: 'lateral_raise', name: 'Lateral Raise', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
+      { key: 'tricep_pushdown', name: 'Tricep Pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
+      { key: 'overhead_tricep_ext', name: 'Overhead Tricep Extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
 
-      { key: 'pullups_or_pulldown', name: 'Weighted Pull-ups or Lat Pulldown', sets: 3, repMin: 6, repMax: 8, restSec: 60, bodyweight: true, optional: true, group: 'Pull Finisher (optional)' },
+      { key: 'pullups_or_pulldown', name: 'Weighted Pull-ups or Lat Pulldown', sets: 3, repMin: 6, repMax: 10, restSec: 90, bodyweight: true, optional: true, group: 'Pull Finisher (optional)' },
     ],
   },
   pull: {
@@ -66,15 +67,16 @@ export const DEFAULT_PLAN: Plan = {
     label: 'Pull + Legs',
     required: false,
     exercises: [
-      { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repMin: 6, repMax: 8, restSec: 180, increment: 5, group: 'Legs' },
-      { key: 'leg_adductor', name: 'Leg Adductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 5, group: 'Legs' },
-      { key: 'leg_abductor', name: 'Leg Abductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 90, increment: 5, group: 'Legs' },
+      { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repMin: 6, repMax: 10, restSec: 180, increment: 5, group: 'Legs' },
+      { key: 'hamstring_curl', name: 'Hamstring Curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'Legs' },
+      { key: 'leg_adductor', name: 'Leg Adductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'Legs' },
+      { key: 'leg_abductor', name: 'Leg Abductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'Legs' },
 
-      { key: 'weighted_pullups', name: 'Weighted Pull-ups', sets: 4, repMin: 6, repMax: 8, restSec: 120, bodyweight: true, group: 'Back' },
-      { key: 'cable_row', name: 'Cable Row (Neutral Grip)', sets: 3, repMin: 8, repMax: 10, restSec: 90, increment: 5, group: 'Back' },
+      { key: 'weighted_pullups', name: 'Weighted Pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'Back' },
+      { key: 'cable_row', name: 'Cable Row (Neutral Grip)', sets: 2, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'Back' },
 
-      { key: 'incline_db_curl', name: 'Incline Dumbbell Curl', sets: 3, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'Biceps' },
-      { key: 'hammer_curl', name: 'Hammer Curl', sets: 3, repMin: 12, repMax: 12, restSec: 60, increment: 5, group: 'Biceps' },
+      { key: 'incline_db_curl', name: 'Incline Dumbbell Curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 5, group: 'Biceps' },
+      { key: 'hammer_curl', name: 'Hammer Curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'Biceps' },
     ],
   },
   // A short, dedicated core session you can run any day. Bodyweight moves
@@ -115,17 +117,49 @@ const LEGACY_LABELS: Record<DayType, string[]> = {
 }
 
 /**
+ * Merge the default exercise list into a stored day's list: the user's own
+ * exercises (with their edits and ordering) are kept untouched, and any default
+ * exercise the stored day is missing — e.g. a newly shipped move like Lateral
+ * Raise — is spliced in next to its default neighbour so it lands in a sensible
+ * spot. Existing (possibly customized) exercises are never overwritten.
+ */
+function mergeDayExercises(defaults: PlannedExercise[], stored: PlannedExercise[]): PlannedExercise[] {
+  const storedKeys = new Set(stored.map((e) => e.key))
+  const out = [...stored]
+  defaults.forEach((def, i) => {
+    if (storedKeys.has(def.key)) return
+    // Insert after the nearest earlier default exercise that the stored list has,
+    // so a new move keeps its intended neighbour; otherwise append.
+    let insertAt = out.length
+    for (let j = i - 1; j >= 0; j--) {
+      const idx = out.findIndex((e) => e.key === defaults[j].key)
+      if (idx >= 0) {
+        insertAt = idx + 1
+        break
+      }
+    }
+    out.splice(insertAt, 0, { ...def })
+  })
+  return out
+}
+
+/**
  * Merge a stored/fetched plan onto the defaults so a plan saved before a new
- * day type existed (e.g. `abs`) still gains that day. Stored days win; missing
- * days fall back to the default.
+ * day type existed (e.g. `abs`) still gains that day, and a day saved before a
+ * new exercise shipped still gains that exercise. Stored days/exercises win;
+ * missing ones fall back to the default.
  */
 export function withPlanDefaults(p: Partial<Plan> | null | undefined): Plan {
   const merged = { ...DEFAULT_PLAN, ...(p ?? {}) }
   for (const type of DAY_TYPES) {
     const day = merged[type]
-    if (LEGACY_LABELS[type].includes(day.label)) {
-      merged[type] = { ...day, label: DEFAULT_PLAN[type].label }
-    }
+    // A day taken from storage keeps its exercises but gains any new defaults.
+    const isStoredDay = merged[type] !== DEFAULT_PLAN[type]
+    const exercises = isStoredDay
+      ? mergeDayExercises(DEFAULT_PLAN[type].exercises, day.exercises)
+      : day.exercises
+    const label = LEGACY_LABELS[type].includes(day.label) ? DEFAULT_PLAN[type].label : day.label
+    merged[type] = { ...day, label, exercises }
   }
   return merged
 }
