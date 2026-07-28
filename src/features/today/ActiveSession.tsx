@@ -28,6 +28,15 @@ type SetStep = {
   stepKey: string
 }
 
+/** The active rest overlay's context: how long, what's next, and whether this is
+ * the exercise's final rest (so we can offer "Add another set"). */
+type RestInfo = {
+  seconds: number
+  exKey: string
+  isLastSetOfExercise: boolean
+  upNext: string | null
+}
+
 function toWeight(v: string): number | null {
   const t = v.trim()
   if (t === '') return null
@@ -44,10 +53,9 @@ function targetLabel(target: Target | undefined): string | null {
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
 export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   const { plan, workouts, durations, logSessionDuration } = useData()
-  const [rest, setRest] = useState<number | null>(null)
+  const [rest, setRest] = useState<RestInfo | null>(null)
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
-  const [showNotes, setShowNotes] = useState(false)
   const [paused, setPaused] = useState(false)
   // Accumulated time spent on the rest-timer screen (the "resting" slice of the
   // session). restStartRef marks when the current rest overlay opened.
@@ -153,16 +161,42 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     onFinish(cleaned)
   }
 
+  // Accumulate the just-ended rest slice, then dismiss the overlay.
+  const closeRest = () => {
+    if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
+    restStartRef.current = 0
+    setRest(null)
+  }
+
   // Mark the current set done and either rest into the next set or finish.
   const completeSetAndAdvance = () => {
     controls.updateSet(planned.key, step.setIndex, { done: true })
     if (atLast) {
       finish()
-    } else {
-      restStartRef.current = Date.now()
-      setRest(planned.restSec)
-      setCurrent(safeCurrent + 1)
+      return
     }
+    // Carry this set's actual weight/reps forward to the next set of the same
+    // exercise, so subsequent sets prefill what you just did (not the target).
+    const nextStep = steps[safeCurrent + 1]
+    if (nextStep && nextStep.ex.key === planned.key && set) {
+      controls.updateSet(planned.key, nextStep.setIndex, { weightLbs: set.weightLbs ?? null, reps: set.reps })
+    }
+    const nextIsNewExercise = !!nextStep && nextStep.ex.key !== planned.key
+    restStartRef.current = Date.now()
+    setRest({
+      seconds: planned.restSec,
+      exKey: planned.key,
+      isLastSetOfExercise: step.setIndex === step.setCount - 1,
+      upNext: nextIsNewExercise ? `Up next: ${nextStep!.ex.name}` : null,
+    })
+    setCurrent(safeCurrent + 1)
+  }
+
+  // Append a set to the exercise whose final rest is showing, then drop back to
+  // logging. `current` already points at the slot the new set lands in.
+  const addSetFromRest = () => {
+    if (rest) controls.addSet(rest.exKey)
+    closeRest()
   }
 
   const hint = targetLabel(target)
@@ -173,9 +207,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
       <header className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">{planned.name}</h2>
-          <p className="text-sm text-neutral-500">
-            Set {step.setIndex + 1} of {step.setCount} · {formatDuration(timeLeft)} left
-          </p>
         </div>
         <KebabMenu
           items={[
@@ -204,6 +235,14 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
       <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
         {planned.group} · {planned.sets}×{repRangeLabel(planned)} · rest {restLabel}
       </p>
+
+      {step.setIndex === step.setCount - 1 && (
+        <p className="px-1 text-xs text-neutral-500">
+          {exercises[step.exIndex + 1]
+            ? `Up next: ${exercises[step.exIndex + 1].name}`
+            : 'Last exercise — almost done'}
+        </p>
+      )}
 
       {set && (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
@@ -240,31 +279,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
               />
             </label>
           </div>
-
-          <div className="flex items-center justify-center gap-4 text-sm">
-            <button
-              onClick={() => controls.addSet(planned.key, target)}
-              className="text-neutral-400 active:text-neutral-200"
-            >
-              + Add set
-            </button>
-            <button
-              onClick={() => setShowNotes((s) => !s)}
-              className="text-neutral-500 active:text-neutral-300"
-            >
-              Notes
-            </button>
-          </div>
-
-          {showNotes && (
-            <textarea
-              value={log?.notes ?? ''}
-              onChange={(e) => controls.setNotes(planned.key, e.target.value)}
-              placeholder="Optional notes…"
-              rows={2}
-              className="w-full rounded-xl bg-surface-2 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          )}
         </div>
       )}
 
@@ -283,12 +297,11 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
 
       {rest != null && (
         <RestTimer
-          seconds={rest}
-          onClose={() => {
-            if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
-            restStartRef.current = 0
-            setRest(null)
-          }}
+          seconds={rest.seconds}
+          upNext={rest.upNext}
+          timeLeftLabel={formatDuration(timeLeft)}
+          onAddSet={rest.isLastSetOfExercise ? addSetFromRest : undefined}
+          onClose={closeRest}
         />
       )}
 
