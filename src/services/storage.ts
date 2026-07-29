@@ -31,6 +31,8 @@ export type StretchState = {
   startedAt?: string
   /** Reps entered per dead-bug core set, keyed by 0-based set index. */
   coreReps?: Record<number, number>
+  /** Rep the current stretch set's rhythm guide had reached (1-based). */
+  rep?: number
 }
 
 export type Settings = {
