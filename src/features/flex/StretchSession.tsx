@@ -18,7 +18,7 @@ import { nextTarget } from '../../lib/progression'
 
 const SEC_PER_REP = 5
 
-/** Seconds to get into position after rest, before the next stretch's pace starts. */
+/** Seconds to get into position at the start and after each rest, before the pace starts. */
 const GET_READY_SEC = 5
 
 /** Which angle a stretch's photo measurement defaults to (user can switch). */
@@ -45,8 +45,13 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState(() => storage.loadStretch()?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(storage.loadStretch()?.done ?? []))
   const [coreReps, setCoreReps] = useState<Record<number, number>>(() => storage.loadStretch()?.coreReps ?? {})
+  // Rep the current stretch set has reached, persisted so an accidental refresh
+  // mid-set resumes the count instead of restarting at rep 1.
+  const [rep, setRep] = useState(() => storage.loadStretch()?.rep ?? 1)
   const [rest, setRest] = useState<number | null>(null)
-  const [preparing, setPreparing] = useState(false)
+  // Starts true so the routine opens with the same "get into position" countdown
+  // that follows each rest, rather than the rhythm firing off immediately.
+  const [preparing, setPreparing] = useState(true)
   const [showList, setShowList] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
@@ -75,8 +80,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget
 
   useEffect(() => {
-    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt, coreReps })
-  }, [safeCurrent, done, startedAt, coreReps])
+    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt, coreReps, rep })
+  }, [safeCurrent, done, startedAt, coreReps, rep])
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
@@ -143,6 +148,12 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       return next
     })
 
+  /** Move to a different set — each one starts its rep count over. */
+  const goToStep = (i: number) => {
+    setCurrent(i)
+    setRep(1)
+  }
+
   const completeSetAndAdvance = () => {
     const nextDone = new Set(done).add(step.stepKey)
     setDone(nextDone)
@@ -151,7 +162,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     } else {
       restStartRef.current = Date.now()
       setRest(step.restSec)
-      setCurrent(safeCurrent + 1)
+      goToStep(safeCurrent + 1)
     }
   }
 
@@ -201,6 +212,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
           tempo={step.tempo}
           reps={step.reps}
           running={rest == null && !preparing && !paused}
+          startRep={rep}
+          onRep={setRep}
         />
       ) : (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
@@ -290,7 +303,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
                   >
                     <button
                       onClick={() => {
-                        setCurrent(i)
+                        goToStep(i)
                         setShowList(false)
                       }}
                       className="flex-1 py-3 text-left active:opacity-70"

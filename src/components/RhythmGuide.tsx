@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { parseTempo, phaseScales } from '../lib/tempo'
 
 /**
@@ -26,7 +26,7 @@ function Shape({ variant, scale }: { variant: Variant; scale: number }) {
     case 'square':
       return (
         <div
-          className="absolute h-[73%] w-[73%] rounded-[14%] bg-accent-2/25 ring-1 ring-accent-2/40"
+          className="absolute h-[73%] w-[73%] rounded-[14%] bg-accent-bright/40 ring-1 ring-accent-bright/70"
           style={{ transform: `scale(${scale}) rotate(${(scale - 0.55) * 25}deg)` }}
         />
       )
@@ -36,7 +36,7 @@ function Shape({ variant, scale }: { variant: Variant; scale: number }) {
           {[73, 53, 33].map((pct, i) => (
             <div
               key={i}
-              className="absolute rounded-full border border-accent-2/40"
+              className="absolute rounded-full border border-accent-bright/70"
               style={{ width: `${pct}%`, height: `${pct}%`, transform: `scale(${scale})` }}
             />
           ))}
@@ -44,15 +44,15 @@ function Shape({ variant, scale }: { variant: Variant; scale: number }) {
       )
     case 'tide':
       return (
-        <div className="absolute h-[73%] w-[73%] overflow-hidden rounded-full ring-1 ring-accent-2/40">
-          <div className="absolute bottom-0 left-0 w-full bg-accent-2/30" style={{ height: `${scale * 100}%` }} />
+        <div className="absolute h-[73%] w-[73%] overflow-hidden rounded-full ring-1 ring-accent-bright/70">
+          <div className="absolute bottom-0 left-0 w-full bg-accent-bright/40" style={{ height: `${scale * 100}%` }} />
         </div>
       )
     case 'orb':
     default:
       return (
         <div
-          className="absolute h-[73%] w-[73%] rounded-full bg-accent-2/25 ring-1 ring-accent-2/40"
+          className="absolute h-[73%] w-[73%] rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
           style={{ transform: `scale(${scale})` }}
         />
       )
@@ -62,14 +62,36 @@ function Shape({ variant, scale }: { variant: Variant; scale: number }) {
 /** Smooth ease-in-out so each phase accelerates then settles, like a breath. */
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 
-export function RhythmGuide({ tempo, reps, running = true }: { tempo: string; reps?: number; running?: boolean }) {
+export function RhythmGuide({
+  tempo,
+  reps,
+  running = true,
+  startRep = 1,
+  onRep,
+}: {
+  tempo: string
+  reps?: number
+  running?: boolean
+  /** Rep to resume counting from — lets a reloaded session pick up where it left off. */
+  startRep?: number
+  /** Fired as each rep completes, so the caller can persist the count. */
+  onRep?: (rep: number) => void
+}) {
   const phases = useMemo(() => parseTempo(tempo), [tempo])
   const scales = useMemo(() => phaseScales(phases), [phases])
   const [variant] = useState<Variant>(pickVariant)
   const [idx, setIdx] = useState(0)
-  const [rep, setRep] = useState(1)
+  const [rep, setRep] = useState(startRep)
+  // The rep count also lives in a ref so the animation loop increments from the
+  // latest value without needing `rep` as an effect dependency (which would
+  // restart the in-flight phase every rep).
+  const repRef = useRef(startRep)
   /** How far (0–1) we are through the current phase, driven per animation frame. */
   const [progress, setProgress] = useState(0)
+  // Held in a ref for the same reason: an inline callback would otherwise change
+  // identity every render and restart the phase timer.
+  const onRepRef = useRef(onRep)
+  onRepRef.current = onRep
 
   useEffect(() => {
     // Hold at the very start of the first phase until the set actually begins,
@@ -88,7 +110,11 @@ export function RhythmGuide({ tempo, reps, running = true }: { tempo: string; re
         // A full pass through every phase is one rep. Keep counting past the
         // target — the goal is shown for reference, but reps continue until you
         // tap done.
-        if (next === 0) setRep((r) => r + 1)
+        if (next === 0) {
+          repRef.current += 1
+          setRep(repRef.current)
+          onRepRef.current?.(repRef.current)
+        }
       } else {
         setProgress(elapsed / dur)
         raf = requestAnimationFrame(tick)
@@ -115,7 +141,7 @@ export function RhythmGuide({ tempo, reps, running = true }: { tempo: string; re
       <div className="mt-2 text-center">
         {/* Rep count is the primary tracker now that the seconds readout is gone
             — the shape's motion paces each phase, so keep the number big + bright. */}
-        <div className="text-5xl font-bold tabular-nums leading-tight text-accent-2">
+        <div className="text-5xl font-bold tabular-nums leading-tight text-accent-bright">
           Rep {rep}
           {reps ? <span className="text-3xl text-neutral-400"> / {reps}</span> : ''}
         </div>

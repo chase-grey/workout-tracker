@@ -3,6 +3,51 @@ import { useEffect, useRef, useState } from 'react'
 const RING_R = 112
 const RING_C = 2 * Math.PI * RING_R
 
+// The same shape family the rhythm guide uses, so rest cycles through some variety.
+const VARIANTS = ['orb', 'square', 'rings', 'tide'] as const
+type Variant = (typeof VARIANTS)[number]
+
+// Remembered across mounts (each rest remounts the timer) so we never show the
+// same shape twice in a row — rest reliably rotates through all four.
+let lastVariant: Variant | null = null
+function pickVariant(): Variant {
+  const pool = VARIANTS.filter((v) => v !== lastVariant)
+  lastVariant = pool[Math.floor(Math.random() * pool.length)]
+  return lastVariant
+}
+
+/** The calm breathing pace cue behind the drain ring, in one of a few shapes. */
+function RestShape({ variant, over }: { variant: Variant; over: boolean }) {
+  const fill = over ? 'bg-accent-2/15' : 'bg-accent/15'
+  const ring = over ? 'ring-accent-2/30' : 'ring-accent/30'
+  const border = over ? 'border-accent-2/30' : 'border-accent/30'
+  switch (variant) {
+    case 'square':
+      return <div className={`rest-breathe absolute h-[62%] w-[62%] rounded-[14%] ring-1 ${fill} ${ring}`} />
+    case 'rings':
+      return (
+        <>
+          {[62, 45, 28].map((pct, i) => (
+            <div
+              key={i}
+              className={`rest-breathe absolute rounded-full border ${border}`}
+              style={{ width: `${pct}%`, height: `${pct}%` }}
+            />
+          ))}
+        </>
+      )
+    case 'tide':
+      return (
+        <div className={`absolute h-[62%] w-[62%] overflow-hidden rounded-full ring-1 ${ring}`}>
+          <div className={`rest-tide absolute bottom-0 left-0 w-full ${fill}`} />
+        </div>
+      )
+    case 'orb':
+    default:
+      return <div className={`rest-breathe absolute h-[62%] w-[62%] rounded-full ring-1 ${fill} ${ring}`} />
+  }
+}
+
 /**
  * Full-screen rest countdown. Wall-clock based: it tracks a target end time and
  * derives the remaining seconds from `Date.now()`, so it stays accurate even
@@ -32,6 +77,7 @@ export function RestTimer({
 }) {
   const endRef = useRef<number>(Date.now() + seconds * 1000)
   const [remaining, setRemaining] = useState(seconds)
+  const [variant] = useState<Variant>(pickVariant)
   const buzzed = useRef(false)
 
   useEffect(() => {
@@ -76,10 +122,8 @@ export function RestTimer({
 
       <div className="flex flex-1 items-center justify-center">
         <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
-          {/* Breathing orb — a calm pace cue. */}
-          <div
-            className={`rest-orb absolute h-[62%] w-[62%] rounded-full ring-1 ${over ? 'bg-accent-2/15 ring-accent-2/30' : 'bg-accent/15 ring-accent/30'}`}
-          />
+          {/* Breathing shape — a calm pace cue that varies from rest to rest. */}
+          <RestShape variant={variant} over={over} />
 
           {/* Rest progress ring: full at the start, empty when rest is up. */}
           <svg viewBox="0 0 240 240" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>

@@ -8,6 +8,7 @@
   --color-border: #333333;
   --color-accent: #16a34a; /* dark green — primary CTAs, highlights, streaks */
   --color-accent-2: #22c55e; /* medium green — success / completed states */
+  --color-accent-bright: #4ade80; /* bright green — rhythm/rest animations that call attention */
 }
 
 html,
@@ -36,10 +37,11 @@ input[type='number'] {
   -moz-appearance: textfield;
 }
 
-/* ---- Rest timer breathing orb (see RestTimer) ---- */
+/* ---- Rest timer breathing shapes (see RestTimer) ---- */
 
-/* A slow, self-contained breathe so the orb pulses regardless of how often the
-   parent re-renders — driven purely by CSS rather than a JS interval. */
+/* A slow, self-contained breathe so the shape pulses regardless of how often the
+   parent re-renders — driven purely by CSS rather than a JS interval. Used by the
+   orb / square / rings rest variants. */
 @keyframes rest-breathe {
   0%,
   100% {
@@ -49,13 +51,32 @@ input[type='number'] {
     transform: scale(1.06);
   }
 }
-.rest-orb {
+.rest-breathe {
   animation: rest-breathe 8s ease-in-out infinite;
   will-change: transform;
 }
+
+/* Tide variant: a fill that slowly rises and falls instead of scaling. */
+@keyframes rest-tide {
+  0%,
+  100% {
+    height: 28%;
+  }
+  50% {
+    height: 78%;
+  }
+}
+.rest-tide {
+  animation: rest-tide 8s ease-in-out infinite;
+  will-change: height;
+}
 @media (prefers-reduced-motion: reduce) {
-  .rest-orb {
+  .rest-breathe {
     animation: none;
+  }
+  .rest-tide {
+    animation: none;
+    height: 55%;
   }
 }
 
