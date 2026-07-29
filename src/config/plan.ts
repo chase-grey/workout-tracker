@@ -85,7 +85,7 @@ export const DEFAULT_PLAN: Plan = {
     label: 'Pull + Legs',
     required: false,
     exercises: [
-      { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repMin: 6, repMax: 10, restSec: 180, increment: 5, group: 'Legs' },
+      { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 5, group: 'Legs' },
       { key: 'hamstring_curl', name: 'Hamstring Curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'Legs' },
       { key: 'leg_adductor', name: 'Leg Adductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'Legs' },
       { key: 'leg_abductor', name: 'Leg Abductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'Legs' },

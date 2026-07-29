@@ -6,7 +6,7 @@ import { PlanEditor } from './PlanEditor'
 import { FlexRoutineEditor } from './FlexRoutineEditor'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
-import { DAY_TYPES } from '../../config/plan'
+import { DAY_TYPES, DEFAULT_PLAN } from '../../config/plan'
 import type { DayType } from '../../types'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
@@ -19,7 +19,7 @@ const SYNC_LABEL: Record<string, string> = {
 }
 
 export function SettingsTab() {
-  const { settings, updateSettings, refresh, sync, lastSync, pendingWrites, workouts, plan } = useData()
+  const { settings, updateSettings, refresh, sync, lastSync, pendingWrites, workouts, plan, updatePlan } = useData()
   const [apiUrl, setApiUrl] = useState(settings.apiUrl)
   const [saved, setSaved] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -84,6 +84,15 @@ export function SettingsTab() {
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
           Edit Stretch
+        </button>
+        <button
+          onClick={() => {
+            if (confirm('Replace your plan with the latest defaults? Any customizations you made will be overwritten.'))
+              updatePlan(structuredClone(DEFAULT_PLAN))
+          }}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          Reset plan to latest defaults
         </button>
       </section>
 

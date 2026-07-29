@@ -45,14 +45,14 @@ input[type='number'] {
 @keyframes rest-breathe {
   0%,
   100% {
-    transform: scale(0.86);
+    transform: scale(0.8);
   }
   50% {
-    transform: scale(1.06);
+    transform: scale(1.14);
   }
 }
 .rest-breathe {
-  animation: rest-breathe 8s ease-in-out infinite;
+  animation: rest-breathe 4.5s ease-in-out infinite;
   will-change: transform;
 }
 
@@ -67,7 +67,7 @@ input[type='number'] {
   }
 }
 .rest-tide {
-  animation: rest-tide 8s ease-in-out infinite;
+  animation: rest-tide 4.5s ease-in-out infinite;
   will-change: height;
 }
 @media (prefers-reduced-motion: reduce) {

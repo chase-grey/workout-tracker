@@ -113,10 +113,9 @@ export function RestTimer({
       className="fixed inset-0 z-50 flex flex-col items-center bg-black px-6"
       onClick={onClose}
     >
-      {(upNext || timeLeftLabel) && (
+      {upNext && (
         <div className="pt-[calc(1.5rem+env(safe-area-inset-top))] text-center">
-          {upNext && <p className="text-base font-semibold text-neutral-200">{upNext}</p>}
-          {timeLeftLabel && <p className="text-xs text-neutral-500">{timeLeftLabel} left</p>}
+          <p className="text-base font-semibold text-neutral-200">{upNext}</p>
         </div>
       )}
 
@@ -161,6 +160,9 @@ export function RestTimer({
         <div className={`font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-white'}`}>
           {label}
         </div>
+        {timeLeftLabel && (
+          <p className="text-sm font-medium text-neutral-400">{timeLeftLabel} left in workout</p>
+        )}
       </div>
     </div>
   )
