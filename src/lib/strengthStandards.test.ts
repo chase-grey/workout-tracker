@@ -113,7 +113,7 @@ describe('muscleDevelopment — mapping', () => {
   })
 
   it('takes the best percentile across a muscle with several sources', () => {
-    // incline scales to ~1.22× flat, so it should beat a lighter flat bench.
+    // A heavier incline set outranks a lighter flat bench (both feed chest).
     const scores = muscleDevelopment({ flat_bench: 0.8 * BW, incline_bench: 0.9 * BW }, BW)
     const flatOnly = muscleDevelopment({ flat_bench: 0.8 * BW }, BW)
     if (scores.chest.hasData && flatOnly.chest.hasData) {

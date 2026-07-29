@@ -144,7 +144,7 @@ export type LiftResult = {
 /**
  * Percentile + development for one lift. `load` is the est 1RM already converted
  * to the value the standard expects (e.g. pull-ups pass bodyweight + added
- * weight; incline bench is scaled to a flat-bench equivalent — see EXERCISE_SOURCES).
+ * weight — see EXERCISE_SOURCES).
  */
 export function liftPercentile(lift: Lift, load: number, bodyweightLb: number): LiftResult {
   if (!(load > 0) || !(bodyweightLb > 0)) {
@@ -163,8 +163,10 @@ type LiftSource = {
   muscle: Muscle
   /**
    * Convert a logged best est-1RM into the "load" the standard expects.
-   * Defaults to identity. Pull-ups add bodyweight; incline bench scales to a
-   * flat-bench equivalent (incline ≈ 82% of flat).
+   * Defaults to identity — only pull-ups override it, adding bodyweight to the
+   * added weight so the standard sees total load. (Incline bench is scored
+   * as-is against the bench standard: it reads a touch conservative since incline
+   * is harder than flat, but the displayed number stays a real est-1RM.)
    */
   toLoad?: (est1RM: number, bodyweightLb: number) => number
 }
@@ -177,7 +179,7 @@ type LiftSource = {
 export const EXERCISE_SOURCES: Record<string, LiftSource> = {
   barbell_squat: { lift: 'squat', muscle: 'quads' },
   flat_bench: { lift: 'bench', muscle: 'chest' },
-  incline_bench: { lift: 'bench', muscle: 'chest', toLoad: (e) => e / 0.82 },
+  incline_bench: { lift: 'bench', muscle: 'chest' },
   iso_chest: { lift: null, muscle: 'chest' }, // chest fly / pec deck — no standard
   db_overhead_press: { lift: 'ohp', muscle: 'shoulders' },
   lateral_raise: { lift: null, muscle: 'shoulders' }, // isolation — no standard

@@ -3,7 +3,6 @@ import { useData } from '../../store/DataContext'
 import { exerciseSeries } from '../../lib/progress'
 import {
   AVATAR_EXERCISE_KEYS,
-  legsVsUpper,
   liftReadouts,
   muscleDevelopment,
   MUSCLES,
@@ -49,7 +48,7 @@ function titleFor(muscle: Muscle, score: MuscleScore | undefined): string {
   const name = MUSCLE_LABELS[muscle]
   if (!score || !score.hasData) return `${name} — no data`
   if (score.percentile == null) return `${name} — trained`
-  return `${name} — ${score.band} (${ordinal(score.percentile)} percentile)`
+  return `${name} — ${score.band}`
 }
 
 const MUSCLE_LABELS: Record<Muscle, string> = {
@@ -61,12 +60,6 @@ const MUSCLE_LABELS: Record<Muscle, string> = {
   core: 'Core',
   quads: 'Quads',
   hamstrings: 'Hamstrings',
-}
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd']
-  const v = n % 100
-  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0])
 }
 
 /**
@@ -172,7 +165,6 @@ export function MuscleAvatar() {
     () => liftReadouts(bestLiftsByKey, bodyweightLb),
     [bestLiftsByKey, bodyweightLb],
   )
-  const balance = useMemo(() => legsVsUpper(scores), [scores])
 
   const hasAnyData = MUSCLES.some((m) => scores[m].hasData)
 
@@ -200,7 +192,7 @@ export function MuscleAvatar() {
 
             <div className="flex flex-1 flex-col gap-2">
               <p className="text-xs uppercase tracking-wider text-neutral-500">
-                Percentile vs. men at {bodyweightLb} lbs
+                Estimated 1RM vs. men at {bodyweightLb} lbs
               </p>
               {readouts.length > 0 ? (
                 <ul className="flex flex-col gap-1">
@@ -208,18 +200,16 @@ export function MuscleAvatar() {
                     <li key={r.lift} className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="text-neutral-300">{r.label}</span>
                       <span className="tabular-nums text-neutral-500">
-                        {r.load} lbs · <span className="text-accent-2">{ordinal(r.percentile)}</span> · {r.band}
+                        est. 1RM {r.load} lbs · <span className="text-accent-2">{r.band}</span>
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="text-sm text-neutral-500">
-                  Log a weighted lift (squat, bench, press) to see your percentiles.
+                  Log a weighted lift (squat, bench, press) to see your strength level.
                 </p>
               )}
-
-              {balance && <p className="mt-1 text-sm text-neutral-400">{balance.verdict}</p>}
             </div>
           </div>
         </div>
