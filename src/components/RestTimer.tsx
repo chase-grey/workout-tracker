@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { KebabMenu, type MenuItem } from './KebabMenu'
 import { SessionProgress } from './SessionProgress'
 
-// Calming shapes made for rest — slow, self-contained loops that read as
-// "wind down," distinct from the effortful rhythm shapes used during a set.
-const VARIANTS = ['orb', 'tide', 'ripple', 'glow', 'orbit', 'aurora', 'bloom'] as const
+// Time-telling shapes made for rest: each one encodes the remaining fraction
+// directly in its dominant dimension — a sand level, a liquid line, a candle's
+// height, a stack of lit segments — so a glance reads how much rest is left.
+// Any looping motion (falling sand, rising bubbles, a flickering flame) is
+// texture only and never drives that level, so the time reading stays honest.
+const VARIANTS = ['sandglass', 'tide', 'candle', 'pips'] as const
 type Variant = (typeof VARIANTS)[number]
 
 // Remembered across mounts (each rest remounts the timer) so we never show the
@@ -16,75 +19,106 @@ function pickVariant(): Variant {
   return lastVariant
 }
 
-/** The rest animation itself, in one of a few restful shapes. */
-function RestShape({ variant }: { variant: Variant }) {
-  // Bright green — the resting animation is meant to call attention, matching the
-  // rhythm guide, so it reads as vividly green rather than a faint wash. Dark green
-  // (accent) is reserved for the timer and bar UI.
-  const fill = 'bg-accent-bright/30'
-  const ring = 'ring-accent-bright/60'
-  const border = 'border-accent-bright/60'
-  // Small elements need more opacity than the big washes to stay readable.
-  const dot = 'bg-accent-bright/80'
+/**
+ * The rest animation itself. `fraction` is how much rest is still left (1 at the
+ * start, 0 when it's up); every shape maps it straight onto its level so the
+ * shape *is* the timer.
+ *
+ * Bright green throughout — the resting animation is meant to call attention, so
+ * it reads as vividly green rather than a faint wash. Dark green (accent) stays
+ * reserved for the numeric timer and bar UI.
+ */
+function RestShape({ variant, fraction }: { variant: Variant; fraction: number }) {
+  const level = `${fraction * 100}%`
+  const filled = `${(1 - fraction) * 100}%`
+  // Smooth the 250ms wall-clock steps into one continuous drain.
+  const drain = { transition: 'height 260ms linear' } as const
   switch (variant) {
     case 'tide':
+      // A vessel that empties: the liquid line drops from full to nothing. The
+      // surface glint and slow bubbles read as liquid without moving the line.
       return (
-        <div className={`absolute h-[62%] w-[62%] overflow-hidden rounded-full ring-1 ${ring}`}>
-          <div className={`rest-tide absolute bottom-0 left-0 w-full ${fill}`} />
-        </div>
-      )
-    case 'ripple':
-      // Rings that expand outward and fade like a still pond — staggered so a
-      // new ripple sets off before the last one clears.
-      return (
-        <>
-          {[0, 1, 2].map((i) => (
+        <div className="absolute h-[74%] w-[74%] overflow-hidden rounded-full ring-1 ring-accent-bright/50">
+          <div className="absolute inset-0 bg-accent-bright/12" />
+          <div className="absolute inset-x-0 bottom-0 bg-accent-bright/70" style={{ height: level, ...drain }}>
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
+            <div className="rest-bubble absolute bottom-[8%] left-[34%] h-[6%] w-[6%] rounded-full bg-accent-bright/70" />
             <div
-              key={i}
-              className={`rest-ripple absolute h-[46%] w-[46%] rounded-full border ${border}`}
-              style={{ animationDelay: `${i * 1.5}s` }}
+              className="rest-bubble absolute bottom-[8%] left-[62%] h-[4%] w-[4%] rounded-full bg-accent-bright/70"
+              style={{ animationDelay: '1.6s' }}
             />
-          ))}
-        </>
-      )
-    case 'glow':
-      // A soft, blurred halo that swells and dims — the most passive of the set.
-      return <div className={`rest-glow absolute h-[64%] w-[64%] rounded-full blur-2xl ${fill}`} />
-    case 'orbit':
-      // A single dot tracing a slow circuit — something to follow with the eyes
-      // instead of a pulse to breathe with.
-      return (
-        <div className="absolute h-[62%] w-[62%]">
-          <div className={`absolute inset-0 rounded-full border ${border}`} />
-          <div className="rest-orbit absolute inset-0">
-            <div className={`absolute left-1/2 top-0 h-[13%] w-[13%] -translate-x-1/2 -translate-y-1/2 rounded-full ${dot}`} />
           </div>
         </div>
       )
-    case 'aurora':
-      // Two blurred bands drifting past each other behind the ring — motion
-      // with no pulse at all, for when a rhythm would feel like a countdown.
+    case 'candle':
+      // A candle burning down: the wax height is the time left and the flame
+      // rides its top downward, guttering out as it reaches the base.
       return (
-        <div className="absolute h-[70%] w-[70%] overflow-hidden rounded-full">
-          <div className={`rest-aurora-a absolute h-[55%] w-[130%] -left-[15%] rounded-full blur-2xl ${fill}`} />
-          <div className={`rest-aurora-b absolute h-[45%] w-[130%] -left-[15%] rounded-full blur-2xl ${fill}`} />
+        <div className="absolute bottom-[12%] left-1/2 h-[74%] w-[22%] -translate-x-1/2">
+          {/* Faint full-height guide so the shrinking wax reads against a whole. */}
+          <div className="absolute inset-0 rounded-t-[45%] rounded-b-[14%] bg-accent-bright/12" />
+          <div
+            className="absolute inset-x-0 bottom-0 rounded-t-[45%] rounded-b-[14%] bg-accent-bright/70"
+            style={{ height: level, ...drain }}
+          />
+          {fraction > 0 && (
+            <div
+              className="rest-flame absolute left-1/2 h-[15%] w-[64%] -translate-x-1/2 rounded-[50%_50%_50%_50%/72%_72%_38%_38%] bg-accent-bright"
+              style={{ bottom: level, marginBottom: '-3%', transition: 'bottom 260ms linear' }}
+            />
+          )}
         </div>
       )
-    case 'bloom':
-      // Six petals opening and closing around a center as the whole flower
-      // turns — the slowest, most ornamental shape of the set.
+    case 'pips': {
+      // A meter that empties bottom-up: lit segments are the time left, and the
+      // leading one breathes so the boundary is easy to find at a glance.
+      const total = 6
+      const lit = Math.ceil(fraction * total)
       return (
-        <div className="rest-bloom absolute h-[62%] w-[62%]">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="absolute inset-0" style={{ transform: `rotate(${i * 60}deg)` }}>
-              <div className={`absolute left-1/2 top-[4%] h-[44%] w-[44%] -translate-x-1/2 rounded-full border ${border}`} />
-            </div>
-          ))}
+        <div className="absolute inset-y-[10%] left-1/2 flex w-[26%] -translate-x-1/2 flex-col-reverse gap-1.5">
+          {Array.from({ length: total }, (_, i) => {
+            const on = i < lit
+            return (
+              <div
+                key={i}
+                className={`flex-1 rounded-full ${on ? 'bg-accent-bright/80' : 'bg-accent-bright/12'} ${
+                  on && i === lit - 1 ? 'rest-pip' : ''
+                }`}
+              />
+            )
+          })}
         </div>
       )
-    case 'orb':
+    }
+    case 'sandglass':
     default:
-      return <div className={`rest-breathe absolute h-[62%] w-[62%] rounded-full ring-1 ${fill} ${ring}`} />
+      // An hourglass: the top chamber's sand drains out the neck (its surface
+      // descending as time runs out) and piles up in the bottom chamber.
+      return (
+        <div className="absolute inset-[8%]">
+          {/* Caps frame the glass as a timer object. */}
+          <div className="absolute inset-x-[6%] top-0 h-[4%] rounded-full bg-accent-bright/60" />
+          <div className="absolute inset-x-[6%] bottom-0 h-[4%] rounded-full bg-accent-bright/60" />
+          <div
+            className="absolute inset-x-0 top-[4%] h-[46%] overflow-hidden"
+            style={{ clipPath: 'polygon(2% 0, 98% 0, 55% 100%, 45% 100%)' }}
+          >
+            <div className="absolute inset-0 bg-accent-bright/12" />
+            <div className="absolute inset-x-0 bottom-0 bg-accent-bright/80" style={{ height: level, ...drain }} />
+          </div>
+          <div
+            className="absolute inset-x-0 bottom-[4%] h-[46%] overflow-hidden"
+            style={{ clipPath: 'polygon(45% 0, 55% 0, 98% 100%, 2% 100%)' }}
+          >
+            <div className="absolute inset-0 bg-accent-bright/12" />
+            <div className="absolute inset-x-0 bottom-0 bg-accent-bright/80" style={{ height: filled, ...drain }} />
+          </div>
+          {/* A thin stream through the neck while sand is still falling. */}
+          {fraction > 0 && fraction < 1 && (
+            <div className="rest-stream absolute left-1/2 top-1/2 h-[12%] w-[2.5%] -translate-x-1/2 -translate-y-1/2 rounded-full" />
+          )}
+        </div>
+      )
   }
 }
 
@@ -95,11 +129,11 @@ function RestShape({ variant }: { variant: Variant }) {
  * come back and it reflects the real elapsed time. Counts into overtime until
  * dismissed. No system notifications by design.
  *
- * The rest animation is the timer: a restful shape fills the screen at the start
- * of the rest and drains to almost nothing as time runs out — like sand emptying
- * from a timer, a calm, glanceable cue for how much rest is left — while the numeric
- * countdown (in dark green) sits at the bottom of the screen. Because the scale is
- * derived from the wall-clock end time (not a CSS loop), it stays in sync after
+ * The rest animation is the timer: a restful shape (a sandglass, a draining
+ * vessel, a burning-down candle) encodes the time left directly in its level — a
+ * calm, glanceable cue for how much rest is left — while the numeric countdown
+ * (in dark green) sits at the bottom of the screen. Because the level is derived
+ * from the wall-clock end time (not a CSS loop), it stays in sync after
  * backgrounding or a reload. Optional `upNext` tells the resting
  * user what's coming; `progress` + `timeLeftLabel` (rendered verbatim, so the
  * caller phrases it — "~5 min left in workout") show the same session progress
@@ -164,9 +198,9 @@ export function RestTimer({
   const over = remaining < 0
   const abs = Math.abs(remaining)
   const label = `${over ? '+' : ''}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, '0')}`
-  // How much of the rest is still left (1 at the start, 0 when rest is up). The
-  // shape scales with this — full at the start and draining to almost nothing as
-  // time runs out, like a sand timer — so the animation itself reads as the timer.
+  // How much of the rest is still left (1 at the start, 0 when rest is up). Each
+  // shape encodes this directly as its level — a sand column, a liquid line, a
+  // candle's height — so the animation itself reads as the timer.
   const remainingFraction = seconds > 0 ? Math.max(0, Math.min(1, remaining / seconds)) : 0
 
   return (
@@ -202,19 +236,10 @@ export function RestTimer({
 
       <div className="flex flex-1 items-center justify-center">
         <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
-          {/* The animation is the timer: it fills the space at the start of the
-              rest and drains to almost nothing as time runs out, like sand emptying
-              from a timer. The variant keeps its own gentle loop for life; this
-              scale carries the countdown. */}
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{
-              transform: `scale(${0.12 + 0.88 * remainingFraction})`,
-              transition: 'transform 250ms linear',
-            }}
-          >
-            <RestShape variant={variant} />
-          </div>
+          {/* The animation is the timer: the shape's level carries the countdown
+              (full at the start, empty when rest is up); any looping motion is
+              just texture and never drives the level. */}
+          <RestShape variant={variant} fraction={remainingFraction} />
         </div>
       </div>
 
