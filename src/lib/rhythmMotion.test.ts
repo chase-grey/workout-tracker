@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseTempo } from './tempo'
-import { motionForPhases, phaseDepths } from './rhythmMotion'
+import { cycleProgress, loopFadeIn, motionForPhases, phaseDepths } from './rhythmMotion'
 
 describe('motionForPhases', () => {
   it('reads a down · hold · up rep as a breath', () => {

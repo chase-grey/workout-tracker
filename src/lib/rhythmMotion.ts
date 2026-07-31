@@ -48,3 +48,35 @@ export function phaseDepths(phases: TempoPhase[]): number[] {
     return cur
   })
 }
+
+/**
+ * How far (0–1) through a whole rep we are, given the phase we're in and how far
+ * through that phase. Phases are weighted by their duration, so this advances at
+ * a steady rate across the rep rather than jumping at each phase boundary.
+ */
+export function cycleProgress(phases: TempoPhase[], idx: number, progress: number): number {
+  const total = phases.reduce((sum, p) => sum + p.seconds, 0)
+  if (total <= 0) return 0
+  let before = 0
+  for (let i = 0; i < idx && i < phases.length; i++) before += phases[i].seconds
+  return (before + phases[idx].seconds * progress) / total
+}
+
+/** Seconds spent dissolving the finished rep into the new one at the loop point. */
+export const LOOP_FADE_SECONDS = 1
+
+/**
+ * Opacity (0–1) of the incoming rep at the loop point. A descent rep ends deep
+ * and the next has to start back at the top, so the wrap is an unavoidable jump
+ * in depth. Fading the new rep in across the first second — while the finished
+ * one dissolves at full depth — hides that jump, so the set reads as one
+ * continuous loop instead of snapping back to the top every rep. Capped at a
+ * third of the rep so short tempos still spend most of their time at full
+ * opacity.
+ */
+export function loopFadeIn(phases: TempoPhase[], cyclePos: number): number {
+  const total = phases.reduce((sum, p) => sum + p.seconds, 0)
+  if (total <= 0) return 1
+  const fade = Math.min(1 / 3, LOOP_FADE_SECONDS / total)
+  return Math.max(0, Math.min(1, cyclePos / fade))
+}

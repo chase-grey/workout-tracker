@@ -349,8 +349,9 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
           onClose={closeRest}
         />
       )}
-      {/* The get-into-position count waits its turn behind a photo screen. */}
-      {preparing && photos == null && (
+      {/* The get-into-position count waits its turn behind a photo screen, and
+          is skipped for dead-bug core sets — there's no pace to settle into. */}
+      {preparing && photos == null && step.kind === 'flex' && (
         <GetReady seconds={GET_READY_SEC} onDone={() => setPreparing(false)} />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}

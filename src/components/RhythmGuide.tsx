@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdKeyboardArrowDown } from 'react-icons/md'
 import { parseTempo } from '../lib/tempo'
-import { motionForPhases, phaseDepths, type MotionKind } from '../lib/rhythmMotion'
+import {
+  cycleProgress,
+  loopFadeIn,
+  motionForPhases,
+  phaseDepths,
+  type MotionKind,
+} from '../lib/rhythmMotion'
 
 /**
  * An abstract, nature-inspired rhythm animation that paces a stretch's tempo.
@@ -297,11 +303,34 @@ export function RhythmGuide({
     motion === 'descent' && i === 0 ? 0 : depths[(i - 1 + depths.length) % depths.length]
   const depth = from + (depths[i] - from) * easeInOut(progress)
 
+  // That jump back to the top is what made the loop look choppy, so crossfade
+  // it: for the first moment of a descent rep the new shape fades in up top
+  // while the rep that just finished lingers at full depth and dissolves. The
+  // two overlap, so there's no frame where the shape teleports or blinks out.
+  // The first rep of a set has nothing behind it to dissolve.
+  const fadeIn = motion === 'descent' ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
+  const showPrevRep = fadeIn < 1 && rep > startRep
+
   return (
     <div className="flex flex-col items-center py-3">
       <div className="relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
         {motion === 'descent' ? (
-          <DescentShape variant={variant} depth={depth} />
+          <>
+            {showPrevRep && (
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ opacity: 1 - fadeIn }}
+              >
+                <DescentShape variant={variant} depth={depths[depths.length - 1]} />
+              </div>
+            )}
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ opacity: fadeIn }}
+            >
+              <DescentShape variant={variant} depth={depth} />
+            </div>
+          </>
         ) : (
           <BreatheShape variant={variant} scale={scaleFromDepth(depth)} />
         )}
