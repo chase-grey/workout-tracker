@@ -95,14 +95,17 @@ input[type='number'] {
   will-change: transform, opacity;
 }
 
-/* Pips: the leading lit segment breathes so the boundary is easy to spot. */
+/* Pips: the leading lit segment breathes so the boundary is easy to spot.
+   It rests at full brightness and dips in the middle — the reverse would start
+   the pulse dim, so a segment newly promoted to leading would visibly drop the
+   moment it took over. */
 @keyframes rest-pip {
   0%,
   100% {
-    opacity: 0.5;
+    opacity: 1;
   }
   50% {
-    opacity: 1;
+    opacity: 0.55;
   }
 }
 .rest-pip {

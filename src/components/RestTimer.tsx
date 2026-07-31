@@ -28,6 +28,8 @@ function pickVariant(): Variant {
  * it reads as vividly green rather than a faint wash. Dark green (accent) stays
  * reserved for the numeric timer and bar UI.
  */
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
+
 function RestShape({ variant, fraction }: { variant: Variant; fraction: number }) {
   const level = `${fraction * 100}%`
   const filled = `${(1 - fraction) * 100}%`
@@ -72,21 +74,26 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
     case 'pips': {
       // A meter that empties bottom-up: lit segments are the time left, and the
       // leading one breathes so the boundary is easy to find at a glance.
+      //
+      // The leading segment *drains* rather than switching off — its fill sinks
+      // to nothing before the segment below takes over as the leading one. A lit
+      // pip never vanishes mid-pulse at full brightness, so the boundary slides
+      // down the meter continuously instead of hopping segment to segment.
       const total = 6
-      const lit = Math.ceil(fraction * total)
+      const exact = fraction * total
+      const leading = Math.floor(exact)
       return (
         <div className="absolute inset-y-[10%] left-1/2 flex w-[26%] -translate-x-1/2 flex-col-reverse gap-1.5">
-          {Array.from({ length: total }, (_, i) => {
-            const on = i < lit
-            return (
+          {Array.from({ length: total }, (_, i) => (
+            <div key={i} className="relative flex-1 overflow-hidden rounded-full bg-accent-bright/12">
               <div
-                key={i}
-                className={`flex-1 rounded-full ${on ? 'bg-accent-bright/80' : 'bg-accent-bright/12'} ${
-                  on && i === lit - 1 ? 'rest-pip' : ''
+                className={`absolute inset-x-0 bottom-0 rounded-full bg-accent-bright/80 ${
+                  i === leading ? 'rest-pip' : ''
                 }`}
+                style={{ height: `${clamp01(exact - i) * 100}%`, ...drain }}
               />
-            )
-          })}
+            </div>
+          ))}
         </div>
       )
     }
@@ -169,15 +176,18 @@ export function RestTimer({
   menu?: MenuItem[]
 }) {
   const endRef = useRef<number>(endsAt ?? Date.now() + seconds * 1000)
-  const [remaining, setRemaining] = useState(() => Math.round((endRef.current - Date.now()) / 1000))
+  // Kept in milliseconds, not whole seconds: the shape's level is derived from
+  // this, and rounding here would step it once a second — a staircase the drain
+  // transition can't smooth over. The readout rounds for display instead.
+  const [remainingMs, setRemainingMs] = useState(() => endRef.current - Date.now())
   const [variant] = useState<Variant>(pickVariant)
   const buzzed = useRef(false)
 
   useEffect(() => {
     const tick = () => {
-      const r = Math.round((endRef.current - Date.now()) / 1000)
-      setRemaining(r)
-      if (r <= 0 && !buzzed.current) {
+      const ms = endRef.current - Date.now()
+      setRemainingMs(ms)
+      if (ms <= 0 && !buzzed.current) {
         buzzed.current = true
         navigator.vibrate?.(400)
       }
@@ -195,13 +205,16 @@ export function RestTimer({
     }
   }, [])
 
+  const remaining = Math.round(remainingMs / 1000)
   const over = remaining < 0
   const abs = Math.abs(remaining)
   const label = `${over ? '+' : ''}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, '0')}`
   // How much of the rest is still left (1 at the start, 0 when rest is up). Each
   // shape encodes this directly as its level — a sand column, a liquid line, a
-  // candle's height — so the animation itself reads as the timer.
-  const remainingFraction = seconds > 0 ? Math.max(0, Math.min(1, remaining / seconds)) : 0
+  // candle's height — so the animation itself reads as the timer. Taken from the
+  // millisecond value so the level advances every tick and the drain transition
+  // has a small, continuous step to smooth rather than a full second's jump.
+  const remainingFraction = seconds > 0 ? clamp01(remainingMs / (seconds * 1000)) : 0
 
   return (
     <div
