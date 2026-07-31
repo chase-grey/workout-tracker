@@ -13,6 +13,7 @@ import {
   type ExerciseTimeSample,
 } from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
+import { usePressAction } from '../../lib/usePressAction'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
@@ -259,6 +260,8 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     closeRest()
   }
 
+  const advancePress = usePressAction(completeSetAndAdvance)
+
   const hint = targetLabel(target)
   const challengeLabel =
     target && (target.weightLbs == null ? `${target.reps} reps` : `${target.weightLbs} × ${target.reps}`)
@@ -357,16 +360,11 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       )}
 
       <button
-        onClick={completeSetAndAdvance}
+        {...advancePress}
+        aria-label={atLast ? undefined : 'next set'}
         className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
       >
-        {atLast ? (
-          'finish workout'
-        ) : (
-          <>
-            done <MdChevronRight className="text-2xl" aria-hidden />
-          </>
-        )}
+        {atLast ? 'finish workout' : <MdChevronRight className="text-3xl" aria-hidden />}
       </button>
 
       {rest != null && (
