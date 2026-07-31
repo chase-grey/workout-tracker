@@ -28,12 +28,10 @@ export function GetReady({ seconds, onDone }: { seconds: number; onDone: () => v
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-black px-6"
       onClick={() => doneRef.current()}
     >
-      <p className="text-sm tracking-widest text-neutral-500">get into position</p>
       <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
         <div className="absolute h-[62%] w-[62%] rounded-full bg-accent/15 ring-1 ring-accent/30" />
         <div className="relative font-mono text-8xl font-bold tabular-nums text-white">{Math.max(0, remaining)}</div>
       </div>
-      <p className="text-sm text-neutral-500">tap to start now</p>
     </div>
   )
 }
