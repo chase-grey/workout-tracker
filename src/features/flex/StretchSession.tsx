@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MdCheckCircle, MdChevronRight, MdPhotoCamera, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
+import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
@@ -8,10 +8,11 @@ import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { MeasureSheet } from './MeasureSheet'
-import { CameraMeasure } from './CameraMeasure'
+import { PhotoStep } from './PhotoStep'
 import { formatDuration, remainingSecs } from '../../lib/estimate'
-import { buildSessionSteps, measureOpportunity, type CoreSetStep, type MeasureKind } from '../../lib/flexSteps'
-import { type MeasureMode, type MeasureResult } from '../../lib/measure'
+import { buildSessionSteps, type CoreSetStep } from '../../lib/flexSteps'
+import { COLD_GATE, PHOTO_SHOT, gateAfterStep, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
+import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement } from '../../store/DataContext'
 import { canResumeRest } from '../../lib/rest'
 import { storage, type RestState } from '../../services/storage'
@@ -24,12 +25,12 @@ const SEC_PER_REP = 5
 /** Seconds to get into position at the start and after each rest, before the pace starts. */
 const GET_READY_SEC = 5
 
-/** The button label and camera mode for each of the three measurement moments. */
-const MEASURE_PROMPT: Record<MeasureKind, { label: string; mode: MeasureMode }> = {
-  'cold-split': { label: 'measure cold split', mode: 'split' },
-  tailors: { label: "measure tailor's angle", mode: 'tailors' },
-  'warm-split': { label: 'measure warm split', mode: 'split' },
-}
+/**
+ * A photo screen waiting to be shown, plus the set it interrupts. `resumeIndex`
+ * is the step whose rest starts once the screen is dismissed, or null for the
+ * cold screen, which runs before the routine has started.
+ */
+type PendingPhotos = { gate: PhotoGate; resumeIndex: number | null }
 
 /**
  * Guided, one-set-at-a-time Stretch + Core flow: the mobility routine (with a
@@ -57,8 +58,16 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const [preparing, setPreparing] = useState(rest == null)
   const [showList, setShowList] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
-  const [showCamera, setShowCamera] = useState(false)
   const [paused, setPaused] = useState(false)
+  // Photo screens already offered this session, so resuming doesn't re-ask.
+  const [seenGates, setSeenGates] = useState<Set<string>>(() => new Set(saved?.photoGates ?? []))
+  // The cold shots open the session, before anything has warmed up. A resume
+  // that's already past the first set is past that moment, so it doesn't re-ask.
+  const [photos, setPhotos] = useState<PendingPhotos | null>(() =>
+    seenGates.has(COLD_GATE.id) || (saved?.step ?? 0) > 0 || (saved?.done?.length ?? 0) > 0
+      ? null
+      : { gate: COLD_GATE, resumeIndex: null },
+  )
   // When the routine began (persisted so a resumed session still measures its
   // full length) and accumulated time spent on the rest screen.
   const [startedAt] = useState(saved?.startedAt)
@@ -85,8 +94,16 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget
 
   useEffect(() => {
-    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt, coreReps, rep, rest })
-  }, [safeCurrent, done, startedAt, coreReps, rep, rest])
+    storage.saveStretch({
+      step: safeCurrent,
+      done: [...done],
+      startedAt,
+      coreReps,
+      rep,
+      rest,
+      photoGates: [...seenGates],
+    })
+  }, [safeCurrent, done, startedAt, coreReps, rep, rest, seenGates])
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
@@ -144,20 +161,25 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
 
   const step = steps[safeCurrent]
   const atLast = safeCurrent >= N - 1
-  // The camera is offered only at three points: cold split at the start, tailor's
-  // angle on its last set, and warm split right before the core block.
-  const opp = measureOpportunity(steps, safeCurrent)
 
-  // Route a captured angle into the right field. If the user switched the camera
-  // to a different pose than the moment implied, the present fields still win.
-  const logMeasurement = (kind: MeasureKind, result: MeasureResult) => {
+  // Route a captured angle into the right field. The shot fixes cold vs warm;
+  // which pose it lands in follows the angles the camera actually returned, so
+  // switching pose mid-capture still logs the reading somewhere sensible.
+  const logMeasurement = (kind: PhotoKind, result: MeasureResult) => {
+    const { cold } = PHOTO_SHOT[kind]
     const m: FlexMeasurement = { note: 'measurement' }
     if (result.splitDeg != null) {
-      if (kind === 'cold-split') m.coldSplitDeg = result.splitDeg
+      if (cold) m.coldSplitDeg = result.splitDeg
       else m.warmSplitDeg = result.splitDeg
     }
-    if (result.tailorsLeftDeg != null) m.tailorsLeftDeg = result.tailorsLeftDeg
-    if (result.tailorsRightDeg != null) m.tailorsRightDeg = result.tailorsRightDeg
+    if (result.tailorsLeftDeg != null) {
+      if (cold) m.tailorsColdLeftDeg = result.tailorsLeftDeg
+      else m.tailorsWarmLeftDeg = result.tailorsLeftDeg
+    }
+    if (result.tailorsRightDeg != null) {
+      if (cold) m.tailorsColdRightDeg = result.tailorsRightDeg
+      else m.tailorsWarmRightDeg = result.tailorsRightDeg
+    }
     void logFlex(m)
   }
 
@@ -183,16 +205,36 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
     setPreparing(true)
   }
 
+  // Start the finished set's rest and move on — or wrap up, on the last step.
+  const advanceFrom = (index: number, doneSet: Set<string>) => {
+    if (index >= N - 1) {
+      finishWith(doneSet)
+      return
+    }
+    restStartRef.current = Date.now()
+    setRest({ seconds: steps[index].restSec, endsAt: Date.now() + steps[index].restSec * 1000 })
+    goToStep(index + 1)
+  }
+
   const completeSetAndAdvance = () => {
     const nextDone = new Set(done).add(step.stepKey)
     setDone(nextDone)
-    if (atLast) {
-      finishWith(nextDone)
-    } else {
-      restStartRef.current = Date.now()
-      setRest({ seconds: step.restSec, endsAt: Date.now() + step.restSec * 1000 })
-      goToStep(safeCurrent + 1)
+    // A photo moment holds the flow on its own screen first: the rest clock only
+    // starts once you're through with the camera.
+    const gate = gateAfterStep(steps, safeCurrent)
+    if (gate && !seenGates.has(gate.id)) {
+      setPhotos({ gate, resumeIndex: safeCurrent })
+      return
     }
+    advanceFrom(safeCurrent, nextDone)
+  }
+
+  // Leave a photo screen (shots taken or skipped) and pick the routine back up.
+  const closePhotos = () => {
+    if (!photos) return
+    setSeenGates((prev) => new Set(prev).add(photos.gate.id))
+    setPhotos(null)
+    if (photos.resumeIndex != null) advanceFrom(photos.resumeIndex, done)
   }
 
   // Shared by the header and the rest screen, so the same actions stay reachable
@@ -219,6 +261,15 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
 
   return (
     <div className="flex min-h-full flex-col gap-3">
+      {/* Same bar, same place, as the rest screen's: how much of the whole
+          routine is still ahead of you, at the top of the screen either way. */}
+      <SessionProgress
+        done={completed}
+        total={N}
+        unit="sets"
+        timeLeftLabel={`${formatDuration(timeLeft)} left`}
+      />
+
       <header className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">{step.exName}</h2>
@@ -228,8 +279,6 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         </div>
         <KebabMenu items={menuItems} />
       </header>
-
-      <SessionProgress done={completed} total={N} />
 
       {/* Flex sets show their rep count live in the rhythm guide, so only the
           core block's target range needs stating up here. */}
@@ -244,7 +293,7 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
           key={step.stepKey}
           tempo={step.tempo}
           reps={step.reps}
-          running={rest == null && !preparing && !paused}
+          running={rest == null && !preparing && !paused && photos == null}
           startRep={rep}
           onRep={setRep}
         />
@@ -276,15 +325,6 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex flex-col gap-2 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur"
         style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
       >
-        {opp && (
-          <button
-            onClick={() => setShowCamera(true)}
-            className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-border bg-surface font-semibold text-neutral-200 active:opacity-80"
-          >
-            <MdPhotoCamera aria-hidden /> {MEASURE_PROMPT[opp].label}
-          </button>
-        )}
-
         <button
           onClick={completeSetAndAdvance}
           className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
@@ -309,19 +349,13 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
           onClose={closeRest}
         />
       )}
-      {preparing && <GetReady seconds={GET_READY_SEC} onDone={() => setPreparing(false)} />}
+      {/* The get-into-position count waits its turn behind a photo screen. */}
+      {preparing && photos == null && (
+        <GetReady seconds={GET_READY_SEC} onDone={() => setPreparing(false)} />
+      )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
-      {showCamera && opp && (
-        <CameraMeasure
-          mode={MEASURE_PROMPT[opp].mode}
-          onClose={() => setShowCamera(false)}
-          onDone={(result) => {
-            logMeasurement(opp, result)
-            setShowCamera(false)
-          }}
-        />
-      )}
+      {photos && <PhotoStep gate={photos.gate} onCapture={logMeasurement} onDone={closePhotos} />}
 
       {showList && (
         // Above the rest overlay (z-50) — reachable from the rest screen's menu.

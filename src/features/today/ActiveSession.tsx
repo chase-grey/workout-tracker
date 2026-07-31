@@ -283,14 +283,21 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
 
   return (
     <div className="flex flex-col gap-3 pb-6">
+      {/* Same bar, same place, as the rest screen's: how much of the whole
+          workout is still ahead of you, at the top of the screen either way. */}
+      <SessionProgress
+        done={totals.done}
+        total={totals.all}
+        unit="sets"
+        timeLeftLabel={`${formatDuration(timeLeft)} left`}
+      />
+
       <header className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">{planned.name}</h2>
         </div>
         <KebabMenu items={menuItems} />
       </header>
-
-      <SessionProgress done={totals.done} total={totals.all} />
 
       <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
         {planned.group} · {planned.sets}×{repRangeLabel(planned)} · rest {restLabel}

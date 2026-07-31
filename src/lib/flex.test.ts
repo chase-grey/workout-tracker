@@ -4,6 +4,7 @@ import {
   flexStats,
   splitSeries,
   tailorsAvgSeries,
+  tailorsSeries,
   type FlexEntry,
 } from './flex'
 
@@ -124,6 +125,31 @@ describe('flexStats', () => {
     expect(s.coldSplit).toEqual({ latest: 84, best: 84 })
     expect(s.warmSplit).toEqual({ latest: 120, best: 120 }) // legacy split is newest warm
   })
+
+  it("tracks cold and warm tailor's independently", () => {
+    const entries: FlexEntry[] = [
+      entry({
+        date: '2026-06-01',
+        tailorsColdLeftDeg: 40,
+        tailorsColdRightDeg: 42,
+        tailorsWarmLeftDeg: 55,
+        tailorsWarmRightDeg: 58,
+      }),
+      entry({ date: '2026-07-01', tailorsLeftDeg: 60, tailorsRightDeg: 61 }), // legacy → warm only
+    ]
+    const s = flexStats(entries, TODAY)
+    expect(s.coldTailorsLeft).toEqual({ latest: 40, best: 40 })
+    expect(s.coldTailorsRight).toEqual({ latest: 42, best: 42 })
+    expect(s.tailorsLeft).toEqual({ latest: 60, best: 60 }) // legacy pair is newest warm
+    expect(s.tailorsRight).toEqual({ latest: 61, best: 61 })
+  })
+
+  it("prefers the tagged warm tailor's reading over the legacy pair on one entry", () => {
+    const entries: FlexEntry[] = [
+      entry({ date: '2026-07-01', tailorsLeftDeg: 50, tailorsWarmLeftDeg: 57 }),
+    ]
+    expect(flexStats(entries, TODAY).tailorsLeft).toEqual({ latest: 57, best: 57 })
+  })
 })
 
 describe('splitSeries', () => {
@@ -141,8 +167,28 @@ describe('splitSeries', () => {
   })
 })
 
+describe('tailorsSeries', () => {
+  it('emits a cold/warm L/R row per date with a reading, sorted ascending', () => {
+    const entries: FlexEntry[] = [
+      entry({
+        date: '2026-07-08',
+        tailorsColdLeftDeg: 44,
+        tailorsColdRightDeg: 46,
+        tailorsWarmLeftDeg: 57,
+        tailorsWarmRightDeg: 59,
+      }),
+      entry({ date: '2026-07-01', tailorsLeftDeg: 40 }), // legacy untagged → warm, cold null
+      entry({ date: '2026-07-05', splitDeg: 155 }), // no tailor's — excluded
+    ]
+    expect(tailorsSeries(entries)).toEqual([
+      { date: '2026-07-01', coldLeft: null, coldRight: null, warmLeft: 40, warmRight: null },
+      { date: '2026-07-08', coldLeft: 44, coldRight: 46, warmLeft: 57, warmRight: 59 },
+    ])
+  })
+})
+
 describe('tailorsAvgSeries', () => {
-  it('averages available L/R values, filters entries with none, and sorts', () => {
+  it('averages available warm L/R values, filters entries with none, and sorts', () => {
     const entries: FlexEntry[] = [
       entry({ date: '2026-07-08', tailorsLeftDeg: 40, tailorsRightDeg: 50 }), // avg 45
       entry({ date: '2026-07-01', tailorsLeftDeg: 30 }), // only left — avg of the one = 30
@@ -154,5 +200,13 @@ describe('tailorsAvgSeries', () => {
       { date: '2026-07-03', value: 60 },
       { date: '2026-07-08', value: 45 },
     ])
+  })
+
+  it("ignores the cold reading and never lets it stand in for warm", () => {
+    const entries: FlexEntry[] = [
+      entry({ date: '2026-07-02', tailorsColdLeftDeg: 40, tailorsColdRightDeg: 42 }),
+      entry({ date: '2026-07-09', tailorsColdLeftDeg: 41, tailorsWarmLeftDeg: 58 }),
+    ]
+    expect(tailorsAvgSeries(entries)).toEqual([{ date: '2026-07-09', value: 58 }])
   })
 })

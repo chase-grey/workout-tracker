@@ -47,6 +47,8 @@ export type StretchState = {
   rep?: number
   /** The rest countdown that was on screen, if any. */
   rest?: RestState | null
+  /** Ids of the photo screens already offered, so a reload doesn't re-ask. */
+  photoGates?: string[]
 }
 
 /**

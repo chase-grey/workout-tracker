@@ -98,36 +98,3 @@ export function buildDeadBugSteps(): CoreSetStep[] {
 export function buildSessionSteps(plan: FlexBlock[]): SessionStep[] {
   return [...buildFlexSteps(plan), ...buildDeadBugSteps()]
 }
-
-/**
- * The one photo measurement (if any) offered at a given step. The camera is only
- * worth pulling out at three moments in the routine:
- *   - `cold-split`: on the very first stretch set, to capture the cold split
- *     before any warming up.
- *   - `tailors`: on the last set of Tailor's Pose, when the hips are as open as
- *     that exercise gets them.
- *   - `warm-split`: on the last stretch set, right before the core block, to
- *     capture the warm split.
- * Returns null on every other step (and on all core steps).
- */
-export type MeasureKind = 'cold-split' | 'tailors' | 'warm-split'
-
-export function measureOpportunity(steps: SessionStep[], index: number): MeasureKind | null {
-  const step = steps[index]
-  if (!step || step.kind !== 'flex') return null
-
-  const flexIdx = steps.flatMap((s, i) => (s.kind === 'flex' ? [i] : []))
-  if (flexIdx.length === 0) return null
-  const first = flexIdx[0]
-  const last = flexIdx[flexIdx.length - 1]
-  const lastTailors = [...flexIdx]
-    .reverse()
-    .find((i) => steps[i].exKey.toLowerCase().includes('tailor'))
-
-  // Order matters: the cold reading owns the opening set even though it's a
-  // tailor's set, and the warm reading owns the closing set.
-  if (index === first) return 'cold-split'
-  if (index === last) return 'warm-split'
-  if (index === lastTailors) return 'tailors'
-  return null
-}

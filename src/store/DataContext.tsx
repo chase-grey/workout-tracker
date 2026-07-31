@@ -71,8 +71,25 @@ export type FlexMeasurement = {
   warmSplitDeg?: number | null
   tailorsLeftDeg?: number | null
   tailorsRightDeg?: number | null
+  tailorsColdLeftDeg?: number | null
+  tailorsColdRightDeg?: number | null
+  tailorsWarmLeftDeg?: number | null
+  tailorsWarmRightDeg?: number | null
   note?: string
 }
+
+/** The angle fields a measurement can carry — one non-null makes it a reading. */
+const FLEX_ANGLE_KEYS = [
+  'splitDeg',
+  'coldSplitDeg',
+  'warmSplitDeg',
+  'tailorsLeftDeg',
+  'tailorsRightDeg',
+  'tailorsColdLeftDeg',
+  'tailorsColdRightDeg',
+  'tailorsWarmLeftDeg',
+  'tailorsWarmRightDeg',
+] as const
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
@@ -389,14 +406,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         warmSplitDeg: m.warmSplitDeg ?? null,
         tailorsLeftDeg: m.tailorsLeftDeg ?? null,
         tailorsRightDeg: m.tailorsRightDeg ?? null,
+        tailorsColdLeftDeg: m.tailorsColdLeftDeg ?? null,
+        tailorsColdRightDeg: m.tailorsColdRightDeg ?? null,
+        tailorsWarmLeftDeg: m.tailorsWarmLeftDeg ?? null,
+        tailorsWarmRightDeg: m.tailorsWarmRightDeg ?? null,
         note: m.note,
       }
-      const isMeasurement =
-        m.splitDeg != null ||
-        m.coldSplitDeg != null ||
-        m.warmSplitDeg != null ||
-        m.tailorsLeftDeg != null ||
-        m.tailorsRightDeg != null
+      const isMeasurement = FLEX_ANGLE_KEYS.some((k) => m[k] != null)
       const prevFlex = storage.loadFlex()
       const nextFlex = dedupeFlexByDate([...prevFlex, entry])
       persistFlex(nextFlex)

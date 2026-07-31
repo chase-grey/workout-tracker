@@ -11,14 +11,16 @@ import {
   YAxis,
 } from 'recharts'
 import { useData } from '../../store/DataContext'
-import { flexStats, splitSeries } from '../../lib/flex'
+import { flexStats, splitSeries, tailorsSeries } from '../../lib/flex'
 import { flexGoalPredictions, type FlexGoal } from '../../lib/flexPredict'
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
-/** Cold split line — a cool blue, against the warm split's green. */
-const SPLIT_COLD = '#38bdf8'
+/** Cold lines run cool — blue for the left/only reading, violet for the right —
+ *  against the warm lines' green and amber. */
+const COLD_A = '#38bdf8'
+const COLD_B = '#a78bfa'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -63,17 +65,7 @@ export function FlexProgress() {
   const splitGoals = predictions.filter((g) => g.kind === 'split')
   const tailorsGoals = predictions.filter((g) => g.kind === 'tailors')
   const split = useMemo(() => splitSeries(flexEntries), [flexEntries])
-  const tailors = useMemo(() => {
-    const m = new Map<string, { date: string; left?: number; right?: number }>()
-    for (const e of flexEntries) {
-      if (e.tailorsLeftDeg == null && e.tailorsRightDeg == null) continue
-      const row = m.get(e.date) ?? { date: e.date }
-      if (e.tailorsLeftDeg != null) row.left = e.tailorsLeftDeg
-      if (e.tailorsRightDeg != null) row.right = e.tailorsRightDeg
-      m.set(e.date, row)
-    }
-    return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
-  }, [flexEntries])
+  const tailors = useMemo(() => tailorsSeries(flexEntries), [flexEntries])
 
   return (
     <div className="flex flex-col gap-3">
@@ -97,7 +89,7 @@ export function FlexProgress() {
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={180} stroke="#6b7280" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="cold" name="cold" stroke={SPLIT_COLD} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="cold" name="cold" stroke={COLD_A} strokeWidth={2} dot={{ r: 2 }} connectNulls />
               <Line type="monotone" dataKey="warm" name="warm" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
@@ -111,8 +103,8 @@ export function FlexProgress() {
 
       <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">tailor's pose</h3>
       <div className="flex gap-2">
-        <Stat value={stats.tailorsLeft.latest != null ? `${stats.tailorsLeft.latest}°` : '—'} label="left" />
-        <Stat value={stats.tailorsRight.latest != null ? `${stats.tailorsRight.latest}°` : '—'} label="right" />
+        <Stat value={stats.tailorsLeft.latest != null ? `${stats.tailorsLeft.latest}°` : '—'} label="warm left" />
+        <Stat value={stats.tailorsRight.latest != null ? `${stats.tailorsRight.latest}°` : '—'} label="warm right" />
         <Stat value="90°" label="goal" />
       </div>
       {tailors.length >= 2 ? (
@@ -129,8 +121,11 @@ export function FlexProgress() {
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={90} stroke="#6b7280" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="left" name="left" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-              <Line type="monotone" dataKey="right" name="right" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              {/* Cold readings are dashed so the warm pair stays the headline. */}
+              <Line type="monotone" dataKey="coldLeft" name="cold L" stroke={COLD_A} strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="coldRight" name="cold R" stroke={COLD_B} strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="warmLeft" name="warm L" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="warmRight" name="warm R" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>

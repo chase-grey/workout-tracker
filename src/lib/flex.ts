@@ -6,8 +6,12 @@ export type FlexEntry = {
   splitDeg: number | null /* legacy/untagged side-split angle; counts as warm */
   coldSplitDeg?: number | null /* side split measured cold, at the start */
   warmSplitDeg?: number | null /* side split measured warm, at the end */
-  tailorsLeftDeg: number | null /* tailor's pose, left */
-  tailorsRightDeg: number | null /* tailor's pose, right */
+  tailorsLeftDeg: number | null /* legacy/untagged tailor's, left; counts as warm */
+  tailorsRightDeg: number | null /* legacy/untagged tailor's, right; counts as warm */
+  tailorsColdLeftDeg?: number | null /* tailor's left measured cold, at the start */
+  tailorsColdRightDeg?: number | null /* tailor's right measured cold, at the start */
+  tailorsWarmLeftDeg?: number | null /* tailor's left measured warm, after the last set */
+  tailorsWarmRightDeg?: number | null /* tailor's right measured warm, after the last set */
   note?: string
 }
 
@@ -18,8 +22,11 @@ const ANGLE_FIELDS = [
   'warmSplitDeg',
   'tailorsLeftDeg',
   'tailorsRightDeg',
+  'tailorsColdLeftDeg',
+  'tailorsColdRightDeg',
+  'tailorsWarmLeftDeg',
+  'tailorsWarmRightDeg',
 ] as const
-type AngleField = (typeof ANGLE_FIELDS)[number]
 
 /**
  * The warm split for an entry: the warm reading when present, otherwise the
@@ -29,6 +36,18 @@ export const warmSplitOf = (e: FlexEntry): number | null => e.warmSplitDeg ?? e.
 
 /** The cold split for an entry, or null if none was captured. */
 export const coldSplitOf = (e: FlexEntry): number | null => e.coldSplitDeg ?? null
+
+/**
+ * Tailor's readings follow the same cold/warm split as the side split: the
+ * tagged warm reading wins, falling back to the legacy untagged pair (older
+ * data and manual logs count as warm). Cold has no legacy fallback.
+ */
+export const warmTailorsLeftOf = (e: FlexEntry): number | null =>
+  e.tailorsWarmLeftDeg ?? e.tailorsLeftDeg ?? null
+export const warmTailorsRightOf = (e: FlexEntry): number | null =>
+  e.tailorsWarmRightDeg ?? e.tailorsRightDeg ?? null
+export const coldTailorsLeftOf = (e: FlexEntry): number | null => e.tailorsColdLeftDeg ?? null
+export const coldTailorsRightOf = (e: FlexEntry): number | null => e.tailorsColdRightDeg ?? null
 
 /**
  * Collapse to one merged entry per date. For each angle field, keep the latest
@@ -48,6 +67,10 @@ export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
         warmSplitDeg: e.warmSplitDeg ?? null,
         tailorsLeftDeg: e.tailorsLeftDeg,
         tailorsRightDeg: e.tailorsRightDeg,
+        tailorsColdLeftDeg: e.tailorsColdLeftDeg ?? null,
+        tailorsColdRightDeg: e.tailorsColdRightDeg ?? null,
+        tailorsWarmLeftDeg: e.tailorsWarmLeftDeg ?? null,
+        tailorsWarmRightDeg: e.tailorsWarmRightDeg ?? null,
         ...(e.note != null && e.note !== '' ? { note: e.note } : {}),
       })
       continue
@@ -67,6 +90,9 @@ export type FlexStats = {
   weeklyGoal: number /* default 2 */
   coldSplit: MetricStats
   warmSplit: MetricStats
+  coldTailorsLeft: MetricStats
+  coldTailorsRight: MetricStats
+  /** Warm tailor's readings — the headline numbers, as with the split. */
   tailorsLeft: MetricStats
   tailorsRight: MetricStats
 }
@@ -88,9 +114,6 @@ function metricStats(entries: FlexEntry[], value: (e: FlexEntry) => number | nul
   return { latest, best }
 }
 
-/** Selector for a plain angle field, tolerating older entries missing the key. */
-const field = (f: AngleField) => (e: FlexEntry) => e[f] ?? null
-
 export function flexStats(
   entries: FlexEntry[],
   today: Date = new Date(),
@@ -109,8 +132,10 @@ export function flexStats(
     weeklyGoal,
     coldSplit: metricStats(entries, coldSplitOf),
     warmSplit: metricStats(entries, warmSplitOf),
-    tailorsLeft: metricStats(entries, field('tailorsLeftDeg')),
-    tailorsRight: metricStats(entries, field('tailorsRightDeg')),
+    coldTailorsLeft: metricStats(entries, coldTailorsLeftOf),
+    coldTailorsRight: metricStats(entries, coldTailorsRightOf),
+    tailorsLeft: metricStats(entries, warmTailorsLeftOf),
+    tailorsRight: metricStats(entries, warmTailorsRightOf),
   }
 }
 
@@ -143,9 +168,41 @@ export function warmSplitSeries(entries: FlexEntry[]): { date: string; value: nu
   return out.sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
+/** One tailor's chart row per date, carrying both cold and warm left/right. */
+export type TailorsPoint = {
+  date: string
+  coldLeft: number | null
+  coldRight: number | null
+  warmLeft: number | null
+  warmRight: number | null
+}
+
 /**
- * For each entry with at least one tailor's value, the average of the available
- * left/right values. Sorted ascending by date.
+ * Cold + warm tailor's readings per date, for the tailor's chart. Entries with
+ * no reading at all are dropped. Sorted ascending by date.
+ */
+export function tailorsSeries(entries: FlexEntry[]): TailorsPoint[] {
+  const out: TailorsPoint[] = []
+  for (const e of entries) {
+    const row = {
+      date: e.date,
+      coldLeft: coldTailorsLeftOf(e),
+      coldRight: coldTailorsRightOf(e),
+      warmLeft: warmTailorsLeftOf(e),
+      warmRight: warmTailorsRightOf(e),
+    }
+    if (row.coldLeft == null && row.coldRight == null && row.warmLeft == null && row.warmRight == null) {
+      continue
+    }
+    out.push(row)
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
+ * For each entry with at least one warm tailor's value, the average of the
+ * available left/right values — the series goal projections run on. Sorted
+ * ascending by date.
  */
 export function tailorsAvgSeries(
   entries: FlexEntry[],
@@ -153,8 +210,10 @@ export function tailorsAvgSeries(
   const out: { date: string; value: number }[] = []
   for (const e of entries) {
     const vals: number[] = []
-    if (e.tailorsLeftDeg != null) vals.push(e.tailorsLeftDeg)
-    if (e.tailorsRightDeg != null) vals.push(e.tailorsRightDeg)
+    const left = warmTailorsLeftOf(e)
+    const right = warmTailorsRightOf(e)
+    if (left != null) vals.push(left)
+    if (right != null) vals.push(right)
     if (vals.length === 0) continue
     out.push({
       date: e.date,
