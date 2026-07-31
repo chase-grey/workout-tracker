@@ -19,12 +19,13 @@ function pickVariant(): Variant {
 /** The rest animation itself, in one of a few restful shapes. */
 function RestShape({ variant }: { variant: Variant }) {
   // Bright green — the resting animation is meant to call attention, matching the
-  // rhythm guide. Dark green (accent) is reserved for solid UI like the buttons.
-  const fill = 'bg-accent-bright/15'
-  const ring = 'ring-accent-bright/30'
-  const border = 'border-accent-bright/30'
+  // rhythm guide, so it reads as vividly green rather than a faint wash. Dark green
+  // (accent) is reserved for the timer and bar UI.
+  const fill = 'bg-accent-bright/30'
+  const ring = 'ring-accent-bright/60'
+  const border = 'border-accent-bright/60'
   // Small elements need more opacity than the big washes to stay readable.
-  const dot = 'bg-accent-bright/35'
+  const dot = 'bg-accent-bright/80'
   switch (variant) {
     case 'tide':
       return (
@@ -94,15 +95,16 @@ function RestShape({ variant }: { variant: Variant }) {
  * come back and it reflects the real elapsed time. Counts into overtime until
  * dismissed. No system notifications by design.
  *
- * The rest animation is the timer: a restful shape grows from almost nothing at
- * the start of the rest to filling the screen when rest is up — a calm, glanceable
- * cue for how much rest is left — and the numeric countdown sits at the bottom of
- * the screen. Because the growth is derived from the wall-clock end time (not a CSS
- * loop), it stays in sync after backgrounding or a reload. Optional `upNext` tells the resting
+ * The rest animation is the timer: a restful shape fills the screen at the start
+ * of the rest and drains to almost nothing as time runs out — like sand emptying
+ * from a timer, a calm, glanceable cue for how much rest is left — while the numeric
+ * countdown (in dark green) sits at the bottom of the screen. Because the scale is
+ * derived from the wall-clock end time (not a CSS loop), it stays in sync after
+ * backgrounding or a reload. Optional `upNext` tells the resting
  * user what's coming; `progress` + `timeLeftLabel` (rendered verbatim, so the
  * caller phrases it — "~5 min left in workout") show the same session progress
- * bar as the session header, so rest says how far in you are and not just how
- * long is left. `onAddSet` surfaces an "Add another set" action during an
+ * bar as the session header — pinned to the top of the rest screen — so rest says
+ * how far in you are and not just how long is left. `onAddSet` surfaces an "Add another set" action during an
  * exercise's final rest, and `menu` keeps the session's overflow actions reachable
  * without ending rest first.
  */
@@ -162,37 +164,52 @@ export function RestTimer({
   const over = remaining < 0
   const abs = Math.abs(remaining)
   const label = `${over ? '+' : ''}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, '0')}`
-  // How much of the rest has elapsed (0 at the start, 1 when rest is up). The
-  // shape scales with this, so the animation itself reads as the timer.
-  const elapsed = seconds > 0 ? 1 - Math.max(0, Math.min(1, remaining / seconds)) : 1
+  // How much of the rest is still left (1 at the start, 0 when rest is up). The
+  // shape scales with this — full at the start and draining to almost nothing as
+  // time runs out, like a sand timer — so the animation itself reads as the timer.
+  const remainingFraction = seconds > 0 ? Math.max(0, Math.min(1, remaining / seconds)) : 0
 
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center bg-black px-6"
       onClick={onClose}
     >
-      {(upNext || menu) && (
-        // One top row: the menu sits at the right with "up next" still centered
-        // between the edges, so a long exercise name can't run underneath it.
-        <div className="flex w-full items-start gap-2 pt-[calc(0.75rem+env(safe-area-inset-top))]">
-          <div className="w-11 shrink-0" aria-hidden />
-          <p className="flex-1 pt-2.5 text-center text-base font-semibold text-neutral-200">{upNext}</p>
-          {/* Tapping the overlay ends rest, so the menu keeps its taps to itself. */}
-          <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
-            {menu && <KebabMenu items={menu} />}
+      {/* Top region: the "how far through the workout" bar sits at the very top,
+          with the up-next/menu row beneath it. */}
+      <div className="w-full pt-[calc(0.75rem+env(safe-area-inset-top))]">
+        {progress && (
+          <SessionProgress
+            done={progress.done}
+            total={progress.total}
+            unit={progress.unit ?? 'sets'}
+            timeLeftLabel={timeLeftLabel}
+            className="w-full"
+          />
+        )}
+        {(upNext || menu) && (
+          // One row: the menu sits at the right with "up next" still centered
+          // between the edges, so a long exercise name can't run underneath it.
+          <div className="mt-3 flex w-full items-start gap-2">
+            <div className="w-11 shrink-0" aria-hidden />
+            <p className="flex-1 pt-2.5 text-center text-base font-semibold text-neutral-200">{upNext}</p>
+            {/* Tapping the overlay ends rest, so the menu keeps its taps to itself. */}
+            <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {menu && <KebabMenu items={menu} />}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="flex flex-1 items-center justify-center">
         <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
-          {/* The animation is the timer: it grows from almost nothing at the start
-              of the rest to filling the space when rest is up. The variant keeps its
-              own gentle loop for life; this scale carries the countdown. */}
+          {/* The animation is the timer: it fills the space at the start of the
+              rest and drains to almost nothing as time runs out, like sand emptying
+              from a timer. The variant keeps its own gentle loop for life; this
+              scale carries the countdown. */}
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
-              transform: `scale(${0.12 + 0.88 * elapsed})`,
+              transform: `scale(${0.12 + 0.88 * remainingFraction})`,
               transition: 'transform 250ms linear',
             }}
           >
@@ -213,19 +230,15 @@ export function RestTimer({
             add another set
           </button>
         )}
-        <div className={`font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-white'}`}>
+        {/* Dark green for the timer UI; overtime shifts to the brighter green so
+            it still reads as "past due" against the dark-green baseline. */}
+        <div className={`font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-accent'}`}>
           {label}
         </div>
-        {progress ? (
-          <SessionProgress
-            done={progress.done}
-            total={progress.total}
-            unit={progress.unit ?? 'sets'}
-            timeLeftLabel={timeLeftLabel}
-            className="w-[min(78vw,20rem)]"
-          />
-        ) : (
-          timeLeftLabel && <p className="text-sm font-medium text-neutral-400">{timeLeftLabel}</p>
+        {/* The session progress bar now lives at the top; when there's no bar to
+            show, fall back to the bare time-left line here. */}
+        {!progress && timeLeftLabel && (
+          <p className="text-sm font-medium text-neutral-400">{timeLeftLabel}</p>
         )}
       </div>
     </div>
