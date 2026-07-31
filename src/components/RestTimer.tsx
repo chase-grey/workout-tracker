@@ -171,19 +171,16 @@ export function RestTimer({
       className="fixed inset-0 z-50 flex flex-col items-center bg-black px-6"
       onClick={onClose}
     >
-      {menu && (
-        // Tapping the overlay ends rest, so the menu has to keep its taps to itself.
-        <div
-          className="absolute right-2 top-[calc(0.75rem+env(safe-area-inset-top))]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <KebabMenu items={menu} />
-        </div>
-      )}
-
-      {upNext && (
-        <div className="pt-[calc(1.5rem+env(safe-area-inset-top))] text-center">
-          <p className="text-base font-semibold text-neutral-200">{upNext}</p>
+      {(upNext || menu) && (
+        // One top row: the menu sits at the right with "up next" still centered
+        // between the edges, so a long exercise name can't run underneath it.
+        <div className="flex w-full items-start gap-2 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+          <div className="w-11 shrink-0" aria-hidden />
+          <p className="flex-1 pt-2.5 text-center text-base font-semibold text-neutral-200">{upNext}</p>
+          {/* Tapping the overlay ends rest, so the menu keeps its taps to itself. */}
+          <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
+            {menu && <KebabMenu items={menu} />}
+          </div>
         </div>
       )}
 
