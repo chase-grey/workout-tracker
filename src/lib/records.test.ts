@@ -37,7 +37,7 @@ describe('newRecords — weekly session counts', () => {
     const before = snap({ workouts: [...prior, ...thisWeek] })
     const after = snap({ workouts: [...prior, ...thisWeek, session('2026-07-22')] })
     const recs = newRecords(before, after, TODAY)
-    expect(recs.some((r) => r.title === 'Most workouts in a week')).toBe(true)
+    expect(recs.some((r) => r.title === 'most workouts in a week')).toBe(true)
   })
 
   it('does not cheer when there is no prior week to beat', () => {
@@ -51,7 +51,7 @@ describe('newRecords — weekly session counts', () => {
     const cross = snap({ workouts: [...prior, session('2026-07-20'), session('2026-07-21'), session('2026-07-22')] })
     // before already leads (3 > 2), so adding a 4th is not a fresh crossing
     const after4 = snap({ workouts: [...cross.workouts, session('2026-07-23')] })
-    expect(newRecords(cross, after4, TODAY).some((r) => r.title === 'Most workouts in a week')).toBe(false)
+    expect(newRecords(cross, after4, TODAY).some((r) => r.title === 'most workouts in a week')).toBe(false)
   })
 
   it('distinguishes Push from Pull records', () => {
@@ -59,15 +59,15 @@ describe('newRecords — weekly session counts', () => {
     const before = snap({ workouts: [...prior, session('2026-07-20', 'pull')] })
     const after = snap({ workouts: [...prior, session('2026-07-20', 'pull'), session('2026-07-21', 'pull')] })
     const recs = newRecords(before, after, TODAY)
-    expect(recs.some((r) => r.title === 'Most Pull sessions in a week')).toBe(true)
-    expect(recs.some((r) => r.title === 'Most Push sessions in a week')).toBe(false)
+    expect(recs.some((r) => r.title === 'most pull sessions in a week')).toBe(true)
+    expect(recs.some((r) => r.title === 'most push sessions in a week')).toBe(false)
   })
 
   it('cheers a most-stretches-in-a-week record', () => {
     const before = snap({ flexDates: ['2026-07-06', '2026-07-20'] })
     const after = snap({ flexDates: ['2026-07-06', '2026-07-20', '2026-07-21'] })
     const recs = newRecords(before, after, TODAY)
-    expect(recs.some((r) => r.title === 'Most stretch sessions in a week')).toBe(true)
+    expect(recs.some((r) => r.title === 'most stretch sessions in a week')).toBe(true)
   })
 })
 
@@ -76,13 +76,13 @@ describe('newRecords — calories', () => {
     const before = snap({ calorieEntries: [cal('2026-07-10', 4200), cal('2026-07-21', 3000)] })
     const after = snap({ calorieEntries: [cal('2026-07-10', 4200), cal('2026-07-21', 4500)] })
     const recs = newRecords(before, after, TODAY)
-    expect(recs.some((r) => r.title === 'Biggest eating day yet')).toBe(true)
+    expect(recs.some((r) => r.title === 'biggest eating day yet')).toBe(true)
   })
 
   it('does not re-fire the daily record once already ahead', () => {
     const before = snap({ calorieEntries: [cal('2026-07-10', 4200), cal('2026-07-21', 4500)] })
     const after = snap({ calorieEntries: [cal('2026-07-10', 4200), cal('2026-07-21', 5000)] })
-    expect(newRecords(before, after, TODAY).some((r) => r.title === 'Biggest eating day yet')).toBe(false)
+    expect(newRecords(before, after, TODAY).some((r) => r.title === 'biggest eating day yet')).toBe(false)
   })
 
   it('cheers a biggest week of fueling', () => {
@@ -91,7 +91,7 @@ describe('newRecords — calories', () => {
     const before = snap({ calorieEntries: [...prior, cal('2026-07-20', 4000), cal('2026-07-21', 3500)] })
     const after = snap({ calorieEntries: [...prior, cal('2026-07-20', 4000), cal('2026-07-21', 4500)] })
     const recs = newRecords(before, after, TODAY)
-    expect(recs.some((r) => r.title === 'Biggest week of fueling')).toBe(true)
+    expect(recs.some((r) => r.title === 'biggest week of fueling')).toBe(true)
   })
 
   it('cheers a new longest calorie streak on the crossing day', () => {
@@ -100,7 +100,7 @@ describe('newRecords — calories', () => {
     const before = snap({ calorieEntries: [...base, cal('2026-07-21', 3000)] })
     const after = snap({ calorieEntries: [...base, cal('2026-07-21', 4100)] })
     const recs = newRecords(before, after, TODAY)
-    expect(recs.some((r) => r.title === 'Longest calorie streak yet')).toBe(true)
+    expect(recs.some((r) => r.title === 'longest calorie streak yet')).toBe(true)
   })
 })
 

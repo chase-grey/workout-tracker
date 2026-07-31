@@ -53,7 +53,7 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
     const rows = buildWorkoutRows(result.exercises, keyByRawName)
     const bws = buildBodyWeightEntries(result.bodyWeights)
     await importData(rows, bws)
-    setDone(`Imported ${rows.length} sets and ${bws.length} weigh-ins.`)
+    setDone(`imported ${rows.length} sets and ${bws.length} weigh-ins.`)
     setResult(null)
     setText('')
   }
@@ -61,9 +61,9 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-lg font-bold">Import history</h2>
+        <h2 className="text-lg font-bold">import history</h2>
         <button onClick={onClose} className="min-h-[44px] px-2 text-neutral-400">
-          Close
+          close
         </button>
       </header>
 
@@ -75,7 +75,7 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
         {!result ? (
           <>
             <p className="mb-2 text-sm text-neutral-400">
-              Paste your exercise and body-weight tables. Config/superset tables and empty tables are
+              paste your exercise and body-weight tables. config/superset tables and empty tables are
               ignored automatically.
             </p>
             <textarea
@@ -90,7 +90,7 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
               disabled={!text.trim()}
               className="mt-3 min-h-[48px] w-full rounded-2xl bg-accent font-bold text-black disabled:opacity-30"
             >
-              Parse
+              parse
             </button>
           </>
         ) : (
@@ -121,13 +121,13 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
                       onChange={(ev) => setDecisions((d) => ({ ...d, [e.rawName]: ev.target.value }))}
                       className="min-h-[44px] w-full rounded-lg bg-surface-2 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                     >
-                      <option value={NEW}>Import as new: “{e.match.name || e.rawName}”</option>
+                      <option value={NEW}>import as new: “{e.match.name || e.rawName}”</option>
                       {ALL_EXERCISES.map((x) => (
                         <option key={x.key} value={x.key}>
                           {x.name}
                         </option>
                       ))}
-                      <option value={SKIP}>Skip this exercise</option>
+                      <option value={SKIP}>skip this exercise</option>
                     </select>
                     {warnCount > 0 && (
                       <p className="mt-1 text-xs text-accent">
@@ -145,13 +145,13 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
                 onClick={() => setResult(null)}
                 className="min-h-[48px] flex-1 rounded-2xl bg-surface font-medium"
               >
-                Back
+                back
               </button>
               <button
                 onClick={confirm}
                 className="min-h-[48px] flex-[2] rounded-2xl bg-accent font-bold text-black"
               >
-                Confirm import
+                confirm import
               </button>
             </div>
           </>

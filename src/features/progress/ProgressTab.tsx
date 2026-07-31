@@ -36,16 +36,16 @@ import {
 const BENCH_COMBO = '__bench__'
 
 const RANGES: { label: string; months: number | null }[] = [
-  { label: '3M', months: 3 },
-  { label: '6M', months: 6 },
-  { label: 'All', months: null },
+  { label: '3m', months: 3 },
+  { label: '6m', months: 6 },
+  { label: 'all', months: null },
 ]
 
 const METRICS: { label: string; value: Metric }[] = [
-  { label: 'Est. 1RM', value: '1rm' },
-  { label: 'Top set', value: 'weight' },
-  { label: 'Volume', value: 'volume' },
-  { label: 'Reps', value: 'reps' },
+  { label: 'est. 1rm', value: '1rm' },
+  { label: 'top set', value: 'weight' },
+  { label: 'volume', value: 'volume' },
+  { label: 'reps', value: 'reps' },
 ]
 
 function Pills<T extends string | number | null>({
@@ -101,7 +101,7 @@ function Chart({
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
-        No data in this range
+        no data in this range
       </div>
     )
   }
@@ -142,7 +142,7 @@ function Chart({
                 yAxisId="cal"
                 type="monotone"
                 dataKey="cal"
-                name="Cal surplus"
+                name="cal surplus"
                 stroke={LINE_SECONDARY}
                 strokeWidth={2}
                 dot={false}
@@ -177,7 +177,7 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
-        No bench data in this range
+        no bench data in this range
       </div>
     )
   }
@@ -195,8 +195,8 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
             formatter={(v, n) => [`${v} ${unit}`, n]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="flat" name="Flat" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-          <Line type="monotone" dataKey="incline" name="Incline" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          <Line type="monotone" dataKey="flat" name="flat" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          <Line type="monotone" dataKey="incline" name="incline" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -204,8 +204,8 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
 }
 
 const BODY_METRICS: { label: string; value: 'bf' | 'waist' }[] = [
-  { label: 'Body fat %', value: 'bf' },
-  { label: 'Waist', value: 'waist' },
+  { label: 'body fat %', value: 'bf' },
+  { label: 'waist', value: 'waist' },
 ]
 
 export function ProgressTab() {
@@ -267,7 +267,7 @@ export function ProgressTab() {
   )
 
   const exerciseOptions = useMemo(
-    () => [{ key: BENCH_COMBO, name: 'Bench press (flat + incline)' }, ...availableExercises(workouts)],
+    () => [{ key: BENCH_COMBO, name: 'bench press (flat + incline)' }, ...availableExercises(workouts)],
     [workouts],
   )
 
@@ -297,7 +297,7 @@ export function ProgressTab() {
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      <h2 className="text-xl font-bold">Progress</h2>
+      <h2 className="text-xl font-bold">progress</h2>
 
       {(showMonthReview || showYearReview) && (
         <div className="flex gap-2">
@@ -306,7 +306,7 @@ export function ProgressTab() {
               onClick={() => openRecap('month')}
               className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
             >
-              Month in review
+              month in review
             </button>
           )}
           {showYearReview && (
@@ -314,7 +314,7 @@ export function ProgressTab() {
               onClick={() => openRecap('year')}
               className="min-h-[44px] flex-1 rounded-xl bg-surface text-sm font-semibold active:bg-surface-2"
             >
-              Year in review
+              year in review
             </button>
           )}
         </div>
@@ -323,21 +323,21 @@ export function ProgressTab() {
       <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />
 
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
-          Body weight{latestWeight ? ` · ${latestWeight.weightLbs} lbs` : ''}
+        <h3 className="text-sm font-semibold tracking-wider text-neutral-500">
+          body weight{latestWeight ? ` · ${latestWeight.weightLbs} lbs` : ''}
         </h3>
         <button
           onClick={() => setShowWeight(true)}
           className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
         >
-          Log weight
+          log weight
         </button>
       </div>
-      <Chart data={weightSeries} unit="lbs" label="Weight" calories={calorieSurplus} />
+      <Chart data={weightSeries} unit="lbs" label="weight" calories={calorieSurplus} />
 
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
-          Body fat
+        <h3 className="text-sm font-semibold tracking-wider text-neutral-500">
+          body fat
           {latestBf != null
             ? ` · ${latestBf}%`
             : lastMeasure?.waistIn != null
@@ -348,19 +348,19 @@ export function ProgressTab() {
           onClick={() => setShowMeasure(true)}
           className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
         >
-          Log measurement
+          log measurement
         </button>
       </div>
       <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
       {bodyMetric === 'bf' && heightIn === 0 ? (
         <div className="flex h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          Set your height in Settings to estimate body fat % from your measurements.
+          set your height in settings to estimate body fat % from your measurements.
         </div>
       ) : (
         <Chart
           data={bodySeries}
           unit={bodyMetric === 'bf' ? '%' : 'in'}
-          label={bodyMetric === 'bf' ? 'Body fat' : 'Waist'}
+          label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
           calories={calorieSurplus}
         />
       )}
@@ -369,7 +369,7 @@ export function ProgressTab() {
 
       <MuscleAvatar />
 
-      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">Lifts</h3>
+      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
       <select
         value={exercise}
         onChange={(e) => setExercise(e.target.value)}

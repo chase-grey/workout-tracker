@@ -20,7 +20,7 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
       >
-        <h2 className="mb-4 text-lg font-bold">Log body weight</h2>
+        <h2 className="mb-4 text-lg font-bold">log body weight</h2>
         <div className="flex items-center gap-2">
           <input
             autoFocus
@@ -38,7 +38,7 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
           disabled={!valid}
           className="mt-4 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black disabled:opacity-30"
         >
-          Save
+          save
         </button>
       </div>
     </div>

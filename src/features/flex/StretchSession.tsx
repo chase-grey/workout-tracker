@@ -2,15 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdCheckCircle, MdChevronRight, MdPhotoCamera, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
+import { SessionProgress } from '../../components/SessionProgress'
 import { GetReady } from '../../components/GetReady'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
-import { KebabMenu } from '../../components/KebabMenu'
+import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { MeasureSheet } from './MeasureSheet'
 import { CameraMeasure } from './CameraMeasure'
 import { formatDuration, remainingSecs } from '../../lib/estimate'
-import { buildSessionSteps, type CoreSetStep } from '../../lib/flexSteps'
-import { type MeasureMode } from '../../lib/measure'
+import { buildSessionSteps, measureOpportunity, type CoreSetStep, type MeasureKind } from '../../lib/flexSteps'
+import { type MeasureMode, type MeasureResult } from '../../lib/measure'
+import { type FlexMeasurement } from '../../store/DataContext'
 import { canResumeRest } from '../../lib/rest'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
@@ -22,18 +24,11 @@ const SEC_PER_REP = 5
 /** Seconds to get into position at the start and after each rest, before the pace starts. */
 const GET_READY_SEC = 5
 
-/** Which angle a stretch's photo measurement defaults to (user can switch). */
-const measureModeFor = (exKey: string): MeasureMode =>
-  exKey.toLowerCase().includes('tailor') ? 'tailors' : 'split'
-
-/**
- * Only tailor's pose and horse squats have a meaningful camera-measurable angle
- * (tailor's angle / straddle split). The pancake hang has none, so we hide the
- * "Measure with camera" button there.
- */
-const canMeasureFor = (exKey: string): boolean => {
-  const k = exKey.toLowerCase()
-  return k.includes('tailor') || k.includes('horse')
+/** The button label and camera mode for each of the three measurement moments. */
+const MEASURE_PROMPT: Record<MeasureKind, { label: string; mode: MeasureMode }> = {
+  'cold-split': { label: 'measure cold split', mode: 'split' },
+  tailors: { label: "measure tailor's angle", mode: 'tailors' },
+  'warm-split': { label: 'measure warm split', mode: 'split' },
 }
 
 /**
@@ -41,7 +36,7 @@ const canMeasureFor = (exKey: string): boolean => {
  * tempo rhythm animation) followed by a dead-bug core block whose reps are
  * logged as workout rows. Finishing counts as a stretch/flex day.
  */
-export function StretchSession({ onClose }: { onClose: () => void }) {
+export function StretchSession({ onClose, onMinimize }: { onClose: () => void; onMinimize: () => void }) {
   const { flexPlan, workouts, logFlex, logCore, durations, logSessionDuration } = useData()
   // The whole flow resumes from this snapshot, read once on mount: an app switch
   // or accidental refresh drops you back where you were, not at the top.
@@ -132,16 +127,16 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
       .map((s) => coreRepsFor(s.round))
     void logCore(reps)
-    void logFlex({ note: 'Stretch + Core' })
+    void logFlex({ note: 'stretch + core' })
     onClose()
   }
 
   if (N === 0) {
     return (
       <div className="flex flex-col gap-4 pb-24 pt-16 text-center">
-        <p className="text-neutral-500">No stretches in your routine. Add some in Settings → Edit stretch routine.</p>
+        <p className="text-neutral-500">no stretches in your routine. add some in settings → edit stretch routine.</p>
         <button onClick={onClose} className="min-h-[44px] rounded-xl bg-surface font-medium">
-          Back
+          back
         </button>
       </div>
     )
@@ -149,6 +144,22 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
 
   const step = steps[safeCurrent]
   const atLast = safeCurrent >= N - 1
+  // The camera is offered only at three points: cold split at the start, tailor's
+  // angle on its last set, and warm split right before the core block.
+  const opp = measureOpportunity(steps, safeCurrent)
+
+  // Route a captured angle into the right field. If the user switched the camera
+  // to a different pose than the moment implied, the present fields still win.
+  const logMeasurement = (kind: MeasureKind, result: MeasureResult) => {
+    const m: FlexMeasurement = { note: 'measurement' }
+    if (result.splitDeg != null) {
+      if (kind === 'cold-split') m.coldSplitDeg = result.splitDeg
+      else m.warmSplitDeg = result.splitDeg
+    }
+    if (result.tailorsLeftDeg != null) m.tailorsLeftDeg = result.tailorsLeftDeg
+    if (result.tailorsRightDeg != null) m.tailorsRightDeg = result.tailorsRightDeg
+    void logFlex(m)
+  }
 
   const toggleDone = (key: string) =>
     setDone((prev) => {
@@ -164,6 +175,14 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     setRep(1)
   }
 
+  // Bank the rest slice just spent, then hand the screen to the get-ready count.
+  const closeRest = () => {
+    if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
+    restStartRef.current = 0
+    setRest(null)
+    setPreparing(true)
+  }
+
   const completeSetAndAdvance = () => {
     const nextDone = new Set(done).add(step.stepKey)
     setDone(nextDone)
@@ -176,8 +195,30 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Shared by the header and the rest screen, so the same actions stay reachable
+  // while resting instead of forcing you to end rest to get at them.
+  const menuItems: MenuItem[] = [
+    { label: 'back to app (keep going)', onClick: onMinimize },
+    { label: 'pause routine', onClick: () => setPaused(true) },
+    { label: 'log measurement', onClick: () => setShowMeasure(true) },
+    { label: 'routine checklist', onClick: () => setShowList(true) },
+    {
+      label: 'skip logging details (mark done)',
+      onClick: () => {
+        recordDuration()
+        void logFlex({ note: 'stretch + core' })
+        onClose()
+      },
+    },
+    {
+      label: 'finish & log session',
+      onClick: () => finishWith(done),
+    },
+    { label: 'exit without logging', danger: true, onClick: onClose },
+  ]
+
   return (
-    <div className="flex flex-col gap-3 pb-6">
+    <div className="flex min-h-full flex-col gap-3">
       <header className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">{step.exName}</h2>
@@ -185,35 +226,18 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
             set {step.round + 1} of {step.maxSets}
           </p>
         </div>
-        <KebabMenu
-          items={[
-            { label: 'Pause routine', onClick: () => setPaused(true) },
-            { label: 'Log measurement', onClick: () => setShowMeasure(true) },
-            { label: 'Routine checklist', onClick: () => setShowList(true) },
-            {
-              label: 'Skip logging details (mark done)',
-              onClick: () => {
-                recordDuration()
-                void logFlex({ note: 'Stretch + Core' })
-                onClose()
-              },
-            },
-            {
-              label: 'Finish & log session',
-              onClick: () => finishWith(done),
-            },
-            { label: 'Exit without logging', danger: true, onClick: onClose },
-          ]}
-        />
+        <KebabMenu items={menuItems} />
       </header>
 
-      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-        <div className="h-full bg-accent transition-all" style={{ width: `${(completed / N) * 100}%` }} />
-      </div>
+      <SessionProgress done={completed} total={N} />
 
-      <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        {step.kind === 'flex' ? `${step.reps} reps` : `${repRangeLabel(step)} reps`}
-      </p>
+      {/* Flex sets show their rep count live in the rhythm guide, so only the
+          core block's target range needs stating up here. */}
+      {step.kind === 'core' && (
+        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
+          {repRangeLabel(step)} reps
+        </p>
+      )}
 
       {step.kind === 'flex' ? (
         <RhythmGuide
@@ -228,10 +252,10 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
           <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
             <MdTrackChanges aria-hidden />
-            Target {coreTarget} reps
+            target {coreTarget} reps
           </p>
           <label className="mx-auto flex flex-col items-center gap-1">
-            <span className="text-xs uppercase tracking-wide text-neutral-500">Reps</span>
+            <span className="text-xs tracking-wide text-neutral-500">reps</span>
             <input
               type="number"
               inputMode="numeric"
@@ -246,64 +270,69 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      <button
-        onClick={completeSetAndAdvance}
-        className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+      {/* Pinned to the bottom of the screen: thumb-reachable mid-stretch, and it
+          stays put as the guide above it changes size from set to set. */}
+      <div
+        className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex flex-col gap-2 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur"
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
       >
-        {atLast ? (
-          'Finish & log session'
-        ) : (
-          <>
-            done <MdChevronRight className="text-2xl" aria-hidden />
-          </>
+        {opp && (
+          <button
+            onClick={() => setShowCamera(true)}
+            className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-border bg-surface font-semibold text-neutral-200 active:opacity-80"
+          >
+            <MdPhotoCamera aria-hidden /> {MEASURE_PROMPT[opp].label}
+          </button>
         )}
-      </button>
 
-      {step.kind === 'flex' && canMeasureFor(step.exKey) && (
         <button
-          onClick={() => setShowCamera(true)}
-          className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-border bg-surface font-semibold text-neutral-200 active:opacity-80"
+          onClick={completeSetAndAdvance}
+          className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
         >
-          <MdPhotoCamera aria-hidden /> Measure with camera
+          {atLast ? (
+            'finish & log session'
+          ) : (
+            <>
+              done <MdChevronRight className="text-2xl" aria-hidden />
+            </>
+          )}
         </button>
-      )}
+      </div>
 
       {rest != null && (
         <RestTimer
           seconds={rest.seconds}
           endsAt={rest.endsAt}
+          menu={menuItems}
+          progress={{ done: completed, total: N, unit: 'sets' }}
           timeLeftLabel={`${formatDuration(timeLeft)} left`}
-          onClose={() => {
-            if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
-            restStartRef.current = 0
-            setRest(null)
-            setPreparing(true)
-          }}
+          onClose={closeRest}
         />
       )}
       {preparing && <GetReady seconds={GET_READY_SEC} onDone={() => setPreparing(false)} />}
-      {paused && <PauseOverlay label="Routine paused" onResume={() => setPaused(false)} />}
+      {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
-      {showCamera && step.kind === 'flex' && (
+      {showCamera && opp && (
         <CameraMeasure
-          mode={measureModeFor(step.exKey)}
+          mode={MEASURE_PROMPT[opp].mode}
           onClose={() => setShowCamera(false)}
           onDone={(result) => {
-            void logFlex({ ...result, note: 'measurement' })
+            logMeasurement(opp, result)
             setShowCamera(false)
           }}
         />
       )}
 
       {showList && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={() => setShowList(false)}>
+        // Above the rest overlay (z-50) — reachable from the rest screen's menu.
+        <div className="fixed inset-0 z-60 flex items-end bg-black/60" onClick={() => setShowList(false)}>
           <div
             className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-1 text-lg font-bold">Routine checklist</h3>
-            <p className="mb-3 text-xs text-neutral-500">Tap a set to jump; tap the circle to mark it done.</p>
+            <h3 className="mb-1 text-lg font-bold">routine checklist</h3>
+            <p className="mb-3 text-xs text-neutral-500">tap a set to jump; tap the circle to mark it done.</p>
             <div className="flex flex-col gap-1">
               {steps.map((s, i) => {
                 const isDone = done.has(s.stepKey)
@@ -315,11 +344,14 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
                     <button
                       onClick={() => {
                         goToStep(i)
+                        // Jumping is a decision to start that set now, so an
+                        // in-flight rest ends rather than covering it back up.
+                        if (rest) closeRest()
                         setShowList(false)
                       }}
                       className="flex-1 py-3 text-left active:opacity-70"
                     >
-                      <span className="text-[10px] uppercase tracking-wide text-neutral-500">{s.blockLabel}</span>
+                      <span className="text-[10px] tracking-wide text-neutral-500">{s.blockLabel}</span>
                       <span className="block font-medium">
                         {s.exName} · set {s.round + 1}
                       </span>

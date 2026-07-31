@@ -17,6 +17,8 @@ import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from 
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+/** Cold split line — a cool blue, against the warm split's green. */
+const SPLIT_COLD = '#38bdf8'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -35,7 +37,7 @@ function Projections({ goals }: { goals: FlexGoal[] }) {
             {g.proj.onTrack && g.proj.etaWeeks === 0
               ? 'reached ✓'
               : g.proj.onTrack
-                ? `ETA ${fmtDate(g.proj.etaDate)}`
+                ? `eta ${fmtDate(g.proj.etaDate)}`
                 : 'need more data / not trending'}
           </span>
         </div>
@@ -48,7 +50,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex flex-1 flex-col items-center rounded-2xl bg-surface py-3">
       <span className="text-2xl font-bold tabular-nums">{value}</span>
-      <span className="text-[11px] uppercase tracking-wide text-neutral-500">{label}</span>
+      <span className="text-[11px] tracking-wide text-neutral-500">{label}</span>
     </div>
   )
 }
@@ -75,11 +77,11 @@ export function FlexProgress() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Side splits</h3>
+      <h3 className="text-sm font-semibold tracking-wider text-neutral-500">side splits</h3>
       <div className="flex gap-2">
-        <Stat value={stats.split.latest != null ? `${stats.split.latest}°` : '—'} label="Current" />
-        <Stat value={stats.split.best != null ? `${stats.split.best}°` : '—'} label="Best" />
-        <Stat value="180°" label="Goal" />
+        <Stat value={stats.coldSplit.latest != null ? `${stats.coldSplit.latest}°` : '—'} label="cold" />
+        <Stat value={stats.warmSplit.latest != null ? `${stats.warmSplit.latest}°` : '—'} label="warm" />
+        <Stat value="180°" label="goal" />
       </div>
       {split.length >= 2 ? (
         <div className="rounded-2xl bg-surface p-2">
@@ -91,25 +93,27 @@ export function FlexProgress() {
               <Tooltip
                 contentStyle={tooltipStyle}
                 labelFormatter={(ms) => fmtDateLabel(Number(ms))}
-                formatter={(v) => [`${v}°`, 'split']}
+                formatter={(v, n) => [`${v}°`, n]}
               />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={180} stroke="#6b7280" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="value" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} />
+              <Line type="monotone" dataKey="cold" name="cold" stroke={SPLIT_COLD} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="warm" name="warm" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
       ) : (
         <div className="flex h-24 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
-          Log split measurements to see progression
+          log split measurements to see progression
         </div>
       )}
       <Projections goals={splitGoals} />
 
-      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">Tailor's pose</h3>
+      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">tailor's pose</h3>
       <div className="flex gap-2">
-        <Stat value={stats.tailorsLeft.latest != null ? `${stats.tailorsLeft.latest}°` : '—'} label="Left" />
-        <Stat value={stats.tailorsRight.latest != null ? `${stats.tailorsRight.latest}°` : '—'} label="Right" />
-        <Stat value="90°" label="Goal" />
+        <Stat value={stats.tailorsLeft.latest != null ? `${stats.tailorsLeft.latest}°` : '—'} label="left" />
+        <Stat value={stats.tailorsRight.latest != null ? `${stats.tailorsRight.latest}°` : '—'} label="right" />
+        <Stat value="90°" label="goal" />
       </div>
       {tailors.length >= 2 ? (
         <div className="rounded-2xl bg-surface p-2">
@@ -125,19 +129,19 @@ export function FlexProgress() {
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={90} stroke="#6b7280" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="left" name="Left" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-              <Line type="monotone" dataKey="right" name="Right" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="left" name="left" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="right" name="right" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
       ) : (
         <div className="flex h-24 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
-          Log tailor's-pose measurements to see progression
+          log tailor's-pose measurements to see progression
         </div>
       )}
       <Projections goals={tailorsGoals} />
 
-      <p className="px-1 text-xs text-neutral-500">Log measurements during a stretch session (kebab → Log measurement).</p>
+      <p className="px-1 text-xs text-neutral-500">log measurements during a stretch session (kebab → log measurement).</p>
     </div>
   )
 }

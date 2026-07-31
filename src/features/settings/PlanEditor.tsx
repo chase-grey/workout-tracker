@@ -7,7 +7,7 @@ const clone = (p: Plan): Plan => JSON.parse(JSON.stringify(p))
 
 function newExercise(): PlannedExercise {
   const id = Math.random().toString(36).slice(2, 8)
-  return { key: `ex_${id}`, name: 'New exercise', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 5, group: 'Custom' }
+  return { key: `ex_${id}`, name: 'new exercise', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 5, group: 'custom' }
 }
 
 function NumberField({
@@ -23,7 +23,7 @@ function NumberField({
 }) {
   return (
     <label className="flex flex-1 flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</span>
+      <span className="text-[10px] tracking-wide text-neutral-500">{label}</span>
       <input
         type="number"
         inputMode="decimal"
@@ -71,11 +71,11 @@ export function PlanEditor({ day, onClose }: { day: DayType; onClose: () => void
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-lg font-bold">Edit {draft[day].label}</h2>
+        <h2 className="text-lg font-bold">edit {draft[day].label}</h2>
         <div className="flex gap-2">
           <button
             onClick={() => {
-              if (confirm(`Reset ${draft[day].label} to the default plan?`))
+              if (confirm(`reset ${draft[day].label} to the default plan?`))
                 setDraft((d) => {
                   const next = clone(d)
                   next[day] = clone(DEFAULT_PLAN)[day]
@@ -84,17 +84,17 @@ export function PlanEditor({ day, onClose }: { day: DayType; onClose: () => void
             }}
             className="min-h-[44px] px-2 text-sm text-neutral-400"
           >
-            Reset
+            reset
           </button>
           <button onClick={onClose} className="min-h-[44px] px-2 text-sm text-neutral-400">
-            Cancel
+            cancel
           </button>
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto px-3 pt-3 pb-24">
         <label className="mb-3 flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Name</span>
+          <span className="text-xs text-neutral-500">name</span>
           <input
             value={draft[day].label}
             onChange={(e) =>
@@ -114,20 +114,20 @@ export function PlanEditor({ day, onClose }: { day: DayType; onClose: () => void
               <input
                 value={ex.name}
                 onChange={(e) => patchExercise(i, { name: e.target.value })}
-                placeholder="Exercise name"
+                placeholder="exercise name"
                 className="mb-2 min-h-[44px] w-full rounded-lg bg-surface-2 px-3 font-medium focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <input
                 value={ex.group}
                 onChange={(e) => patchExercise(i, { group: e.target.value })}
-                placeholder="Group (e.g. Chest)"
+                placeholder="group (e.g. chest)"
                 className="mb-2 min-h-[44px] w-full rounded-lg bg-surface-2 px-3 text-sm text-neutral-300 focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <div className="flex gap-2">
-                <NumberField label="Sets" value={ex.sets} onChange={(n) => patchExercise(i, { sets: n })} />
-                <NumberField label="Rep min" value={ex.repMin} onChange={(n) => patchExercise(i, { repMin: n })} />
-                <NumberField label="Rep max" value={ex.repMax} onChange={(n) => patchExercise(i, { repMax: n })} />
-                <NumberField label="Rest s" value={ex.restSec} onChange={(n) => patchExercise(i, { restSec: n })} />
+                <NumberField label="sets" value={ex.sets} onChange={(n) => patchExercise(i, { sets: n })} />
+                <NumberField label="rep min" value={ex.repMin} onChange={(n) => patchExercise(i, { repMin: n })} />
+                <NumberField label="rep max" value={ex.repMax} onChange={(n) => patchExercise(i, { repMax: n })} />
+                <NumberField label="rest s" value={ex.restSec} onChange={(n) => patchExercise(i, { restSec: n })} />
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm text-neutral-400">
@@ -137,13 +137,13 @@ export function PlanEditor({ day, onClose }: { day: DayType; onClose: () => void
                     onChange={(e) => patchExercise(i, { bodyweight: e.target.checked })}
                     className="h-5 w-5 accent-[var(--color-accent)]"
                   />
-                  Bodyweight
+                  bodyweight
                 </label>
                 <button
                   onClick={() => removeExercise(i)}
                   className="min-h-[44px] px-3 text-sm text-red-400 active:text-red-300"
                 >
-                  Remove
+                  remove
                 </button>
               </div>
             </div>
@@ -154,7 +154,7 @@ export function PlanEditor({ day, onClose }: { day: DayType; onClose: () => void
           onClick={addExercise}
           className="mt-3 min-h-[48px] w-full rounded-xl border border-dashed border-border text-sm text-neutral-400 active:bg-surface"
         >
-          + Add exercise
+          + add exercise
         </button>
       </div>
 
@@ -163,7 +163,7 @@ export function PlanEditor({ day, onClose }: { day: DayType; onClose: () => void
           onClick={save}
           className="min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black"
         >
-          Save plan
+          save plan
         </button>
       </div>
     </div>

@@ -3,15 +3,32 @@ import { weekStartISO, toISODate } from './dates'
 /** A single flexibility log entry, tracking multiple stretch angles. */
 export type FlexEntry = {
   date: string /* YYYY-MM-DD */
-  splitDeg: number | null /* side-split angle */
+  splitDeg: number | null /* legacy/untagged side-split angle; counts as warm */
+  coldSplitDeg?: number | null /* side split measured cold, at the start */
+  warmSplitDeg?: number | null /* side split measured warm, at the end */
   tailorsLeftDeg: number | null /* tailor's pose, left */
   tailorsRightDeg: number | null /* tailor's pose, right */
   note?: string
 }
 
 /** The angle fields carried by a FlexEntry. */
-const ANGLE_FIELDS = ['splitDeg', 'tailorsLeftDeg', 'tailorsRightDeg'] as const
+const ANGLE_FIELDS = [
+  'splitDeg',
+  'coldSplitDeg',
+  'warmSplitDeg',
+  'tailorsLeftDeg',
+  'tailorsRightDeg',
+] as const
 type AngleField = (typeof ANGLE_FIELDS)[number]
+
+/**
+ * The warm split for an entry: the warm reading when present, otherwise the
+ * legacy untagged split (older data and manual logs count as warm).
+ */
+export const warmSplitOf = (e: FlexEntry): number | null => e.warmSplitDeg ?? e.splitDeg ?? null
+
+/** The cold split for an entry, or null if none was captured. */
+export const coldSplitOf = (e: FlexEntry): number | null => e.coldSplitDeg ?? null
 
 /**
  * Collapse to one merged entry per date. For each angle field, keep the latest
@@ -27,6 +44,8 @@ export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
       byDate.set(e.date, {
         date: e.date,
         splitDeg: e.splitDeg,
+        coldSplitDeg: e.coldSplitDeg ?? null,
+        warmSplitDeg: e.warmSplitDeg ?? null,
         tailorsLeftDeg: e.tailorsLeftDeg,
         tailorsRightDeg: e.tailorsRightDeg,
         ...(e.note != null && e.note !== '' ? { note: e.note } : {}),
@@ -46,18 +65,19 @@ export type MetricStats = { latest: number | null; best: number | null }
 export type FlexStats = {
   sessionsThisWeek: number /* distinct dates with an entry in the current Mon–Sun week */
   weeklyGoal: number /* default 2 */
-  split: MetricStats
+  coldSplit: MetricStats
+  warmSplit: MetricStats
   tailorsLeft: MetricStats
   tailorsRight: MetricStats
 }
 
 /** latest = value from the newest-dated entry with a non-null value; best = max non-null value. */
-function metricStats(entries: FlexEntry[], field: AngleField): MetricStats {
+function metricStats(entries: FlexEntry[], value: (e: FlexEntry) => number | null): MetricStats {
   let latest: number | null = null
   let latestDate: string | null = null
   let best: number | null = null
   for (const e of entries) {
-    const v = e[field]
+    const v = value(e)
     if (v == null) continue
     if (best == null || v > best) best = v
     if (latestDate === null || e.date > latestDate) {
@@ -67,6 +87,9 @@ function metricStats(entries: FlexEntry[], field: AngleField): MetricStats {
   }
   return { latest, best }
 }
+
+/** Selector for a plain angle field, tolerating older entries missing the key. */
+const field = (f: AngleField) => (e: FlexEntry) => e[f] ?? null
 
 export function flexStats(
   entries: FlexEntry[],
@@ -84,20 +107,40 @@ export function flexStats(
   return {
     sessionsThisWeek: inWeekDates.size,
     weeklyGoal,
-    split: metricStats(entries, 'splitDeg'),
-    tailorsLeft: metricStats(entries, 'tailorsLeftDeg'),
-    tailorsRight: metricStats(entries, 'tailorsRightDeg'),
+    coldSplit: metricStats(entries, coldSplitOf),
+    warmSplit: metricStats(entries, warmSplitOf),
+    tailorsLeft: metricStats(entries, field('tailorsLeftDeg')),
+    tailorsRight: metricStats(entries, field('tailorsRightDeg')),
   }
 }
 
-/** Non-null splitDeg values as {date, value}, sorted ascending by date. */
-export function splitSeries(
-  entries: FlexEntry[],
-): { date: string; value: number }[] {
-  return entries
-    .filter((e): e is FlexEntry & { splitDeg: number } => e.splitDeg != null)
-    .map((e) => ({ date: e.date, value: e.splitDeg }))
-    .sort((a, b) => (a.date < b.date ? -1 : 1))
+/** One split chart row per date, carrying the cold and/or warm reading. */
+export type SplitPoint = { date: string; cold: number | null; warm: number | null }
+
+/**
+ * Cold + warm split per date, for the two-line split chart. Entries with neither
+ * reading are dropped. Sorted ascending by date.
+ */
+export function splitSeries(entries: FlexEntry[]): SplitPoint[] {
+  const out: SplitPoint[] = []
+  for (const e of entries) {
+    const cold = coldSplitOf(e)
+    const warm = warmSplitOf(e)
+    if (cold == null && warm == null) continue
+    out.push({ date: e.date, cold, warm })
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/** Non-null warm-split values as {date, value}, sorted ascending — for goal projections. */
+export function warmSplitSeries(entries: FlexEntry[]): { date: string; value: number }[] {
+  const out: { date: string; value: number }[] = []
+  for (const e of entries) {
+    const warm = warmSplitOf(e)
+    if (warm == null) continue
+    out.push({ date: e.date, value: warm })
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
 /**

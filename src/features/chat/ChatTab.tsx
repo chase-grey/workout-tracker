@@ -182,7 +182,7 @@ export function ChatTab() {
       }
       setTurns([...priorTurns, { role: 'user', content: text }, ...newTurns])
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Something went wrong.'
+      const msg = e instanceof Error ? e.message : 'something went wrong.'
       setTurns([...priorTurns, { role: 'user', content: text }, { role: 'assistant', content: msg, error: true }])
     } finally {
       setLoading(false)
@@ -193,11 +193,11 @@ export function ChatTab() {
     return (
       <div className="flex flex-col items-center justify-center gap-3 pb-24 pt-24 text-center">
         <MdVpnKey className="text-5xl" aria-hidden />
-        <h2 className="text-xl font-bold">Add your OpenAI key</h2>
+        <h2 className="text-xl font-bold">add your openai key</h2>
         <p className="max-w-xs text-sm text-neutral-500">
-          To use the assistant in the deployed app, add an OpenAI API key in Settings (stored on this
-          device only). An Epic key only works when you run the app locally (<code>npm run dev</code>)
-          on Epic's network — see the README.
+          to use the assistant in the deployed app, add an openai api key in settings (stored on this
+          device only). an epic key only works when you run the app locally (<code>npm run dev</code>)
+          on epic's network — see the readme.
         </p>
       </div>
     )
@@ -206,20 +206,20 @@ export function ChatTab() {
   return (
     <div className="flex min-h-full flex-col">
       <div className="flex items-center justify-between pb-2">
-        <h2 className="text-xl font-bold">Assistant</h2>
+        <h2 className="text-xl font-bold">assistant</h2>
         <button
           onClick={() => setTurns([])}
           disabled={turns.length === 0 || loading}
           className="min-h-[44px] rounded-xl bg-surface px-3 text-sm font-medium text-neutral-300 active:bg-surface-2 disabled:opacity-40"
         >
-          Clear chat
+          clear chat
         </button>
       </div>
 
       <div className="flex flex-1 flex-col gap-3 pb-24">
         {turns.length === 0 && !loading && (
           <p className="pt-8 text-center text-sm text-neutral-500">
-            Ask about your training, or tell me to tweak your plan — e.g. "add face pulls to pull day"
+            ask about your training, or tell me to tweak your plan — e.g. "add face pulls to pull day"
             or "bump incline bench to 4×5–8".
           </p>
         )}
@@ -262,7 +262,7 @@ export function ChatTab() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') void send()
           }}
-          placeholder="Ask, or tell me to change your plan…"
+          placeholder="ask, or tell me to change your plan…"
           className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
         />
         <button
@@ -270,7 +270,7 @@ export function ChatTab() {
           disabled={loading || input.trim().length === 0}
           className="min-h-[44px] rounded-xl bg-accent px-4 font-semibold text-black active:opacity-80 disabled:opacity-40"
         >
-          Send
+          send
         </button>
       </div>
     </div>

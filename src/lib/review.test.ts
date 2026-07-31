@@ -99,9 +99,9 @@ describe('buildReview', () => {
       calorieEntries: [cal('2026-06-02', 4200)],
     })
     const r = buildReview(d, 'month', '2026-06')
-    expect(r.title).toBe('June 2026 in review')
+    expect(r.title).toBe('june 2026 in review')
     expect(r.story.length).toBeGreaterThan(0)
-    expect(r.stats.find((s) => s.label === 'Workouts')?.value).toBe('2')
+    expect(r.stats.find((s) => s.label === 'workouts')?.value).toBe('2')
   })
 
   it('flags a record period', () => {

@@ -16,6 +16,9 @@ import { useActiveSession } from './features/today/useActiveSession'
 import { StretchSession } from './features/flex/StretchSession'
 import { storage } from './services/storage'
 import { IS_DESKTOP } from './lib/device'
+import { useBackGuard } from './lib/useBackGuard'
+import { MdFitnessCenter } from 'react-icons/md'
+import type { DayType } from './types'
 
 const CHAT_ENABLED = IS_DESKTOP
 
@@ -39,11 +42,25 @@ function AppShell() {
   const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
   const [review, setReview] = useState<Review | null>(null)
   const [finishSummary, setFinishSummary] = useState<WorkoutFinishSummary | null>(null)
+  // A session set aside — the rest of the app is usable while it keeps running.
+  // The session stays mounted (just hidden), so its rest timer, rep pace and
+  // elapsed-time accounting carry on untouched until you jump back in.
+  const [minimized, setMinimized] = useState(false)
+  const sessionActive = controls.session != null || stretching
 
   // Scroll back to the top when switching tabs.
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 })
   }, [tab])
+
+  // A finished/discarded session leaves nothing to jump back into.
+  useEffect(() => {
+    if (!sessionActive) setMinimized(false)
+  }, [sessionActive])
+
+  // Android back (and browser back) sets the session aside rather than leaving
+  // the app — the workout keeps running behind the tabs.
+  useBackGuard(sessionActive && !minimized, () => setMinimized(true))
 
   // Month/year in review, once per new period. On the feature's first run the
   // markers are unset — seed them to the current period so we never backfill a
@@ -85,11 +102,18 @@ function AppShell() {
   const startStretch = () => {
     if (!storage.loadStretch())
       storage.saveStretch({ step: 0, done: [], startedAt: new Date().toISOString() })
+    setMinimized(false)
     setStretching(true)
   }
 
-  // Workouts and stretches take over the whole screen (no tabs / bottom nav).
-  const immersive = controls.session != null || stretching || finishSummary != null
+  const startWorkout = (dayType: DayType) => {
+    setMinimized(false)
+    controls.start(dayType)
+  }
+
+  // Workouts and stretches take over the whole screen (no tabs / bottom nav)
+  // unless they've been set aside.
+  const immersive = (sessionActive && !minimized) || finishSummary != null
 
   const dismissFinish = () => {
     const ambient = finishSummary?.ambient ?? null
@@ -98,10 +122,10 @@ function AppShell() {
     if (ambient) celebrate(ambient)
   }
 
-  let content
+  let session = null
   if (controls.session) {
     const { dayType } = controls.session
-    content = (
+    session = (
       <ActiveSession
         session={controls.session}
         controls={controls}
@@ -114,25 +138,18 @@ function AppShell() {
           void quickLog(dayType)
           controls.clear()
         }}
+        onMinimize={() => setMinimized(true)}
       />
     )
   } else if (stretching) {
-    content = (
+    session = (
       <StretchSession
         onClose={() => {
           storage.saveStretch(null)
           setStretching(false)
         }}
+        onMinimize={() => setMinimized(true)}
       />
-    )
-  } else {
-    content = (
-      <>
-        {tab === 'today' && <TodayTab onStart={controls.start} onStartStretch={startStretch} />}
-        {tab === 'progress' && <ProgressTab />}
-        {tab === 'chat' && CHAT_ENABLED && <ChatTab />}
-        {tab === 'settings' && <SettingsTab />}
-      </>
     )
   }
 
@@ -143,8 +160,27 @@ function AppShell() {
         className="flex-1 overflow-y-auto px-4 pb-4"
         style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top))' }}
       >
-        {content}
+        {/* A set-aside session stays mounted, only hidden — its timers, rep pace
+            and elapsed-time accounting must not restart when you look away. */}
+        {session && <div className={minimized ? 'hidden' : 'contents'}>{session}</div>}
+        {(!session || minimized) && (
+          <>
+            {tab === 'today' && <TodayTab onStart={startWorkout} onStartStretch={startStretch} />}
+            {tab === 'progress' && <ProgressTab />}
+            {tab === 'chat' && CHAT_ENABLED && <ChatTab />}
+            {tab === 'settings' && <SettingsTab />}
+          </>
+        )}
       </main>
+      {minimized && sessionActive && (
+        <button
+          onClick={() => setMinimized(false)}
+          className="flex min-h-[52px] items-center justify-center gap-2 border-t border-border bg-accent text-base font-bold text-black active:opacity-80"
+        >
+          <MdFitnessCenter className="text-xl" aria-hidden />
+          {controls.session ? 'back to your workout' : 'back to your stretch'}
+        </button>
+      )}
       {!immersive && <BottomNav active={tab} onChange={setTab} showChat={CHAT_ENABLED} />}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
       {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}

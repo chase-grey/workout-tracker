@@ -92,8 +92,8 @@ describe('flexStats', () => {
     ]
     const s = flexStats(entries, TODAY)
 
-    expect(s.split.latest).toBe(155) // newest non-null split is 07-01
-    expect(s.split.best).toBe(165)
+    expect(s.warmSplit.latest).toBe(155) // legacy splitDeg counts as warm; newest is 07-01
+    expect(s.warmSplit.best).toBe(165)
 
     expect(s.tailorsLeft.latest).toBe(45) // newest non-null left is 06-15
     expect(s.tailorsLeft.best).toBe(45)
@@ -108,23 +108,35 @@ describe('flexStats', () => {
       entry({ date: '2026-07-08' }),
     ]
     const s = flexStats(entries, TODAY)
-    expect(s.split).toEqual({ latest: null, best: null })
+    expect(s.coldSplit).toEqual({ latest: null, best: null })
+    expect(s.warmSplit).toEqual({ latest: null, best: null })
     expect(s.tailorsLeft).toEqual({ latest: null, best: null })
     expect(s.tailorsRight).toEqual({ latest: null, best: null })
+  })
+
+  it('tracks cold and warm split independently', () => {
+    const entries: FlexEntry[] = [
+      entry({ date: '2026-06-01', coldSplitDeg: 80, warmSplitDeg: 95 }),
+      entry({ date: '2026-06-15', coldSplitDeg: 84, warmSplitDeg: 100 }),
+      entry({ date: '2026-07-01', splitDeg: 120 }), // legacy untagged → warm only
+    ]
+    const s = flexStats(entries, TODAY)
+    expect(s.coldSplit).toEqual({ latest: 84, best: 84 })
+    expect(s.warmSplit).toEqual({ latest: 120, best: 120 }) // legacy split is newest warm
   })
 })
 
 describe('splitSeries', () => {
-  it('filters to non-null splitDeg and sorts ascending', () => {
+  it('emits a cold/warm row per date with a reading, sorted ascending', () => {
     const entries: FlexEntry[] = [
-      entry({ date: '2026-07-08', splitDeg: 152 }),
-      entry({ date: '2026-07-01', splitDeg: 150 }),
+      entry({ date: '2026-07-08', coldSplitDeg: 90, warmSplitDeg: 108 }),
+      entry({ date: '2026-07-01', splitDeg: 150 }), // legacy untagged → warm, cold null
       entry({ date: '2026-07-05' }), // no split — excluded
       entry({ date: '2026-07-05', tailorsLeftDeg: 40 }), // no split — excluded
     ]
     expect(splitSeries(entries)).toEqual([
-      { date: '2026-07-01', value: 150 },
-      { date: '2026-07-08', value: 152 },
+      { date: '2026-07-01', cold: null, warm: 150 },
+      { date: '2026-07-08', cold: 90, warm: 108 },
     ])
   })
 })

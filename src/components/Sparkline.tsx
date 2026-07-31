@@ -9,7 +9,7 @@ export function Sparkline({
   height?: number
 }) {
   if (values.length < 2) {
-    return <span className="text-sm text-neutral-500">Not enough data yet</span>
+    return <span className="text-sm text-neutral-500">not enough data yet</span>
   }
   const min = Math.min(...values)
   const max = Math.max(...values)

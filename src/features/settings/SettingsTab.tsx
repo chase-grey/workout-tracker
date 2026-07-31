@@ -12,10 +12,10 @@ import type { DayType } from '../../types'
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
 const SYNC_LABEL: Record<string, string> = {
-  idle: 'Synced',
-  syncing: 'Syncing…',
-  offline: 'Not connected',
-  error: 'Sync error',
+  idle: 'synced',
+  syncing: 'syncing…',
+  offline: 'not connected',
+  error: 'sync error',
 }
 
 export function SettingsTab() {
@@ -43,10 +43,10 @@ export function SettingsTab() {
 
   return (
     <div className="flex flex-col gap-6 pb-4">
-      <h2 className="text-xl font-bold">Settings</h2>
+      <h2 className="text-xl font-bold">settings</h2>
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">Google Apps Script URL</label>
+        <label className="text-sm font-medium text-neutral-300">google apps script url</label>
         <input
           value={apiUrl}
           onChange={(e) => setApiUrl(e.target.value)}
@@ -57,58 +57,58 @@ export function SettingsTab() {
           onClick={save}
           className="min-h-[44px] rounded-xl bg-accent font-semibold text-black active:opacity-80"
         >
-          {saved ? 'Saved ✓' : 'Save & sync'}
+          {saved ? 'saved ✓' : 'save & sync'}
         </button>
         <p className="text-xs text-neutral-500">
-          Status: {SYNC_LABEL[sync] ?? sync}
+          status: {SYNC_LABEL[sync] ?? sync}
           {pendingWrites > 0 && ` · ${pendingWrites} write${pendingWrites === 1 ? '' : 's'} queued`}
         </p>
         <p className="text-xs text-neutral-500">
-          Last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
+          last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
         </p>
       </section>
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">Plans</label>
+        <label className="text-sm font-medium text-neutral-300">plans</label>
         {DAY_TYPES.map((t) => (
           <button
             key={t}
             onClick={() => setEditingPlan(t)}
             className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
           >
-            Edit {plan[t].label}
+            edit {plan[t].label}
           </button>
         ))}
         <button
           onClick={() => setEditingFlex(true)}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
-          Edit Stretch
+          edit stretch
         </button>
         <button
           onClick={() => {
-            if (confirm('Replace your plan with the latest defaults? Any customizations you made will be overwritten.'))
+            if (confirm('replace your plan with the latest defaults? any customizations you made will be overwritten.'))
               updatePlan(structuredClone(DEFAULT_PLAN))
           }}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
-          Reset plan to latest defaults
+          reset plan to latest defaults
         </button>
       </section>
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">Data</label>
+        <label className="text-sm font-medium text-neutral-300">data</label>
         <button
           onClick={() => setImporting(true)}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
-          Import historical data
+          import historical data
         </button>
         <button
           onClick={() => download(`workouts-${new Date().toISOString().slice(0, 10)}.csv`, workoutsToCsv(workouts))}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
-          Export workouts as CSV
+          export workouts as CSV
         </button>
       </section>
 
@@ -118,7 +118,7 @@ export function SettingsTab() {
 
       {IS_DESKTOP && (
         <section className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-300">OpenAI API key (for Chat)</label>
+          <label className="text-sm font-medium text-neutral-300">openai api key (for chat)</label>
           <input
             type="password"
             value={openAiKey}
@@ -131,7 +131,7 @@ export function SettingsTab() {
             onClick={saveKey}
             className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
           >
-            {keySaved ? 'Saved ✓' : 'Save key'}
+            {keySaved ? 'saved ✓' : 'save key'}
           </button>
           <select
             value={settings.openAiModel ?? 'gpt-4o-mini'}
@@ -148,16 +148,16 @@ export function SettingsTab() {
       )}
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">Build</label>
+        <label className="text-sm font-medium text-neutral-300">build</label>
         <p className="text-xs text-neutral-500">
-          Version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
+          version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
           {new Date(APP_BUILD_TIME).toLocaleString()}
         </p>
         <button
           onClick={() => void checkForUpdate()}
           className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
         >
-          Check for updates &amp; reload
+          check for updates &amp; reload
         </button>
       </section>
     </div>

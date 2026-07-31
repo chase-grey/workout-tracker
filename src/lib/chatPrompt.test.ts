@@ -56,7 +56,7 @@ describe('buildSystemPrompt', () => {
   })
 
   it('includes a known exercise name from the plan', () => {
-    expect(prompt).toContain('Incline Bench Press')
+    expect(prompt).toContain('incline bench press')
   })
 
   it('includes a logged set', () => {

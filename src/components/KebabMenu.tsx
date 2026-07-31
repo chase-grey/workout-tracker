@@ -21,7 +21,7 @@ export function KebabMenu({ items }: { items: MenuItem[] }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        aria-label="More options"
+        aria-label="more options"
         className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
       >
         <MdMoreVert className="text-2xl" aria-hidden />

@@ -67,6 +67,8 @@ export type WorkoutFinishSummary = {
 /** A flexibility log: a stretch-session marker (angles omitted) and/or measurements. */
 export type FlexMeasurement = {
   splitDeg?: number | null
+  coldSplitDeg?: number | null
+  warmSplitDeg?: number | null
   tailorsLeftDeg?: number | null
   tailorsRightDeg?: number | null
   note?: string
@@ -300,10 +302,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // Persist to the backend in the background so the finish recap can show
       // immediately (offline still falls back to the retry queue).
       void api.postSession(rows).then(
-        () => notify('Workout saved', true),
+        () => notify('workout saved', true),
         () => {
           enqueue({ type: 'session', rows })
-          notify("Couldn't save — queued to retry", false)
+          notify("couldn't save — queued to retry", false)
         },
       )
 
@@ -343,10 +345,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistWeights([...storage.loadBodyWeights(), entry])
       try {
         await api.postBodyWeight(entry)
-        notify('Weight saved', true)
+        notify('weight saved', true)
       } catch {
         enqueue({ type: 'bodyweight', entry })
-        notify("Couldn't save — queued to retry", false)
+        notify("couldn't save — queued to retry", false)
       }
     },
     [enqueue, notify, persistWeights],
@@ -373,7 +375,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           ok = false
         }
       }
-      notify(ok ? 'Imported to sheet' : "Couldn't save import — queued to retry", ok)
+      notify(ok ? 'imported to sheet' : "couldn't save import — queued to retry", ok)
     },
     [enqueue, notify, persistWorkouts, persistWeights],
   )
@@ -383,20 +385,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const entry: FlexEntry = {
         date: toISODate(new Date()),
         splitDeg: m.splitDeg ?? null,
+        coldSplitDeg: m.coldSplitDeg ?? null,
+        warmSplitDeg: m.warmSplitDeg ?? null,
         tailorsLeftDeg: m.tailorsLeftDeg ?? null,
         tailorsRightDeg: m.tailorsRightDeg ?? null,
         note: m.note,
       }
-      const isMeasurement = m.splitDeg != null || m.tailorsLeftDeg != null || m.tailorsRightDeg != null
+      const isMeasurement =
+        m.splitDeg != null ||
+        m.coldSplitDeg != null ||
+        m.warmSplitDeg != null ||
+        m.tailorsLeftDeg != null ||
+        m.tailorsRightDeg != null
       const prevFlex = storage.loadFlex()
       const nextFlex = dedupeFlexByDate([...prevFlex, entry])
       persistFlex(nextFlex)
       try {
         await api.postFlex(entry)
-        notify(isMeasurement ? 'Measurement saved' : 'Stretch logged', true)
+        notify(isMeasurement ? 'measurement saved' : 'stretch logged', true)
       } catch {
         enqueue({ type: 'flex', entry })
-        notify("Couldn't save — queued to retry", false)
+        notify("couldn't save — queued to retry", false)
       }
       // Only a completed stretch session cheers — a pure angle measurement doesn't.
       if (!isMeasurement) {
@@ -446,7 +455,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         notify(`${signed} cal saved`, true)
       } catch {
         persistQueue([...queueSansDay, { type: 'calorie', entry }])
-        notify("Couldn't save — queued to retry", false)
+        notify("couldn't save — queued to retry", false)
       }
       // Cheer: this date's total just crossed the goal + any weekly calorie-day goal.
       try {
@@ -479,10 +488,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), entry]))
       try {
         await api.postMeasurement(entry)
-        notify('Measurement saved', true)
+        notify('measurement saved', true)
       } catch {
         enqueue({ type: 'measurement', entry })
-        notify("Couldn't save — queued to retry", false)
+        notify("couldn't save — queued to retry", false)
       }
     },
     [enqueue, notify, persistMeasurements],
@@ -531,7 +540,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         set_number: 1,
         weight_lbs: null,
         reps: 0,
-        notes: 'Quick log (no details)',
+        notes: 'quick log (no details)',
         is_historical: false,
       }
       const prev = storage.loadWorkouts()
@@ -539,10 +548,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistWorkouts(next)
       try {
         await api.postSession([row])
-        notify('Logged', true)
+        notify('logged', true)
       } catch {
         enqueue({ type: 'session', rows: [row] })
-        notify("Couldn't save — queued to retry", false)
+        notify("couldn't save — queued to retry", false)
       }
       try {
         const flexDates = storage.loadFlex().map((f) => f.date)
@@ -614,10 +623,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setPlan(p)
       storage.savePlan(p)
       api.postPlan(p).then(
-        () => notify('Plan saved', true),
+        () => notify('plan saved', true),
         () => {
           enqueue({ type: 'plan', plan: p })
-          notify("Couldn't save plan — queued to retry", false)
+          notify("couldn't save plan — queued to retry", false)
         },
       )
     },

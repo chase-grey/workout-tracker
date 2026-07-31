@@ -52,14 +52,14 @@ function titleFor(muscle: Muscle, score: MuscleScore | undefined): string {
 }
 
 const MUSCLE_LABELS: Record<Muscle, string> = {
-  chest: 'Chest',
-  shoulders: 'Shoulders',
-  back: 'Back / lats',
-  biceps: 'Biceps',
-  triceps: 'Triceps',
-  core: 'Core',
-  quads: 'Quads',
-  hamstrings: 'Hamstrings',
+  chest: 'chest',
+  shoulders: 'shoulders',
+  back: 'back / lats',
+  biceps: 'biceps',
+  triceps: 'triceps',
+  core: 'core',
+  quads: 'quads',
+  hamstrings: 'hamstrings',
 }
 
 /**
@@ -87,7 +87,7 @@ function Silhouette({ scores }: { scores: Record<Muscle, MuscleScore> }) {
       viewBox="0 0 220 470"
       className="h-auto w-full max-w-[220px]"
       role="img"
-      aria-label="Muscle development map"
+      aria-label="muscle development map"
     >
       {/* Neutral body base — head, torso, arms, pelvis, legs. */}
       <g fill={BODY_BASE} stroke="#3f3f46" strokeWidth={1.5}>
@@ -131,12 +131,12 @@ function Silhouette({ scores }: { scores: Record<Muscle, MuscleScore> }) {
 function Legend() {
   return (
     <div className="flex items-center gap-2 text-xs text-neutral-500">
-      <span>Less</span>
+      <span>less</span>
       <span
         className="h-2 flex-1 rounded-full"
         style={{ background: `linear-gradient(90deg, ${devColor(0)}, ${devColor(0.5)}, ${devColor(1)})` }}
       />
-      <span>More</span>
+      <span>more</span>
     </div>
   )
 }
@@ -170,17 +170,17 @@ export function MuscleAvatar() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">
-        Strength map{bodyweightLb ? ` · ${bodyweightLb} lbs` : ''}
+      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">
+        strength map{bodyweightLb ? ` · ${bodyweightLb} lbs` : ''}
       </h3>
 
       {!bodyweightLb ? (
         <div className="flex min-h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          Log a body weight to compare your lifts to other men.
+          log a body weight to compare your lifts to other men.
         </div>
       ) : !hasAnyData ? (
         <div className="flex min-h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          Log a few lifts to build your strength map.
+          log a few lifts to build your strength map.
         </div>
       ) : (
         <div className="rounded-2xl bg-surface p-4">
@@ -191,8 +191,8 @@ export function MuscleAvatar() {
             </div>
 
             <div className="flex flex-1 flex-col gap-2">
-              <p className="text-xs uppercase tracking-wider text-neutral-500">
-                Estimated 1RM vs. men at {bodyweightLb} lbs
+              <p className="text-xs tracking-wider text-neutral-500">
+                estimated 1rm vs. men at {bodyweightLb} lbs
               </p>
               {readouts.length > 0 ? (
                 <ul className="flex flex-col gap-1">
@@ -200,14 +200,14 @@ export function MuscleAvatar() {
                     <li key={r.lift} className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="text-neutral-300">{r.label}</span>
                       <span className="tabular-nums text-neutral-500">
-                        est. 1RM {r.load} lbs · <span className="text-accent-2">{r.band}</span>
+                        est. 1rm {r.load} lbs · <span className="text-accent-2">{r.band}</span>
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="text-sm text-neutral-500">
-                  Log a weighted lift (squat, bench, press) to see your strength level.
+                  log a weighted lift (squat, bench, press) to see your strength level.
                 </p>
               )}
             </div>

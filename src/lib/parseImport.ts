@@ -66,11 +66,11 @@ export function parseReps(cell: string): { tokens: RepToken[]; warnings: string[
     if (single) {
       tokens.push({
         reps: +single[1],
-        note: single[2] === '!' ? 'PR' : single[2] === '~' ? 'approx' : undefined,
+        note: single[2] === '!' ? 'pr' : single[2] === '~' ? 'approx' : undefined,
       })
       continue
     }
-    warnings.push(`Couldn't parse reps token "${raw}"`)
+    warnings.push(`couldn't parse reps token "${raw}"`)
   }
   return { tokens, warnings }
 }
@@ -130,7 +130,7 @@ export function combineSets(weightCell: string | undefined, repCell: string): Pa
   else if (weights.length === tokens.length) perSet = weights
   else {
     warnings.push(
-      `Ambiguous: ${weights.length} weights across ${tokens.length} sets — split evenly, please verify`,
+      `ambiguous: ${weights.length} weights across ${tokens.length} sets — split evenly, please verify`,
     )
     perSet = distributeWeights(weights, tokens.length)
   }
@@ -187,8 +187,9 @@ export function matchExercise(raw: string): ExerciseMatch {
   }
 }
 
+/** New (unmatched) exercise names adopt the app's lowercase display style. */
 function titleCase(s: string): string {
-  return s.trim().replace(/\b\w/g, (c) => c.toUpperCase())
+  return s.trim().toLowerCase()
 }
 
 /* -------------------------------------------------------------- block parse */

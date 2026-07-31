@@ -40,23 +40,23 @@ export const ROLE_COLOR: Record<Segment['role'], string> = {
 export const UP: Pt = { x: 0, y: -1 }
 
 export const MEASURE_LABEL: Record<MeasureMode, string> = {
-  split: 'Side split',
-  tailors: "Tailor's pose",
+  split: 'side split',
+  tailors: "tailor's pose",
 }
 
 /** Handles the user can drag, per mode (also the order they render). */
 export const HANDLES: Record<MeasureMode, HandleSpec[]> = {
   split: [
-    { key: 'hip', label: 'Hips' },
-    { key: 'ankleL', label: 'Left ankle' },
-    { key: 'ankleR', label: 'Right ankle' },
+    { key: 'hip', label: 'hips' },
+    { key: 'ankleL', label: 'left ankle' },
+    { key: 'ankleR', label: 'right ankle' },
   ],
   // Tailor's is measured off vertical, so no spine reference line: each knee
   // line runs from the tip of that knee down to a single dot between the feet.
   tailors: [
-    { key: 'center', label: 'Between feet' },
-    { key: 'kneeL', label: 'Left knee' },
-    { key: 'kneeR', label: 'Right knee' },
+    { key: 'center', label: 'between feet' },
+    { key: 'kneeL', label: 'left knee' },
+    { key: 'kneeR', label: 'right knee' },
   ],
 }
 

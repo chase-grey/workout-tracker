@@ -29,7 +29,7 @@ export type RecordSnapshot = {
   calorieEntries: CalorieEntry[]
 }
 
-const DAY_TYPE_NAME: Record<DayType, string> = { push: 'Push', pull: 'Pull' }
+const DAY_TYPE_NAME: Record<DayType, string> = { push: 'push', pull: 'pull' }
 
 const MS_PER_DAY = 86_400_000
 
@@ -143,7 +143,7 @@ export function currentCalorieStreak(
 function weekSessionRecord(name: string, count: number): Celebration {
   return {
     tier: 'large',
-    title: `Most ${name} in a week`,
+    title: `most ${name} in a week`,
     subtitle: `${count} this week — a new personal best.`,
     icon: 'trophy',
   }
@@ -152,7 +152,7 @@ function weekSessionRecord(name: string, count: number): Celebration {
 function calDayRecord(calories: number): Celebration {
   return {
     tier: 'medium',
-    title: 'Biggest eating day yet',
+    title: 'biggest eating day yet',
     subtitle: `${calories.toLocaleString()} cal in a single day — new high.`,
     icon: 'flame',
   }
@@ -161,7 +161,7 @@ function calDayRecord(calories: number): Celebration {
 function calWeekRecord(calories: number): Celebration {
   return {
     tier: 'large',
-    title: 'Biggest week of fueling',
+    title: 'biggest week of fueling',
     subtitle: `${calories.toLocaleString()} cal this week — a new high.`,
     icon: 'flame',
   }
@@ -170,8 +170,8 @@ function calWeekRecord(calories: number): Celebration {
 function calStreakRecord(days: number): Celebration {
   return {
     tier: 'large',
-    title: 'Longest calorie streak yet',
-    subtitle: `${days} days straight on target. That's the bulk taking care of itself.`,
+    title: 'longest calorie streak yet',
+    subtitle: `${days} days straight on target. that's the bulk taking care of itself.`,
     icon: 'flame',
   }
 }
@@ -180,7 +180,7 @@ function calStreakMilestone(days: number): Celebration {
   return {
     tier: 'medium',
     title: `${days}-day calorie streak`,
-    subtitle: 'Consistency is compounding — keep it going.',
+    subtitle: 'consistency is compounding — keep it going.',
     icon: 'flame',
   }
 }

@@ -12,8 +12,8 @@ import { motionForPhases, phaseDepths, type MotionKind } from '../lib/rhythmMoti
  * A random variant within the family is chosen per mount, so it varies from one
  * set to the next, and a live rep counter tracks where you are in the set.
  */
-const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide'] as const
-const DESCENT_VARIANTS = ['reach', 'fold', 'dive'] as const
+const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
+const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
 type Variant = (typeof BREATHE_VARIANTS)[number] | (typeof DESCENT_VARIANTS)[number]
 
 // Remembered per family across mounts (each set remounts the guide) so we never
@@ -61,6 +61,47 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
           <div className="absolute bottom-0 left-0 w-full bg-accent-bright/40" style={{ height: `${scale * 100}%` }} />
         </div>
       )
+    case 'petals':
+      // Six dots drawn in toward the center and pushed back out — the breath
+      // read as a ring closing rather than a single body shrinking.
+      return (
+        <div className="absolute h-[73%] w-[73%]">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="absolute inset-0" style={{ transform: `rotate(${i * 60}deg) scale(${scale})` }}>
+              <div className="absolute left-1/2 top-0 h-[21%] w-[21%] -translate-x-1/2 rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70" />
+            </div>
+          ))}
+        </div>
+      )
+    case 'bars':
+      // An equalizer that rises and falls from a shared centerline — the only
+      // shape in the family that reads left-to-right instead of radially.
+      return (
+        <div className="absolute flex h-[73%] w-[73%] items-center justify-center gap-[4%]">
+          {[0.55, 0.8, 1, 0.8, 0.55].map((f, i) => (
+            <div
+              key={i}
+              className="w-[9%] rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+              style={{ height: `${f * scale * 100}%` }}
+            />
+          ))}
+        </div>
+      )
+    case 'halo':
+      // A blurred core and a crisp ring moving in opposition: the core swells as
+      // the ring closes in on it, so the gap between them carries the breath.
+      return (
+        <>
+          <div
+            className="absolute h-[58%] w-[58%] rounded-full bg-accent-bright/40 blur-2xl"
+            style={{ transform: `scale(${scale})` }}
+          />
+          <div
+            className="absolute h-[73%] w-[73%] rounded-full border border-accent-bright/70"
+            style={{ transform: `scale(${1 + SCALE_MIN - scale})` }}
+          />
+        </>
+      )
     case 'orb':
     default:
       return (
@@ -107,6 +148,59 @@ function DescentShape({ variant, depth }: { variant: Variant; depth: number }) {
           })}
         </div>
       )
+    case 'drip':
+      // A droplet that stretches thin as it falls and rounds out as it lands,
+      // pooling wider the longer the stretch is held.
+      return (
+        <div className="absolute inset-0">
+          <div
+            className="absolute bottom-[15%] left-1/2 h-[3%] -translate-x-1/2 rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+            style={{ width: `${16 + depth * 46}%` }}
+          />
+          <div
+            className="absolute left-1/2 h-[19%] w-[19%] rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+            style={{
+              top: `${16 + depth * 56}%`,
+              transform: `translateX(-50%) scaleY(${1 + (1 - depth) * 0.4}) scaleX(${1 - (1 - depth) * 0.2})`,
+            }}
+          />
+        </div>
+      )
+    case 'stairs':
+      // Four steps descending left-to-right that light up one at a time — the
+      // most literal shape of the family, useful when the depth cue matters more
+      // than the mood.
+      return (
+        <div className="absolute inset-0">
+          {[0, 1, 2, 3].map((i) => {
+            const lit = clamp01(depth * 4 - i)
+            return (
+              <div
+                key={i}
+                className="absolute h-[7%] w-[28%] rounded-full bg-accent-bright"
+                style={{ left: `${18 + i * 12}%`, top: `${24 + i * 15}%`, opacity: 0.18 + lit * 0.72 }}
+              />
+            )
+          })}
+        </div>
+      )
+    case 'press': {
+      // A plate bearing down on a block that compresses under it — weight going
+      // into the stretch, held rather than bounced.
+      const baseHeight = 34 - depth * 20
+      return (
+        <div className="absolute inset-0">
+          <div
+            className="absolute left-1/2 h-[8%] w-[54%] -translate-x-1/2 rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+            style={{ top: `${40 + depth * 20}%` }}
+          />
+          <div
+            className="absolute bottom-[18%] left-1/2 w-[36%] -translate-x-1/2 rounded-[14%] border border-accent-bright/70 bg-accent-bright/15"
+            style={{ height: `${baseHeight}%` }}
+          />
+        </div>
+      )
+    }
     case 'reach':
     default:
       // An orb that travels down a track and grows slightly as it settles low,
@@ -213,13 +307,13 @@ export function RhythmGuide({
         )}
       </div>
       <div className="mt-2 text-center">
-        {/* Rep count is the primary tracker now that the seconds readout is gone
-            — the shape's motion paces each phase, so keep the number big + bright. */}
-        <div className="text-5xl font-bold tabular-nums leading-tight text-accent-bright">
-          Rep {rep}
-          {reps ? <span className="text-3xl text-neutral-400"> / {reps}</span> : ''}
+        {/* The phase word leads: it's the instruction you act on, so it sits
+            above the rep count, which is only a running tally. */}
+        <div className="text-3xl font-semibold leading-tight text-white">{phase.label}</div>
+        <div className="mt-1 text-xl font-bold tabular-nums text-accent-bright">
+          rep {rep}
+          {reps ? <span className="text-neutral-400"> / {reps}</span> : ''}
         </div>
-        <div className="mt-1 text-2xl font-semibold capitalize text-white">{phase.label}</div>
       </div>
     </div>
   )

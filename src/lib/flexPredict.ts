@@ -5,7 +5,7 @@
  * `today` clock threaded into `project`.
  */
 import { project, type Projection } from './predictions'
-import { splitSeries, tailorsAvgSeries, type FlexEntry } from './flex'
+import { warmSplitSeries, tailorsAvgSeries, type FlexEntry } from './flex'
 
 /** Side-split goal angles (degrees), ascending. */
 export const SPLIT_GOALS = [100, 120, 150, 180] as const
@@ -26,7 +26,7 @@ export type FlexGoal = {
  * embedded `Projection` conveys whether it is on track and any ETA.
  */
 export function flexGoalPredictions(entries: FlexEntry[], today?: Date): FlexGoal[] {
-  const split = splitSeries(entries)
+  const split = warmSplitSeries(entries)
   const tailors = tailorsAvgSeries(entries)
 
   const goals: FlexGoal[] = []

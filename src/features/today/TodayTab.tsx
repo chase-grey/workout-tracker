@@ -47,23 +47,23 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
             <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
-            Progress-photo time — {reminder.reason}.
+            progress-photo time — {reminder.reason}.
           </p>
           <div className="mt-2 flex gap-2">
             <button
               onClick={() => {
                 logProgressPhoto()
-                flashMsg('Photo logged')
+                flashMsg('photo logged')
               }}
               className="min-h-[40px] flex-1 rounded-xl bg-accent text-sm font-semibold text-black"
             >
-              I took it
+              took it
             </button>
             <button
               onClick={snoozePhotoAWeek}
               className="min-h-[40px] rounded-xl bg-surface px-3 text-sm text-neutral-400"
             >
-              Later
+              later
             </button>
           </div>
         </div>
@@ -80,8 +80,8 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
       <WeightCard />
 
       <div className="flex flex-col gap-2">
-        <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Start a session
+        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
+          start a session
         </p>
         {DAY_TYPES.map((t) => (
           <button
@@ -96,7 +96,7 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
           onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
-          Stretch + Core
+          stretch + core
         </button>
       </div>
     </div>

@@ -51,14 +51,14 @@ export const MUSCLES: Muscle[] = [
 
 /** Human labels for the per-lift readout. */
 export const LIFT_LABELS: Record<Lift, string> = {
-  squat: 'Squat',
-  bench: 'Bench press',
-  ohp: 'Overhead press',
-  row: 'Cable row',
-  pullup: 'Pull-up (total load)',
-  curl: 'Biceps curl',
-  tricep: 'Triceps (isolation)',
-  legcurl: 'Hamstring curl',
+  squat: 'squat',
+  bench: 'bench press',
+  ohp: 'overhead press',
+  row: 'cable row',
+  pullup: 'pull-up (total load)',
+  curl: 'biceps curl',
+  tricep: 'triceps (isolation)',
+  legcurl: 'hamstring curl',
 }
 
 /**
@@ -125,11 +125,11 @@ function interpolatePercentile(ratio: number, thresholds: number[]): number {
 
 /** Strength band label from a percentile. */
 export function bandFor(percentile: number): string {
-  if (percentile < 20) return 'Beginner'
-  if (percentile < 40) return 'Novice'
-  if (percentile < 65) return 'Intermediate'
-  if (percentile < 88) return 'Advanced'
-  return 'Elite'
+  if (percentile < 20) return 'beginner'
+  if (percentile < 40) return 'novice'
+  if (percentile < 65) return 'intermediate'
+  if (percentile < 88) return 'advanced'
+  return 'elite'
 }
 
 export type LiftResult = {
@@ -242,7 +242,7 @@ export function muscleDevelopment(
     out[muscle] =
       best != null
         ? { hasData: true, developmentScore: best.developmentScore, percentile: best.percentile, band: best.band, hasStandard: true }
-        : { hasData: true, developmentScore: PRESENCE_DEV, percentile: null, band: 'Trained', hasStandard: false }
+        : { hasData: true, developmentScore: PRESENCE_DEV, percentile: null, band: 'trained', hasStandard: false }
   }
   return out
 }
@@ -307,9 +307,9 @@ export function legsVsUpper(scores: Record<Muscle, MuscleScore>): Balance | null
   const diff = legs - upper
   const verdict =
     Math.abs(diff) < 0.08
-      ? 'Your legs and upper body are developing in balance.'
+      ? 'your legs and upper body are developing in balance.'
       : diff > 0
-        ? 'Your legs are proportionally ahead of your upper body.'
-        : 'Your upper body is proportionally ahead of your legs.'
+        ? 'your legs are proportionally ahead of your upper body.'
+        : 'your upper body is proportionally ahead of your legs.'
   return { legs, upper, verdict }
 }

@@ -4,7 +4,7 @@ import { useData } from '../../store/DataContext'
 import { CALORIE_GOAL, caloriePaceFraction, totalForDate } from '../../lib/calories'
 import { mondayOf, toISODate } from '../../lib/dates'
 
-const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
 const QUICK_ADDS = [100, 500, 4000]
 
 export function CalorieLogger() {
@@ -35,8 +35,8 @@ export function CalorieLogger() {
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="flex items-baseline justify-between">
-        <p className="text-xs uppercase tracking-wider text-neutral-500">
-          Calories · {selLabel}
+        <p className="text-xs tracking-wider text-neutral-500">
+          calories · {selLabel}
         </p>
         <p className="text-sm tabular-nums text-neutral-400">
           <span className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}>

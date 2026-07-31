@@ -50,51 +50,51 @@ export const QUICK_LOG_KEY = '__quicklog__'
  */
 export const DEAD_BUG: PlannedExercise = {
   key: 'deadbug',
-  name: 'Dead Bug',
+  name: 'dead bug',
   sets: 4,
   repMin: 10,
   repMax: 20,
   restSec: 60,
   bodyweight: true,
-  group: 'Core',
+  group: 'core',
 }
 
 export const DEFAULT_PLAN: Plan = {
   push: {
     type: 'push',
-    label: 'Push',
+    label: 'push',
     required: true,
     exercises: [
-      { key: 'cable_crunch', name: 'Cable Crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'Abs' },
-      { key: 'hanging_leg_raise', name: 'Hanging Leg Raise', sets: 3, repMin: 10, repMax: 15, restSec: 60, bodyweight: true, group: 'Abs' },
+      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      { key: 'hanging_leg_raise', name: 'hanging leg raise', sets: 3, repMin: 10, repMax: 15, restSec: 60, bodyweight: true, group: 'abs' },
 
-      { key: 'incline_bench', name: 'Incline Bench Press', sets: 4, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'Chest' },
-      { key: 'flat_bench', name: 'Flat Bench Press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'Chest' },
-      { key: 'iso_chest', name: 'Chest Fly / Pec Deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'Chest' },
+      { key: 'incline_bench', name: 'incline bench press', sets: 4, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest' },
+      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'chest' },
+      { key: 'iso_chest', name: 'chest fly / pec deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'chest' },
 
-      { key: 'db_overhead_press', name: 'Dumbbell Overhead Press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'Shoulders & Triceps' },
-      { key: 'lateral_raise', name: 'Lateral Raise', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
-      { key: 'tricep_pushdown', name: 'Tricep Pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
-      { key: 'overhead_tricep_ext', name: 'Overhead Tricep Extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'Shoulders & Triceps' },
+      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders & triceps' },
+      { key: 'lateral_raise', name: 'lateral raise', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'shoulders & triceps' },
+      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'shoulders & triceps' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'shoulders & triceps' },
 
-      { key: 'pullups_or_pulldown', name: 'Weighted Pull-ups or Lat Pulldown', sets: 3, repMin: 6, repMax: 10, restSec: 90, bodyweight: true, optional: true, group: 'Pull Finisher (optional)' },
+      { key: 'pullups_or_pulldown', name: 'weighted pull-ups or lat pulldown', sets: 3, repMin: 6, repMax: 10, restSec: 90, bodyweight: true, optional: true, group: 'pull finisher (optional)' },
     ],
   },
   pull: {
     type: 'pull',
-    label: 'Pull + Legs',
+    label: 'pull + legs',
     required: false,
     exercises: [
-      { key: 'barbell_squat', name: 'Barbell Squat', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 5, group: 'Legs' },
-      { key: 'hamstring_curl', name: 'Hamstring Curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'Legs' },
-      { key: 'leg_adductor', name: 'Leg Adductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'Legs' },
-      { key: 'leg_abductor', name: 'Leg Abductor Machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'Legs' },
+      { key: 'barbell_squat', name: 'barbell squat', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 5, group: 'legs' },
+      { key: 'hamstring_curl', name: 'hamstring curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'legs' },
+      { key: 'leg_adductor', name: 'leg adductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
+      { key: 'leg_abductor', name: 'leg abductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
 
-      { key: 'weighted_pullups', name: 'Weighted Pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'Back' },
-      { key: 'cable_row', name: 'Cable Row (Neutral Grip)', sets: 2, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'Back' },
+      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+      { key: 'cable_row', name: 'cable row (neutral grip)', sets: 2, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'back' },
 
-      { key: 'incline_db_curl', name: 'Incline Dumbbell Curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 5, group: 'Biceps' },
-      { key: 'hammer_curl', name: 'Hammer Curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'Biceps' },
+      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 5, group: 'biceps' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'biceps' },
     ],
   },
 }
@@ -122,8 +122,8 @@ export const ALL_EXERCISES: PlannedExercise[] = [
  * A label the user actually chose is left alone.
  */
 const LEGACY_LABELS: Record<DayType, string[]> = {
-  push: ['Push Day'],
-  pull: ['Pull + Legs Day'],
+  push: ['Push Day', 'Push'],
+  pull: ['Pull + Legs Day', 'Pull + Legs'],
 }
 
 /**
@@ -135,7 +135,18 @@ const LEGACY_LABELS: Record<DayType, string[]> = {
  */
 function mergeDayExercises(defaults: PlannedExercise[], stored: PlannedExercise[]): PlannedExercise[] {
   const storedKeys = new Set(stored.map((e) => e.key))
-  const out = [...stored]
+  // Re-adopt the default name/group when a stored one differs only by case, so
+  // a device that saved the old Title Case names picks up the lowercase ones.
+  // A name the user actually changed reads differently and is left alone.
+  const out = stored.map((e) => {
+    const def = defaults.find((d) => d.key === e.key)
+    if (!def) return e
+    return {
+      ...e,
+      name: def.name.toLowerCase() === e.name.toLowerCase() ? def.name : e.name,
+      group: def.group.toLowerCase() === e.group.toLowerCase() ? def.group : e.group,
+    }
+  })
   defaults.forEach((def, i) => {
     if (storedKeys.has(def.key)) return
     // Insert after the nearest earlier default exercise that the stored list has,

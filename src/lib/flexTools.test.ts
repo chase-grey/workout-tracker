@@ -7,13 +7,13 @@ describe('applyFlexEdits', () => {
     const edits: FlexEdit[] = [
       {
         op: 'setExercise',
-        block: 'Pancake',
+        block: 'pancake',
         key: 'pancake_hang',
         fields: { reps: 10, name: 'Pancake Reach', restSec: -5 },
       },
     ]
     const { routine, applied, errors } = applyFlexEdits(FLEX_ROUTINE, edits)
-    const block = routine.find((b) => b.label === 'Pancake')!
+    const block = routine.find((b) => b.label === 'pancake')!
     const ex = block.exercises.find((e) => e.key === 'pancake_hang')!
     expect(ex.reps).toBe(10)
     expect(ex.name).toBe('Pancake Reach')
@@ -29,7 +29,7 @@ describe('applyFlexEdits', () => {
     expect(e1.some((m) => m.includes('not found'))).toBe(true)
 
     const { errors: e2 } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'setExercise', block: 'Pancake', key: 'ghost', fields: { reps: 5 } },
+      { op: 'setExercise', block: 'pancake', key: 'ghost', fields: { reps: 5 } },
     ])
     expect(e2.some((m) => m.includes('ghost'))).toBe(true)
   })
@@ -38,14 +38,14 @@ describe('applyFlexEdits', () => {
     const { applied } = applyFlexEdits(FLEX_ROUTINE, [
       { op: 'setBlockNote', block: '  pancake  ', note: 'hi' },
     ])
-    expect(applied.some((m) => m.includes('Pancake'))).toBe(true)
+    expect(applied.some((m) => m.includes('pancake'))).toBe(true)
   })
 
   it('addExercise slugs name into key and defaults missing fields', () => {
     const { routine, applied } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'addExercise', block: 'Pancake', exercise: { name: 'Frog Stretch!!' } },
+      { op: 'addExercise', block: 'pancake', exercise: { name: 'Frog Stretch!!' } },
     ])
-    const block = routine.find((b) => b.label === 'Pancake')!
+    const block = routine.find((b) => b.label === 'pancake')!
     const ex = block.exercises.find((e) => e.name === 'Frog Stretch!!')!
     expect(ex.key).toBe('frog_stretch')
     expect(ex.sets).toBe('3')
@@ -58,18 +58,18 @@ describe('applyFlexEdits', () => {
 
   it('addExercise appends _2 on key collision', () => {
     const { routine } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'addExercise', block: 'Pancake', exercise: { name: 'Pancake Hang' } },
+      { op: 'addExercise', block: 'pancake', exercise: { name: 'pancake hang' } },
     ])
-    const block = routine.find((b) => b.label === 'Pancake')!
+    const block = routine.find((b) => b.label === 'pancake')!
     expect(block.exercises.map((e) => e.key)).toContain('pancake_hang')
     expect(block.exercises.map((e) => e.key)).toContain('pancake_hang_2')
   })
 
   it('addExercise name falls back to key when name missing', () => {
     const { routine } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'addExercise', block: 'Pancake', exercise: { key: 'butterfly' } as never },
+      { op: 'addExercise', block: 'pancake', exercise: { key: 'butterfly' } as never },
     ])
-    const block = routine.find((b) => b.label === 'Pancake')!
+    const block = routine.find((b) => b.label === 'pancake')!
     const ex = block.exercises.find((e) => e.key === 'butterfly')!
     expect(ex.name).toBe('butterfly')
   })
@@ -83,14 +83,14 @@ describe('applyFlexEdits', () => {
 
   it('removeExercise removes by key and errors when missing', () => {
     const { routine, applied } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'removeExercise', block: 'Adductor superset', key: 'horse_squat' },
+      { op: 'removeExercise', block: 'adductor superset', key: 'horse_squat' },
     ])
-    const block = routine.find((b) => b.label === 'Adductor superset')!
+    const block = routine.find((b) => b.label === 'adductor superset')!
     expect(block.exercises.map((e) => e.key)).not.toContain('horse_squat')
     expect(applied.some((m) => m.includes('horse_squat'))).toBe(true)
 
     const { errors } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'removeExercise', block: 'Adductor superset', key: 'ghost' },
+      { op: 'removeExercise', block: 'adductor superset', key: 'ghost' },
     ])
     expect(errors.some((m) => m.includes('ghost'))).toBe(true)
   })
@@ -112,10 +112,10 @@ describe('applyFlexEdits', () => {
 
   it('removeBlock removes by label and errors when missing', () => {
     const { routine, applied } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'removeBlock', block: 'Pancake' },
+      { op: 'removeBlock', block: 'pancake' },
     ])
-    expect(routine.find((b) => b.label === 'Pancake')).toBeUndefined()
-    expect(applied.some((m) => m.includes('Pancake'))).toBe(true)
+    expect(routine.find((b) => b.label === 'pancake')).toBeUndefined()
+    expect(applied.some((m) => m.includes('pancake'))).toBe(true)
 
     const { errors } = applyFlexEdits(FLEX_ROUTINE, [{ op: 'removeBlock', block: 'Nope' }])
     expect(errors.some((m) => m.includes('not found'))).toBe(true)
@@ -123,9 +123,9 @@ describe('applyFlexEdits', () => {
 
   it('setBlockNote sets the note and errors when block missing', () => {
     const { routine, applied } = applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'setBlockNote', block: 'Pancake', note: 'go deeper' },
+      { op: 'setBlockNote', block: 'pancake', note: 'go deeper' },
     ])
-    expect(routine.find((b) => b.label === 'Pancake')!.note).toBe('go deeper')
+    expect(routine.find((b) => b.label === 'pancake')!.note).toBe('go deeper')
     expect(applied.length).toBe(1)
 
     const { errors } = applyFlexEdits(FLEX_ROUTINE, [
@@ -137,9 +137,9 @@ describe('applyFlexEdits', () => {
   it('does not mutate the input FLEX_ROUTINE', () => {
     const snapshot = JSON.stringify(FLEX_ROUTINE)
     applyFlexEdits(FLEX_ROUTINE, [
-      { op: 'setExercise', block: 'Pancake', key: 'pancake_hang', fields: { reps: 99 } },
-      { op: 'addExercise', block: 'Pancake', exercise: { name: 'New' } },
-      { op: 'removeBlock', block: 'Adductor superset' },
+      { op: 'setExercise', block: 'pancake', key: 'pancake_hang', fields: { reps: 99 } },
+      { op: 'addExercise', block: 'pancake', exercise: { name: 'New' } },
+      { op: 'removeBlock', block: 'adductor superset' },
       { op: 'addBlock', label: 'Extra' },
     ])
     expect(JSON.stringify(FLEX_ROUTINE)).toBe(snapshot)

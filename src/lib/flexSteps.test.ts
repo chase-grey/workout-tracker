@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildDeadBugSteps, buildFlexSteps, buildSessionSteps } from './flexSteps'
+import {
+  buildDeadBugSteps,
+  buildFlexSteps,
+  buildSessionSteps,
+  measureOpportunity,
+} from './flexSteps'
 import type { FlexBlock } from '../config/flexPlan'
 import { DEAD_BUG } from '../config/plan'
 
@@ -71,5 +76,53 @@ describe('buildSessionSteps', () => {
     expect(steps).toHaveLength(2 + DEAD_BUG.sets)
     expect(steps.slice(0, 2).every((s) => s.kind === 'flex')).toBe(true)
     expect(steps.slice(2).every((s) => s.kind === 'core')).toBe(true)
+  })
+})
+
+describe('measureOpportunity', () => {
+  // Default-shaped routine: tailor's/horse superset (3 rounds) then a pancake,
+  // giving the order tailors#0, horse#0, tailors#1, horse#1, tailors#2, horse#2,
+  // pancake#0, followed by the core block.
+  const plan: FlexBlock[] = [
+    { label: 'Superset', superset: true, exercises: [ex('tailors_pose', 3), ex('horse_squat', 3)] },
+    { label: 'Pancake', exercises: [ex('pancake_hang', 1)] },
+  ]
+  const steps = buildSessionSteps(plan)
+  const kindAt = (exKey: string, round: number) =>
+    measureOpportunity(
+      steps,
+      steps.findIndex((s) => s.kind === 'flex' && s.exKey === exKey && s.round === round),
+    )
+
+  it('offers the cold split on the very first stretch set', () => {
+    expect(kindAt('tailors_pose', 0)).toBe('cold-split')
+  })
+
+  it("offers the tailor's angle on the last tailor's set", () => {
+    expect(kindAt('tailors_pose', 2)).toBe('tailors')
+  })
+
+  it('offers the warm split on the last stretch set before core', () => {
+    expect(kindAt('pancake_hang', 0)).toBe('warm-split')
+  })
+
+  it('offers nothing on the intermediate sets', () => {
+    expect(kindAt('horse_squat', 0)).toBeNull()
+    expect(kindAt('tailors_pose', 1)).toBeNull()
+    expect(kindAt('horse_squat', 1)).toBeNull()
+  })
+
+  it('offers nothing on the core block', () => {
+    const firstCore = steps.findIndex((s) => s.kind === 'core')
+    expect(measureOpportunity(steps, firstCore)).toBeNull()
+    expect(measureOpportunity(steps, steps.length - 1)).toBeNull()
+  })
+
+  it('lets the cold reading win the opening set even when it is a tailor set', () => {
+    // Only one tailor set, and it opens the routine: cold split takes priority
+    // over the tailor's-angle reading.
+    const tinyPlan: FlexBlock[] = [{ label: 'B', exercises: [ex('tailors_pose', 1), ex('horse_squat', 1)] }]
+    const tiny = buildSessionSteps(tinyPlan)
+    expect(measureOpportunity(tiny, 0)).toBe('cold-split')
   })
 })

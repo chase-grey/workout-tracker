@@ -68,15 +68,15 @@ export function AngleEditor({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-lg font-bold">Adjust {MEASURE_LABEL[mode].toLowerCase()} lines</h2>
+        <h2 className="text-lg font-bold">adjust {MEASURE_LABEL[mode].toLowerCase()} lines</h2>
         <button onClick={onCancel} className="min-h-[44px] px-2 text-sm text-neutral-400">
-          Cancel
+          cancel
         </button>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4">
         <p className="mb-3 text-sm text-neutral-400">
-          Drag the dots so the lines trace your body. The angle updates live.
+          drag the dots so the lines trace your body. the angle updates live.
         </p>
 
         <div
@@ -120,7 +120,7 @@ export function AngleEditor({
               <button
                 key={spec.key}
                 onPointerDown={onHandleDown(spec.key)}
-                aria-label={`Move ${spec.label}`}
+                aria-label={`move ${spec.label}`}
                 className="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full active:scale-110"
                 style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
               >
@@ -133,17 +133,17 @@ export function AngleEditor({
         <div className="mt-4 rounded-2xl bg-surface p-4 text-center">
           {mode === 'split' ? (
             <>
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Side split</p>
+              <p className="text-xs tracking-wide text-neutral-500">side split</p>
               <p className="text-5xl font-bold tabular-nums">{result.splitDeg ?? 0}°</p>
             </>
           ) : (
             <div className="flex justify-around">
               <div>
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Left</p>
+                <p className="text-xs tracking-wide text-neutral-500">left</p>
                 <p className="text-4xl font-bold tabular-nums">{result.tailorsLeftDeg ?? 0}°</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Right</p>
+                <p className="text-xs tracking-wide text-neutral-500">right</p>
                 <p className="text-4xl font-bold tabular-nums">{result.tailorsRightDeg ?? 0}°</p>
               </div>
             </div>
@@ -156,7 +156,7 @@ export function AngleEditor({
           onClick={() => onSave(result, handles)}
           className="min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
         >
-          Save angle
+          save angle
         </button>
       </div>
     </div>

@@ -14,6 +14,6 @@ export const MEASUREMENT_HISTORY: MeasurementEntry[] = [
     date: '2025-10-31',
     bodyFatPct: 11,
     absVisibility: 'none',
-    note: 'Baseline: 11% BF, abs not yet visible',
+    note: 'baseline: 11% bf, abs not yet visible',
   },
 ]

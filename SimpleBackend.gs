@@ -45,7 +45,15 @@ const WORKOUT_HEADERS = [
   'is_historical',
 ]
 const BW_HEADERS = ['date', 'weight_lbs']
-const FLEX_HEADERS = ['date', 'split_deg', 'tailors_left_deg', 'tailors_right_deg', 'note']
+const FLEX_HEADERS = [
+  'date',
+  'split_deg',
+  'cold_split_deg',
+  'warm_split_deg',
+  'tailors_left_deg',
+  'tailors_right_deg',
+  'note',
+]
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
@@ -201,8 +209,11 @@ function appendBodyWeight(body) {
 
 /* ------------------------------------------------------- flexibility + plan */
 
-// Ensure the flexibility sheet uses the multi-angle schema, migrating the old
-// [date, angle_deg, note] layout in place (old angle_deg -> split_deg).
+// Ensure the flexibility sheet uses the current cold/warm-split schema, migrating
+// older layouts in place:
+//   - oldest [date, angle_deg, note]              -> angle_deg becomes split_deg
+//   - prior  [date, split_deg, tl, tr, note]      -> cold/warm columns inserted
+// The legacy split_deg column is preserved (older split readings count as warm).
 function flexSheet() {
   let sh = ss.getSheetByName('flexibility')
   if (!sh) {
@@ -211,13 +222,31 @@ function flexSheet() {
     return sh
   }
   const header = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0]
+
+  // Oldest single-angle layout: [date, angle_deg, note].
   if (header[1] === 'angle_deg') {
     const data = sh.getDataRange().getValues()
     const migrated = [FLEX_HEADERS]
     for (let i = 1; i < data.length; i++) {
       const r = data[i]
       if (!r[0]) continue
-      migrated.push([r[0], r[1], '', '', r[2] || '']) // date, split_deg, tl, tr, note
+      // date, split_deg, cold, warm, tl, tr, note
+      migrated.push([r[0], r[1], '', '', '', '', r[2] || ''])
+    }
+    sh.clearContents()
+    sh.getRange(1, 1, migrated.length, FLEX_HEADERS.length).setValues(migrated)
+    return sh
+  }
+
+  // Prior multi-angle layout without cold/warm columns: tailor's sat at index 2.
+  if (header[2] === 'tailors_left_deg') {
+    const data = sh.getDataRange().getValues()
+    const migrated = [FLEX_HEADERS]
+    for (let i = 1; i < data.length; i++) {
+      const r = data[i]
+      if (!r[0]) continue
+      // date, split_deg, cold(blank), warm(blank), tl, tr, note
+      migrated.push([r[0], r[1], '', '', r[2], r[3], r[4] || ''])
     }
     sh.clearContents()
     sh.getRange(1, 1, migrated.length, FLEX_HEADERS.length).setValues(migrated)
@@ -244,9 +273,11 @@ function getFlex(since) {
     out.push({
       date: date,
       splitDeg: numOrNull(r[1]),
-      tailorsLeftDeg: numOrNull(r[2]),
-      tailorsRightDeg: numOrNull(r[3]),
-      note: String(r[4] || ''),
+      coldSplitDeg: numOrNull(r[2]),
+      warmSplitDeg: numOrNull(r[3]),
+      tailorsLeftDeg: numOrNull(r[4]),
+      tailorsRightDeg: numOrNull(r[5]),
+      note: String(r[6] || ''),
     })
   }
   return out
@@ -274,14 +305,20 @@ function appendFlex(body) {
         // Merge: incoming non-null angle fields overwrite; nulls keep existing.
         const cur = sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).getValues()[0]
         const split = e.splitDeg == null ? cur[1] : Number(e.splitDeg)
-        const tl = e.tailorsLeftDeg == null ? cur[2] : Number(e.tailorsLeftDeg)
-        const tr = e.tailorsRightDeg == null ? cur[3] : Number(e.tailorsRightDeg)
-        const note = e.note ? e.note : cur[4] || ''
-        sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).setValues([[e.date, split, tl, tr, note]])
+        const cold = e.coldSplitDeg == null ? cur[2] : Number(e.coldSplitDeg)
+        const warm = e.warmSplitDeg == null ? cur[3] : Number(e.warmSplitDeg)
+        const tl = e.tailorsLeftDeg == null ? cur[4] : Number(e.tailorsLeftDeg)
+        const tr = e.tailorsRightDeg == null ? cur[5] : Number(e.tailorsRightDeg)
+        const note = e.note ? e.note : cur[6] || ''
+        sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).setValues([
+          [e.date, split, cold, warm, tl, tr, note],
+        ])
       } else {
         sh.appendRow([
           e.date,
           numOrBlank(e.splitDeg),
+          numOrBlank(e.coldSplitDeg),
+          numOrBlank(e.warmSplitDeg),
           numOrBlank(e.tailorsLeftDeg),
           numOrBlank(e.tailorsRightDeg),
           e.note || '',

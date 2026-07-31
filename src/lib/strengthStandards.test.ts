@@ -17,7 +17,7 @@ describe('liftPercentile — lookup', () => {
     const r = liftPercentile('squat', 1.5 * BW, BW)
     expect(r.percentile).toBeGreaterThanOrEqual(45)
     expect(r.percentile).toBeLessThanOrEqual(55)
-    expect(r.band).toBe('Intermediate')
+    expect(r.band).toBe('intermediate')
     expect(r.developmentScore).toBeCloseTo(r.percentile / 100, 5)
   })
 
@@ -32,7 +32,7 @@ describe('liftPercentile — lookup', () => {
     // Total load = bodyweight (added weight 0) → ratio 1.0 → Novice/Intermediate edge.
     const r = liftPercentile('pullup', BW, BW)
     expect(r.percentile).toBeGreaterThanOrEqual(20)
-    expect(r.band === 'Novice' || r.band === 'Intermediate').toBe(true)
+    expect(r.band === 'novice' || r.band === 'intermediate').toBe(true)
   })
 
   it('is monotonic — heavier lift ⇒ higher percentile', () => {
@@ -52,7 +52,7 @@ describe('liftPercentile — clamping', () => {
   it('caps an absurd lift at 99', () => {
     const r = liftPercentile('squat', 10 * BW, BW)
     expect(r.percentile).toBe(99)
-    expect(r.band).toBe('Elite')
+    expect(r.band).toBe('elite')
     expect(r.developmentScore).toBeLessThanOrEqual(1)
   })
 
@@ -66,11 +66,11 @@ describe('liftPercentile — clamping', () => {
 
 describe('bandFor', () => {
   it('labels the percentile ranges', () => {
-    expect(bandFor(0)).toBe('Beginner')
-    expect(bandFor(30)).toBe('Novice')
-    expect(bandFor(50)).toBe('Intermediate')
-    expect(bandFor(80)).toBe('Advanced')
-    expect(bandFor(95)).toBe('Elite')
+    expect(bandFor(0)).toBe('beginner')
+    expect(bandFor(30)).toBe('novice')
+    expect(bandFor(50)).toBe('intermediate')
+    expect(bandFor(80)).toBe('advanced')
+    expect(bandFor(95)).toBe('elite')
   })
 })
 

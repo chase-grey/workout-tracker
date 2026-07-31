@@ -34,22 +34,23 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={onClose}>
+    // Above the rest overlay (z-50) — it can be opened from the rest screen's menu.
+    <div className="fixed inset-0 z-60 flex items-end bg-black/60" onClick={onClose}>
       <div
         className="w-full rounded-t-3xl bg-surface p-5"
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}
       >
-        <h2 className="mb-3 text-lg font-bold">Log measurement</h2>
+        <h2 className="mb-3 text-lg font-bold">log measurement</h2>
 
         <button
           onClick={() => setMeasuring(true)}
           className="mb-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-surface-2 font-semibold text-neutral-200 active:opacity-80"
         >
-          <MdPhotoCamera aria-hidden /> Measure with camera
+          <MdPhotoCamera aria-hidden /> measure
         </button>
 
-        <label className="mb-1 block text-sm text-neutral-300">Side split (°)</label>
+        <label className="mb-1 block text-sm text-neutral-300">side split (°)</label>
         <input
           type="number"
           inputMode="decimal"
@@ -61,7 +62,7 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
 
         <div className="mt-3 flex gap-2">
           <div className="flex-1">
-            <label className="mb-1 block text-sm text-neutral-300">Tailor's left (°)</label>
+            <label className="mb-1 block text-sm text-neutral-300">tailor's left (°)</label>
             <input
               type="number"
               inputMode="decimal"
@@ -72,7 +73,7 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div className="flex-1">
-            <label className="mb-1 block text-sm text-neutral-300">Tailor's right (°)</label>
+            <label className="mb-1 block text-sm text-neutral-300">tailor's right (°)</label>
             <input
               type="number"
               inputMode="decimal"
@@ -85,7 +86,7 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="mt-2 text-xs text-neutral-500">
-          Camera measures the split and tailor's pose. Drag the lines to fine-tune, then review the
+          camera measures the split and tailor's pose. drag the lines to fine-tune, then review the
           numbers below before saving.
         </p>
 
@@ -94,7 +95,7 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
           disabled={!anyValue}
           className="mt-4 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black disabled:opacity-30"
         >
-          Save measurement
+          save measurement
         </button>
       </div>
 

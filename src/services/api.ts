@@ -31,7 +31,7 @@ export function isConfigured(): boolean {
 
 async function get<T>(route: string, params: Record<string, string> = {}): Promise<T> {
   const base = baseUrl()
-  if (!base) throw new Error('API not configured')
+  if (!base) throw new Error('api not configured')
   const url = new URL(base)
   url.searchParams.set('route', route)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
@@ -42,7 +42,7 @@ async function get<T>(route: string, params: Record<string, string> = {}): Promi
 
 async function post<T>(route: string, body: unknown): Promise<T> {
   const base = baseUrl()
-  if (!base) throw new Error('API not configured')
+  if (!base) throw new Error('api not configured')
   const url = new URL(base)
   url.searchParams.set('route', route)
   const res = await fetch(url.toString(), {

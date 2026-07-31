@@ -4,10 +4,10 @@ import { MdFitnessCenter, MdInsights, MdChatBubbleOutline, MdSettings } from 're
 export type Tab = 'today' | 'progress' | 'chat' | 'settings'
 
 const TABS: { id: Tab; Icon: IconType; label: string }[] = [
-  { id: 'today', Icon: MdFitnessCenter, label: 'Today' },
-  { id: 'progress', Icon: MdInsights, label: 'Progress' },
-  { id: 'chat', Icon: MdChatBubbleOutline, label: 'Chat' },
-  { id: 'settings', Icon: MdSettings, label: 'Settings' },
+  { id: 'today', Icon: MdFitnessCenter, label: 'today' },
+  { id: 'progress', Icon: MdInsights, label: 'progress' },
+  { id: 'chat', Icon: MdChatBubbleOutline, label: 'chat' },
+  { id: 'settings', Icon: MdSettings, label: 'settings' },
 ]
 
 export function BottomNav({

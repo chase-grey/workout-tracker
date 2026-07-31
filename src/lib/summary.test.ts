@@ -51,7 +51,7 @@ describe('weeklySummary', () => {
     ]
     const s = weeklySummary(workouts, [], TODAY)
     expect(s.prs).toHaveLength(1)
-    expect(s.prs[0].exercise).toBe('Incline Bench Press')
+    expect(s.prs[0].exercise).toBe('incline bench press')
     expect(s.prs[0].est1RM).toBe(128.3)
   })
 
@@ -72,7 +72,7 @@ describe('weeklySummary', () => {
     ]
     const s = weeklySummary(workouts, [], TODAY)
     expect(s.prs).toHaveLength(1)
-    expect(s.prs[0].exercise).toBe('Cable Row (Neutral Grip)')
+    expect(s.prs[0].exercise).toBe('cable row (neutral grip)')
   })
 
   it('ignores null-weight rows for 1RM', () => {

@@ -23,7 +23,7 @@ import {
 /** Distinct hues for the three buckets — green work, deep-green stretch, amber rest. */
 const COLORS = { workout: '#22c55e', stretch: '#15803d', rest: '#f59e0b' } as const
 
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTH_ABBR = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
 /** "2026-07" → "Jul '26". */
 function monthLabel(m: string): string {
@@ -53,9 +53,9 @@ export function TimeSpent({ months }: { months: number | null }) {
   const pieData = useMemo(
     () =>
       [
-        { key: 'workout', name: 'Working out', sec: totals.workoutSec, fill: COLORS.workout },
-        { key: 'stretch', name: 'Stretch + Core', sec: totals.stretchSec, fill: COLORS.stretch },
-        { key: 'rest', name: 'Resting', sec: totals.restSec, fill: COLORS.rest },
+        { key: 'workout', name: 'working out', sec: totals.workoutSec, fill: COLORS.workout },
+        { key: 'stretch', name: 'stretch + core', sec: totals.stretchSec, fill: COLORS.stretch },
+        { key: 'rest', name: 'resting', sec: totals.restSec, fill: COLORS.rest },
       ].filter((d) => d.sec > 0),
     [totals],
   )
@@ -73,13 +73,13 @@ export function TimeSpent({ months }: { months: number | null }) {
 
   return (
     <>
-      <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500">
-        Time spent{grandTotal > 0 ? ` · ${fmtHm(grandTotal)}` : ''}
+      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">
+        time spent{grandTotal > 0 ? ` · ${fmtHm(grandTotal)}` : ''}
       </h3>
 
       {grandTotal === 0 ? (
         <div className="flex h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          No sessions logged yet in this range — finish a workout or stretch to start tracking time.
+          no sessions logged yet in this range — finish a workout or stretch to start tracking time.
         </div>
       ) : (
         <>
@@ -136,9 +136,9 @@ export function TimeSpent({ months }: { months: number | null }) {
                     formatter={(v, n) => [`${v} min`, n]}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="workout" name="Working out" stroke={COLORS.workout} strokeWidth={2} dot={{ r: 2 }} />
-                  <Line type="monotone" dataKey="stretch" name="Stretch + Core" stroke={COLORS.stretch} strokeWidth={2} dot={{ r: 2 }} />
-                  <Line type="monotone" dataKey="rest" name="Resting" stroke={COLORS.rest} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="workout" name="working out" stroke={COLORS.workout} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="stretch" name="stretch + core" stroke={COLORS.stretch} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="rest" name="resting" stroke={COLORS.rest} strokeWidth={2} dot={{ r: 2 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

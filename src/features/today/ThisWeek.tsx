@@ -48,7 +48,7 @@ export function ThisWeek() {
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">This week</h2>
+        <h2 className="text-sm font-semibold tracking-wide text-neutral-500">this week</h2>
         <div className="flex items-center gap-3 text-sm font-semibold">
           <span className="flex items-center gap-1 text-accent">
             <MdLocalFireDepartment aria-hidden /> {streaks.streak}
@@ -73,7 +73,7 @@ export function ThisWeek() {
           title="on-pace for now"
         />
       </div>
-      <div className="relative mt-1 h-3 text-[10px] uppercase tracking-wide text-neutral-500">
+      <div className="relative mt-1 h-3 text-[10px] tracking-wide text-neutral-500">
         <span className="absolute -translate-x-1/2" style={{ left: `${checkpointFrac * 100}%` }}>
           checkpoint
         </span>
@@ -81,14 +81,14 @@ export function ThisWeek() {
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
-        <MetricBar label="Workouts" value={wp.workouts} goal={goals.workouts} />
-        <MetricBar label="Flex sessions" value={wp.flex} goal={goals.flex} />
-        <MetricBar label="Calorie days" value={wp.calDays} goal={goals.calDays} suffix=" days" />
+        <MetricBar label="workouts" value={wp.workouts} goal={goals.workouts} />
+        <MetricBar label="flex sessions" value={wp.flex} goal={goals.flex} />
+        <MetricBar label="calorie days" value={wp.calDays} goal={goals.calDays} suffix=" days" />
       </div>
 
       {summary.weightTrend !== null && (
         <p className="mt-2 text-sm text-neutral-400">
-          Weight{' '}
+          weight{' '}
           <span className="font-semibold tabular-nums text-accent">
             {summary.weightTrend > 0 ? '+' : ''}
             {summary.weightTrend}
@@ -102,13 +102,13 @@ export function ThisWeek() {
           {summary.prs.map((pr) => (
             <li key={pr.exercise} className="text-accent-2">
               <MdEmojiEvents className="inline align-text-bottom mr-1" aria-hidden />
-              {pr.exercise} — {pr.est1RM} lbs est. 1RM
+              {pr.exercise} — {pr.est1RM} lbs est. 1rm
             </li>
           ))}
           {calPR && (
             <li className="text-accent-2">
               <MdEmojiEvents className="inline align-text-bottom mr-1" aria-hidden />
-              Calories — {calPR.calories} cal (best bulk day!)
+              calories — {calPR.calories} cal (best bulk day!)
             </li>
           )}
         </ul>

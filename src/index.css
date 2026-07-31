@@ -107,9 +107,69 @@ input[type='number'] {
   will-change: transform, opacity;
 }
 
+/* Orbit variant: a dot tracing a slow circuit around a faint track. Linear, so
+   the pace stays even the whole way round rather than easing at the poles. */
+@keyframes rest-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.rest-orbit {
+  animation: rest-orbit 9s linear infinite;
+  will-change: transform;
+}
+
+/* Aurora variant: two blurred bands drifting past each other. Offset durations
+   keep them from ever settling into a repeating pair. */
+@keyframes rest-aurora-a {
+  0%,
+  100% {
+    transform: translate(-8%, 12%);
+  }
+  50% {
+    transform: translate(8%, 58%);
+  }
+}
+@keyframes rest-aurora-b {
+  0%,
+  100% {
+    transform: translate(6%, 62%);
+  }
+  50% {
+    transform: translate(-6%, 18%);
+  }
+}
+.rest-aurora-a {
+  animation: rest-aurora-a 11s ease-in-out infinite;
+  will-change: transform;
+}
+.rest-aurora-b {
+  animation: rest-aurora-b 8s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Bloom variant: petals opening and closing while the whole flower turns. */
+@keyframes rest-bloom {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(0.78);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.08);
+  }
+}
+.rest-bloom {
+  animation: rest-bloom 12s ease-in-out infinite;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rest-breathe,
-  .rest-glow {
+  .rest-glow,
+  .rest-orbit,
+  .rest-aurora-a,
+  .rest-aurora-b,
+  .rest-bloom {
     animation: none;
   }
   .rest-tide {
@@ -123,6 +183,13 @@ input[type='number'] {
   }
   .rest-ripple:not(:first-child) {
     display: none;
+  }
+  /* Park the drifting bands somewhere legible instead of at their 0% pose. */
+  .rest-aurora-a {
+    transform: translate(0, 20%);
+  }
+  .rest-aurora-b {
+    transform: translate(0, 50%);
   }
 }
 

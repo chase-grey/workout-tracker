@@ -91,7 +91,7 @@ export function applyPlanEdits(
 
   for (const edit of edits) {
     if (!isValidDay(next, edit.day)) {
-      errors.push(`Invalid day "${String(edit.day)}" for op "${edit.op}"`)
+      errors.push(`invalid day "${String(edit.day)}" for op "${edit.op}"`)
       continue
     }
     const dayPlan = next[edit.day]
@@ -100,7 +100,7 @@ export function applyPlanEdits(
       case 'setExercise': {
         const exercise = dayPlan.exercises.find((e) => e.key === edit.key)
         if (!exercise) {
-          errors.push(`No exercise "${edit.key}" on ${edit.day}`)
+          errors.push(`no exercise "${edit.key}" on ${edit.day}`)
           break
         }
         for (const [field, value] of Object.entries(edit.fields)) {
@@ -121,7 +121,7 @@ export function applyPlanEdits(
             continue
           }
         }
-        applied.push(`Updated ${exercise.name || exercise.key} on ${edit.day}`)
+        applied.push(`updated ${exercise.name || exercise.key} on ${edit.day}`)
         break
       }
 
@@ -137,37 +137,37 @@ export function applyPlanEdits(
           repMin: isValidNumber(src.repMin) ? src.repMin : 8,
           repMax: isValidNumber(src.repMax) ? src.repMax : 12,
           restSec: isValidNumber(src.restSec) ? src.restSec : 90,
-          group: src.group ?? 'Custom',
+          group: src.group ?? 'custom',
         }
         if (isValidNumber(src.increment)) exercise.increment = src.increment
         if (typeof src.bodyweight === 'boolean') exercise.bodyweight = src.bodyweight
         if (typeof src.optional === 'boolean') exercise.optional = src.optional
         dayPlan.exercises.push(exercise)
-        applied.push(`Added ${exercise.name} to ${edit.day}`)
+        applied.push(`added ${exercise.name} to ${edit.day}`)
         break
       }
 
       case 'removeExercise': {
         const idx = dayPlan.exercises.findIndex((e) => e.key === edit.key)
         if (idx === -1) {
-          errors.push(`No exercise "${edit.key}" on ${edit.day}`)
+          errors.push(`no exercise "${edit.key}" on ${edit.day}`)
           break
         }
         dayPlan.exercises.splice(idx, 1)
-        applied.push(`Removed ${edit.key} from ${edit.day}`)
+        applied.push(`removed ${edit.key} from ${edit.day}`)
         break
       }
 
       case 'setDayLabel': {
         dayPlan.label = edit.label
-        applied.push(`Set ${edit.day} label to "${edit.label}"`)
+        applied.push(`set ${edit.day} label to "${edit.label}"`)
         break
       }
 
       default: {
         // Exhaustiveness guard for unknown ops.
         const _exhaustive: never = edit
-        errors.push(`Unknown op "${(_exhaustive as { op?: string }).op ?? ''}"`)
+        errors.push(`unknown op "${(_exhaustive as { op?: string }).op ?? ''}"`)
         break
       }
     }

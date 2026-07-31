@@ -39,15 +39,15 @@ export function WorkoutFinishOverlay({
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <div className="flex flex-col items-center text-center">
           <MdEmojiEvents className={`text-5xl ${hasPRs ? 'text-amber-400' : 'text-accent-2'}`} aria-hidden />
-          <h1 className="mt-3 text-3xl font-black leading-tight">Workout complete</h1>
+          <h1 className="mt-3 text-3xl font-black leading-tight">workout complete</h1>
         </div>
 
         {hasPRs && (
           <div className="mt-6 rounded-2xl border border-amber-400/50 bg-surface p-4">
             <div className="flex items-center gap-2 text-amber-400">
               <MdEmojiEvents className="text-xl" aria-hidden />
-              <span className="text-sm font-bold uppercase tracking-wider">
-                {prs.length > 1 ? 'New PRs' : 'New PR'}
+              <span className="text-sm font-bold tracking-wider">
+                {prs.length > 1 ? 'new prs' : 'new pr'}
               </span>
             </div>
             <ul className="mt-2 flex flex-col gap-1.5">
@@ -64,16 +64,16 @@ export function WorkoutFinishOverlay({
         <div className="mt-5 rounded-2xl bg-surface p-4">
           <div className="flex items-center gap-2 text-accent-2">
             <MdTimer className="text-xl" aria-hidden />
-            <span className="text-sm font-bold uppercase tracking-wider">Time · {fmtMin(totalSec)}</span>
+            <span className="text-sm font-bold tracking-wider">time · {fmtMin(totalSec)}</span>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-2 py-3 text-center">
               <span className="text-xl font-black text-accent-2">{fmtMin(activeSec)}</span>
-              <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">Active</span>
+              <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">active</span>
             </div>
             <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-2 py-3 text-center">
               <span className="text-xl font-black text-amber-400">{fmtMin(restSec)}</span>
-              <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">Resting</span>
+              <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">resting</span>
             </div>
           </div>
         </div>
@@ -82,8 +82,8 @@ export function WorkoutFinishOverlay({
           <div className="mt-5 rounded-2xl border border-accent/40 bg-surface p-4">
             <div className="flex items-center gap-2 text-accent">
               <MdBolt className="text-xl" aria-hidden />
-              <span className="text-sm font-bold uppercase tracking-wider">
-                {baselines.length > 1 ? 'New baselines' : 'New baseline'}
+              <span className="text-sm font-bold tracking-wider">
+                {baselines.length > 1 ? 'new baselines' : 'new baseline'}
               </span>
             </div>
             <ul className="mt-2 flex flex-col gap-1.5">
@@ -102,7 +102,7 @@ export function WorkoutFinishOverlay({
           onClick={onClose}
           className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:bg-accent-2"
         >
-          Back to today
+          back to today
         </button>
       </div>
     </div>

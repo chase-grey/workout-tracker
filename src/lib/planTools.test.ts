@@ -42,7 +42,7 @@ describe('applyPlanEdits', () => {
     ])
     const added = plan.push.exercises.find((e) => e.name === 'Cable Fly!!')
     expect(added?.key).toBe('cable_fly')
-    expect(applied[0]).toContain('Added Cable Fly!! to push')
+    expect(applied[0]).toContain('added Cable Fly!! to push')
   })
 
   it('addExercise handles key collision by suffixing', () => {
@@ -66,7 +66,7 @@ describe('applyPlanEdits', () => {
     expect(added?.repMin).toBe(8)
     expect(added?.repMax).toBe(12)
     expect(added?.restSec).toBe(90)
-    expect(added?.group).toBe('Custom')
+    expect(added?.group).toBe('custom')
   })
 
   it('removeExercise removes by key', () => {
@@ -74,7 +74,7 @@ describe('applyPlanEdits', () => {
       { op: 'removeExercise', day: 'pull', key: 'hammer_curl' },
     ])
     expect(plan.pull.exercises.some((e) => e.key === 'hammer_curl')).toBe(false)
-    expect(applied[0]).toBe('Removed hammer_curl from pull')
+    expect(applied[0]).toBe('removed hammer_curl from pull')
     expect(errors).toHaveLength(0)
   })
 

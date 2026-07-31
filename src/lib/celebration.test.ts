@@ -98,7 +98,7 @@ describe('baselineCelebration', () => {
   it('leads with the first name and lists the rest as details', () => {
     const c = baselineCelebration(['Bench', 'Squat'])
     expect(c?.tier).toBe('medium')
-    expect(c?.title).toBe('New baselines set')
+    expect(c?.title).toBe('new baselines set')
     expect(c?.details).toEqual(['Squat'])
   })
 })
@@ -173,7 +173,7 @@ describe('composeCelebration', () => {
     const goal = achievementCelebration('fullGoal', { workouts: 2, flex: 2, calDays: 6 }, DEFAULT_WEEKLY_GOALS)
     const c = composeCelebration([goal, pr])
     expect(c?.tier).toBe('epic')
-    expect(c?.title).toBe('NEW PR!')
-    expect(c?.details).toContain('Weekly goal complete!')
+    expect(c?.title).toBe('new pr!')
+    expect(c?.details).toContain('weekly goal complete!')
   })
 })

@@ -27,7 +27,7 @@ async function savePhoto(blob: Blob, name: string): Promise<void> {
   const file = new File([blob], name, { type: 'image/jpeg' })
   const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean }
   if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-    await nav.share({ files: [file], title: 'Stretch photo' })
+    await nav.share({ files: [file], title: 'stretch photo' })
     return
   }
   const url = URL.createObjectURL(blob)
@@ -207,7 +207,7 @@ export function CameraMeasure({
         await videoRef.current.play().catch(() => {})
       }
     } catch {
-      setError("Couldn't open the camera. Grant camera access, or choose a photo instead.")
+      setError("couldn't open the camera. grant camera access, or choose a photo instead.")
     }
   }, [facing, stopStream])
 
@@ -296,7 +296,7 @@ export function CameraMeasure({
       setShot({ url: canvas.toDataURL('image/jpeg', 0.9), handles })
       setPhase('editing')
     } catch {
-      setError("Couldn't read that image.")
+      setError("couldn't read that image.")
     } finally {
       URL.revokeObjectURL(url)
     }
@@ -333,9 +333,9 @@ export function CameraMeasure({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black">
       <header className="flex items-center justify-between px-4 py-3 text-white">
-        <h2 className="text-lg font-bold">Measure {MEASURE_LABEL[mode].toLowerCase()}</h2>
+        <h2 className="text-lg font-bold">measure {MEASURE_LABEL[mode].toLowerCase()}</h2>
         <button onClick={onClose} className="min-h-[44px] px-2 text-sm text-neutral-300">
-          Close
+          close
         </button>
       </header>
 
@@ -347,7 +347,7 @@ export function CameraMeasure({
             <span className="font-mono text-9xl font-bold tabular-nums text-white drop-shadow-lg">
               {remaining}
             </span>
-            <span className="text-sm uppercase tracking-widest text-white/80">Get into position</span>
+            <span className="text-sm tracking-widest text-white/80">get into position</span>
           </div>
         )}
 
@@ -381,7 +381,7 @@ export function CameraMeasure({
 
             {/* Self-timer length */}
             <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-wide text-neutral-400">Timer</span>
+              <span className="text-xs tracking-wide text-neutral-400">timer</span>
               {TIMER_CHOICES.map((s) => (
                 <button
                   key={s}
@@ -400,11 +400,11 @@ export function CameraMeasure({
                 onClick={startTimer}
                 className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
               >
-                <MdCameraAlt aria-hidden /> Start {timerSec}s timer
+                <MdCameraAlt aria-hidden /> start {timerSec}s timer
               </button>
               <button
                 onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))}
-                aria-label="Flip camera"
+                aria-label="flip camera"
                 className="flex min-h-[52px] w-14 items-center justify-center rounded-2xl bg-white/10"
               >
                 <MdCameraswitch className="text-2xl" aria-hidden />
@@ -412,7 +412,7 @@ export function CameraMeasure({
             </div>
 
             <label className="flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/5 text-sm text-neutral-300">
-              <MdPhotoLibrary aria-hidden /> Choose an existing photo
+              <MdPhotoLibrary aria-hidden /> choose an existing photo
               <input type="file" accept="image/*" onChange={onPickFile} className="hidden" />
             </label>
           </>
@@ -424,10 +424,10 @@ export function CameraMeasure({
               onClick={() => void capture()}
               className="min-h-[52px] flex-1 rounded-2xl bg-accent text-lg font-bold text-black"
             >
-              Capture now
+              capture now
             </button>
             <button onClick={retake} className="min-h-[52px] flex-1 rounded-2xl bg-white/10 font-semibold">
-              Cancel
+              cancel
             </button>
           </div>
         )}

@@ -3,9 +3,9 @@ import { useData } from '../../store/DataContext'
 import { navyBodyFat, latestMeasurement, type AbsVisibility } from '../../lib/bodyComp'
 
 const VISIBILITY_OPTIONS: { value: AbsVisibility; label: string }[] = [
-  { value: 'none', label: 'Not visible' },
-  { value: 'faint', label: 'Faint' },
-  { value: 'clear', label: 'Clear' },
+  { value: 'none', label: 'not visible' },
+  { value: 'faint', label: 'faint' },
+  { value: 'clear', label: 'clear' },
 ]
 
 /**
@@ -49,7 +49,7 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
     autoFocus = false,
   ) => (
     <div className="flex-1">
-      <label className="mb-1 block text-xs uppercase tracking-wider text-neutral-500">{label}</label>
+      <label className="mb-1 block text-xs tracking-wider text-neutral-500">{label}</label>
       <div className="flex items-center gap-1">
         <input
           autoFocus={autoFocus}
@@ -72,28 +72,28 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
       >
-        <h2 className="mb-4 text-lg font-bold">Log measurement</h2>
+        <h2 className="mb-4 text-lg font-bold">log measurement</h2>
         <div className="flex gap-3">
-          {field('Waist', waist, setWaist, '32', true)}
-          {field('Neck', neck, setNeck, '15')}
+          {field('waist', waist, setWaist, '32', true)}
+          {field('neck', neck, setNeck, '15')}
         </div>
 
         {heightIn > 0 ? (
           <p className="mt-4 text-center text-sm text-neutral-400">
-            Est. body fat:{' '}
+            est. body fat:{' '}
             <span className="font-bold tabular-nums text-accent-2">
               {bf != null ? `${bf}%` : '—'}
             </span>
           </p>
         ) : (
           <p className="mt-4 text-center text-sm text-neutral-500">
-            Add your height at setup to estimate body fat %.
+            add your height at setup to estimate body fat %.
           </p>
         )}
 
         <div className="mt-4">
-          <label className="mb-1 block text-xs uppercase tracking-wider text-neutral-500">
-            Abs visible? <span className="normal-case text-neutral-600">(optional)</span>
+          <label className="mb-1 block text-xs tracking-wider text-neutral-500">
+            abs visible? <span className="normal-case text-neutral-600">(optional)</span>
           </label>
           <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
             {VISIBILITY_OPTIONS.map((o) => (
@@ -109,7 +109,7 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
             ))}
           </div>
           <p className="mt-1 text-xs text-neutral-600">
-            Logging this builds your personal “BF% needed to see abs” curve.
+            logging this builds your personal “bf% needed to see abs” curve.
           </p>
         </div>
 
@@ -118,7 +118,7 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
           disabled={!valid}
           className="mt-4 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black disabled:opacity-30"
         >
-          Save
+          save
         </button>
       </div>
     </div>

@@ -43,7 +43,7 @@ describe('parseReps', () => {
     expect(reps('5 8 10 10')).toEqual([5, 8, 10, 10])
   })
   it('flags PR (!) and approximate (~)', () => {
-    expect(parseReps('1!').tokens[0]).toEqual({ reps: 1, note: 'PR' })
+    expect(parseReps('1!').tokens[0]).toEqual({ reps: 1, note: 'pr' })
     expect(parseReps('10~ 7 7 7').tokens[0]).toEqual({ reps: 10, note: 'approx' })
   })
 })
@@ -91,7 +91,7 @@ describe('combineSets', () => {
   })
   it('carries the PR flag into the set note', () => {
     const sets = combineSets('150 barbell', '1!')
-    expect(sets[0].note).toBe('PR; barbell')
+    expect(sets[0].note).toBe('pr; barbell')
   })
 })
 
@@ -175,7 +175,7 @@ describe('parseImport (integration)', () => {
     const cable = result.exercises.find((e) => e.rawName === 'cable crunches')!
     expect(cable.entries.find((e) => e.date === '2026-05-25')!.warnings).toHaveLength(1)
     const flat = result.exercises.find((e) => e.rawName === 'flat bench')!
-    expect(flat.entries[0].sets[0].note).toContain('PR')
+    expect(flat.entries[0].sets[0].note).toContain('pr')
   })
 
   it('collects body weights including the orphaned continuation table', () => {

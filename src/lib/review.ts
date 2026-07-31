@@ -53,8 +53,8 @@ export type Review = {
 }
 
 const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
 ]
 
 // ---------------------------------------------------------------------------
@@ -189,11 +189,11 @@ export function superlatives(data: ReviewData, kind: ReviewKind, periodKey: stri
 }
 
 const SUPERLATIVE_TEXT: Record<Superlative, (kind: ReviewKind) => string> = {
-  workouts: (k) => `Most workouts of any ${k}`,
-  stretches: (k) => `Most stretch sessions of any ${k}`,
-  calorieDays: (k) => `Most days on calorie target of any ${k}`,
-  totalCalories: (k) => `Biggest ${k} of fueling`,
-  prs: (k) => `Most lifting PRs of any ${k}`,
+  workouts: (k) => `most workouts of any ${k}`,
+  stretches: (k) => `most stretch sessions of any ${k}`,
+  calorieDays: (k) => `most days on calorie target of any ${k}`,
+  totalCalories: (k) => `biggest ${k} of fueling`,
+  prs: (k) => `most lifting prs of any ${k}`,
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +205,7 @@ const SUPERLATIVE_LABEL: Record<Superlative, string> = {
   stretches: 'stretch sessions',
   calorieDays: 'days on target',
   totalCalories: 'total calories',
-  prs: 'lifting PRs',
+  prs: 'lifting prs',
 }
 
 function joinList(items: string[]): string {
@@ -223,27 +223,27 @@ function buildStory(kind: ReviewKind, stats: PeriodStats, marks: Superlative[]):
     const bits: string[] = []
     if (stats.workouts > 0) bits.push(`${stats.workouts} workout${stats.workouts === 1 ? '' : 's'}`)
     if (stats.stretches > 0) bits.push(`${stats.stretches} stretch session${stats.stretches === 1 ? '' : 's'}`)
-    parts.push(`You put in ${joinList(bits)} this ${label}.`)
+    parts.push(`you put in ${joinList(bits)} this ${label}.`)
   } else {
-    parts.push(`A quieter ${label} on the training front — a fresh page starts now.`)
+    parts.push(`a quieter ${label} on the training front — a fresh page starts now.`)
   }
 
   if (stats.prs > 0) {
-    parts.push(`You set ${stats.prs} new lifting PR${stats.prs === 1 ? '' : 's'}.`)
+    parts.push(`you set ${stats.prs} new lifting pr${stats.prs === 1 ? '' : 's'}.`)
   }
 
   if (stats.calorieDays > 0) {
-    parts.push(`You hit your calorie goal on ${stats.calorieDays} day${stats.calorieDays === 1 ? '' : 's'}, fueling the bulk.`)
+    parts.push(`you hit your calorie goal on ${stats.calorieDays} day${stats.calorieDays === 1 ? '' : 's'}, fueling the bulk.`)
   }
 
   if (stats.weightChangeLbs != null && stats.weightChangeLbs > 0) {
-    parts.push(`Body weight climbed ${stats.weightChangeLbs} lbs — exactly the direction a bulk should go.`)
+    parts.push(`body weight climbed ${stats.weightChangeLbs} lbs — exactly the direction a bulk should go.`)
   }
 
   if (marks.length > 0) {
-    parts.push(`And it was a record ${label}: your best ever for ${joinList(marks.map((m) => SUPERLATIVE_LABEL[m]))}. Momentum like this is how big goals fall.`)
+    parts.push(`and it was a record ${label}: your best ever for ${joinList(marks.map((m) => SUPERLATIVE_LABEL[m]))}. momentum like this is how big goals fall.`)
   } else {
-    parts.push(`Every rep and every meal is a deposit. Keep stacking them.`)
+    parts.push(`every rep and every meal is a deposit. keep stacking them.`)
   }
 
   return parts.join(' ')
@@ -254,13 +254,13 @@ export function buildReview(data: ReviewData, kind: ReviewKind, periodKey: strin
   const marks = superlatives(data, kind, periodKey)
 
   const statTiles: { label: string; value: string }[] = [
-    { label: 'Workouts', value: String(stats.workouts) },
-    { label: 'Stretches', value: String(stats.stretches) },
-    { label: 'On-target days', value: String(stats.calorieDays) },
-    { label: 'Lifting PRs', value: String(stats.prs) },
-    { label: 'Best day', value: stats.bestCalorieDay > 0 ? `${stats.bestCalorieDay.toLocaleString()} cal` : '—' },
+    { label: 'workouts', value: String(stats.workouts) },
+    { label: 'stretches', value: String(stats.stretches) },
+    { label: 'on-target days', value: String(stats.calorieDays) },
+    { label: 'lifting prs', value: String(stats.prs) },
+    { label: 'best day', value: stats.bestCalorieDay > 0 ? `${stats.bestCalorieDay.toLocaleString()} cal` : '—' },
     {
-      label: 'Weight',
+      label: 'weight',
       value:
         stats.weightChangeLbs == null
           ? '—'
@@ -272,7 +272,7 @@ export function buildReview(data: ReviewData, kind: ReviewKind, periodKey: strin
     kind,
     periodKey,
     title: `${periodLabel(kind, periodKey)} in review`,
-    subtitle: kind === 'month' ? 'A look back at the month' : 'A look back at the year',
+    subtitle: kind === 'month' ? 'a look back at the month' : 'a look back at the year',
     stats: statTiles,
     highlights: marks.map((m) => SUPERLATIVE_TEXT[m](kind)),
     story: buildStory(kind, stats, marks),

@@ -60,7 +60,7 @@ describe('sessionChallenges', () => {
     const result = sessionChallenges(prev, added, opts)
     expect(result).toHaveLength(1)
     expect(result[0].met).toBe(true)
-    expect(metBaselines(result)).toEqual(['Flat Bench Press'])
+    expect(metBaselines(result)).toEqual(['flat bench press'])
   })
 
   it('reports an unmet challenge when no set reaches the target', () => {

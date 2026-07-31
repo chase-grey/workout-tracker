@@ -23,7 +23,7 @@ export function HeightSetup() {
   return (
     <div className="mx-auto flex h-[100dvh] max-w-md flex-col justify-center px-6">
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-bold">What&apos;s your height?</h1>
+        <h1 className="text-2xl font-bold">what&apos;s your height?</h1>
 
         <div className="flex items-center gap-2">
           <input
@@ -52,13 +52,13 @@ export function HeightSetup() {
             onClick={save}
             className="min-h-[52px] rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
           >
-            Get started
+            get started
           </button>
           <button
             onClick={() => complete(undefined)}
             className="min-h-[44px] rounded-xl text-sm font-medium text-neutral-500 active:text-neutral-300"
           >
-            Skip for now
+            skip for now
           </button>
         </div>
       </div>

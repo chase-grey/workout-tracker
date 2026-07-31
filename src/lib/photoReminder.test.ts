@@ -38,7 +38,7 @@ describe('photoReminder', () => {
       today: TODAY,
     })
     expect(r.due).toBe(true)
-    expect(r.reason).toMatch(/Body weight \+5/)
+    expect(r.reason).toMatch(/body weight \+5/)
   })
 
   it('is due on a big strength gain within the month', () => {
@@ -49,7 +49,7 @@ describe('photoReminder', () => {
       today: TODAY,
     })
     expect(r.due).toBe(true)
-    expect(r.reason).toMatch(/est\. 1RM up/)
+    expect(r.reason).toMatch(/est\. 1rm up/)
   })
 
   it('is not due when recent and no big change', () => {

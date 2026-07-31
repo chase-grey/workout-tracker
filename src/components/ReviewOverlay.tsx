@@ -38,7 +38,7 @@ export function ReviewOverlay({ review, onClose }: { review: Review; onClose: ()
           <div className="mt-5 rounded-2xl border border-amber-400/40 bg-surface p-4">
             <div className="flex items-center gap-2 text-amber-400">
               <MdEmojiEvents className="text-xl" aria-hidden />
-              <span className="text-sm font-bold uppercase tracking-wider">Records set</span>
+              <span className="text-sm font-bold tracking-wider">records set</span>
             </div>
             <ul className="mt-2 flex flex-col gap-1.5">
               {review.highlights.map((h) => (
@@ -58,7 +58,7 @@ export function ReviewOverlay({ review, onClose }: { review: Review; onClose: ()
           onClick={onClose}
           className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:bg-accent-2"
         >
-          Keep it going
+          keep it going
         </button>
       </div>
     </div>

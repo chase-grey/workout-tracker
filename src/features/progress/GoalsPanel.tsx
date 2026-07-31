@@ -43,16 +43,16 @@ function GoalRow({
       {proj.onTrack && proj.etaWeeks === 0 ? (
         <p className="mt-1 text-sm text-accent-2">
           <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
-          Goal reached!
+          goal reached!
         </p>
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
-          On track · ETA {fmtDate(proj.etaDate)} ({proj.slopePerWeek > 0 ? '+' : ''}
+          on track · eta {fmtDate(proj.etaDate)} ({proj.slopePerWeek > 0 ? '+' : ''}
           {proj.slopePerWeek} {unit}/wk)
         </p>
       ) : (
         <p className="mt-1 text-sm text-neutral-500">
-          {has ? 'Not trending toward this yet — keep at it.' : 'Log data to project this.'}
+          {has ? 'not trending toward this yet — keep at it.' : 'log data to project this.'}
         </p>
       )}
     </div>
@@ -95,18 +95,18 @@ export function GoalsPanel() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Goals</h3>
-      <GoalRow title="Bodyweight → 180" unit="lbs" proj={goal180} />
-      <GoalRow title="Bodyweight → 190" unit="lbs" proj={goal190} />
+      <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
+      <GoalRow title="bodyweight → 180" unit="lbs" proj={goal180} />
+      <GoalRow title="bodyweight → 190" unit="lbs" proj={goal190} />
       <GoalRow
-        title={`Bench your bodyweight (${currentBw || '—'} lbs)`}
+        title={`bench your bodyweight (${currentBw || '—'} lbs)`}
         unit="lbs"
         proj={benchGoal}
       />
 
       <div className="rounded-2xl bg-surface p-4">
         <div className="flex items-baseline justify-between">
-          <h4 className="font-semibold">Squat 1.5× bodyweight</h4>
+          <h4 className="font-semibold">squat 1.5× bodyweight</h4>
           <span className="text-sm text-neutral-400 tabular-nums">
             {squat.est1RM || '—'} → {squat.target || '—'} lbs
           </span>
@@ -119,66 +119,66 @@ export function GoalsPanel() {
           </p>
         ) : squatProj.onTrack ? (
           <p className="mt-1 text-sm text-accent-2">
-            On track · ETA {fmtDate(squatProj.etaDate)} ({squatProj.slopePerWeek > 0 ? '+' : ''}
+            on track · eta {fmtDate(squatProj.etaDate)} ({squatProj.slopePerWeek > 0 ? '+' : ''}
             {squatProj.slopePerWeek} lbs/wk)
           </p>
         ) : (
           <p className="mt-1 text-sm text-neutral-500">
-            {squat.est1RM ? 'Not trending toward this yet — keep at it.' : 'Log a Barbell Squat to project this.'}
+            {squat.est1RM ? 'not trending toward this yet — keep at it.' : 'log a barbell squat to project this.'}
           </p>
         )}
 
         <p className="mt-2 text-xs text-neutral-500 tabular-nums">
           {squat.bodyweight
             ? `${squat.multiple}× bodyweight · 1× ${squat.milestone}${squat.hitMilestone ? ' ✓' : ''} · 1.5× ${squat.target}`
-            : 'Log a weigh-in to set your squat targets.'}
+            : 'log a weigh-in to set your squat targets.'}
         </p>
       </div>
 
       <div className="rounded-2xl bg-surface p-4">
         <div className="flex items-baseline justify-between">
-          <h4 className="font-semibold">Visible 6-pack abs</h4>
+          <h4 className="font-semibold">visible 6-pack abs</h4>
           <span className="text-sm text-neutral-400 tabular-nums">
-            {Number.isFinite(bfGoal.current) ? `${bfGoal.current}` : '—'} → {bfTarget}% BF
+            {Number.isFinite(bfGoal.current) ? `${bfGoal.current}` : '—'} → {bfTarget}% bf
           </span>
         </div>
 
         {bfGoal.onTrack && bfGoal.etaWeeks === 0 ? (
           <p className="mt-1 text-sm text-accent-2">
             <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
-            Leanness target reached — keep building abs!
+            leanness target reached — keep building abs!
           </p>
         ) : bfGoal.onTrack ? (
           <p className="mt-1 text-sm text-accent-2">
-            On track · ETA {fmtDate(bfGoal.etaDate)} ({bfGoal.slopePerWeek > 0 ? '+' : ''}
+            on track · eta {fmtDate(bfGoal.etaDate)} ({bfGoal.slopePerWeek > 0 ? '+' : ''}
             {bfGoal.slopePerWeek} %/wk)
           </p>
         ) : (
           <p className="mt-1 text-sm text-neutral-500">
             {Number.isFinite(bfGoal.current)
-              ? 'Not trending down yet — log measurements as you lean out.'
-              : 'Log a measurement with ab visibility to project this.'}
+              ? 'not trending down yet — log measurements as you lean out.'
+              : 'log a measurement with ab visibility to project this.'}
           </p>
         )}
 
         {leanest && (
           <p className="mt-2 text-xs text-neutral-500">
-            Leanest logged: {leanest.bodyFat}% on {fmtDate(leanest.date)} → {VIS_TEXT[leanest.visibility]}.
-            {leanest.visibility !== 'clear' && ' Building ab muscle raises the BF% where they show.'}
+            leanest logged: {leanest.bodyFat}% on {fmtDate(leanest.date)} → {VIS_TEXT[leanest.visibility]}.
+            {leanest.visibility !== 'clear' && ' building ab muscle raises the bf% where they show.'}
           </p>
         )}
 
         <p className="mt-1 text-xs text-neutral-500">
           {absReps.length > 0
-            ? `Ab work: ${absReps[0].value}${
+            ? `ab work: ${absReps[0].value}${
                 absReps.length > 1 ? ` → ${absReps[absReps.length - 1].value}` : ''
               } reps/session.`
-            : 'Ab work: none logged — do your core exercises or a Stretch + Core session to build ab muscle.'}
+            : 'ab work: none logged — do your core exercises or a stretch + core session to build ab muscle.'}
         </p>
 
         {heightIn === 0 && (
           <p className="mt-1 text-xs text-neutral-600">
-            Set your height in Settings so tape measurements also feed this.
+            set your height in settings so tape measurements also feed this.
           </p>
         )}
       </div>

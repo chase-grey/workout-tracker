@@ -16,14 +16,17 @@ import { toISODate } from '../../lib/dates'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
+import { SessionProgress } from '../../components/SessionProgress'
 import { PauseOverlay } from '../../components/PauseOverlay'
-import { KebabMenu } from '../../components/KebabMenu'
+import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 
 type Props = {
   session: WorkoutSession
   controls: ReturnType<typeof useActiveSession>
   onFinish: (s: WorkoutSession, duration: { totalSec: number; restSec: number }) => void
   onSkip: () => void
+  /** Drop back to the rest of the app with the workout still running. */
+  onMinimize: () => void
 }
 
 /** Reject per-set active times outside this range (app left open / mis-taps). */
@@ -48,12 +51,12 @@ function toWeight(v: string): number | null {
 
 function targetLabel(target: Target | undefined): string | null {
   if (!target) return null
-  if (target.weightLbs == null) return `Target ${target.reps} reps`
-  return `Target ${target.weightLbs} × ${target.reps}`
+  if (target.weightLbs == null) return `target ${target.reps} reps`
+  return `target ${target.weightLbs} × ${target.reps}`
 }
 
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
-export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
+export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize }: Props) {
   const { plan, workouts, exerciseAverages, logSessionDuration, logExerciseTimes } = useData()
   // A rest still running when the app closed resumes with its real remaining
   // time (it's wall-clock based, so the time away counts) unless it's long stale.
@@ -244,7 +247,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
       endsAt: Date.now() + restSec * 1000,
       exKey: planned.key,
       isLastSetOfExercise: step.setIndex === step.setCount - 1,
-      upNext: nextIsNewExercise ? `Up next: ${nextStep!.ex.name}` : null,
+      upNext: nextIsNewExercise ? `up next: ${nextStep!.ex.name}` : null,
     })
     setCurrent(safeCurrent + 1)
   }
@@ -261,45 +264,43 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     target && (target.weightLbs == null ? `${target.reps} reps` : `${target.weightLbs} × ${target.reps}`)
   const restLabel = planned.restSec >= 60 ? `${planned.restSec / 60} min` : `${planned.restSec}s`
 
+  // Shared by the header and the rest screen, so the same actions stay reachable
+  // while resting instead of forcing you to end rest to get at them.
+  const menuItems: MenuItem[] = [
+    { label: 'back to app (keep going)', onClick: onMinimize },
+    { label: 'pause workout', onClick: () => setPaused(true) },
+    { label: 'workout checklist', onClick: () => setShowList(true) },
+    { label: 'skip logging details (mark done)', onClick: onSkip },
+    { label: 'finish workout now', onClick: finish },
+    {
+      label: 'discard workout',
+      danger: true,
+      onClick: () => {
+        if (confirm('discard this in-progress workout?')) controls.clear()
+      },
+    },
+  ]
+
   return (
     <div className="flex flex-col gap-3 pb-6">
       <header className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">{planned.name}</h2>
         </div>
-        <KebabMenu
-          items={[
-            { label: 'Pause workout', onClick: () => setPaused(true) },
-            { label: 'Workout checklist', onClick: () => setShowList(true) },
-            { label: 'Skip logging details (mark done)', onClick: onSkip },
-            { label: 'Finish workout now', onClick: finish },
-            {
-              label: 'Discard workout',
-              danger: true,
-              onClick: () => {
-                if (confirm('Discard this in-progress workout?')) controls.clear()
-              },
-            },
-          ]}
-        />
+        <KebabMenu items={menuItems} />
       </header>
 
-      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-        <div
-          className="h-full bg-accent transition-all"
-          style={{ width: `${totals.all ? (totals.done / totals.all) * 100 : 0}%` }}
-        />
-      </div>
+      <SessionProgress done={totals.done} total={totals.all} />
 
-      <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+      <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
         {planned.group} · {planned.sets}×{repRangeLabel(planned)} · rest {restLabel}
       </p>
 
       {step.setIndex === step.setCount - 1 && (
         <p className="px-1 text-xs text-neutral-500">
           {exercises[step.exIndex + 1]
-            ? `Up next: ${exercises[step.exIndex + 1].name}`
-            : 'Last exercise — almost done'}
+            ? `up next: ${exercises[step.exIndex + 1].name}`
+            : 'last exercise — almost done'}
         </p>
       )}
 
@@ -308,7 +309,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
           {challenging && challengeLabel ? (
             <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
               <MdBolt aria-hidden />
-              Challenge · Push for {challengeLabel}
+              challenge · push for {challengeLabel}
             </p>
           ) : (
             hint && (
@@ -320,13 +321,13 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
           )}
           <div className="flex items-end justify-center gap-3">
             <label className="flex flex-1 flex-col items-center gap-1">
-              <span className="text-xs uppercase tracking-wide text-neutral-500">
-                {planned.bodyweight ? 'Added lbs' : 'Weight'}
+              <span className="text-xs tracking-wide text-neutral-500">
+                {planned.bodyweight ? 'added lbs' : 'weight'}
               </span>
               <input
                 type="number"
                 inputMode="decimal"
-                placeholder={planned.bodyweight ? 'BW' : 'lbs'}
+                placeholder={planned.bodyweight ? 'bw' : 'lbs'}
                 value={set.weightLbs ?? ''}
                 onChange={(e) => controls.updateSet(planned.key, step.setIndex, { weightLbs: toWeight(e.target.value) })}
                 className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
@@ -334,7 +335,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
             </label>
             <span className="pb-5 text-2xl text-neutral-600">×</span>
             <label className="flex flex-1 flex-col items-center gap-1">
-              <span className="text-xs uppercase tracking-wide text-neutral-500">Reps</span>
+              <span className="text-xs tracking-wide text-neutral-500">reps</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -353,7 +354,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
         className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
       >
         {atLast ? (
-          'Finish workout'
+          'finish workout'
         ) : (
           <>
             done <MdChevronRight className="text-2xl" aria-hidden />
@@ -366,23 +367,26 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
           seconds={rest.seconds}
           endsAt={rest.endsAt}
           upNext={rest.upNext}
-          timeLeftLabel={`${formatDuration(timeLeft)} left in workout`}
+          menu={menuItems}
+          progress={{ done: totals.done, total: totals.all, unit: 'sets' }}
+          timeLeftLabel={`${formatDuration(timeLeft)} left`}
           onAddSet={rest.isLastSetOfExercise ? addSetFromRest : undefined}
           onClose={closeRest}
         />
       )}
 
-      {paused && <PauseOverlay label="Workout paused" onResume={() => setPaused(false)} />}
+      {paused && <PauseOverlay label="workout paused" onResume={() => setPaused(false)} />}
 
       {showList && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={() => setShowList(false)}>
+        // Above the rest overlay (z-50) — reachable from the rest screen's menu.
+        <div className="fixed inset-0 z-60 flex items-end bg-black/60" onClick={() => setShowList(false)}>
           <div
             className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-1 text-lg font-bold">Workout checklist</h3>
-            <p className="mb-3 text-xs text-neutral-500">Tap a name to jump; tap the circle to mark done.</p>
+            <h3 className="mb-1 text-lg font-bold">workout checklist</h3>
+            <p className="mb-3 text-xs text-neutral-500">tap a name to jump; tap the circle to mark done.</p>
             <div className="flex flex-col gap-1">
               {exercises.map((e, i) => {
                 const complete = isComplete(e.key)
@@ -395,11 +399,14 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
                     <button
                       onClick={() => {
                         if (firstStep >= 0) setCurrent(firstStep)
+                        // Jumping is a decision to start that exercise now, so an
+                        // in-flight rest ends rather than covering it back up.
+                        if (rest) closeRest()
                         setShowList(false)
                       }}
                       className="flex-1 py-3 text-left active:opacity-70"
                     >
-                      <span className="text-[10px] uppercase tracking-wide text-neutral-500">{e.group}</span>
+                      <span className="text-[10px] tracking-wide text-neutral-500">{e.group}</span>
                       <span className="block font-medium">{e.name}</span>
                       <span className="text-xs text-neutral-500 tabular-nums">
                         {doneCount(e.key)}/{logFor(e.key)?.sets.length ?? e.sets} sets

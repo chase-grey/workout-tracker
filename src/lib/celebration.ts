@@ -100,7 +100,7 @@ export function baselineCelebration(names: string[]): Celebration | null {
   const [top, ...rest] = names
   return {
     tier: 'medium',
-    title: names.length > 1 ? 'New baselines set' : 'New baseline set',
+    title: names.length > 1 ? 'new baselines set' : 'new baseline set',
     subtitle: `${top} — you beat last session.`,
     details: rest.length ? rest : undefined,
     icon: 'flag',
@@ -113,8 +113,8 @@ export function prCelebration(prs: PR[]): Celebration | null {
   const [top, ...rest] = prs
   return {
     tier: 'epic',
-    title: prs.length > 1 ? 'NEW PRs!' : 'NEW PR!',
-    subtitle: `${top.exercise} — ${top.est1RM} lbs est. 1RM`,
+    title: prs.length > 1 ? 'new prs!' : 'new pr!',
+    subtitle: `${top.exercise} — ${top.est1RM} lbs est. 1rm`,
     details: rest.map((p) => `${p.exercise} — ${p.est1RM} lbs`),
     icon: 'trophy',
   }
@@ -209,43 +209,43 @@ export function achievementCelebration(
     case 'workoutGoal':
       return {
         tier: 'medium',
-        title: 'Weekly workouts done',
+        title: 'weekly workouts done',
         subtitle: `${counts.workouts} of ${goals.workouts} workouts this week.`,
         icon: 'medal',
       }
     case 'flexGoal':
       return {
         tier: 'medium',
-        title: 'Weekly stretches done',
+        title: 'weekly stretches done',
         subtitle: `${counts.flex} of ${goals.flex} sessions this week.`,
         icon: 'medal',
       }
     case 'calGoal':
       return {
         tier: 'medium',
-        title: 'Weekly calorie days done',
+        title: 'weekly calorie days done',
         subtitle: `${counts.calDays} of ${goals.calDays} days this week.`,
         icon: 'medal',
       }
     case 'checkpoint':
       return {
         tier: 'medium',
-        title: 'Checkpoint reached',
-        subtitle: "Halfway to the week's goal — keep it rolling.",
+        title: 'checkpoint reached',
+        subtitle: "halfway to the week's goal — keep it rolling.",
         icon: 'flag',
       }
     case 'fullGoal':
       return {
         tier: 'large',
-        title: 'Weekly goal complete!',
-        subtitle: 'Every target hit this week.',
+        title: 'weekly goal complete!',
+        subtitle: 'every target hit this week.',
         icon: 'stars',
       }
     case 'exceeded':
       return {
         tier: 'large',
-        title: 'Above and beyond!',
-        subtitle: 'You blew past your weekly goal.',
+        title: 'above and beyond!',
+        subtitle: 'you blew past your weekly goal.',
         icon: 'stars',
       }
   }
@@ -256,20 +256,20 @@ export function achievementCelebration(
 // ---------------------------------------------------------------------------
 
 export function workoutDoneCelebration(_dayType: WorkoutRow['day_type']): Celebration {
-  return { tier: 'small', title: 'Workout complete', subtitle: 'Logged and done. Nice work.', icon: 'check' }
+  return { tier: 'small', title: 'workout complete', subtitle: 'logged and done. nice work.', icon: 'check' }
 }
 
 export const stretchDoneCelebration: Celebration = {
   tier: 'small',
-  title: 'Stretch + Core done',
-  subtitle: 'Loose, limber, and braced. Well done.',
+  title: 'stretch + core done',
+  subtitle: 'loose, limber, and braced. well done.',
   icon: 'check',
 }
 
 export function calorieGoalCelebration(goal: number): Celebration {
   return {
     tier: 'small',
-    title: 'Calorie goal hit',
+    title: 'calorie goal hit',
     subtitle: `${goal.toLocaleString()} cal in — bulk fueled.`,
     icon: 'flame',
   }

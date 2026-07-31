@@ -44,13 +44,13 @@ export async function chatComplete(
     } catch {
       /* body not JSON — keep the status-based message */
     }
-    throw new Error(`OpenAI request failed: ${detail}`)
+    throw new Error(`openai request failed: ${detail}`)
   }
 
   const data = (await res.json()) as ChatCompletionResponse
   const content = data.choices?.[0]?.message?.content
   if (typeof content !== 'string') {
-    throw new Error('OpenAI response did not include a message.')
+    throw new Error('openai response did not include a message.')
   }
   return content
 }
@@ -110,7 +110,7 @@ export async function chatCompleteRaw(
     } catch {
       /* keep status-based message */
     }
-    throw new Error(`OpenAI request failed: ${detail}`)
+    throw new Error(`openai request failed: ${detail}`)
   }
 
   const data = (await res.json()) as {

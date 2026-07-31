@@ -22,13 +22,13 @@ export type FlexBlock = {
 
 export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
   {
-    label: 'Adductor superset',
-    note: 'Alternate back-to-back: Tailor’s → Horse → Tailor’s → Horse → Tailor’s → Horse (3 rounds each).',
+    label: 'adductor superset',
+    note: 'alternate back-to-back: tailor’s → horse → tailor’s → horse → tailor’s → horse (3 rounds each).',
     superset: true,
     exercises: [
       {
         key: 'tailors_pose',
-        name: 'Tailor’s Pose',
+        name: 'tailor’s pose',
         sets: '3–4',
         maxSets: 4,
         reps: 8,
@@ -37,7 +37,7 @@ export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
       },
       {
         key: 'horse_squat',
-        name: 'Horse Squat',
+        name: 'horse squat',
         sets: '3–4',
         maxSets: 4,
         reps: 8,
@@ -47,11 +47,11 @@ export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
     ],
   },
   {
-    label: 'Pancake',
+    label: 'pancake',
     exercises: [
       {
         key: 'pancake_hang',
-        name: 'Pancake Hang',
+        name: 'pancake hang',
         sets: '2–3',
         maxSets: 3,
         reps: 6,
