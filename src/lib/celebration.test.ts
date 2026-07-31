@@ -11,6 +11,7 @@ import {
   newlyEarned,
   overallProgress,
   prCelebration,
+  stretchDoneCelebration,
   weekAchievements,
 } from './celebration'
 
@@ -175,5 +176,17 @@ describe('composeCelebration', () => {
     expect(c?.tier).toBe('epic')
     expect(c?.title).toBe('new pr!')
     expect(c?.details).toContain('weekly goal complete!')
+  })
+
+  it('keeps the ack flag when a louder win leads the session-end cheer', () => {
+    const goal = achievementCelebration('fullGoal', { workouts: 2, flex: 2, calDays: 6 }, DEFAULT_WEEKLY_GOALS)
+    const c = composeCelebration([goal, stretchDoneCelebration])
+    expect(c?.title).toBe('weekly goal complete!')
+    expect(c?.ack).toBe(true)
+  })
+
+  it('leaves ack unset when nothing earned asks for it', () => {
+    const goal = achievementCelebration('checkpoint', { workouts: 1, flex: 1, calDays: 3 }, DEFAULT_WEEKLY_GOALS)
+    expect(composeCelebration([goal])?.ack).toBeUndefined()
   })
 })

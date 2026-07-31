@@ -102,7 +102,7 @@ export function WorkoutFinishOverlay({
           onClick={onClose}
           className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:bg-accent-2"
         >
-          back to today
+          nice
         </button>
       </div>
     </div>

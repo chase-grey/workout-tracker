@@ -118,6 +118,7 @@ function AppShell() {
   const dismissFinish = () => {
     const ambient = finishSummary?.ambient ?? null
     setFinishSummary(null)
+    setTab('today')
     // Any weekly-goal / all-time-record wins ride in after the recap closes.
     if (ambient) celebrate(ambient)
   }
@@ -137,6 +138,7 @@ function AppShell() {
         onSkip={() => {
           void quickLog(dayType)
           controls.clear()
+          setTab('today')
         }}
         onMinimize={() => setMinimized(true)}
       />
@@ -147,6 +149,8 @@ function AppShell() {
         onClose={() => {
           storage.saveStretch(null)
           setStretching(false)
+          // A finished routine lands you home, under the celebration screen.
+          setTab('today')
         }}
         onMinimize={() => setMinimized(true)}
       />

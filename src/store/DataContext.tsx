@@ -416,13 +416,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const prevFlex = storage.loadFlex()
       const nextFlex = dedupeFlexByDate([...prevFlex, entry])
       persistFlex(nextFlex)
-      try {
-        await api.postFlex(entry)
-        notify(isMeasurement ? 'measurement saved' : 'stretch logged', true)
-      } catch {
-        enqueue({ type: 'flex', entry })
-        notify("couldn't save — queued to retry", false)
-      }
+      // Cheer before the round-trip: the finish screen belongs to the moment you
+      // finished, not to whenever the backend gets back to us.
       // Only a completed stretch session cheers — a pure angle measurement doesn't.
       if (!isMeasurement) {
         try {
@@ -444,6 +439,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         } catch {
           /* a missed cheer must never break a save */
         }
+      }
+      try {
+        await api.postFlex(entry)
+        notify(isMeasurement ? 'measurement saved' : 'stretch logged', true)
+      } catch {
+        enqueue({ type: 'flex', entry })
+        notify("couldn't save — queued to retry", false)
       }
     },
     [celebrate, enqueue, notify, persistFlex, weeklyCelebrations],

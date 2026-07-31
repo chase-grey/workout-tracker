@@ -28,6 +28,12 @@ export type Celebration = {
   /** Secondary achievements earned in the same moment, shown as small badges. */
   details?: string[]
   icon: CelebrationIcon
+  /**
+   * Take over the whole screen and wait to be dismissed instead of flashing by.
+   * Set for the end of a session — the moment you put the phone down — so the
+   * cheer isn't missed and closing it is what returns you to the app.
+   */
+  ack?: boolean
 }
 
 export const TIER_RANK: Record<CelebrationTier, number> = {
@@ -256,7 +262,13 @@ export function achievementCelebration(
 // ---------------------------------------------------------------------------
 
 export function workoutDoneCelebration(_dayType: WorkoutRow['day_type']): Celebration {
-  return { tier: 'small', title: 'workout complete', subtitle: 'logged and done. nice work.', icon: 'check' }
+  return {
+    tier: 'small',
+    title: 'workout complete',
+    subtitle: 'logged and done. nice work.',
+    icon: 'check',
+    ack: true,
+  }
 }
 
 export const stretchDoneCelebration: Celebration = {
@@ -264,6 +276,7 @@ export const stretchDoneCelebration: Celebration = {
   title: 'stretch + core done',
   subtitle: 'loose, limber, and braced. well done.',
   icon: 'check',
+  ack: true,
 }
 
 export function calorieGoalCelebration(goal: number): Celebration {
@@ -283,6 +296,9 @@ export function calorieGoalCelebration(goal: number): Celebration {
  * Merge everything earned by one action into a single celebration: the loudest
  * tier becomes the headline, the rest ride along as secondary badges. Returns
  * null when nothing was earned.
+ *
+ * `ack` carries from any item, not just the headline: a session-end cheer still
+ * owns the screen even when a louder win (a weekly goal, say) leads it.
  */
 export function composeCelebration(items: (Celebration | null)[]): Celebration | null {
   const real = items.filter((c): c is Celebration => c != null)
@@ -291,5 +307,9 @@ export function composeCelebration(items: (Celebration | null)[]): Celebration |
   const sorted = [...real].sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier])
   const [head, ...rest] = sorted
   const details = [...(head.details ?? []), ...rest.map((c) => c.title)]
-  return { ...head, details: details.length ? details : undefined }
+  return {
+    ...head,
+    details: details.length ? details : undefined,
+    ack: real.some((c) => c.ack) || undefined,
+  }
 }
