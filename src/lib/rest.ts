@@ -8,6 +8,23 @@
 export const TRANSITION_REST_CAP_SEC = 90
 
 /**
+ * How long past its end a persisted rest can still be resumed. A rest counts
+ * into overtime indefinitely while the app is open, but reopening the app a day
+ * later shouldn't drop you onto a rest screen reading "+14:52:07".
+ */
+export const RESUMABLE_REST_GRACE_SEC = 30 * 60
+
+/**
+ * Whether a rest saved before a reload/app-close should reopen. Rests are
+ * wall-clock based, so time spent away still counts — but only up to
+ * {@link RESUMABLE_REST_GRACE_SEC} of overtime, past which the rest is stale
+ * and the caller should move straight on to the next set.
+ */
+export function canResumeRest(endsAt: number, now: number): boolean {
+  return now - endsAt <= RESUMABLE_REST_GRACE_SEC * 1000
+}
+
+/**
  * How long to rest after completing a set.
  *
  * - Between sets of the SAME exercise: the exercise's own prescribed `restSec`.

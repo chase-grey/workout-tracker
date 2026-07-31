@@ -20,9 +20,21 @@ const KEYS = {
   plan: 'wt.plan',
   flexPlan: 'wt.flexplan',
   activeStep: 'wt.activeStep',
+  activeRest: 'wt.activeRest',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
 } as const
+
+/**
+ * A rest countdown in progress. Stored as the wall-clock time it ends (not the
+ * seconds left) so a reload resumes the real remaining time rather than
+ * restarting the countdown. `seconds` is the rest's nominal length, which the
+ * timer's progress ring drains against.
+ */
+export type RestState = {
+  seconds: number
+  endsAt: number
+}
 
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
 export type StretchState = {
@@ -33,6 +45,19 @@ export type StretchState = {
   coreReps?: Record<number, number>
   /** Rep the current stretch set's rhythm guide had reached (1-based). */
   rep?: number
+  /** The rest countdown that was on screen, if any. */
+  rest?: RestState | null
+}
+
+/**
+ * The guided workout's in-progress rest: the countdown plus the context its
+ * screen shows ("up next", the add-a-set affordance on an exercise's last rest).
+ * Kept apart from the session log, which stores only sets.
+ */
+export type ActiveRest = RestState & {
+  exKey: string
+  isLastSetOfExercise: boolean
+  upNext: string | null
 }
 
 export type Settings = {
@@ -129,6 +154,10 @@ export const storage = {
 
   loadActiveStep: (): number => read(KEYS.activeStep, 0),
   saveActiveStep: (n: number) => write(KEYS.activeStep, n),
+
+  loadActiveRest: (): ActiveRest | null => read(KEYS.activeRest, null),
+  saveActiveRest: (r: ActiveRest | null) =>
+    r ? write(KEYS.activeRest, r) : localStorage.removeItem(KEYS.activeRest),
 
   loadStretch: (): StretchState | null => read(KEYS.stretch, null),
   saveStretch: (s: StretchState | null) =>

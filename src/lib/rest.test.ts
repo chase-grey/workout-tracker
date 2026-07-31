@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { restBeforeNextSet, TRANSITION_REST_CAP_SEC } from './rest'
+import { canResumeRest, restBeforeNextSet, RESUMABLE_REST_GRACE_SEC, TRANSITION_REST_CAP_SEC } from './rest'
 
 describe('restBeforeNextSet', () => {
   it('uses the exercise rest between sets of the same exercise', () => {
@@ -32,5 +32,30 @@ describe('restBeforeNextSet', () => {
     expect(
       restBeforeNextSet({ currentRestSec: 120, sameExercise: false, nextRestSec: null }),
     ).toBe(0)
+  })
+})
+
+describe('canResumeRest', () => {
+  const now = 1_700_000_000_000
+  const sec = (n: number) => n * 1000
+
+  it('resumes a rest that is still counting down', () => {
+    expect(canResumeRest(now + sec(45), now)).toBe(true)
+  })
+
+  it('resumes a rest that just went into overtime', () => {
+    expect(canResumeRest(now - sec(20), now)).toBe(true)
+  })
+
+  it('resumes right up to the end of the grace period', () => {
+    expect(canResumeRest(now - sec(RESUMABLE_REST_GRACE_SEC), now)).toBe(true)
+  })
+
+  it('drops a rest that elapsed beyond the grace period', () => {
+    expect(canResumeRest(now - sec(RESUMABLE_REST_GRACE_SEC + 1), now)).toBe(false)
+  })
+
+  it('drops a rest left over from a much earlier session', () => {
+    expect(canResumeRest(now - sec(8 * 60 * 60), now)).toBe(false)
   })
 })

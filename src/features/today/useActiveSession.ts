@@ -23,6 +23,7 @@ export function useActiveSession() {
   const start = useCallback(
     (dayType: DayType) => {
       storage.saveActiveStep(0)
+      storage.saveActiveRest(null)
       commit({
         sessionId: uuid(),
         date: toISODate(new Date()),
@@ -108,6 +109,7 @@ export function useActiveSession() {
 
   const clear = useCallback(() => {
     storage.saveActiveStep(0)
+    storage.saveActiveRest(null)
     commit(null)
   }, [commit])
 

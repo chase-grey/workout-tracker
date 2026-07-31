@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseTempo, phaseScales } from './tempo'
+import { parseTempo } from './tempo'
 
 describe('parseTempo', () => {
   it('parses labelled phases', () => {
@@ -18,14 +18,5 @@ describe('parseTempo', () => {
   it('returns [] for empty/garbage', () => {
     expect(parseTempo('')).toEqual([])
     expect(parseTempo('just breathe')).toEqual([])
-  })
-})
-
-describe('phaseScales', () => {
-  it('shrinks on down, holds, grows on up', () => {
-    expect(phaseScales(parseTempo('2s down · 3s hold at bottom · 1s up'))).toEqual([0.55, 0.55, 1])
-  })
-  it('breathes back up through a passive hang', () => {
-    expect(phaseScales(parseTempo('5s pushing down · 5s passive hang'))).toEqual([0.55, 1])
   })
 })

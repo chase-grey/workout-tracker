@@ -11,7 +11,8 @@ import { CameraMeasure } from './CameraMeasure'
 import { formatDuration, remainingSecs } from '../../lib/estimate'
 import { buildSessionSteps, type CoreSetStep } from '../../lib/flexSteps'
 import { type MeasureMode } from '../../lib/measure'
-import { storage } from '../../services/storage'
+import { canResumeRest } from '../../lib/rest'
+import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { DEAD_BUG, repRangeLabel } from '../../config/plan'
 import { nextTarget } from '../../lib/progression'
@@ -42,25 +43,34 @@ const canMeasureFor = (exKey: string): boolean => {
  */
 export function StretchSession({ onClose }: { onClose: () => void }) {
   const { flexPlan, workouts, logFlex, logCore, durations, logSessionDuration } = useData()
-  const [current, setCurrent] = useState(() => storage.loadStretch()?.step ?? 0)
-  const [done, setDone] = useState<Set<string>>(() => new Set(storage.loadStretch()?.done ?? []))
-  const [coreReps, setCoreReps] = useState<Record<number, number>>(() => storage.loadStretch()?.coreReps ?? {})
-  // Rep the current stretch set has reached, persisted so an accidental refresh
-  // mid-set resumes the count instead of restarting at rep 1.
-  const [rep, setRep] = useState(() => storage.loadStretch()?.rep ?? 1)
-  const [rest, setRest] = useState<number | null>(null)
-  // Starts true so the routine opens with the same "get into position" countdown
-  // that follows each rest, rather than the rhythm firing off immediately.
-  const [preparing, setPreparing] = useState(true)
+  // The whole flow resumes from this snapshot, read once on mount: an app switch
+  // or accidental refresh drops you back where you were, not at the top.
+  const [saved] = useState(() => storage.loadStretch())
+  const [current, setCurrent] = useState(saved?.step ?? 0)
+  const [done, setDone] = useState<Set<string>>(() => new Set(saved?.done ?? []))
+  const [coreReps, setCoreReps] = useState<Record<number, number>>(() => saved?.coreReps ?? {})
+  // Rep the current stretch set has reached, persisted so a refresh mid-set
+  // resumes the count instead of restarting at rep 1.
+  const [rep, setRep] = useState(saved?.rep ?? 1)
+  // A rest still running when the app closed picks up its real remaining time
+  // (it's wall-clock based, so the time away counts) unless it's long stale.
+  const [rest, setRest] = useState<RestState | null>(() =>
+    saved?.rest && canResumeRest(saved.rest.endsAt, Date.now()) ? saved.rest : null,
+  )
+  // True so the routine opens with the same "get into position" countdown that
+  // follows each rest — but not over a resumed rest, which owns the screen first.
+  const [preparing, setPreparing] = useState(rest == null)
   const [showList, setShowList] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
   const [paused, setPaused] = useState(false)
   // When the routine began (persisted so a resumed session still measures its
   // full length) and accumulated time spent on the rest screen.
-  const [startedAt] = useState(() => storage.loadStretch()?.startedAt)
+  const [startedAt] = useState(saved?.startedAt)
   const restAccumSec = useRef(0)
-  const restStartRef = useRef(0)
+  // Initial value only: a resumed rest began before the reload, so credit it from
+  // its real start rather than from now.
+  const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)
 
   const steps = useMemo(() => buildSessionSteps(flexPlan), [flexPlan])
   const N = steps.length
@@ -80,8 +90,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget
 
   useEffect(() => {
-    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt, coreReps, rep })
-  }, [safeCurrent, done, startedAt, coreReps, rep])
+    storage.saveStretch({ step: safeCurrent, done: [...done], startedAt, coreReps, rep, rest })
+  }, [safeCurrent, done, startedAt, coreReps, rep, rest])
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
@@ -161,7 +171,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       finishWith(nextDone)
     } else {
       restStartRef.current = Date.now()
-      setRest(step.restSec)
+      setRest({ seconds: step.restSec, endsAt: Date.now() + step.restSec * 1000 })
       goToStep(safeCurrent + 1)
     }
   }
@@ -170,10 +180,9 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col gap-3 pb-6">
       <header className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Stretch + Core</p>
           <h2 className="text-xl font-bold">{step.exName}</h2>
           <p className="text-sm text-neutral-500">
-            Set {step.round + 1} of {step.maxSets} · {formatDuration(timeLeft)} left
+            set {step.round + 1} of {step.maxSets}
           </p>
         </div>
         <KebabMenu
@@ -203,7 +212,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       </div>
 
       <p className="px-1 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        {step.blockLabel} · {step.kind === 'flex' ? `${step.reps} reps` : `${repRangeLabel(step)} reps`}
+        {step.kind === 'flex' ? `${step.reps} reps` : `${repRangeLabel(step)} reps`}
       </p>
 
       {step.kind === 'flex' ? (
@@ -245,7 +254,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
           'Finish & log session'
         ) : (
           <>
-            Set done — rest <MdChevronRight className="text-2xl" aria-hidden />
+            done <MdChevronRight className="text-2xl" aria-hidden />
           </>
         )}
       </button>
@@ -261,7 +270,9 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
 
       {rest != null && (
         <RestTimer
-          seconds={rest}
+          seconds={rest.seconds}
+          endsAt={rest.endsAt}
+          timeLeftLabel={`${formatDuration(timeLeft)} left`}
           onClose={() => {
             if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
             restStartRef.current = 0

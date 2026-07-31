@@ -41,7 +41,7 @@ input[type='number'] {
 
 /* A slow, self-contained breathe so the shape pulses regardless of how often the
    parent re-renders — driven purely by CSS rather than a JS interval. Used by the
-   orb / square / rings rest variants. */
+   orb rest variant. */
 @keyframes rest-breathe {
   0%,
   100% {
@@ -70,13 +70,59 @@ input[type='number'] {
   animation: rest-tide 4.5s ease-in-out infinite;
   will-change: height;
 }
+
+/* Ripple variant: a ring that expands outward and fades like a still pond. */
+@keyframes rest-ripple {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.7;
+  }
+  80% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.rest-ripple {
+  animation: rest-ripple 4.5s ease-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Glow variant: a soft halo that slowly swells and dims — the calmest cue. */
+@keyframes rest-glow {
+  0%,
+  100% {
+    transform: scale(0.85);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.65;
+  }
+}
+.rest-glow {
+  animation: rest-glow 6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .rest-breathe {
+  .rest-breathe,
+  .rest-glow {
     animation: none;
   }
   .rest-tide {
     animation: none;
     height: 55%;
+  }
+  /* Show a single settled ring rather than a stack of overlapping ones. */
+  .rest-ripple {
+    animation: none;
+    opacity: 0.5;
+  }
+  .rest-ripple:not(:first-child) {
+    display: none;
   }
 }
 

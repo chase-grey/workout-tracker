@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 const RING_R = 112
 const RING_C = 2 * Math.PI * RING_R
 
-// The same shape family the rhythm guide uses, so rest cycles through some variety.
-const VARIANTS = ['orb', 'square', 'rings', 'tide'] as const
+// Calming shapes made for rest — slow, self-contained loops that read as
+// "wind down," distinct from the effortful rhythm shapes used during a set.
+const VARIANTS = ['orb', 'tide', 'ripple', 'glow'] as const
 type Variant = (typeof VARIANTS)[number]
 
 // Remembered across mounts (each rest remounts the timer) so we never show the
@@ -16,32 +17,37 @@ function pickVariant(): Variant {
   return lastVariant
 }
 
-/** The calm breathing pace cue behind the drain ring, in one of a few shapes. */
-function RestShape({ variant, over }: { variant: Variant; over: boolean }) {
-  const fill = over ? 'bg-accent-2/15' : 'bg-accent/15'
-  const ring = over ? 'ring-accent-2/30' : 'ring-accent/30'
-  const border = over ? 'border-accent-2/30' : 'border-accent/30'
+/** The calm pace cue behind the drain ring, in one of a few restful shapes. */
+function RestShape({ variant }: { variant: Variant }) {
+  // Bright green — the resting animation is meant to call attention, matching the
+  // rhythm guide. Dark green (accent) is reserved for solid UI like the buttons.
+  const fill = 'bg-accent-bright/15'
+  const ring = 'ring-accent-bright/30'
+  const border = 'border-accent-bright/30'
   switch (variant) {
-    case 'square':
-      return <div className={`rest-breathe absolute h-[62%] w-[62%] rounded-[14%] ring-1 ${fill} ${ring}`} />
-    case 'rings':
-      return (
-        <>
-          {[62, 45, 28].map((pct, i) => (
-            <div
-              key={i}
-              className={`rest-breathe absolute rounded-full border ${border}`}
-              style={{ width: `${pct}%`, height: `${pct}%` }}
-            />
-          ))}
-        </>
-      )
     case 'tide':
       return (
         <div className={`absolute h-[62%] w-[62%] overflow-hidden rounded-full ring-1 ${ring}`}>
           <div className={`rest-tide absolute bottom-0 left-0 w-full ${fill}`} />
         </div>
       )
+    case 'ripple':
+      // Rings that expand outward and fade like a still pond — staggered so a
+      // new ripple sets off before the last one clears.
+      return (
+        <>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className={`rest-ripple absolute h-[46%] w-[46%] rounded-full border ${border}`}
+              style={{ animationDelay: `${i * 1.5}s` }}
+            />
+          ))}
+        </>
+      )
+    case 'glow':
+      // A soft, blurred halo that swells and dims — the most passive of the set.
+      return <div className={`rest-glow absolute h-[64%] w-[64%] rounded-full blur-2xl ${fill}`} />
     case 'orb':
     default:
       return <div className={`rest-breathe absolute h-[62%] w-[62%] rounded-full ring-1 ${fill} ${ring}`} />
@@ -58,25 +64,33 @@ function RestShape({ variant, over }: { variant: Variant; over: boolean }) {
  * A large ring drains over the rest period with a slow breathing orb pulsing
  * behind it — a calm, glanceable cue for how much rest is left — and the numeric
  * countdown sits at the bottom of the screen. Optional `upNext` / `timeLeftLabel`
- * give the resting user a heads-up on what's coming and how much workout is left,
+ * (rendered verbatim, so the caller phrases it — "~5 min left in workout") give the
+ * resting user a heads-up on what's coming and how much of the session is left,
  * and `onAddSet` surfaces an "Add another set" action during an exercise's final
  * rest.
  */
 export function RestTimer({
   seconds,
+  endsAt,
   onClose,
   upNext,
   timeLeftLabel,
   onAddSet,
 }: {
   seconds: number
+  /**
+   * When this rest ends (epoch ms). Pass a saved value to resume a rest that was
+   * already running — e.g. after a page reload. Defaults to a fresh `seconds`
+   * countdown starting now.
+   */
+  endsAt?: number
   onClose: () => void
   upNext?: string | null
   timeLeftLabel?: string | null
   onAddSet?: () => void
 }) {
-  const endRef = useRef<number>(Date.now() + seconds * 1000)
-  const [remaining, setRemaining] = useState(seconds)
+  const endRef = useRef<number>(endsAt ?? Date.now() + seconds * 1000)
+  const [remaining, setRemaining] = useState(() => Math.round((endRef.current - Date.now()) / 1000))
   const [variant] = useState<Variant>(pickVariant)
   const buzzed = useRef(false)
 
@@ -122,7 +136,7 @@ export function RestTimer({
       <div className="flex flex-1 items-center justify-center">
         <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
           {/* Breathing shape — a calm pace cue that varies from rest to rest. */}
-          <RestShape variant={variant} over={over} />
+          <RestShape variant={variant} />
 
           {/* Rest progress ring: full at the start, empty when rest is up. */}
           <svg viewBox="0 0 240 240" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>
@@ -134,7 +148,7 @@ export function RestTimer({
               fill="none"
               strokeWidth="6"
               strokeLinecap="round"
-              className={over ? 'stroke-accent-2' : 'stroke-accent'}
+              className={over ? 'stroke-accent-2' : 'stroke-accent-bright'}
               style={{
                 strokeDasharray: RING_C,
                 strokeDashoffset: RING_C * (1 - (over ? 1 : fraction)),
@@ -161,7 +175,7 @@ export function RestTimer({
           {label}
         </div>
         {timeLeftLabel && (
-          <p className="text-sm font-medium text-neutral-400">{timeLeftLabel} left in workout</p>
+          <p className="text-sm font-medium text-neutral-400">{timeLeftLabel}</p>
         )}
       </div>
     </div>

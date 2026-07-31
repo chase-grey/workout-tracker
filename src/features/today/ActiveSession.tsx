@@ -5,7 +5,7 @@ import { useData } from '../../store/DataContext'
 import { repRangeLabel, type PlannedExercise } from '../../config/plan'
 import { nextTarget, type Target } from '../../lib/progression'
 import { isChallenge } from '../../lib/challenge'
-import { restBeforeNextSet } from '../../lib/rest'
+import { canResumeRest, restBeforeNextSet } from '../../lib/rest'
 import {
   formatDuration,
   remainingWorkoutSecs,
@@ -13,7 +13,7 @@ import {
   type ExerciseTimeSample,
 } from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
-import { storage } from '../../services/storage'
+import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
 import { PauseOverlay } from '../../components/PauseOverlay'
@@ -39,15 +39,6 @@ type SetStep = {
   stepKey: string
 }
 
-/** The active rest overlay's context: how long, what's next, and whether this is
- * the exercise's final rest (so we can offer "Add another set"). */
-type RestInfo = {
-  seconds: number
-  exKey: string
-  isLastSetOfExercise: boolean
-  upNext: string | null
-}
-
 function toWeight(v: string): number | null {
   const t = v.trim()
   if (t === '') return null
@@ -64,14 +55,20 @@ function targetLabel(target: Target | undefined): string | null {
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
 export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   const { plan, workouts, exerciseAverages, logSessionDuration, logExerciseTimes } = useData()
-  const [rest, setRest] = useState<RestInfo | null>(null)
+  // A rest still running when the app closed resumes with its real remaining
+  // time (it's wall-clock based, so the time away counts) unless it's long stale.
+  const [rest, setRest] = useState<ActiveRest | null>(() => {
+    const saved = storage.loadActiveRest()
+    return saved && canResumeRest(saved.endsAt, Date.now()) ? saved : null
+  })
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
   const [paused, setPaused] = useState(false)
   // Accumulated time spent on the rest-timer screen (the "resting" slice of the
-  // session). restStartRef marks when the current rest overlay opened.
+  // session). restStartRef marks when the current rest overlay opened — for a
+  // resumed rest that's before the reload, so credit it from its real start.
   const restAccumSec = useRef(0)
-  const restStartRef = useRef(0)
+  const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)
   // Per-exercise active-time learning: activeStartRef marks when the current set
   // screen became active; accumulators sum active seconds + set counts per
   // exercise, and restCount tracks how many rest intervals were taken.
@@ -115,6 +112,10 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
   useEffect(() => {
     storage.saveActiveStep(safeCurrent)
   }, [safeCurrent])
+
+  useEffect(() => {
+    storage.saveActiveRest(rest)
+  }, [rest])
 
   const target: Target | undefined = useMemo(
     () =>
@@ -231,14 +232,16 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
     const nextIsNewExercise = !!nextStep && nextStep.ex.key !== planned.key
     restStartRef.current = Date.now()
     restCount.current += 1
+    // Full inter-set rest within an exercise, but a shorter transition rest
+    // (sized to the next exercise, capped) when moving to a different move.
+    const restSec = restBeforeNextSet({
+      currentRestSec: planned.restSec,
+      sameExercise: !nextIsNewExercise,
+      nextRestSec: nextStep ? nextStep.ex.restSec : null,
+    })
     setRest({
-      // Full inter-set rest within an exercise, but a shorter transition rest
-      // (sized to the next exercise, capped) when moving to a different move.
-      seconds: restBeforeNextSet({
-        currentRestSec: planned.restSec,
-        sameExercise: !nextIsNewExercise,
-        nextRestSec: nextStep ? nextStep.ex.restSec : null,
-      }),
+      seconds: restSec,
+      endsAt: Date.now() + restSec * 1000,
       exKey: planned.key,
       isLastSetOfExercise: step.setIndex === step.setCount - 1,
       upNext: nextIsNewExercise ? `Up next: ${nextStep!.ex.name}` : null,
@@ -353,7 +356,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
           'Finish workout'
         ) : (
           <>
-            Set done — rest <MdChevronRight className="text-2xl" aria-hidden />
+            done <MdChevronRight className="text-2xl" aria-hidden />
           </>
         )}
       </button>
@@ -361,8 +364,9 @@ export function ActiveSession({ session, controls, onFinish, onSkip }: Props) {
       {rest != null && (
         <RestTimer
           seconds={rest.seconds}
+          endsAt={rest.endsAt}
           upNext={rest.upNext}
-          timeLeftLabel={formatDuration(timeLeft)}
+          timeLeftLabel={`${formatDuration(timeLeft)} left in workout`}
           onAddSet={rest.isLastSetOfExercise ? addSetFromRest : undefined}
           onClose={closeRest}
         />
