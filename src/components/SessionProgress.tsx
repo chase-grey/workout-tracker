@@ -26,7 +26,9 @@ export function SessionProgress({
   return (
     <div className={className}>
       <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${fraction * 100}%` }} />
+        {/* Deep green, a step below the CTA's dark green: the bar is a glanceable
+            reference, not something to pull the eye mid-set. */}
+        <div className="h-full rounded-full bg-accent-deep transition-all" style={{ width: `${fraction * 100}%` }} />
       </div>
       {captioned && (
         <div className="mt-1.5 flex items-baseline justify-between gap-3 text-xs font-medium text-neutral-400">

@@ -230,11 +230,9 @@ export function RestTimer({
             add another set
           </button>
         )}
-        {/* Dark green for the timer UI; overtime shifts to the brighter green so
-            it still reads as "past due" against the dark-green baseline. */}
-        <div className={`font-mono text-7xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-accent'}`}>
-          {label}
-        </div>
+        {/* Dark green for the timer UI, overtime included — the leading "+" says
+            you're past due without the number brightening to grab at you. */}
+        <div className="font-mono text-7xl font-bold tabular-nums text-accent">{label}</div>
         {/* The session progress bar now lives at the top; when there's no bar to
             show, fall back to the bare time-left line here. */}
         {!progress && timeLeftLabel && (
