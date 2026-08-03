@@ -1,9 +1,10 @@
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
-import { DEFAULT_PLAN, withPlanDefaults, type Plan } from '../config/plan'
+import { DEFAULT_PLAN, PLAN_REVISION, withPlanDefaults, type Plan } from '../config/plan'
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
+import type { LockedProjections } from '../lib/goalLock'
 import { EMPTY_EXERCISE_AVERAGES, type ExerciseAverages, type SessionDuration, type SessionTimeSamples } from '../lib/estimate'
 
 const KEYS = {
@@ -18,8 +19,10 @@ const KEYS = {
   cacheExerciseAverages: 'wt.cache.exerciseAverages',
   queue: 'wt.queue',
   plan: 'wt.plan',
+  planRevision: 'wt.planRevision',
   flexPlan: 'wt.flexplan',
   activeStep: 'wt.activeStep',
+  activeStepKey: 'wt.activeStepKey',
   activeRest: 'wt.activeRest',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
@@ -81,6 +84,12 @@ export type Settings = {
   lastReviewedMonth?: string
   /** `YYYY` of the year whose recap has already been shown (year-in-review). */
   lastReviewedYear?: string
+  /**
+   * Goal projections frozen once their ETA came within six months, keyed by goal
+   * id (see lib/goalLock). Kept on-device: it's a commitment made from this
+   * device's view of the data, and recalculating is a deliberate user action.
+   */
+  lockedGoals?: LockedProjections
 }
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }
@@ -148,14 +157,35 @@ export const storage = {
   loadQueue: (): QueuedWrite[] => read(KEYS.queue, []),
   saveQueue: (q: QueuedWrite[]) => write(KEYS.queue, q),
 
-  loadPlan: (): Plan => withPlanDefaults(read<Partial<Plan>>(KEYS.plan, DEFAULT_PLAN)),
-  savePlan: (p: Plan) => write(KEYS.plan, p),
+  /**
+   * The stored plan reconciled against the shipped defaults. The revision the
+   * stored copy was last reconciled with rides alongside it (see PLAN_REVISION),
+   * so a shipped restructure reaches a device that already saved a plan.
+   */
+  loadPlan: (): Plan =>
+    withPlanDefaults(read<Partial<Plan>>(KEYS.plan, DEFAULT_PLAN), read<number>(KEYS.planRevision, 0)),
+  // Saving a plan also marks it current: whatever the user has now is by
+  // definition reconciled with the revision this build ships.
+  savePlan: (p: Plan) => {
+    write(KEYS.plan, p)
+    write(KEYS.planRevision, PLAN_REVISION)
+  },
+  loadPlanRevision: (): number => read<number>(KEYS.planRevision, 0),
 
   loadFlexPlan: (): FlexBlock[] => read(KEYS.flexPlan, DEFAULT_FLEX_ROUTINE),
   saveFlexPlan: (r: FlexBlock[]) => write(KEYS.flexPlan, r),
 
   loadActiveStep: (): number => read(KEYS.activeStep, 0),
   saveActiveStep: (n: number) => write(KEYS.activeStep, n),
+  /**
+   * The `exerciseKey:setIndex` of the step in progress, saved alongside the bare
+   * index. A shipped plan change reshapes the flattened step list (a circuit
+   * interleaves it, a retired exercise shortens it), so the index alone can point
+   * at a different set after an update — the key survives that.
+   */
+  loadActiveStepKey: (): string | null => read<string | null>(KEYS.activeStepKey, null),
+  saveActiveStepKey: (k: string | null) =>
+    k ? write(KEYS.activeStepKey, k) : localStorage.removeItem(KEYS.activeStepKey),
 
   loadActiveRest: (): ActiveRest | null => read(KEYS.activeRest, null),
   saveActiveRest: (r: ActiveRest | null) =>

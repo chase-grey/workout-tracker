@@ -27,7 +27,7 @@ const UPDATE_PLAN_TOOL: Tool = {
             type: 'object',
             properties: {
               op: { type: 'string', enum: ['setExercise', 'addExercise', 'removeExercise', 'setDayLabel'] },
-              day: { type: 'string', enum: ['push', 'pull'] },
+              day: { type: 'string', enum: [...DAY_TYPES] },
               key: { type: 'string', description: 'exercise key (setExercise / removeExercise)' },
               label: { type: 'string', description: 'new day label (setDayLabel)' },
               fields: {

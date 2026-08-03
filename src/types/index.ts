@@ -1,4 +1,4 @@
-export type DayType = 'push' | 'pull'
+export type DayType = 'push' | 'pull' | 'fullbody'
 
 export type SetLog = {
   setNumber: number
@@ -23,6 +23,11 @@ export type WorkoutSession = {
   isHistorical: boolean
   /** ISO timestamp the session was started — used to learn typical durations. */
   startedAt?: string
+  /**
+   * Which A/B variant of the day this is (Push + Core only). Pinned at start so a
+   * session resumed after logging another one keeps the variant it began with.
+   */
+  variant?: 'A' | 'B'
 }
 
 export type BodyWeightEntry = {

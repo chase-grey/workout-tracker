@@ -44,6 +44,8 @@ import {
   type WeekCounts,
 } from '../lib/celebration'
 import { newRecords, type RecordSnapshot } from '../lib/records'
+import { goalPaceNotes, type GoalPaceNote } from '../lib/goalPace'
+import { graduationNote } from '../lib/graduation'
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
 
@@ -62,6 +64,13 @@ export type WorkoutFinishSummary = {
   activeSec: number
   restSec: number
   ambient: Celebration | null
+  /**
+   * How this session moved the locked goals it touched — whether it gained or
+   * lost ground against the projection each goal committed to.
+   */
+  goalPace: GoalPaceNote[]
+  /** One-off notes earned by this session (e.g. graduating to full leg raises). */
+  notes: string[]
 }
 
 /** A flexibility log: a stretch-session marker (angles omitted) and/or measurements. */
@@ -280,7 +289,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
-        const merged = withPlanDefaults(p)
+        // The sheet stores the plan without a revision marker, so reconcile the
+        // fetched copy against this device's — a plan that predates a shipped
+        // restructure gets it applied rather than overwriting the local one.
+        const merged = withPlanDefaults(p, storage.loadPlanRevision())
         setPlan(merged)
         storage.savePlan(merged)
       }
@@ -349,9 +361,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
         /* a missed cheer must never break a save */
       }
 
+      // Goal pacing + one-off progression notes. Same defensive framing as the
+      // ambient cheers: a missing note must never break the save.
+      let goalPace: GoalPaceNote[] = []
+      const notes: string[] = []
+      try {
+        const s = storage.loadSettings()
+        goalPace = goalPaceNotes(prev, rows, s.lockedGoals ?? {}, {
+          bodyWeights: storage.loadBodyWeights(),
+          measurements: storage.loadMeasurements(),
+          heightIn: s.heightIn ?? 0,
+        })
+        const graduated = graduationNote(prev, rows)
+        if (graduated) notes.push(graduated)
+      } catch {
+        /* pacing is commentary, not the save */
+      }
+
       const totalSec = duration?.totalSec ?? 0
       const restSec = Math.max(0, Math.min(duration?.restSec ?? 0, totalSec))
-      return { prs, baselines, totalSec, activeSec: totalSec - restSec, restSec, ambient }
+      return { prs, baselines, totalSec, activeSec: totalSec - restSec, restSec, ambient, goalPace, notes }
     },
     [challengeOptsByKey, enqueue, notify, persistWorkouts, weeklyCelebrations],
   )

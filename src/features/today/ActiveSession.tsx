@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MdBolt, MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
+import {
+  MdBolt,
+  MdCheckCircle,
+  MdChevronRight,
+  MdRadioButtonUnchecked,
+  MdShowChart,
+  MdTrackChanges,
+} from 'react-icons/md'
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
-import { repRangeLabel, type PlannedExercise } from '../../config/plan'
+import { repRangeLabel, variantExercises, type PlannedExercise } from '../../config/plan'
 import { nextTarget, type Target } from '../../lib/progression'
 import { isChallenge } from '../../lib/challenge'
+import { buildSetOrder } from '../../lib/circuit'
 import { canResumeRest, restBeforeNextSet } from '../../lib/rest'
+import { ExerciseHistorySheet } from '../../components/ExerciseHistorySheet'
 import {
   formatDuration,
   remainingWorkoutSecs,
@@ -68,6 +77,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
   const [showList, setShowList] = useState(false)
   const [paused, setPaused] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   // Accumulated time spent on the rest-timer screen (the "resting" slice of the
   // session). restStartRef marks when the current rest overlay opened — for a
   // resumed rest that's before the reload, so credit it from its real start.
@@ -82,7 +92,12 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   const restCount = useRef(0)
 
   const day = plan[session.dayType]
-  const exercises = day.exercises
+  // The day as this session is actually performing it: the A/B variant's set
+  // counts and press order, pinned when the session started.
+  const exercises = useMemo(
+    () => variantExercises(day, session.variant ?? null),
+    [day, session.variant],
+  )
 
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
   const doneCount = (key: string) => logFor(key)?.sets.filter((s) => s.done && s.reps > 0).length ?? 0
@@ -93,15 +108,17 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
 
   // Flatten the workout into individual set-steps, one screen each. Driven by the
   // live log's set counts so an added/removed set reshapes the flow immediately.
+  // buildSetOrder rotates through a circuit's stations instead of finishing one
+  // station at a time (see lib/circuit).
   const steps = useMemo(() => {
-    const out: SetStep[] = []
-    exercises.forEach((ex, exIndex) => {
-      const count = logFor(ex.key)?.sets.length ?? ex.sets
-      for (let s = 0; s < count; s++) {
-        out.push({ ex, exIndex, setIndex: s, setCount: count, stepKey: `${ex.key}:${s}` })
-      }
-    })
-    return out
+    const counts = exercises.map((ex) => logFor(ex.key)?.sets.length ?? ex.sets)
+    return buildSetOrder(exercises, counts).map(({ exIndex, setIndex }) => ({
+      ex: exercises[exIndex],
+      exIndex,
+      setIndex,
+      setCount: counts[exIndex],
+      stepKey: `${exercises[exIndex].key}:${setIndex}`,
+    })) satisfies SetStep[]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, session])
 
@@ -113,9 +130,22 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   const set = log?.sets[step.setIndex]
   const atLast = safeCurrent >= N - 1
 
+  // Resume by step key when the saved one still exists: a plan change can reshape
+  // the step list under a session that was already in progress, and the bare index
+  // would then land on a different set.
+  useEffect(() => {
+    const savedKey = storage.loadActiveStepKey()
+    if (!savedKey) return
+    const idx = steps.findIndex((s) => s.stepKey === savedKey)
+    if (idx >= 0 && idx !== safeCurrent) setCurrent(idx)
+    // Only on mount: afterwards `current` is the source of truth, not storage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     storage.saveActiveStep(safeCurrent)
-  }, [safeCurrent])
+    storage.saveActiveStepKey(step?.stepKey ?? null)
+  }, [safeCurrent, step?.stepKey])
 
   useEffect(() => {
     storage.saveActiveRest(rest)
@@ -134,8 +164,8 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
 
   // A "challenge" set: the prefilled target is a genuine step up from last time.
   const challenging = useMemo(
-    () => (target ? isChallenge(workouts, planned.key, target) : false),
-    [target, workouts, planned.key],
+    () => (target ? isChallenge(workouts, planned.key, target, planned.repMin) : false),
+    [target, workouts, planned.key, planned.repMin],
   )
 
   const totals = useMemo(() => {
@@ -234,14 +264,21 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       controls.updateSet(planned.key, nextStep.setIndex, { weightLbs: set.weightLbs ?? null, reps: set.reps })
     }
     const nextIsNewExercise = !!nextStep && nextStep.ex.key !== planned.key
+    // Rotating to another station of the same circuit, vs. coming back around to
+    // start a fresh round of it (the set number goes up).
+    const sameCircuit = !!nextStep && !!planned.circuit && nextStep.ex.circuit === planned.circuit
+    const newCircuitRound = sameCircuit && nextStep!.setIndex > step.setIndex
     restStartRef.current = Date.now()
     restCount.current += 1
-    // Full inter-set rest within an exercise, but a shorter transition rest
-    // (sized to the next exercise, capped) when moving to a different move.
+    // Full inter-set rest within an exercise, a brief station change inside a
+    // circuit, and a shorter transition rest (sized to the next exercise, capped)
+    // when moving to a different move.
     const restSec = restBeforeNextSet({
       currentRestSec: planned.restSec,
       sameExercise: !nextIsNewExercise,
       nextRestSec: nextStep ? nextStep.ex.restSec : null,
+      sameCircuit,
+      newCircuitRound,
     })
     setRest({
       seconds: restSec,
@@ -306,44 +343,55 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
         {planned.group} · {planned.sets}×{repRangeLabel(planned)} · rest {restLabel}
       </p>
 
-      {step.setIndex === step.setCount - 1 && (
-        <p className="px-1 text-xs text-neutral-500">
-          {exercises[step.exIndex + 1]
-            ? `up next: ${exercises[step.exIndex + 1].name}`
-            : 'last exercise — almost done'}
-        </p>
-      )}
-
       {set && (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
-          {challenging && challengeLabel ? (
-            <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
-              <MdBolt aria-hidden />
-              challenge · push for {challengeLabel}
-            </p>
-          ) : (
-            hint && (
-              <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
-                <MdTrackChanges aria-hidden />
-                {hint}
+          {/* The target line, and a chart button that puts this set in the
+              context of the whole history for the lift. */}
+          <div className="flex items-center gap-2">
+            {challenging && challengeLabel ? (
+              <p className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
+                <MdBolt aria-hidden />
+                {challengeLabel}
               </p>
-            )
-          )}
+            ) : (
+              <p className="flex flex-1 items-center justify-center gap-1 text-sm font-medium text-accent">
+                {hint && (
+                  <>
+                    <MdTrackChanges aria-hidden />
+                    {hint}
+                  </>
+                )}
+              </p>
+            )}
+            <button
+              onClick={() => setShowHistory(true)}
+              aria-label={`all-time chart for ${planned.name}`}
+              className="shrink-0 rounded-xl bg-surface-2 p-2 text-xl text-neutral-300 active:opacity-70"
+            >
+              <MdShowChart aria-hidden />
+            </button>
+          </div>
           <div className="flex items-end justify-center gap-3">
-            <label className="flex flex-1 flex-col items-center gap-1">
-              <span className="text-xs tracking-wide text-neutral-500">
-                {planned.bodyweight ? 'added lbs' : 'weight'}
-              </span>
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder={planned.bodyweight ? 'bw' : 'lbs'}
-                value={set.weightLbs ?? ''}
-                onChange={(e) => controls.updateSet(planned.key, step.setIndex, { weightLbs: toWeight(e.target.value) })}
-                className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </label>
-            <span className="pb-5 text-2xl text-neutral-600">×</span>
+            {/* A move that's never loaded (hanging raises, dead bugs) gets no
+                weight field at all rather than an empty "added lbs" box. */}
+            {!planned.repsOnly && (
+              <>
+                <label className="flex flex-1 flex-col items-center gap-1">
+                  <span className="text-xs tracking-wide text-neutral-500">
+                    {planned.bodyweight ? 'added lbs' : 'weight'}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder={planned.bodyweight ? 'bw' : 'lbs'}
+                    value={set.weightLbs ?? ''}
+                    onChange={(e) => controls.updateSet(planned.key, step.setIndex, { weightLbs: toWeight(e.target.value) })}
+                    className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                </label>
+                <span className="pb-5 text-2xl text-neutral-600">×</span>
+              </>
+            )}
             <label className="flex flex-1 flex-col items-center gap-1">
               <span className="text-xs tracking-wide text-neutral-500">reps</span>
               <input
@@ -381,6 +429,20 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       )}
 
       {paused && <PauseOverlay label="workout paused" onResume={() => setPaused(false)} />}
+
+      {showHistory && (
+        <ExerciseHistorySheet
+          exerciseKey={planned.key}
+          name={planned.name}
+          target={target}
+          plannedSets={step.setCount}
+          // Only a genuinely unloadable move charts as reps: weighted pull-ups are
+          // flagged `bodyweight` but do take added weight, so they keep the
+          // weight-based metrics.
+          repsOnly={!!planned.repsOnly}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
 
       {showList && (
         // Above the rest overlay (z-50) — reachable from the rest screen's menu.

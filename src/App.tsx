@@ -19,6 +19,7 @@ import { IS_DESKTOP } from './lib/device'
 import { useBackGuard } from './lib/useBackGuard'
 import { MdFitnessCenter } from 'react-icons/md'
 import type { DayType } from './types'
+import type { VariantKey } from './config/plan'
 
 const CHAT_ENABLED = IS_DESKTOP
 
@@ -106,9 +107,9 @@ function AppShell() {
     setStretching(true)
   }
 
-  const startWorkout = (dayType: DayType) => {
+  const startWorkout = (dayType: DayType, variant?: VariantKey) => {
     setMinimized(false)
-    controls.start(dayType)
+    controls.start(dayType, variant)
   }
 
   // Workouts and stretches take over the whole screen (no tabs / bottom nav)

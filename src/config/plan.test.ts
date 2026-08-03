@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DAY_TYPES, DEFAULT_PLAN, withPlanDefaults, type Plan } from './plan'
+import { DAY_TYPES, DEFAULT_PLAN, PLAN_REVISION, withPlanDefaults, type Plan } from './plan'
 
 describe('withPlanDefaults', () => {
   it('keeps only the current day types and fills any missing one from the defaults', () => {
@@ -22,17 +22,58 @@ describe('withPlanDefaults', () => {
 
   it('merges newly shipped exercises into a stored day near their neighbour', () => {
     // A stored push day from before Lateral Raise shipped, with a user edit.
+    const defaultKeys = DEFAULT_PLAN.push.exercises.map((e) => e.key)
+    // Derived rather than hard-coded, so reordering the day doesn't fail this test
+    // for a reason that has nothing to do with the merge.
+    const predecessor = defaultKeys[defaultKeys.indexOf('lateral_raise') - 1]
     const storedPush = {
       ...DEFAULT_PLAN.push,
       exercises: DEFAULT_PLAN.push.exercises
         .filter((e) => e.key !== 'lateral_raise')
         .map((e) => (e.key === 'flat_bench' ? { ...e, sets: 5 } : e)),
     }
-    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush })
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush }, PLAN_REVISION)
     const keys = merged.push.exercises.map((e) => e.key)
     expect(keys).toContain('lateral_raise')
-    // Inserted right after its default predecessor (db_overhead_press).
-    expect(keys.indexOf('lateral_raise')).toBe(keys.indexOf('db_overhead_press') + 1)
+    // Inserted right after the default exercise it follows in the shipped day.
+    expect(keys.indexOf('lateral_raise')).toBe(keys.indexOf(predecessor) + 1)
+  })
+
+  it('drops a retired default exercise from a stored day', () => {
+    // The optional lat-pulldown finisher, retired now that pull + legs exists.
+    const storedPush = {
+      ...DEFAULT_PLAN.push,
+      exercises: [
+        ...DEFAULT_PLAN.push.exercises,
+        { key: 'pullups_or_pulldown', name: 'weighted pull-ups or lat pulldown', sets: 3, repMin: 6, repMax: 10, restSec: 90, bodyweight: true, optional: true, group: 'pull finisher (optional)' },
+      ],
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush }, PLAN_REVISION)
+    expect(merged.push.exercises.map((e) => e.key)).not.toContain('pullups_or_pulldown')
+  })
+
+  it('re-adopts a renamed default exercise a stored day still calls by its old name', () => {
+    const storedPush = {
+      ...DEFAULT_PLAN.push,
+      exercises: DEFAULT_PLAN.push.exercises.map((e) =>
+        e.key === 'hanging_leg_raise' ? { ...e, name: 'hanging leg raise' } : e,
+      ),
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush }, PLAN_REVISION)
+    expect(merged.push.exercises.find((e) => e.key === 'hanging_leg_raise')?.name).toBe(
+      'hanging knee raise',
+    )
+  })
+
+  it('adopts structural fields (circuit, variants) the plan editor cannot set', () => {
+    // A stored day saved before the arm circuit and the A/B split shipped.
+    const storedPush = {
+      ...DEFAULT_PLAN.push,
+      exercises: DEFAULT_PLAN.push.exercises.map(({ circuit: _c, byVariant: _v, ...rest }) => rest),
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush }, PLAN_REVISION)
+    expect(merged.push.exercises.find((e) => e.key === 'tricep_pushdown')?.circuit).toBe('arms')
+    expect(merged.push.exercises.find((e) => e.key === 'flat_bench')?.byVariant?.B?.sets).toBe(4)
   })
 
   it('never clobbers a user-customized exercise', () => {
@@ -42,10 +83,69 @@ describe('withPlanDefaults', () => {
         e.key === 'flat_bench' ? { ...e, sets: 5, restSec: 200 } : e,
       ),
     }
-    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush })
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush }, PLAN_REVISION)
     const flat = merged.push.exercises.find((e) => e.key === 'flat_bench')
     expect(flat?.sets).toBe(5)
     expect(flat?.restSec).toBe(200)
+  })
+
+  describe('a plan that predates a shipped restructure', () => {
+    /** A stored push day as it looked before this revision: old order and volume. */
+    const legacyPush = {
+      type: 'push' as const,
+      label: 'push',
+      required: true,
+      exercises: [
+        { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+        { key: 'hanging_leg_raise', name: 'hanging leg raise', sets: 3, repMin: 10, repMax: 15, restSec: 60, bodyweight: true, group: 'abs' },
+        { key: 'incline_bench', name: 'incline bench press', sets: 4, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest' },
+        { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'chest' },
+        { key: 'iso_chest', name: 'chest fly / pec deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'chest' },
+        { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders & triceps' },
+        { key: 'lateral_raise', name: 'lateral raise', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'shoulders & triceps' },
+        { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'shoulders & triceps' },
+        { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'shoulders & triceps' },
+        { key: 'pullups_or_pulldown', name: 'weighted pull-ups or lat pulldown', sets: 3, repMin: 6, repMax: 10, restSec: 90, bodyweight: true, optional: true, group: 'pull finisher (optional)' },
+      ],
+    }
+    // No revision recorded: the device saved this plan before revisions existed.
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: legacyPush })
+
+    it('adopts the shipped order, so the arm circuit really alternates', () => {
+      const keys = merged.push.exercises.map((e) => e.key)
+      expect(keys.indexOf('lateral_raise')).toBeGreaterThan(keys.indexOf('tricep_pushdown'))
+      expect(keys.indexOf('lateral_raise')).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
+    })
+
+    it('adopts the shipped volume, so core reaches four sets', () => {
+      expect(merged.push.exercises.find((e) => e.key === 'cable_crunch')?.sets).toBe(4)
+      const raise = merged.push.exercises.find((e) => e.key === 'hanging_leg_raise')
+      expect(raise?.sets).toBe(4)
+      // Without the new repMax the graduation to full leg raises is unreachable.
+      expect(raise?.repMax).toBe(20)
+    })
+
+    it('moves overhead press ahead of chest isolation', () => {
+      const keys = merged.push.exercises.map((e) => e.key)
+      expect(keys.indexOf('db_overhead_press')).toBeLessThan(keys.indexOf('iso_chest'))
+    })
+
+    it('drops the retired finisher and refreshes the day label', () => {
+      expect(merged.push.exercises.map((e) => e.key)).not.toContain('pullups_or_pulldown')
+      expect(merged.push.label).toBe('push + core')
+    })
+
+    it('keeps an exercise the user added themselves', () => {
+      const withCustom = {
+        ...legacyPush,
+        exercises: [
+          ...legacyPush.exercises,
+          { key: 'ex_custom', name: 'face pull', sets: 3, repMin: 12, repMax: 15, restSec: 60, group: 'custom' },
+        ],
+      }
+      const out = withPlanDefaults({ ...DEFAULT_PLAN, push: withCustom })
+      expect(out.push.exercises.map((e) => e.key)).toContain('ex_custom')
+    })
   })
 
   it('leaves the defaults themselves intact when nothing is stored', () => {

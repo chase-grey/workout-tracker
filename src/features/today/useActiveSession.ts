@@ -5,6 +5,8 @@ import { storage } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { useData } from '../../store/DataContext'
 import { nextTarget } from '../../lib/progression'
+import { variantExercises, type VariantKey } from '../../config/plan'
+import { nextVariant } from '../../lib/pushVariant'
 
 /**
  * Owns the in-progress workout session, mirrored to localStorage so a mid-gym
@@ -21,16 +23,21 @@ export function useActiveSession() {
   }, [])
 
   const start = useCallback(
-    (dayType: DayType) => {
+    // `variant` overrides the automatic A/B choice (Push + Core only); omit it to
+    // take whichever one this week's session count calls for.
+    (dayType: DayType, variant?: VariantKey) => {
       storage.saveActiveStep(0)
+      storage.saveActiveStepKey(null)
       storage.saveActiveRest(null)
+      const chosen = variant ?? nextVariant(workouts, dayType) ?? undefined
       commit({
         sessionId: uuid(),
         date: toISODate(new Date()),
         dayType,
         isHistorical: false,
         startedAt: new Date().toISOString(),
-        exercises: plan[dayType].exercises.map((e) => {
+        variant: chosen,
+        exercises: variantExercises(plan[dayType], chosen ?? null).map((e) => {
           const target = nextTarget(workouts, e.key, {
             repMin: e.repMin,
             repMax: e.repMax,
@@ -109,6 +116,7 @@ export function useActiveSession() {
 
   const clear = useCallback(() => {
     storage.saveActiveStep(0)
+    storage.saveActiveStepKey(null)
     storage.saveActiveRest(null)
     commit(null)
   }, [commit])

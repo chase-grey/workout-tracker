@@ -6,12 +6,13 @@ import { WeightCard } from './WeightCard'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
-import { DAY_TYPES } from '../../config/plan'
+import { DAY_TYPES, type VariantKey } from '../../config/plan'
+import { nextVariant, otherVariant } from '../../lib/pushVariant'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 
 type Props = {
-  onStart: (dayType: DayType) => void
+  onStart: (dayType: DayType, variant?: VariantKey) => void
   onStartStretch: () => void
 }
 
@@ -42,7 +43,10 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-3 pb-4">
+    // No bottom padding of its own: `main` already pads below the scroll area, and
+    // stacking a second 1rem on top of it pushed the home page just past the
+    // viewport — enough to make it scroll by a hair with nothing to scroll to.
+    <div className="flex flex-col gap-3">
       {photoDue && (
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
@@ -83,15 +87,40 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
         <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
           start a session
         </p>
-        {DAY_TYPES.map((t) => (
-          <button
-            key={t}
-            onClick={() => onStart(t)}
-            className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
-          >
-            {plan[t].label}
-          </button>
-        ))}
+        {DAY_TYPES.map((t) => {
+          // Push + Core alternates A/B by position in the week, so the button
+          // says which one is up. The small button beside it takes the other.
+          const auto = nextVariant(workouts, t)
+          if (auto == null) {
+            return (
+              <button
+                key={t}
+                onClick={() => onStart(t)}
+                className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
+              >
+                {plan[t].label}
+              </button>
+            )
+          }
+          const other = otherVariant(auto)
+          return (
+            <div key={t} className="flex gap-2">
+              <button
+                onClick={() => onStart(t, auto)}
+                className="min-h-[52px] flex-1 rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
+              >
+                {plan[t].label} {auto}
+              </button>
+              <button
+                onClick={() => onStart(t, other)}
+                aria-label={`${plan[t].label} ${other} instead`}
+                className="min-h-[52px] w-14 rounded-2xl bg-surface text-lg font-bold text-neutral-500 active:bg-surface-2"
+              >
+                {other}
+              </button>
+            </div>
+          )
+        })}
         <button
           onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"

@@ -21,6 +21,7 @@ import type { Celebration } from './celebration'
 import { CALORIE_GOAL, calorieHitDates, dayTotals, type CalorieEntry } from './calories'
 import { parseISODate, toISODate, weekStartISO } from './dates'
 import { trainingSessions } from './session'
+import { DAY_TYPES } from '../config/plan'
 
 /** The data an action might have changed, snapshotted before and after. */
 export type RecordSnapshot = {
@@ -29,7 +30,7 @@ export type RecordSnapshot = {
   calorieEntries: CalorieEntry[]
 }
 
-const DAY_TYPE_NAME: Record<DayType, string> = { push: 'push', pull: 'pull' }
+const DAY_TYPE_NAME: Record<DayType, string> = { push: 'push', pull: 'pull', fullbody: 'full body' }
 
 const MS_PER_DAY = 86_400_000
 
@@ -206,8 +207,11 @@ export function newRecords(
   // Weekly session-count records: total workouts + each day type + stretches.
   const sessionDefs: { name: string; keep: (d: DayType) => boolean }[] = [
     { name: 'workouts', keep: () => true },
-    { name: `${DAY_TYPE_NAME.push} sessions`, keep: (d) => d === 'push' },
-    { name: `${DAY_TYPE_NAME.pull} sessions`, keep: (d) => d === 'pull' },
+    // Derived from DAY_TYPES so a newly shipped day gets its own record too.
+    ...DAY_TYPES.map((type) => ({
+      name: `${DAY_TYPE_NAME[type]} sessions`,
+      keep: (d: DayType) => d === type,
+    })),
   ]
   for (const def of sessionDefs) {
     const b = periodValue(sessionsByWeek(before.workouts, def.keep), wk)

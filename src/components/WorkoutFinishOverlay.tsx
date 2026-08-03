@@ -1,4 +1,4 @@
-import { MdBolt, MdEmojiEvents, MdTimer } from 'react-icons/md'
+import { MdBolt, MdEmojiEvents, MdFlag, MdTimer, MdTrendingDown, MdTrendingUp } from 'react-icons/md'
 import type { WorkoutFinishSummary } from '../store/DataContext'
 import { Confetti } from './Confetti'
 
@@ -29,7 +29,7 @@ export function WorkoutFinishOverlay({
   summary: WorkoutFinishSummary
   onClose: () => void
 }) {
-  const { prs, baselines, totalSec, activeSec, restSec } = summary
+  const { prs, baselines, totalSec, activeSec, restSec, goalPace, notes } = summary
   const hasPRs = prs.length > 0
 
   return (
@@ -90,6 +90,39 @@ export function WorkoutFinishOverlay({
               {baselines.map((name) => (
                 <li key={name} className="text-sm text-neutral-200">
                   {name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {goalPace.length > 0 && (
+          <div className="mt-5 rounded-2xl bg-surface p-4">
+            <div className="flex items-center gap-2 text-neutral-300">
+              <MdFlag className="text-xl" aria-hidden />
+              <span className="text-sm font-bold tracking-wider">goal pace</span>
+            </div>
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {goalPace.map((n) => (
+                <li key={n.goalId} className="flex items-start gap-2 text-sm">
+                  {n.direction === 'slower' ? (
+                    <MdTrendingDown className="mt-0.5 shrink-0 text-amber-400" aria-hidden />
+                  ) : (
+                    <MdTrendingUp className="mt-0.5 shrink-0 text-accent-2" aria-hidden />
+                  )}
+                  <span className="text-neutral-200">{n.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {notes.length > 0 && (
+          <div className="mt-5 rounded-2xl border border-accent-2/40 bg-surface p-4">
+            <ul className="flex flex-col gap-1.5">
+              {notes.map((n) => (
+                <li key={n} className="text-sm font-medium text-accent-2">
+                  {n}
                 </li>
               ))}
             </ul>

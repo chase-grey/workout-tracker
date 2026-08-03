@@ -25,9 +25,19 @@ export function canResumeRest(endsAt: number, now: number): boolean {
 }
 
 /**
+ * Moving between stations of a circuit: just long enough to walk over and set
+ * up. The point of a circuit is that the muscle you just worked recovers while
+ * you work the others, so a full rest here would throw that away.
+ */
+export const CIRCUIT_STATION_REST_SEC = 30
+
+/**
  * How long to rest after completing a set.
  *
  * - Between sets of the SAME exercise: the exercise's own prescribed `restSec`.
+ * - Moving to the next STATION of a circuit: {@link CIRCUIT_STATION_REST_SEC}.
+ * - Starting a new ROUND of a circuit (back to the first station): the next
+ *   exercise's own `restSec`, capped — you've now worked every station once.
  * - Transitioning to a DIFFERENT exercise: only what the NEXT exercise needs
  *   (its `restSec`), capped at {@link TRANSITION_REST_CAP_SEC}.
  * - No next set (final set of the whole workout): `0` — the caller finishes
@@ -37,9 +47,14 @@ export function restBeforeNextSet(params: {
   currentRestSec: number
   sameExercise: boolean
   nextRestSec: number | null
+  /** Next set is another station of the circuit the current set belongs to. */
+  sameCircuit?: boolean
+  /** That station starts a new round rather than continuing the current one. */
+  newCircuitRound?: boolean
 }): number {
-  const { currentRestSec, sameExercise, nextRestSec } = params
+  const { currentRestSec, sameExercise, nextRestSec, sameCircuit, newCircuitRound } = params
   if (sameExercise) return currentRestSec
   if (nextRestSec == null) return 0
+  if (sameCircuit && !newCircuitRound) return CIRCUIT_STATION_REST_SEC
   return Math.min(nextRestSec, TRANSITION_REST_CAP_SEC)
 }

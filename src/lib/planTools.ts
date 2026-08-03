@@ -1,5 +1,5 @@
 import type { DayType } from '../types'
-import type { Plan, PlannedExercise } from '../config/plan'
+import { DAY_TYPES, type Plan, type PlannedExercise } from '../config/plan'
 
 /**
  * Structured, serializable edits to a workout {@link Plan}. The AI chat assistant
@@ -54,7 +54,9 @@ function isValidNumber(value: unknown): value is number {
 }
 
 function isValidDay(plan: Plan, day: unknown): day is DayType {
-  return (day === 'push' || day === 'pull') && day in plan
+  // Checked against DAY_TYPES rather than a hard-coded pair, so a newly shipped
+  // day (full body) is editable by the assistant without a second edit here.
+  return typeof day === 'string' && (DAY_TYPES as string[]).includes(day) && day in plan
 }
 
 /** Slugify a name into a stable key: lowercase, non-alnum -> '_', trimmed underscores. */
