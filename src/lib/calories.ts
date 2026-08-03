@@ -149,3 +149,62 @@ export function calorieSurplusSeries(
     return { date, value: Math.round(sum / n) }
   })
 }
+
+/**
+ * What an unlogged day is assumed to have contained. A day with nothing logged
+ * almost certainly wasn't a fast — it was a day the logging didn't happen — so
+ * counting it as zero would invent a huge deficit. 2500 is a plausible
+ * didn't-track-it day: real eating, but well short of the bulk goal, so a gap
+ * still reads as a week that fell behind rather than one that never happened.
+ */
+export const ASSUMED_UNLOGGED_CALORIES = 2500
+
+/**
+ * Average daily surplus (intake − goal) per WEEK, one point per Mon–Sun week
+ * keyed by its Monday, sorted oldest → newest.
+ *
+ * Two deliberate differences from the daily series above:
+ *
+ * - **Only complete days count.** Today is still being eaten, so including it
+ *   would drag every week down until bedtime. The window ends at yesterday.
+ * - **Unlogged days count as {@link ASSUMED_UNLOGGED_CALORIES}** rather than
+ *   being skipped. Skipping them makes a badly-tracked week look identical to a
+ *   well-fed one; assuming a modest intake reflects that a missed log is usually
+ *   a missed *day*, not a missed meal.
+ *
+ * Weekly rather than daily because day-to-day intake is far too spiky to read
+ * anything from against a body-weight trend that moves over weeks.
+ */
+export function weeklyCalorieSurplusSeries(
+  entries: CalorieEntry[],
+  opts: { goal?: number; assumedUnlogged?: number; today?: Date } = {},
+): { date: string; value: number }[] {
+  const goal = opts.goal ?? CALORIE_GOAL
+  const assumed = opts.assumedUnlogged ?? ASSUMED_UNLOGGED_CALORIES
+  const today = opts.today ?? new Date()
+
+  const totals = dayTotals(entries)
+  if (totals.size === 0) return []
+
+  // Yesterday is the last day that has actually finished.
+  const lastComplete = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+  const first = [...totals.keys()].sort()[0]
+  const start = parseISODate(first)
+  if (start > lastComplete) return []
+
+  // Walk every complete day from the first logged one, bucketing into weeks.
+  const weeks = new Map<string, { sum: number; days: number }>()
+  for (const d = new Date(start); d <= lastComplete; d.setDate(d.getDate() + 1)) {
+    const iso = toISODate(d)
+    const intake = totals.get(iso) ?? assumed
+    const wk = weekStartISO(iso)
+    const bucket = weeks.get(wk) ?? { sum: 0, days: 0 }
+    bucket.sum += intake - goal
+    bucket.days += 1
+    weeks.set(wk, bucket)
+  }
+
+  return [...weeks.entries()]
+    .map(([date, { sum, days }]) => ({ date, value: Math.round(sum / days) }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
