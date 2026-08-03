@@ -23,8 +23,14 @@ export type ChallengeOpts = { repMin: number; repMax: number; bodyweight?: boole
  * A brand-new exercise (no history) is not a challenge — there's nothing to beat
  * yet. Heavier weight always counts; at the same weight, more reps counts.
  */
-export function isChallenge(prev: WorkoutRow[], exerciseKey: string, target: Target): boolean {
-  const last = lastPerformance(prev, exerciseKey)
+export function isChallenge(
+  prev: WorkoutRow[],
+  exerciseKey: string,
+  target: Target,
+  /** Bottom of the rep range, so this reads the same working set nextTarget did. */
+  repMin = 1,
+): boolean {
+  const last = lastPerformance(prev, exerciseKey, repMin)
   if (!last) return false
   if (target.weightLbs != null && last.topWeight != null) {
     if (target.weightLbs > last.topWeight) return true
@@ -72,7 +78,7 @@ export function sessionChallenges(
     const opts = optsByKey.get(key)
     if (!opts) continue
     const target = nextTarget(prev, key, opts)
-    if (!isChallenge(prev, key, target)) continue
+    if (!isChallenge(prev, key, target, opts.repMin)) continue
     const met = rows.some((r) => setMeetsTarget(r.weight_lbs, r.reps, target))
     out.push({ exercise: exerciseName(key), target, met })
   }

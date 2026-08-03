@@ -1,4 +1,5 @@
 import type { WorkoutRow } from '../types'
+import { parseISODate, toISODate } from './dates'
 
 export type Target = { weightLbs: number | null; reps: number }
 
@@ -7,19 +8,90 @@ function roundHalf(n: number): number {
   return Math.round(n * 2) / 2
 }
 
+/**
+ * How long a gap makes the last session a poor basis for a step up. Come back
+ * from a break, an illness or a holiday and the plan repeats what you last
+ * actually did rather than demanding more on top of it — you re-pace upward from
+ * a real number instead of chasing one you set while fresh.
+ */
+export const STALE_HISTORY_DAYS = 21
+
 type SessionGroup = { date: string; sets: { weight: number | null; reps: number }[] }
+
+/** Whole days between two ISO dates (negative if `b` precedes `a`). */
+function daysBetween(a: string, b: string): number {
+  return Math.round((parseISODate(b).getTime() - parseISODate(a).getTime()) / 86_400_000)
+}
+
+/**
+ * The WORKING set of a session: the weight you actually trained at, and the best
+ * reps you managed at it.
+ *
+ * Deliberately not simply the heaviest set. A session of 135×8, 135×8, 135×7,
+ * 150×1 has a top set of 150×1, and building the next target off that asks for
+ * 150×2 — a prescription outside the exercise's own rep range that no
+ * double-progression scheme would ever produce.
+ *
+ * So: the heaviest weight at which a set actually reached the bottom of the
+ * prescribed range. That excludes the heavy single (1 rep of an 8–12 exercise
+ * isn't training that range) while still crediting the heaviest weight genuinely
+ * worked, so back-off sets can't ratchet the target downward the way a plain
+ * modal weight would.
+ *
+ * When no set reached repMin — a bad day, or a lift being worked below its range —
+ * there's no in-range weight to read, so it falls back to the modal weight: the
+ * one appearing in the most sets, which is robust to a single outlier. Ties go to
+ * the heavier weight, since sets were completed there too.
+ */
+function workingSet(
+  sets: { weight: number | null; reps: number }[],
+  repMin: number,
+): { weight: number; reps: number } | null {
+  const weighted = sets.filter((s): s is { weight: number; reps: number } => s.weight != null)
+  if (weighted.length === 0) return null
+
+  const bestRepsAt = (weight: number): number =>
+    weighted.reduce((best, s) => (s.weight === weight ? Math.max(best, s.reps) : best), 0)
+
+  // Heaviest weight that carried a set into the prescribed range.
+  const inRange = weighted.filter((s) => s.reps >= repMin)
+  if (inRange.length > 0) {
+    const weight = Math.max(...inRange.map((s) => s.weight))
+    return { weight, reps: bestRepsAt(weight) }
+  }
+
+  // Nothing reached the range: fall back to the weight most sets used.
+  const counts = new Map<number, number>()
+  for (const s of weighted) counts.set(s.weight, (counts.get(s.weight) ?? 0) + 1)
+  let weight = -Infinity
+  let bestCount = 0
+  for (const [w, count] of counts) {
+    if (count > bestCount || (count === bestCount && w > weight)) {
+      bestCount = count
+      weight = w
+    }
+  }
+  return { weight, reps: bestRepsAt(weight) }
+}
 
 /**
  * The most recent session's performance for one exercise (null if no history).
  *
  * Rows are grouped by session (session_id, falling back to date), and the group
- * with the latest date wins. The "top set" is the heaviest set (ties broken by
- * greater reps); topReps is that set's reps. For a bodyweight exercise (every set
- * has a null weight) topWeight is null and topReps is the max reps in the session.
+ * with the latest date wins. `topWeight`/`topReps` describe that session's
+ * WORKING set — the modal weight and the best reps at it (see workingSet), not
+ * its single heaviest set. For a bodyweight exercise (every set has a null
+ * weight) topWeight is null and topReps is the max reps in the session.
  */
 export function lastPerformance(
   workouts: WorkoutRow[],
   exerciseKey: string,
+  /**
+   * Bottom of the exercise's prescribed rep range, used to tell a real working set
+   * from a heavy single. Defaults to 1, which makes every set count as in-range —
+   * i.e. plain "heaviest set" behaviour for callers that don't know the range.
+   */
+  repMin = 1,
 ): { date: string; topWeight: number | null; topReps: number } | null {
   const bySession = new Map<string, SessionGroup>()
   for (const r of workouts) {
@@ -39,25 +111,14 @@ export function lastPerformance(
   }
   if (latest === null) return null
 
-  const hasWeight = latest.sets.some((s) => s.weight != null)
-  if (!hasWeight) {
-    // Bodyweight session: no weight, top set is simply the most reps.
+  const working = workingSet(latest.sets, repMin)
+  if (working === null) {
+    // Bodyweight session: no weight anywhere, so the top set is simply most reps.
     let topReps = 0
     for (const s of latest.sets) topReps = Math.max(topReps, s.reps)
     return { date: latest.date, topWeight: null, topReps }
   }
-
-  // Weighted session: heaviest set wins; ties broken by greater reps.
-  let topWeight = -Infinity
-  let topReps = 0
-  for (const s of latest.sets) {
-    if (s.weight == null) continue
-    if (s.weight > topWeight || (s.weight === topWeight && s.reps > topReps)) {
-      topWeight = s.weight
-      topReps = s.reps
-    }
-  }
-  return { date: latest.date, topWeight, topReps }
+  return { date: latest.date, topWeight: working.weight, topReps: working.reps }
 }
 
 /**
@@ -67,27 +128,48 @@ export function lastPerformance(
  * Re-pacing note: the target is always derived from the MOST RECENT session, so
  * if the user logs below target one week, next week's target is computed from that
  * lower actual — the plan automatically re-paces to reality rather than compounding
- * an aspirational number the user never actually hit.
+ * an aspirational number the user never actually hit. After a gap of more than
+ * STALE_HISTORY_DAYS it stops asking for a step up at all and simply repeats the
+ * last working set, so coming back from a break starts from something achievable.
+ *
+ * The prescribed reps never exceed repMax. They're allowed to sit BELOW repMin —
+ * if the last session only managed 4 reps of an 8–12 exercise, the next target is
+ * 5, not a demoralizing jump straight back to 8.
  */
 export function nextTarget(
   workouts: WorkoutRow[],
   exerciseKey: string,
-  opts: { repMin: number; repMax: number; bodyweight?: boolean; increment?: number },
+  opts: { repMin: number; repMax: number; bodyweight?: boolean; increment?: number; today?: Date },
 ): Target {
   const { repMin, repMax } = opts
   const increment = opts.increment ?? 5
+  const today = opts.today ?? new Date()
 
-  const last = lastPerformance(workouts, exerciseKey)
+  const last = lastPerformance(workouts, exerciseKey, repMin)
 
   // Brand-new exercise: no weight suggestion, start at the bottom of the range.
   if (last === null) {
     return { weightLbs: null, reps: repMin }
   }
 
+  /** One more rep than last time, never past the top of the range. */
+  const oneMoreRep = Math.min(last.topReps + 1, repMax)
+  /** What you last actually managed, for repeating rather than stepping up. */
+  const repeatReps = Math.max(1, Math.min(last.topReps, repMax))
+  // Checked before the bodyweight branch, so reps-only lifts re-pace after a
+  // layoff too rather than being asked for a rep they haven't earned in months.
+  const stale = daysBetween(last.date, toISODate(today)) > STALE_HISTORY_DAYS
+
   // Bodyweight (flagged, or no weight recorded): progress reps only.
   if (opts.bodyweight || last.topWeight == null) {
-    const reps = last.topReps < repMax ? Math.min(last.topReps + 1, repMax) : repMax
-    return { weightLbs: null, reps }
+    return { weightLbs: null, reps: stale ? repeatReps : Math.max(1, oneMoreRep) }
+  }
+
+  const weightLbs = roundHalf(last.topWeight)
+
+  // Long layoff: repeat what you last actually did instead of stepping up.
+  if (stale) {
+    return { weightLbs, reps: repeatReps }
   }
 
   // Weighted double progression.
@@ -95,6 +177,5 @@ export function nextTarget(
     // Earned a weight bump: increase weight, reset reps to the bottom of the range.
     return { weightLbs: roundHalf(last.topWeight + increment), reps: repMin }
   }
-  // Otherwise add a rep at the same weight (topReps + 1 stays <= repMax here).
-  return { weightLbs: roundHalf(last.topWeight), reps: last.topReps + 1 }
+  return { weightLbs, reps: Math.max(1, oneMoreRep) }
 }
