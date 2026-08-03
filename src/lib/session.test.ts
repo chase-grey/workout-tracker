@@ -65,6 +65,39 @@ describe('sessionToRows', () => {
     expect(rows[0].exercise).toBe('flat_bench')
     expect(rows[0].reps).toBe(8)
   })
+
+  it("stamps the session's A/B slot onto every row", () => {
+    // Without it there is no way to tell afterwards whether a bench set led the
+    // day or followed four other exercises (see lastPerformance).
+    const rows = sessionToRows({
+      sessionId: 's',
+      date: '2026-07-21',
+      dayType: 'push',
+      isHistorical: false,
+      variant: 'B',
+      exercises: [
+        {
+          exercise: 'flat_bench',
+          sets: [
+            { setNumber: 1, weightLbs: 185, reps: 8 },
+            { setNumber: 2, weightLbs: 185, reps: 7 },
+          ],
+        },
+      ],
+    })
+    expect(rows.map((r) => r.variant)).toEqual(['B', 'B'])
+  })
+
+  it('leaves the slot off a day that does not run variants', () => {
+    const rows = sessionToRows({
+      sessionId: 's',
+      date: '2026-07-21',
+      dayType: 'pull',
+      isHistorical: false,
+      exercises: [{ exercise: 'barbell_squat', sets: [{ setNumber: 1, weightLbs: 225, reps: 5 }] }],
+    })
+    expect(rows[0].variant).toBeUndefined()
+  })
 })
 
 describe('hasLoggedSets', () => {

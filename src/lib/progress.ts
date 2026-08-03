@@ -1,20 +1,72 @@
 import type { WorkoutRow } from '../types'
-import { ALL_EXERCISES, QUICK_LOG_KEY } from '../config/plan'
+import { ALL_EXERCISES, QUICK_LOG_KEY, type VariantKey } from '../config/plan'
 import { epley1RM } from './epley'
 import { parseISODate } from './dates'
+import { leadVariantForKey } from './pushVariant'
 
 export type Metric = '1rm' | 'weight' | 'volume' | 'reps'
 export type Point = { date: string; value: number }
 
+/**
+ * Which A/B slot of a variant day a series reads.
+ *
+ * - `'lead'` — only the slot that trains the lift freshest. The strength read:
+ *   Push + Core benches twice a week, and the session that follows four other
+ *   exercises is necessarily lighter, so plotting both draws a sawtooth that
+ *   looks like backsliding every other session when nothing was lost.
+ * - `'all'` — every session, whatever slot.
+ * - `'A'` / `'B'` — one named slot, for comparing like with like against the
+ *   session you're in right now.
+ *
+ * An exercise the variants train alike (most of the plan) reads every session
+ * under any of these.
+ */
+export type SlotScope = 'lead' | 'all' | VariantKey
+
+/**
+ * The slot a metric reads when the caller doesn't say.
+ *
+ * Top weight and estimated 1RM are strength readings, so they read the lead slot
+ * only. Volume and reps are workload, not strength — a second-press session's
+ * sets are real work that really was done — so those count every session.
+ */
+function defaultSlot(metric: Metric): SlotScope {
+  return metric === 'volume' || metric === 'reps' ? 'all' : 'lead'
+}
+
 /** One data point per session for a given exercise, sorted oldest → newest. */
-export function exerciseSeries(rows: WorkoutRow[], exerciseKey: string, metric: Metric): Point[] {
-  const bySession = new Map<string, { date: string; sets: { w: number | null; reps: number }[] }>()
+export function exerciseSeries(
+  rows: WorkoutRow[],
+  exerciseKey: string,
+  metric: Metric,
+  /** Which A/B slot to read; omitted takes the metric's default (see defaultSlot). */
+  slot?: SlotScope,
+): Point[] {
+  const scope = slot ?? defaultSlot(metric)
+  const wanted =
+    scope === 'all' ? null : scope === 'lead' ? leadVariantForKey(exerciseKey) : scope
+
+  const bySession = new Map<
+    string,
+    { date: string; variant?: VariantKey; sets: { w: number | null; reps: number }[] }
+  >()
   for (const r of rows) {
     if (r.exercise !== exerciseKey) continue
     const key = r.session_id || r.date
     const g = bySession.get(key) ?? { date: r.date, sets: [] }
+    // A blank from the sheet or a CSV round-trip reads as "no slot recorded".
+    if (g.variant == null && r.variant) g.variant = r.variant
     g.sets.push({ w: r.weight_lbs, reps: r.reps })
     bySession.set(key, g)
+  }
+
+  // Drop the sessions trained in another slot. A session with no slot recorded is
+  // kept whatever the scope — imported history, or a day that doesn't run
+  // variants, neither of which sat behind a second press of the same lift.
+  if (wanted != null) {
+    for (const [key, g] of bySession) {
+      if (g.variant != null && g.variant !== wanted) bySession.delete(key)
+    }
   }
 
   const points = [...bySession.values()].map((g) => {

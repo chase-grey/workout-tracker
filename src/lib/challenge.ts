@@ -12,8 +12,9 @@
  */
 
 import type { WorkoutRow } from '../types'
-import { exerciseName } from '../config/plan'
+import { exerciseName, type VariantKey } from '../config/plan'
 import { lastPerformance, nextTarget, type Target } from './progression'
+import { progressionVariant } from './pushVariant'
 
 /** Progression inputs for one exercise (the fields nextTarget needs). */
 export type ChallengeOpts = { repMin: number; repMax: number; bodyweight?: boolean; increment?: number }
@@ -29,8 +30,15 @@ export function isChallenge(
   target: Target,
   /** Bottom of the rep range, so this reads the same working set nextTarget did. */
   repMin = 1,
+  /**
+   * The A/B slot being trained, matching what nextTarget was given. Read the
+   * other slot's session and a fresh press looks like a challenge every time it
+   * follows a tired one, while a tired press is credited with beating a number
+   * set fresh — neither of which is a step up in the lift.
+   */
+  variant?: VariantKey | null,
 ): boolean {
-  const last = lastPerformance(prev, exerciseKey, repMin)
+  const last = lastPerformance(prev, exerciseKey, repMin, variant)
   if (!last) return false
   if (target.weightLbs != null && last.topWeight != null) {
     if (target.weightLbs > last.topWeight) return true
@@ -65,6 +73,8 @@ export function sessionChallenges(
   prev: WorkoutRow[],
   added: WorkoutRow[],
   optsByKey: Map<string, ChallengeOpts>,
+  /** Passed through to nextTarget, which reads it for the stale-history check. */
+  today: Date = new Date(),
 ): SessionChallenge[] {
   const byKey = new Map<string, WorkoutRow[]>()
   for (const r of added) {
@@ -73,12 +83,18 @@ export function sessionChallenges(
     byKey.set(r.exercise, list)
   }
 
+  // The slot this session trained in, so each target is read from the sessions
+  // trained under the same fatigue. Taken from the rows themselves rather than
+  // passed in, since they carry it (see sessionToRows).
+  const sessionVariant = added.find((r) => r.variant)?.variant ?? null
+
   const out: SessionChallenge[] = []
   for (const [key, rows] of byKey) {
     const opts = optsByKey.get(key)
     if (!opts) continue
-    const target = nextTarget(prev, key, opts)
-    if (!isChallenge(prev, key, target, opts.repMin)) continue
+    const variant = progressionVariant(key, sessionVariant)
+    const target = nextTarget(prev, key, { ...opts, variant, today })
+    if (!isChallenge(prev, key, target, opts.repMin, variant)) continue
     const met = rows.some((r) => setMeetsTarget(r.weight_lbs, r.reps, target))
     out.push({ exercise: exerciseName(key), target, met })
   }

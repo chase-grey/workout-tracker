@@ -49,6 +49,9 @@ export function sessionToRows(s: WorkoutSession): WorkoutRow[] {
         reps: set.reps,
         notes: set.notes ?? ex.notes ?? '',
         is_historical: s.isHistorical,
+        // Pinned onto every row, not just the day: which press led decides what
+        // the next target for this lift is read from (see lastPerformance).
+        variant: s.variant,
       })
     }
   }

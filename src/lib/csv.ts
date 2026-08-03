@@ -10,6 +10,7 @@ const HEADERS: (keyof WorkoutRow)[] = [
   'reps',
   'notes',
   'is_historical',
+  'variant',
 ]
 
 function cell(v: unknown): string {

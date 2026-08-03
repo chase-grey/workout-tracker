@@ -1,4 +1,5 @@
 import type { WorkoutRow } from '../types'
+import type { VariantKey } from '../config/plan'
 import { parseISODate, toISODate } from './dates'
 
 export type Target = { weightLbs: number | null; reps: number }
@@ -16,7 +17,12 @@ function roundHalf(n: number): number {
  */
 export const STALE_HISTORY_DAYS = 21
 
-type SessionGroup = { date: string; sets: { weight: number | null; reps: number }[] }
+type SessionGroup = {
+  date: string
+  /** The A/B slot the session trained in, or undefined when none was recorded. */
+  variant?: VariantKey
+  sets: { weight: number | null; reps: number }[]
+}
 
 /** Whole days between two ISO dates (negative if `b` precedes `a`). */
 function daysBetween(a: string, b: string): number {
@@ -75,6 +81,33 @@ function workingSet(
 }
 
 /**
+ * Sessions comparable to `variant`: those trained in the same A/B slot, plus any
+ * whose slot wasn't recorded.
+ *
+ * An unrecorded slot counts as comparable rather than being thrown away — it's
+ * imported history, a day that doesn't run variants, or a session logged before
+ * the split shipped, none of which sat behind a second press of the same lift.
+ * Passing no variant compares against everything.
+ */
+function comparableSessions(groups: SessionGroup[], variant?: VariantKey | null): SessionGroup[] {
+  if (variant == null) return groups
+  return groups.filter((g) => g.variant == null || g.variant === variant)
+}
+
+export type LastPerformance = {
+  date: string
+  topWeight: number | null
+  topReps: number
+  /**
+   * True when the reading came from a session trained in the slot the caller
+   * asked for — i.e. under comparable fatigue. False when no such session exists
+   * and the number had to be borrowed from the other slot, which tells callers
+   * not to demand a step up on top of it (see nextTarget).
+   */
+  sameSlot: boolean
+}
+
+/**
  * The most recent session's performance for one exercise (null if no history).
  *
  * Rows are grouped by session (session_id, falling back to date), and the group
@@ -92,21 +125,39 @@ export function lastPerformance(
    * i.e. plain "heaviest set" behaviour for callers that don't know the range.
    */
   repMin = 1,
-): { date: string; topWeight: number | null; topReps: number } | null {
+  /**
+   * The A/B slot being read for, so a lift trained twice a week under different
+   * fatigue is compared against itself. Push + Core's flat bench leads variant B
+   * but follows four other exercises in variant A, and reading the fresh session
+   * for the tired one prescribes a weight there's no chance of hitting (and the
+   * reverse under-prescribes). Omit for exercises the variants train alike.
+   */
+  variant?: VariantKey | null,
+): LastPerformance | null {
   const bySession = new Map<string, SessionGroup>()
   for (const r of workouts) {
     if (r.exercise !== exerciseKey) continue
     const key = r.session_id || r.date
     const g = bySession.get(key) ?? { date: r.date, sets: [] }
+    // A blank from the sheet or a CSV round-trip reads as "no slot recorded".
+    if (g.variant == null && r.variant) g.variant = r.variant
     g.sets.push({ weight: r.weight_lbs, reps: r.reps })
     bySession.set(key, g)
   }
 
   if (bySession.size === 0) return null
 
+  const groups = [...bySession.values()]
+  const comparable = comparableSessions(groups, variant)
+  // Nothing in this slot yet — the lift's first session in it, or its first since
+  // the split shipped. Read the other slot rather than treating a known lift as
+  // brand new, and flag it so the target repeats instead of stepping up.
+  const sameSlot = comparable.length > 0
+  const pool = sameSlot ? comparable : groups
+
   // Pick the session with the latest date (YYYY-MM-DD sorts lexicographically).
   let latest: SessionGroup | null = null
-  for (const g of bySession.values()) {
+  for (const g of pool) {
     if (latest === null || g.date > latest.date) latest = g
   }
   if (latest === null) return null
@@ -116,9 +167,9 @@ export function lastPerformance(
     // Bodyweight session: no weight anywhere, so the top set is simply most reps.
     let topReps = 0
     for (const s of latest.sets) topReps = Math.max(topReps, s.reps)
-    return { date: latest.date, topWeight: null, topReps }
+    return { date: latest.date, topWeight: null, topReps, sameSlot }
   }
-  return { date: latest.date, topWeight: working.weight, topReps: working.reps }
+  return { date: latest.date, topWeight: working.weight, topReps: working.reps, sameSlot }
 }
 
 /**
@@ -132,6 +183,11 @@ export function lastPerformance(
  * STALE_HISTORY_DAYS it stops asking for a step up at all and simply repeats the
  * last working set, so coming back from a break starts from something achievable.
  *
+ * `opts.variant` scopes that most-recent session to the A/B slot being trained,
+ * so a lift the week hits twice under different fatigue climbs on two independent
+ * ladders. Without it, the fresh press would be prescribed off a tired session and
+ * the tired one asked to beat a fresh session it can't.
+ *
  * The prescribed reps never exceed repMax. They're allowed to sit BELOW repMin —
  * if the last session only managed 4 reps of an 8–12 exercise, the next target is
  * 5, not a demoralizing jump straight back to 8.
@@ -139,13 +195,21 @@ export function lastPerformance(
 export function nextTarget(
   workouts: WorkoutRow[],
   exerciseKey: string,
-  opts: { repMin: number; repMax: number; bodyweight?: boolean; increment?: number; today?: Date },
+  opts: {
+    repMin: number
+    repMax: number
+    bodyweight?: boolean
+    increment?: number
+    today?: Date
+    /** The A/B slot being trained — see lastPerformance. */
+    variant?: VariantKey | null
+  },
 ): Target {
   const { repMin, repMax } = opts
   const increment = opts.increment ?? 5
   const today = opts.today ?? new Date()
 
-  const last = lastPerformance(workouts, exerciseKey, repMin)
+  const last = lastPerformance(workouts, exerciseKey, repMin, opts.variant)
 
   // Brand-new exercise: no weight suggestion, start at the bottom of the range.
   if (last === null) {
@@ -159,16 +223,23 @@ export function nextTarget(
   // Checked before the bodyweight branch, so reps-only lifts re-pace after a
   // layoff too rather than being asked for a rep they haven't earned in months.
   const stale = daysBetween(last.date, toISODate(today)) > STALE_HISTORY_DAYS
+  /**
+   * Repeat the last working set rather than step up. Two cases share the reason:
+   * the number wasn't set under conditions this session can build on — a layoff
+   * ago, or in the day's other slot, where the lift was fresh (or tired) and this
+   * one isn't. Either way it's a starting point, not a baseline to add to; the
+   * first session in the slot sets the real one.
+   */
+  const repeat = stale || !last.sameSlot
 
   // Bodyweight (flagged, or no weight recorded): progress reps only.
   if (opts.bodyweight || last.topWeight == null) {
-    return { weightLbs: null, reps: stale ? repeatReps : Math.max(1, oneMoreRep) }
+    return { weightLbs: null, reps: repeat ? repeatReps : Math.max(1, oneMoreRep) }
   }
 
   const weightLbs = roundHalf(last.topWeight)
 
-  // Long layoff: repeat what you last actually did instead of stepping up.
-  if (stale) {
+  if (repeat) {
     return { weightLbs, reps: repeatReps }
   }
 

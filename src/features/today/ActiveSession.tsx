@@ -12,6 +12,7 @@ import { useData } from '../../store/DataContext'
 import { repRangeLabel, variantExercises, type PlannedExercise } from '../../config/plan'
 import { nextTarget, type Target } from '../../lib/progression'
 import { isChallenge } from '../../lib/challenge'
+import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder } from '../../lib/circuit'
 import { canResumeRest, restBeforeNextSet } from '../../lib/rest'
 import { ExerciseHistorySheet } from '../../components/ExerciseHistorySheet'
@@ -151,6 +152,14 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     storage.saveActiveRest(rest)
   }, [rest])
 
+  // The slot this lift is being trained in, for every read of its history: the
+  // press that leads today is compared against the days it led, not against the
+  // ones it followed four other exercises (see progressionVariant).
+  const slot = useMemo(
+    () => progressionVariant(planned.key, session.variant),
+    [planned.key, session.variant],
+  )
+
   const target: Target | undefined = useMemo(
     () =>
       nextTarget(workouts, planned.key, {
@@ -158,14 +167,15 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
         repMax: planned.repMax,
         bodyweight: planned.bodyweight,
         increment: planned.increment,
+        variant: slot,
       }),
-    [planned, workouts],
+    [planned, workouts, slot],
   )
 
   // A "challenge" set: the prefilled target is a genuine step up from last time.
   const challenging = useMemo(
-    () => (target ? isChallenge(workouts, planned.key, target, planned.repMin) : false),
-    [target, workouts, planned.key, planned.repMin],
+    () => (target ? isChallenge(workouts, planned.key, target, planned.repMin, slot) : false),
+    [target, workouts, planned.key, planned.repMin, slot],
   )
 
   const totals = useMemo(() => {
@@ -436,6 +446,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           name={planned.name}
           target={target}
           plannedSets={step.setCount}
+          slot={slot ?? undefined}
           // Only a genuinely unloadable move charts as reps: weighted pull-ups are
           // flagged `bodyweight` but do take added weight, so they keep the
           // weight-based metrics.

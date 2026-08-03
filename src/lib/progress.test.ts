@@ -41,6 +41,64 @@ describe('exerciseSeries', () => {
   })
 })
 
+/**
+ * Flat bench leads variant B and follows four other exercises in variant A, so
+ * the A session is necessarily lighter. Plotting both draws a sawtooth that reads
+ * as backsliding every other session when nothing was lost.
+ */
+describe('exerciseSeries across A/B slots', () => {
+  const bench = (session: string, date: string, weight: number, variant?: 'A' | 'B'): WorkoutRow => ({
+    ...r(session, date, weight, 8),
+    exercise: 'flat_bench',
+    variant,
+  })
+
+  const bothSlots = [
+    bench('b1', '2026-01-05', 185, 'B'), // led the day
+    bench('a1', '2026-01-07', 165, 'A'), // second press of the day
+    bench('b2', '2026-01-12', 190, 'B'),
+  ]
+
+  it('charts strength off the lead slot alone', () => {
+    for (const metric of ['weight', '1rm'] as const) {
+      const s = exerciseSeries(bothSlots, 'flat_bench', metric)
+      expect(s.map((p) => p.date)).toEqual(['2026-01-05', '2026-01-12'])
+    }
+  })
+
+  it('counts every session for the workload metrics', () => {
+    // A second-press session's sets are real work that really was done.
+    for (const metric of ['volume', 'reps'] as const) {
+      expect(exerciseSeries(bothSlots, 'flat_bench', metric)).toHaveLength(3)
+    }
+  })
+
+  it('reads a named slot for comparing against the session in progress', () => {
+    const s = exerciseSeries(bothSlots, 'flat_bench', 'weight', 'A')
+    expect(s.map((p) => p.value)).toEqual([165])
+  })
+
+  it('charts everything when asked for all slots', () => {
+    expect(exerciseSeries(bothSlots, 'flat_bench', 'weight', 'all')).toHaveLength(3)
+  })
+
+  it('keeps sessions with no slot recorded whatever the scope', () => {
+    // Imported history and pre-split sessions: no second press to sit behind.
+    const withLegacy = [...bothSlots, bench('old', '2025-12-01', 175)]
+    expect(exerciseSeries(withLegacy, 'flat_bench', 'weight', 'A').map((p) => p.value)).toEqual([
+      175, 165,
+    ])
+  })
+
+  it('leaves an exercise the variants train alike untouched', () => {
+    const crunches = [
+      { ...bench('a1', '2026-01-05', 50, 'A'), exercise: 'cable_crunch' },
+      { ...bench('b1', '2026-01-07', 55, 'B'), exercise: 'cable_crunch' },
+    ]
+    expect(exerciseSeries(crunches, 'cable_crunch', 'weight')).toHaveLength(2)
+  })
+})
+
 describe('availableExercises', () => {
   it('includes plan exercises and prettified unplanned imported keys', () => {
     const planKey = ALL_EXERCISES[0].key

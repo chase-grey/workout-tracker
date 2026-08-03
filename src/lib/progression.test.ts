@@ -184,6 +184,7 @@ describe('lastPerformance', () => {
       date: '2026-01-08',
       topWeight: 145,
       topReps: 7,
+      sameSlot: true,
     })
   })
 
@@ -198,6 +199,7 @@ describe('lastPerformance', () => {
       date: '2026-01-01',
       topWeight: 135,
       topReps: 8,
+      sameSlot: true,
     })
   })
 
@@ -221,6 +223,7 @@ describe('lastPerformance', () => {
       date: '2026-01-01',
       topWeight: 135,
       topReps: 4,
+      sameSlot: true,
     })
   })
 
@@ -241,6 +244,62 @@ describe('lastPerformance', () => {
       date: '2026-01-01',
       topWeight: null,
       topReps: 12,
+      sameSlot: true,
+    })
+  })
+})
+
+/**
+ * Push + Core trains flat bench twice a week: leading variant B, and following
+ * four other exercises in variant A. Each slot has to climb on its own ladder, or
+ * the fresh press is prescribed off a tired session and the tired one is asked to
+ * beat a fresh session it can't.
+ */
+describe('nextTarget across A/B slots', () => {
+  /** Fresh flat bench (variant B), then the tired one two days later (variant A). */
+  const twoSlots = [
+    row({ session_id: 'b1', date: '2026-01-05', variant: 'B', weight_lbs: 185, reps: 8 }),
+    row({ session_id: 'a1', date: '2026-01-07', variant: 'A', weight_lbs: 165, reps: 8 }),
+  ]
+
+  it('reads the matching slot, not simply the most recent session', () => {
+    // The fresh slot steps up from its own 185, ignoring the 165 logged since.
+    expect(
+      nextTarget(twoSlots, 'bench', { repMin: 6, repMax: 10, today: TODAY, variant: 'B' }),
+    ).toEqual({ weightLbs: 185, reps: 9 })
+    // And the tired slot steps up from 165 rather than being handed 185.
+    expect(
+      nextTarget(twoSlots, 'bench', { repMin: 6, repMax: 10, today: TODAY, variant: 'A' }),
+    ).toEqual({ weightLbs: 165, reps: 9 })
+  })
+
+  it('repeats rather than steps up when the slot has no history of its own', () => {
+    // Only the fresh slot has been trained. The tired slot borrows its weight so a
+    // known lift isn't treated as brand new, but doesn't demand a rep on top of a
+    // number set under conditions it can't match.
+    const freshOnly = [twoSlots[0]]
+    expect(
+      nextTarget(freshOnly, 'bench', { repMin: 6, repMax: 10, today: TODAY, variant: 'A' }),
+    ).toEqual({ weightLbs: 185, reps: 8 })
+    expect(lastPerformance(freshOnly, 'bench', 6, 'A')?.sameSlot).toBe(false)
+  })
+
+  it('treats a session with no slot recorded as comparable to either', () => {
+    // Imported history and anything logged before the split shipped: there was no
+    // second press of the day to sit behind, so both slots build on it.
+    const legacy = [row({ date: '2026-01-05', weight_lbs: 175, reps: 8 })]
+    for (const variant of ['A', 'B'] as const) {
+      expect(nextTarget(legacy, 'bench', { repMin: 6, repMax: 10, today: TODAY, variant })).toEqual(
+        { weightLbs: 175, reps: 9 },
+      )
+    }
+  })
+
+  it('ignores slots entirely when no variant is asked for', () => {
+    // The lifts both variants train alike keep one ladder off every session.
+    expect(nextTarget(twoSlots, 'bench', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
+      weightLbs: 165,
+      reps: 9,
     })
   })
 })

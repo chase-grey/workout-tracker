@@ -14,9 +14,18 @@
  */
 
 import type { DayType, WorkoutRow } from '../types'
-import type { VariantKey } from '../config/plan'
+import {
+  DEFAULT_PLAN,
+  VARIANT_DAY_TYPES,
+  variantExercises,
+  type DayPlan,
+  type VariantKey,
+} from '../config/plan'
 import { toISODate, weekStartISO } from './dates'
 import { trainingSessions } from './session'
+
+/** Every variant a variant day runs, in order. */
+export const VARIANT_KEYS: VariantKey[] = ['A', 'B']
 
 /** The variant for the nth push session of a week, counting n from 0. */
 export function variantForIndex(index: number): VariantKey {
@@ -55,4 +64,73 @@ export function nextVariant(
 /** The other variant — for the "actually, give me the other one" override. */
 export function otherVariant(v: VariantKey): VariantKey {
   return v === 'A' ? 'B' : 'A'
+}
+
+/** Where one exercise sits in a variant: its place in the order, and its sets. */
+type Slot = { index: number; sets: number }
+
+function slotIn(day: DayPlan, variant: VariantKey, key: string): Slot | null {
+  const list = variantExercises(day, variant)
+  const index = list.findIndex((e) => e.key === key)
+  return index < 0 ? null : { index, sets: list[index].sets }
+}
+
+/**
+ * The variant that trains `key` under the least fatigue — the one where it leads
+ * rather than following the day's other press.
+ *
+ * Decided on where the exercise falls in the performed order first, then on set
+ * count, since the variant that gives a lift its full sets is the one built
+ * around it. Null when the exercise sits identically in every variant (nothing
+ * to choose between) or the day doesn't run variants at all — most of the plan,
+ * which is why callers treat null as "every session is comparable".
+ */
+export function leadVariant(day: DayPlan, key: string): VariantKey | null {
+  if (!VARIANT_DAY_TYPES.includes(day.type)) return null
+  const a = slotIn(day, 'A', key)
+  const b = slotIn(day, 'B', key)
+  if (!a || !b) return null
+  if (a.index !== b.index) return a.index < b.index ? 'A' : 'B'
+  if (a.sets !== b.sets) return a.sets > b.sets ? 'A' : 'B'
+  return null
+}
+
+/**
+ * {@link leadVariant} for an exercise key alone, read off the shipped defaults.
+ *
+ * The pure readers that need this — charts, goals, the strength map — have no
+ * live plan to hand, and they don't need one: `byVariant` is program design
+ * rather than user preference, so a stored plan always re-adopts it from the
+ * defaults (see mergeDayExercises). Only the day's ordering is the user's to
+ * change, and the shipped variants differ in set count too, which settles it
+ * either way.
+ */
+export function leadVariantForKey(key: string): VariantKey | null {
+  for (const type of VARIANT_DAY_TYPES) {
+    const found = leadVariant(DEFAULT_PLAN[type], key)
+    if (found) return found
+  }
+  return null
+}
+
+/**
+ * The slot a lift's progression should read when the session is training
+ * `variant`: the variant itself for a lift the variants train differently, and
+ * null — every session, one ladder — for the many they train alike.
+ *
+ * Scoping the alike ones would split a single ladder into two that each climb at
+ * half speed: a cable crunch done on both push days is the same cable crunch, and
+ * pinning Tuesday's target to Tuesdays only would ignore the reps earned on
+ * Friday. Only the presses, whose fatigue genuinely differs, get their own ladder.
+ *
+ * Read off the shipped defaults for the same reason as {@link leadVariantForKey},
+ * and so the target prefilled mid-session and the challenge check run at save time
+ * can't disagree about which history they're reading.
+ */
+export function progressionVariant(
+  key: string,
+  variant: VariantKey | null | undefined,
+): VariantKey | null {
+  if (variant == null) return null
+  return leadVariantForKey(key) != null ? variant : null
 }

@@ -7,7 +7,9 @@
  *
  * Tabs (created automatically on first write):
  *   workouts:     session_id, date, day_type, exercise, set_number,
- *                 weight_lbs, reps, notes, is_historical
+ *                 weight_lbs, reps, notes, is_historical, variant
+ *                 (variant = which A/B slot of a Push + Core day the set was
+ *                 trained in; blank for every other day and for imports)
  *   body_weight:  date, weight_lbs
  *   measurements: date, waist_in, neck_in, note
  *   durations:    date, kind, day_type, total_sec, rest_sec  (per-session; feeds Time-spent report)
@@ -43,6 +45,7 @@ const WORKOUT_HEADERS = [
   'reps',
   'notes',
   'is_historical',
+  'variant',
 ]
 const BW_HEADERS = ['date', 'weight_lbs']
 const FLEX_HEADERS = [
@@ -137,7 +140,7 @@ function getWorkouts(since) {
     if (!r[0]) continue
     const date = isoDate(r[1])
     if (since && date < since) continue
-    out.push({
+    const row = {
       session_id: String(r[0]),
       date: date,
       day_type: String(r[2]),
@@ -147,7 +150,12 @@ function getWorkouts(since) {
       reps: Number(r[6]),
       notes: String(r[7] || ''),
       is_historical: r[8] === true || String(r[8]).toUpperCase() === 'TRUE',
-    })
+    }
+    // Left off entirely when blank — every row written before the column existed,
+    // plus every day that doesn't run variants. The client reads a missing slot as
+    // "comparable to either", so an empty string must not reach it.
+    if (r[9]) row.variant = String(r[9])
+    out.push(row)
   }
   return out
 }
@@ -181,6 +189,7 @@ function appendWorkoutRows(rows) {
     Number(r.reps),
     r.notes || '',
     !!r.is_historical,
+    r.variant || '',
   ])
   sh.getRange(sh.getLastRow() + 1, 1, values.length, WORKOUT_HEADERS.length).setValues(values)
   return { saved: values.length }
@@ -604,6 +613,16 @@ function sheet(name, headers) {
   if (!sh) {
     sh = ss.insertSheet(name)
     sh.getRange(1, 1, 1, headers.length).setValues([headers])
+    return sh
+  }
+  // A tab created before a column was added is missing that header cell, and the
+  // header row is what makes the sheet legible by hand. Fill in only the cells to
+  // the right of what's already there, so an existing header is never rewritten
+  // and no data column is touched.
+  const width = sh.getLastColumn()
+  if (width < headers.length) {
+    const missing = headers.slice(width)
+    sh.getRange(1, width + 1, 1, missing.length).setValues([missing])
   }
   return sh
 }

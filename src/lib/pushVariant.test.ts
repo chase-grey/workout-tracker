@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import type { WorkoutRow } from '../types'
-import { nextVariant, otherVariant, sessionsThisWeek, variantForIndex } from './pushVariant'
-import { DEAD_BUG } from '../config/plan'
+import {
+  leadVariant,
+  leadVariantForKey,
+  nextVariant,
+  otherVariant,
+  progressionVariant,
+  sessionsThisWeek,
+  variantForIndex,
+} from './pushVariant'
+import { DEAD_BUG, DEFAULT_PLAN } from '../config/plan'
 
 function row(overrides: Partial<WorkoutRow>): WorkoutRow {
   return {
@@ -86,5 +94,56 @@ describe('otherVariant', () => {
   it('flips between the two', () => {
     expect(otherVariant('A')).toBe('B')
     expect(otherVariant('B')).toBe('A')
+  })
+})
+
+describe('leadVariant', () => {
+  it('gives each press the variant it leads', () => {
+    // Incline leads A at four sets; flat leads B, swapping ahead of it.
+    expect(leadVariant(DEFAULT_PLAN.push, 'incline_bench')).toBe('A')
+    expect(leadVariant(DEFAULT_PLAN.push, 'flat_bench')).toBe('B')
+  })
+
+  it('has no lead for an exercise the variants train alike', () => {
+    for (const key of ['cable_crunch', 'db_overhead_press', 'lateral_raise']) {
+      expect(leadVariant(DEFAULT_PLAN.push, key)).toBeNull()
+    }
+  })
+
+  it('has no lead on a day that does not run variants', () => {
+    // Flat bench is on Full Body too, where there is no second press to trail.
+    expect(leadVariant(DEFAULT_PLAN.fullbody, 'flat_bench')).toBeNull()
+    expect(leadVariant(DEFAULT_PLAN.pull, 'barbell_squat')).toBeNull()
+  })
+
+  it('has no lead for an exercise the day does not contain', () => {
+    expect(leadVariant(DEFAULT_PLAN.push, 'barbell_squat')).toBeNull()
+  })
+})
+
+describe('leadVariantForKey', () => {
+  it('finds the lead across the variant days', () => {
+    expect(leadVariantForKey('flat_bench')).toBe('B')
+    expect(leadVariantForKey('incline_bench')).toBe('A')
+    expect(leadVariantForKey('barbell_squat')).toBeNull()
+  })
+})
+
+describe('progressionVariant', () => {
+  it('scopes only the lifts whose fatigue differs by variant', () => {
+    expect(progressionVariant('flat_bench', 'A')).toBe('A')
+    expect(progressionVariant('incline_bench', 'B')).toBe('B')
+  })
+
+  it('leaves the alike lifts on one ladder off every session', () => {
+    // Splitting these would halve the rate each one climbs: Tuesday's cable
+    // crunch target would ignore the reps earned on Friday.
+    expect(progressionVariant('cable_crunch', 'A')).toBeNull()
+    expect(progressionVariant('lateral_raise', 'B')).toBeNull()
+  })
+
+  it('is unscoped for a session with no variant at all', () => {
+    expect(progressionVariant('flat_bench', undefined)).toBeNull()
+    expect(progressionVariant('flat_bench', null)).toBeNull()
   })
 })

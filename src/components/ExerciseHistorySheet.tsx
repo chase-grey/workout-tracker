@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { useData } from '../store/DataContext'
 import { exerciseSeries, type Metric } from '../lib/progress'
+import type { VariantKey } from '../config/plan'
 import { epley1RM } from '../lib/epley'
 import { fmtDateLabel, LINE_PRIMARY, timeXAxis, withTime } from '../lib/chart'
 import type { Target } from '../lib/progression'
@@ -32,6 +33,7 @@ export function ExerciseHistorySheet({
   name,
   target,
   plannedSets,
+  slot,
   repsOnly = false,
   onClose,
 }: {
@@ -41,6 +43,13 @@ export function ExerciseHistorySheet({
   target?: Target
   /** Sets planned today, for scaling a per-set target onto a session-total axis. */
   plannedSets?: number
+  /**
+   * The A/B slot today's set belongs to, so the chart shows the sessions today is
+   * actually comparable to — a second press reads against past second presses,
+   * not against the days the lift led. Absent for the lifts (and days) the
+   * variants train alike, which chart every session.
+   */
+  slot?: VariantKey
   /**
    * The lift is tracked by reps alone, so weight-based metrics would chart a flat
    * zero line. Taken from the plan rather than inferred from the target, which is
@@ -52,7 +61,10 @@ export function ExerciseHistorySheet({
   const { workouts } = useData()
   const [metric, setMetric] = useState<Metric>(repsOnly ? 'reps' : '1rm')
 
-  const data = useMemo(() => exerciseSeries(workouts, exerciseKey, metric), [workouts, exerciseKey, metric])
+  const data = useMemo(
+    () => exerciseSeries(workouts, exerciseKey, metric, slot),
+    [workouts, exerciseKey, metric, slot],
+  )
 
   // Where today's target falls on the current metric's scale. The reps and volume
   // series are session TOTALS (see exerciseSeries), but a target is per-set, so

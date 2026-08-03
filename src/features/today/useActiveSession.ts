@@ -6,7 +6,7 @@ import { toISODate } from '../../lib/dates'
 import { useData } from '../../store/DataContext'
 import { nextTarget } from '../../lib/progression'
 import { variantExercises, type VariantKey } from '../../config/plan'
-import { nextVariant } from '../../lib/pushVariant'
+import { nextVariant, progressionVariant } from '../../lib/pushVariant'
 
 /**
  * Owns the in-progress workout session, mirrored to localStorage so a mid-gym
@@ -43,6 +43,10 @@ export function useActiveSession() {
             repMax: e.repMax,
             bodyweight: e.bodyweight,
             increment: e.increment,
+            // A press this variant trains under different fatigue climbs on its
+            // own ladder, so the prefill is read from the matching slot rather
+            // than from the day the lift led (or followed).
+            variant: progressionVariant(e.key, chosen),
           })
           const sets: SetLog[] = Array.from({ length: e.sets }, (_, i) => ({
             setNumber: i + 1,
