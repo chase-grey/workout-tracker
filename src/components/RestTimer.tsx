@@ -7,8 +7,30 @@ import { SessionProgress } from './SessionProgress'
 // height, a stack of lit segments — so a glance reads how much rest is left.
 // Any looping motion (falling sand, rising bubbles, a flickering flame) is
 // texture only and never drives that level, so the time reading stays honest.
-const VARIANTS = ['sandglass', 'tide', 'candle', 'pips'] as const
+//
+// Boxed shapes live in a square in the middle of the screen. Full-bleed ones use
+// the entire viewport instead, sitting behind the readout — a rest you can read
+// from across the gym without looking at the numbers.
+const BOX_VARIANTS = ['sandglass', 'tide', 'candle', 'pips'] as const
+const FULL_VARIANTS = ['perimeter', 'curtain', 'dune'] as const
+const VARIANTS = [...BOX_VARIANTS, ...FULL_VARIANTS] as const
 type Variant = (typeof VARIANTS)[number]
+type FullVariant = (typeof FULL_VARIANTS)[number]
+
+function isFullBleed(v: Variant): v is FullVariant {
+  return (FULL_VARIANTS as readonly string[]).includes(v)
+}
+
+/**
+ * How long after mounting the rest screen ignores a tap-to-dismiss.
+ *
+ * Finishing a set fires on pointerup, and the browser follows that with a
+ * synthesized mouse `click` at the same coordinates. By then this overlay is
+ * mounted underneath the finger, so that stray click hit-tests onto it and
+ * dismissed the rest before it was ever seen. Long enough to swallow the
+ * compatibility click, short enough that a deliberate tap still works.
+ */
+const GHOST_CLICK_GRACE_MS = 400
 
 // Remembered across mounts (each rest remounts the timer) so we never show the
 // same shape twice in a row — rest reliably rotates through the whole set.
@@ -29,6 +51,95 @@ function pickVariant(): Variant {
  * reserved for the numeric timer and bar UI.
  */
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
+
+/**
+ * How the perimeter path splits its time budget across the three edges it
+ * crosses on each side of the screen: out along the top to the corner, down the
+ * full side, then in along the bottom to the centre. Fixed weights rather than
+ * measured pixel lengths — the drain still finishes exactly at zero, and this
+ * needs no knowledge of the viewport's aspect ratio.
+ */
+const PERIMETER_WEIGHTS = { top: 0.25, side: 0.5, bottom: 0.25 } as const
+
+/**
+ * Full-screen rest shapes. Same contract as the boxed ones: `fraction` is how
+ * much rest is left and drives the level directly.
+ */
+function FullBleedShape({ variant, fraction }: { variant: FullVariant; fraction: number }) {
+  const drain = { transition: 'height 260ms linear, width 260ms linear' } as const
+
+  if (variant === 'curtain') {
+    // The whole viewport is the vessel: the level falls from the top of the
+    // screen to the bottom over the rest.
+    return (
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+        <div
+          className="absolute inset-x-0 top-0 bg-accent-bright/20"
+          style={{ height: `${fraction * 100}%`, ...drain }}
+        >
+          {/* The surface line is the reading; everything else is texture. */}
+          <div className="absolute inset-x-0 bottom-0 h-[3px] bg-accent-bright" />
+        </div>
+      </div>
+    )
+  }
+
+  if (variant === 'dune') {
+    // Sand piles up across the floor of the screen as the rest runs down: the
+    // dune's height is the time already spent.
+    const piled = `${(1 - fraction) * 100}%`
+    return (
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+        <div className="absolute inset-x-0 bottom-0" style={{ height: piled, ...drain }}>
+          <div className="absolute inset-0 rounded-t-[50%] bg-accent-bright/25" />
+          <div className="absolute inset-x-0 top-0 h-[3px] rounded-t-[50%] bg-accent-bright/80" />
+        </div>
+        {fraction > 0 && (
+          <div className="rest-stream absolute left-1/2 top-0 h-[22%] w-[3px] -translate-x-1/2" />
+        )}
+      </div>
+    )
+  }
+
+  // 'perimeter': sand starts along the top edge of the screen, runs down both
+  // sides and settles along the bottom. The bright arc is the rest still to come
+  // and always touches the top; the dim track behind it is sand already fallen.
+  const w = PERIMETER_WEIGHTS
+  const topFill = clamp01(fraction / w.top)
+  const sideFill = clamp01((fraction - w.top) / w.side)
+  const bottomFill = clamp01((fraction - w.top - w.side) / w.bottom)
+  const bar = 'absolute bg-accent-bright'
+  const track = 'absolute bg-accent-bright/12'
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+      {/* The full loop, dim: the path the sand travels. */}
+      <div className={`${track} inset-x-0 top-0 h-[6px]`} />
+      <div className={`${track} inset-x-0 bottom-0 h-[6px]`} />
+      <div className={`${track} inset-y-0 left-0 w-[6px]`} />
+      <div className={`${track} inset-y-0 right-0 w-[6px]`} />
+
+      {/* Top edge: fills outward from the centre toward both corners. */}
+      <div className="absolute inset-x-0 top-0 flex h-[6px] justify-center">
+        <div className={`${bar} right-1/2 h-[6px]`} style={{ width: `${topFill * 50}%`, ...drain }} />
+        <div className={`${bar} left-1/2 h-[6px]`} style={{ width: `${topFill * 50}%`, ...drain }} />
+      </div>
+
+      {/* Sides: descend from the top corners. */}
+      <div className={`${bar} left-0 top-0 w-[6px]`} style={{ height: `${sideFill * 100}%`, ...drain }} />
+      <div className={`${bar} right-0 top-0 w-[6px]`} style={{ height: `${sideFill * 100}%`, ...drain }} />
+
+      {/* Bottom edge: closes inward from both corners to the centre. */}
+      <div className={`${bar} bottom-0 left-0 h-[6px]`} style={{ width: `${bottomFill * 50}%`, ...drain }} />
+      <div className={`${bar} bottom-0 right-0 h-[6px]`} style={{ width: `${bottomFill * 50}%`, ...drain }} />
+
+      {/* Grains running along whichever edge the sand is currently crossing. */}
+      {fraction > 0 && fraction < 1 && (
+        <div className="rest-perimeter-glow absolute inset-0" />
+      )}
+    </div>
+  )
+}
 
 function RestShape({ variant, fraction }: { variant: Variant; fraction: number }) {
   const level = `${fraction * 100}%`
@@ -176,6 +287,12 @@ export function RestTimer({
   menu?: MenuItem[]
 }) {
   const endRef = useRef<number>(endsAt ?? Date.now() + seconds * 1000)
+  // When this overlay mounted, so a tap that belongs to the *previous* screen
+  // can't dismiss it. The set-advance button fires on pointerup (see
+  // usePressAction) and the browser then emits a compatibility mouse `click` at
+  // the same coordinates — which now hit-tests onto this freshly-mounted overlay
+  // and closed the rest instantly, so no rest screen appeared at all.
+  const mountedAt = useRef(Date.now())
   // Kept in milliseconds, not whole seconds: the shape's level is derived from
   // this, and rounding here would step it once a second — a staircase the drain
   // transition can't smooth over. The readout rounds for display instead.
@@ -215,15 +332,29 @@ export function RestTimer({
   // millisecond value so the level advances every tick and the drain transition
   // has a small, continuous step to smooth rather than a full second's jump.
   const remainingFraction = seconds > 0 ? clamp01(remainingMs / (seconds * 1000)) : 0
+  const full = isFullBleed(variant)
+
+  /**
+   * Wrap a handler so the ghost click that ended the previous set can't trigger it.
+   * Applied to every control on this screen, not just tap-to-dismiss: "add another
+   * set" sits near the advance button, so a stray click there would append a
+   * phantom set instead.
+   */
+  const afterGrace = (fn: () => void) => () => {
+    if (Date.now() - mountedAt.current < GHOST_CLICK_GRACE_MS) return
+    fn()
+  }
+  const dismiss = afterGrace(onClose)
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center bg-black px-6"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex flex-col items-center overflow-hidden bg-black px-6"
+      onClick={dismiss}
     >
       {/* Top region: the "how far through the workout" bar sits at the very top,
-          with the up-next/menu row beneath it. */}
-      <div className="w-full pt-[calc(0.75rem+env(safe-area-inset-top))]">
+          with the up-next/menu row beneath it. Above the full-bleed shape, which
+          paints the edges of the same screen. */}
+      <div className="relative z-10 w-full pt-[calc(0.75rem+env(safe-area-inset-top))]">
         {progress && (
           <SessionProgress
             done={progress.done}
@@ -247,21 +378,25 @@ export function RestTimer({
         )}
       </div>
 
+      {/* The animation is the timer: the shape's level carries the countdown
+          (full at the start, empty when rest is up); any looping motion is just
+          texture and never drives the level. A full-bleed shape uses the whole
+          viewport and sits behind the readout; a boxed one takes the middle. */}
+      {full && <FullBleedShape variant={variant} fraction={remainingFraction} />}
       <div className="flex flex-1 items-center justify-center">
-        <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
-          {/* The animation is the timer: the shape's level carries the countdown
-              (full at the start, empty when rest is up); any looping motion is
-              just texture and never drives the level. */}
-          <RestShape variant={variant} fraction={remainingFraction} />
-        </div>
+        {!full && (
+          <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
+            <RestShape variant={variant} fraction={remainingFraction} />
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-col items-center gap-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+      <div className="relative z-10 flex flex-col items-center gap-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {onAddSet && (
           <button
             onClick={(e) => {
               e.stopPropagation()
-              onAddSet()
+              afterGrace(onAddSet)()
             }}
             className="min-h-[44px] rounded-2xl border border-border bg-surface px-5 font-semibold text-neutral-200 active:opacity-80"
           >
