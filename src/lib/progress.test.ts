@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { availableExercises, combinedRepsSeries, exerciseSeries, filterRange } from './progress'
+import {
+  availableExercises,
+  combinedRepsSeries,
+  exerciseSeries,
+  exercisesByFrequency,
+  filterRange,
+  sessionCount,
+} from './progress'
 import { ALL_EXERCISES, DEFAULT_PLAN, absExerciseKeys } from '../config/plan'
 import type { WorkoutRow } from '../types'
 
@@ -125,6 +132,67 @@ describe('availableExercises', () => {
     const planCount = ALL_EXERCISES.length
     expect(list.slice(0, planCount).map((x) => x.key)).toEqual(ALL_EXERCISES.map((e) => e.key))
     expect(list[planCount]).toEqual({ key: 'prayer_curls', name: 'Prayer Curls' })
+  })
+})
+
+describe('exercisesByFrequency', () => {
+  const [first, second, third] = ALL_EXERCISES
+
+  // third: 3 sessions, second: 2, first: 1 — deliberately the reverse of plan order.
+  const w: WorkoutRow[] = [
+    { ...r('s1', '2026-01-01', 100, 5), exercise: first.key },
+    { ...r('s2', '2026-01-02', 100, 5), exercise: second.key },
+    { ...r('s2', '2026-01-02', 110, 5), exercise: second.key }, // second set, same session
+    { ...r('s3', '2026-01-03', 100, 5), exercise: second.key },
+    { ...r('s4', '2026-01-04', 40, 12), exercise: third.key },
+    { ...r('s5', '2026-01-05', 40, 12), exercise: third.key },
+    { ...r('s6', '2026-01-06', 40, 12), exercise: third.key },
+    { ...r('s7', '2026-01-07', 40, 12), exercise: 'prayer_curls' },
+  ]
+
+  it('orders by session count, counting each session once', () => {
+    const list = exercisesByFrequency(w)
+    expect(list.slice(0, 3)).toEqual([
+      { key: third.key, name: third.name, sessions: 3 },
+      { key: second.key, name: second.name, sessions: 2 },
+      { key: first.key, name: first.name, sessions: 1 },
+    ])
+  })
+
+  it('sinks never-logged plan exercises to the bottom in plan order', () => {
+    const list = exercisesByFrequency(w)
+    const untrained = list.filter((e) => e.sessions === 0)
+
+    // every option with a session outranks every option without one
+    expect(list.slice(0, list.length - untrained.length).every((e) => e.sessions > 0)).toBe(true)
+
+    const trainedKeys = new Set([first.key, second.key, third.key])
+    expect(untrained.map((e) => e.key)).toEqual(
+      ALL_EXERCISES.map((e) => e.key).filter((k) => !trainedKeys.has(k)),
+    )
+  })
+
+  it('ranks an imported one-off by its own frequency, not below the plan', () => {
+    const list = exercisesByFrequency(w)
+    const curls = list.findIndex((e) => e.key === 'prayer_curls')
+    expect(list[curls].sessions).toBe(1)
+    // ahead of every plan exercise that was never trained
+    expect(list.slice(curls + 1).every((e) => e.sessions === 0)).toBe(true)
+  })
+})
+
+describe('sessionCount', () => {
+  it('counts the union of sessions across keys', () => {
+    const w: WorkoutRow[] = [
+      { ...r('s1', '2026-01-01', 100, 5), exercise: 'flat_bench' },
+      { ...r('s2', '2026-01-02', 100, 5), exercise: 'incline_bench' },
+      // both presses in one session counts that session once
+      { ...r('s3', '2026-01-03', 100, 5), exercise: 'flat_bench' },
+      { ...r('s3', '2026-01-03', 80, 5), exercise: 'incline_bench' },
+    ]
+    expect(sessionCount(w, ['flat_bench', 'incline_bench'])).toBe(3)
+    expect(sessionCount(w, ['flat_bench'])).toBe(2)
+    expect(sessionCount(w, ['squat'])).toBe(0)
   })
 })
 

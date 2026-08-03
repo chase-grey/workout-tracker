@@ -139,6 +139,44 @@ export function availableExercises(workouts: WorkoutRow[]): { key: string; name:
   return [...planList, ...extras]
 }
 
+/** The distinct sessions each exercise key was logged in. */
+function sessionsByExercise(rows: WorkoutRow[]): Map<string, Set<string>> {
+  const byKey = new Map<string, Set<string>>()
+  for (const r of rows) {
+    if (!r.exercise) continue
+    const sessions = byKey.get(r.exercise) ?? new Set<string>()
+    sessions.add(r.session_id || r.date)
+    byKey.set(r.exercise, sessions)
+  }
+  return byKey
+}
+
+/**
+ * How many distinct sessions logged any of `keys` — the union, so a combined
+ * series (flat + incline bench) counts a session once even if both were trained.
+ */
+export function sessionCount(rows: WorkoutRow[], keys: Iterable<string>): number {
+  const byKey = sessionsByExercise(rows)
+  const all = new Set<string>()
+  for (const key of keys) for (const s of byKey.get(key) ?? []) all.add(s)
+  return all.size
+}
+
+/**
+ * The chartable exercises ordered by how often they've actually been trained,
+ * most sessions first, so the lifts in current rotation sit at the top of the
+ * picker. Never-logged plan exercises fall to the bottom in plan order — the
+ * sort is stable, so anything tied keeps availableExercises' ordering.
+ */
+export function exercisesByFrequency(
+  workouts: WorkoutRow[],
+): { key: string; name: string; sessions: number }[] {
+  const byKey = sessionsByExercise(workouts)
+  return availableExercises(workouts)
+    .map((e) => ({ ...e, sessions: byKey.get(e.key)?.size ?? 0 }))
+    .sort((a, b) => b.sessions - a.sessions)
+}
+
 /** Keep points within the last `months` (null = all time). */
 export function filterRange(points: Point[], months: number | null, today: Date = new Date()): Point[] {
   if (months == null) return points

@@ -11,10 +11,18 @@ import {
   YAxis,
 } from 'recharts'
 import { useData } from '../../store/DataContext'
-import { availableExercises, exerciseSeries, filterRange, type Metric, type Point } from '../../lib/progress'
+import {
+  exerciseSeries,
+  exercisesByFrequency,
+  filterRange,
+  sessionCount,
+  type Metric,
+  type Point,
+} from '../../lib/progress'
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
 import { buildGoals, GOAL_IDS } from '../../lib/goals'
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
+import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
 import { MuscleAvatar } from './MuscleAvatar'
 import { FlexProgress } from '../flex/FlexProgress'
@@ -306,10 +314,18 @@ export function ProgressTab() {
     }
   }, [workouts, bodyWeights, measurements, heightIn, settings.lockedGoals])
 
-  const exerciseOptions = useMemo(
-    () => [{ key: BENCH_COMBO, name: 'bench press (flat + incline)' }, ...availableExercises(workouts)],
-    [workouts],
-  )
+  // Most-trained first, so the picker leads with the lifts actually in rotation.
+  // The bench combo counts the sessions of both presses, which lands it wherever
+  // benching really sits — first when it leads, and it wins ties against the two
+  // series it's built from.
+  const exerciseOptions = useMemo(() => {
+    const combo = {
+      key: BENCH_COMBO,
+      name: 'bench press (flat + incline)',
+      sessions: sessionCount(workouts, ['flat_bench', 'incline_bench']),
+    }
+    return [combo, ...exercisesByFrequency(workouts)].sort((a, b) => b.sessions - a.sessions)
+  }, [workouts])
 
   const weightSeries = useMemo(
     () =>
@@ -417,17 +433,7 @@ export function ProgressTab() {
       <MuscleAvatar />
 
       <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
-      <select
-        value={exercise}
-        onChange={(e) => setExercise(e.target.value)}
-        className="min-h-[44px] rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
-      >
-        {exerciseOptions.map((e) => (
-          <option key={e.key} value={e.key}>
-            {e.name}
-          </option>
-        ))}
-      </select>
+      <ExercisePicker options={exerciseOptions} value={exercise} onChange={setExercise} />
       <Pills options={METRICS} value={metric} onChange={setMetric} />
       {exercise === BENCH_COMBO ? <BenchChart data={benchSeries} unit={unit} /> : <Chart data={series} unit={unit} />}
 
