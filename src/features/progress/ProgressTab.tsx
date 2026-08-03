@@ -12,7 +12,8 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { availableExercises, exerciseSeries, filterRange, type Metric, type Point } from '../../lib/progress'
-import { calorieSurplusSeries } from '../../lib/calories'
+import { weeklyCalorieSurplusSeries } from '../../lib/calories'
+import { buildGoals, GOAL_IDS } from '../../lib/goals'
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
 import { GoalsPanel } from './GoalsPanel'
 import { MuscleAvatar } from './MuscleAvatar'
@@ -90,13 +91,16 @@ function Chart({
   unit,
   label,
   calories,
+  goalLines,
 }: {
   data: Point[]
   unit: string
   /** Series name shown in the legend/tooltip when the calorie overlay is on. */
   label?: string
-  /** Optional 7-day-avg calorie surplus (intake − goal) to overlay on a right axis. */
+  /** Optional weekly-avg calorie surplus (intake − goal) to overlay on a right axis. */
   calories?: Point[]
+  /** Targets of goals now close enough to be worth seeing on the chart. */
+  goalLines?: { value: number; label: string }[]
 }) {
   if (data.length === 0) {
     return (
@@ -130,10 +134,22 @@ function Chart({
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}
             formatter={(v, n) =>
               n === 'cal'
-                ? [`${Number(v) > 0 ? '+' : ''}${v} cal/day`, 'vs goal (7d avg)']
+                ? [`${Number(v) > 0 ? '+' : ''}${v} cal/day`, 'vs goal (weekly avg)']
                 : [`${v} ${unit}`, label ?? '']
             }
           />
+          {/* Goals whose projected finish is inside the lock-in horizon get a
+              target line, so the chart shows what you're actually driving at. */}
+          {goalLines?.map((g) => (
+            <ReferenceLine
+              key={g.label}
+              yAxisId="left"
+              y={g.value}
+              stroke="#facc15"
+              strokeDasharray="5 4"
+              label={{ value: g.label, fill: '#facc15', fontSize: 10, position: 'insideTopLeft' }}
+            />
+          ))}
           {overlay && (
             <>
               <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -261,10 +277,34 @@ export function ProgressTab() {
     [measurements, heightIn, bodyMetric, months],
   )
 
+  // Weekly rather than daily, complete days only, unlogged days assumed —
+  // see weeklyCalorieSurplusSeries.
   const calorieSurplus = useMemo(
-    () => filterRange(calorieSurplusSeries(calorieEntries), months),
+    () => filterRange(weeklyCalorieSurplusSeries(calorieEntries), months),
     [calorieEntries, months],
   )
+
+  // Targets for goals whose projection has been locked in (ETA within six
+  // months), split by which chart they belong on.
+  const goalLines = useMemo(() => {
+    const specs = buildGoals({ workouts, bodyWeights, measurements, heightIn })
+    const locked = settings.lockedGoals ?? {}
+    // The locked target, not the live one — the same number the goals panel
+    // measures pace against, so the chart line and the panel agree.
+    const targetOf = (id: string, fallback: number) => locked[id]?.target ?? fallback
+    const within = (id: string) => locked[id] != null
+    return {
+      weight: specs
+        .filter((g) => (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) && within(g.id))
+        .map((g) => ({
+          value: targetOf(g.id, g.target),
+          label: g.title.replace('bodyweight → ', 'goal '),
+        })),
+      bodyFat: specs
+        .filter((g) => g.id === GOAL_IDS.sixPack && within(g.id))
+        .map((g) => ({ value: targetOf(g.id, g.target), label: '6-pack' })),
+    }
+  }, [workouts, bodyWeights, measurements, heightIn, settings.lockedGoals])
 
   const exerciseOptions = useMemo(
     () => [{ key: BENCH_COMBO, name: 'bench press (flat + incline)' }, ...availableExercises(workouts)],
@@ -333,7 +373,13 @@ export function ProgressTab() {
           log weight
         </button>
       </div>
-      <Chart data={weightSeries} unit="lbs" label="weight" calories={calorieSurplus} />
+      <Chart
+        data={weightSeries}
+        unit="lbs"
+        label="weight"
+        calories={calorieSurplus}
+        goalLines={goalLines.weight}
+      />
 
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold tracking-wider text-neutral-500">
@@ -362,6 +408,7 @@ export function ProgressTab() {
           unit={bodyMetric === 'bf' ? '%' : 'in'}
           label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
           calories={calorieSurplus}
+          goalLines={bodyMetric === 'bf' ? goalLines.bodyFat : undefined}
         />
       )}
 
