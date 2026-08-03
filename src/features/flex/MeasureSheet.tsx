@@ -85,11 +85,6 @@ export function MeasureSheet({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <p className="mt-2 text-xs text-neutral-500">
-          camera measures the split and tailor's pose. drag the lines to fine-tune, then review the
-          numbers below before saving.
-        </p>
-
         <button
           onClick={save}
           disabled={!anyValue}
