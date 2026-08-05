@@ -13,14 +13,13 @@ import {
   type Handles,
   type MeasureMode,
   type MeasureResult,
+  type MeasureTemp,
 } from '../../lib/measure'
 import { toISODate } from '../../lib/dates'
 import { AngleEditor } from './AngleEditor'
 
 type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
 type Facing = 'user' | 'environment'
-/** Whether the shot is a cold or warm reading; absent when it's neither. */
-export type MeasureTemp = 'cold' | 'warm'
 
 /** Pill fill per reading, matching the cold blue / warm green of the charts. */
 const TEMP_COLOR: Record<MeasureTemp, string> = { cold: '#38bdf8', warm: '#22c55e' }

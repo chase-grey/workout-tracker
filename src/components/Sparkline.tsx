@@ -3,10 +3,13 @@ export function Sparkline({
   values,
   width = 160,
   height = 40,
+  color = 'var(--color-accent)',
 }: {
   values: number[]
   width?: number
   height?: number
+  /** Line + end-dot color, for series with a color language of their own. */
+  color?: string
 }) {
   if (values.length < 2) {
     return <span className="text-sm text-neutral-500">not enough data yet</span>
@@ -26,12 +29,12 @@ export function Sparkline({
       <polyline
         points={pts.join(' ')}
         fill="none"
-        stroke="var(--color-accent)"
+        stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx={last[0]} cy={last[1]} r={3} fill="var(--color-accent)" />
+      <circle cx={last[0]} cy={last[1]} r={3} fill={color} />
     </svg>
   )
 }

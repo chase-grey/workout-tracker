@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { MdCheckCircle, MdChevronRight, MdPhotoCamera } from 'react-icons/md'
 import { CameraMeasure } from './CameraMeasure'
+import { AngleContextCard } from './AngleContextCard'
+import { useData } from '../../store/DataContext'
 import { PHOTO_SHOT, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
 import { summarizeResult, type MeasureResult } from '../../lib/measure'
+import { angleTrends, type AngleTrend } from '../../lib/angleContext'
+import { toISODate } from '../../lib/dates'
 
 /**
  * A photo screen in the stretch flow: one row per shot the moment calls for,
@@ -19,10 +23,14 @@ export function PhotoStep({
   onCapture: (kind: PhotoKind, result: MeasureResult) => void
   onDone: () => void
 }) {
+  const { flexEntries } = useData()
   const [open, setOpen] = useState<PhotoKind | null>(null)
   // Summary of each shot taken on this screen, e.g. "92°" — retaking replaces it.
   const [taken, setTaken] = useState<Partial<Record<PhotoKind, string>>>({})
   const anyTaken = Object.keys(taken).length > 0
+  // The reading just taken, held on its own card until it's been read. `last`
+  // says whether dismissing it also finishes the screen.
+  const [context, setContext] = useState<{ trends: AngleTrend[]; last: boolean } | null>(null)
 
   return (
     // Above the rest overlay (z-50) and the measure sheet (z-60).
@@ -70,12 +78,34 @@ export function PhotoStep({
           temp={PHOTO_SHOT[open].cold ? 'cold' : 'warm'}
           onClose={() => setOpen(null)}
           onDone={(result) => {
+            const shot = PHOTO_SHOT[open]
+            // Read the history before the capture is logged, so the reading is
+            // compared against the sessions before it rather than itself.
+            const trends = angleTrends(
+              flexEntries,
+              result,
+              shot.cold ? 'cold' : 'warm',
+              toISODate(new Date()),
+            )
             onCapture(open, result)
-            const next = { ...taken, [open]: summarizeResult(PHOTO_SHOT[open].mode, result) }
+            const next = { ...taken, [open]: summarizeResult(shot.mode, result) }
             setTaken(next)
             setOpen(null)
-            // Every shot this screen asked for is in — move on without a tap.
-            if (gate.shots.every((k) => next[k])) onDone()
+            const last = gate.shots.every((k) => next[k])
+            // The measurement gets its own card first; only then does the screen
+            // move on — automatically, once every shot it asked for is in.
+            if (trends.length > 0) setContext({ trends, last })
+            else if (last) onDone()
+          }}
+        />
+      )}
+
+      {context && (
+        <AngleContextCard
+          trends={context.trends}
+          onDismiss={() => {
+            setContext(null)
+            if (context.last) onDone()
           }}
         />
       )}

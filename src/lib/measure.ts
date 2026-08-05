@@ -18,6 +18,9 @@ import type { Landmark } from './pose'
 
 export type MeasureMode = 'split' | 'tailors'
 
+/** Whether a shot is a cold or warm reading; absent when it's neither. */
+export type MeasureTemp = 'cold' | 'warm'
+
 /** Named draggable points, keyed by handle id, in normalized (0..1) coords. */
 export type Handles = Record<string, Pt>
 
