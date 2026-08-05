@@ -3,6 +3,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -10,7 +11,7 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
-import { combinedRepsSeries, filterRange } from '../../lib/progress'
+import { combinedRepsSeries, filterRange, type Point } from '../../lib/progress'
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
 import { absExerciseKeys } from '../../config/plan'
 import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
@@ -56,15 +57,17 @@ function mergeActualProjected(actual: { date: string; value: number }[], project
 }
 
 /**
- * Actual vs. projected for a locked goal: the real series against the straight
- * line the lock committed to. Only drawn from the lock date onward — the history
- * before the lock isn't something the projection was ever measured against.
+ * Actual vs. projected for a locked goal: the whole logged history against the
+ * line the lock committed to. The history before the lock isn't something the
+ * projection was measured against, but it's the run-up that earned the pace — a
+ * chart starting at the lock date shows one or two points and reads as a straight
+ * segment. A marker on the lock date separates the two halves.
  */
 function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: string; value: number }[] }) {
-  const rows = useMemo(() => {
-    const since = actual.filter((p) => p.date >= lock.lockedAt)
-    return withTime(mergeActualProjected(since, projectedSeries(lock)))
-  }, [lock, actual])
+  const rows = useMemo(
+    () => withTime(mergeActualProjected(actual, projectedSeries(lock))),
+    [lock, actual],
+  )
 
   const yScale = useMemo(
     () => niceScale(rows.flatMap((r) => [r.actual, r.projected]).filter((v): v is number => v != null)),
@@ -73,7 +76,7 @@ function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: s
 
   return (
     <div className="mt-3 rounded-xl bg-surface-2 p-1">
-      <ResponsiveContainer width="100%" height={120}>
+      <ResponsiveContainer width="100%" height={140}>
         <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
@@ -90,6 +93,14 @@ function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: s
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}
+          />
+          {/* Where the projection was frozen: history to the left, the commitment
+              it's being measured against to the right. */}
+          <ReferenceLine
+            x={parseISODate(lock.lockedAt).getTime()}
+            stroke="#facc15"
+            strokeDasharray="3 3"
+            label={{ value: 'locked', fill: '#facc15', fontSize: 9, position: 'insideTopRight' }}
           />
           <Line
             type="monotone"
@@ -117,6 +128,57 @@ function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: s
 }
 
 /**
+ * A goal's raw series against its target line, shown when the goal isn't close
+ * enough to lock a projection yet — so the history is still visible instead of
+ * only a "keep at it" line. No projected line, because there isn't a reliable
+ * one to draw.
+ */
+function DataChart({ points, target, targetLabel }: { points: Point[]; target: number; targetLabel: string }) {
+  const rows = useMemo(() => withTime(points), [points])
+  const yScale = useMemo(() => niceScale([...points.map((p) => p.value), target]), [points, target])
+
+  return (
+    <div className="mt-3 rounded-xl bg-surface-2 p-1">
+      <ResponsiveContainer width="100%" height={120}>
+        <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+          <CartesianGrid stroke="#262626" vertical={false} />
+          <XAxis {...timeXAxis} tick={axisTick} />
+          <YAxis
+            tick={axisTick}
+            width={40}
+            domain={yScale.domain}
+            ticks={yScale.ticks}
+            allowDecimals={false}
+            interval={0}
+          />
+          <AxisBreak broken={yScale.broken} bg="#262626" />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelStyle={{ color: '#a3a3a3' }}
+            labelFormatter={(ms) => fmtDateLabel(Number(ms))}
+          />
+          <ReferenceLine
+            y={target}
+            stroke="#facc15"
+            strokeDasharray="5 4"
+            label={{ value: targetLabel, fill: '#facc15', fontSize: 10, position: 'insideTopLeft' }}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            name="actual"
+            stroke={LINE_PRIMARY}
+            strokeWidth={2}
+            dot={{ r: 2 }}
+            connectNulls
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+/**
  * One goal. Until its ETA comes within {@link LOCK_HORIZON_MONTHS} it shows the
  * live projection; from then on the projection is locked and the row shows how
  * the real numbers are tracking against it, with a chart of actual vs projected
@@ -127,12 +189,15 @@ function GoalRow({
   proj,
   lock,
   onRecalculate,
+  showData,
   children,
 }: {
   goal: GoalSpec
   proj: Projection
   lock?: LockedProjection
   onRecalculate: () => void
+  /** Plot the goal's own series (with its target line) while it's unlocked. */
+  showData?: boolean
   children?: React.ReactNode
 }) {
   const has = Number.isFinite(proj.current)
@@ -219,6 +284,14 @@ function GoalRow({
                 ? 'gaining, but not fast enough to reach this yet.'
                 : 'not trending toward this yet — keep at it.'}
         </p>
+      )}
+
+      {showData && !reached && !lock && goal.points.length > 0 && (
+        <DataChart
+          points={goal.points}
+          target={shownTarget}
+          targetLabel={`goal ${shownTarget}`}
+        />
       )}
 
       {children}
@@ -318,11 +391,11 @@ export function GoalsPanel({ months }: { months: number | null }) {
             ? `ab work: ${absReps[0].value}${
                 absReps.length > 1 ? ` → ${absReps[absReps.length - 1].value}` : ''
               } reps/session.`
-            : 'ab work: none logged — do your core exercises or a stretch + core session to build ab muscle.'}
+            : 'ab work: none logged — do my core exercises or a stretch + core session to build ab muscle.'}
         </p>
         {heightIn === 0 && (
           <p className="mt-1 text-xs text-neutral-600">
-            set your height in settings so tape measurements also feed this.
+            set my height in settings so tape measurements also feed this.
           </p>
         )}
       </>
@@ -348,7 +421,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
         label="weight"
         calories={calorieSurplus}
         goalLines={weightGoalLines}
-        empty="log your weight to project these goals"
+        empty="log my weight to project these goals"
       />
     </div>
   )
@@ -367,6 +440,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
               proj={proj}
               lock={locked[g.id]}
               onRecalculate={() => recalculate(g)}
+              showData={g.id === GOAL_IDS.benchBodyweight}
             >
               {extras[g.id]}
             </GoalRow>
