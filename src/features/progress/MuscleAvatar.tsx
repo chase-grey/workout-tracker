@@ -209,6 +209,40 @@ function Legend() {
   )
 }
 
+/**
+ * One exercise: where it stands today, and on the line beneath, the load that
+ * unlocks the tier above. The second line is dropped once there's no tier left.
+ */
+function Row({
+  label,
+  value,
+  band,
+  next,
+  unit,
+}: {
+  label: string
+  value: string
+  band: string
+  next: { band: string; value: number } | null
+  unit: string
+}) {
+  return (
+    <li className="flex flex-col">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="text-neutral-300">{label}</span>
+        <span className="tabular-nums text-neutral-500">
+          {value} · <span className="text-accent-2">{band}</span>
+        </span>
+      </div>
+      {next && (
+        <span className="text-right text-xs tabular-nums text-neutral-600">
+          {next.band} at {next.value} {unit}
+        </span>
+      )}
+    </li>
+  )
+}
+
 export function MuscleAvatar() {
   const { workouts, bodyWeights } = useData()
 
@@ -263,45 +297,38 @@ export function MuscleAvatar() {
             </div>
 
             <div className="flex flex-1 flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <p className="text-xs tracking-wider text-neutral-500">
-                  estimated 1rm vs. men at {bodyweightLb} lbs
+              {lifts.length > 0 ? (
+                <ul className="flex flex-col gap-2">
+                  {lifts.map((r) => (
+                    <Row
+                      key={r.lift}
+                      label={r.label}
+                      value={`est. 1rm ${r.load} lbs`}
+                      band={r.band}
+                      next={r.next}
+                      unit="lbs"
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-neutral-500">
+                  log a weighted lift (squat, bench, press) to see your strength level.
                 </p>
-                {lifts.length > 0 ? (
-                  <ul className="flex flex-col gap-1">
-                    {lifts.map((r) => (
-                      <li key={r.lift} className="flex items-baseline justify-between gap-3 text-sm">
-                        <span className="text-neutral-300">{r.label}</span>
-                        <span className="tabular-nums text-neutral-500">
-                          est. 1rm {r.load} lbs · <span className="text-accent-2">{r.band}</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-neutral-500">
-                    log a weighted lift (squat, bench, press) to see your strength level.
-                  </p>
-                )}
-              </div>
+              )}
 
               {ladders.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs tracking-wider text-neutral-500">
-                    your own progression · from where you started
-                  </p>
-                  <ul className="flex flex-col gap-1">
-                    {ladders.map((r) => (
-                      <li key={r.key} className="flex items-baseline justify-between gap-3 text-sm">
-                        <span className="text-neutral-300">{r.label}</span>
-                        <span className="tabular-nums text-neutral-500">
-                          {r.baseline} → {r.best} {r.unit} · <span className="text-accent-2">{r.band}</span>
-                          {r.next && ` · ${r.next.band} at ${r.next.value}`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="flex flex-col gap-2">
+                  {ladders.map((r) => (
+                    <Row
+                      key={r.key}
+                      label={r.label}
+                      value={`${r.baseline} → ${r.best} ${r.unit}`}
+                      band={r.band}
+                      next={r.next}
+                      unit={r.unit}
+                    />
+                  ))}
+                </ul>
               )}
             </div>
           </div>

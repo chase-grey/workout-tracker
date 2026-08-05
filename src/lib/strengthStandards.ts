@@ -167,8 +167,43 @@ export function bandFor(percentile: number): string {
   return 'elite'
 }
 
-/** The band label at each of the five levels, derived from the same anchors. */
-const LEVEL_BANDS = LEVEL_PCT.map(bandFor)
+/**
+ * Where each band above beginner starts, matching bandFor's cutoffs. These are
+ * NOT the five level anchors: "advanced" begins at 65, between the 50 and 75
+ * anchors. Reading the next tier off the anchors instead would both overstate
+ * what it takes and, mid-band, name the band you're already in.
+ */
+const BAND_CUTS: { pct: number; band: string }[] = [
+  { pct: 20, band: 'novice' },
+  { pct: 40, band: 'intermediate' },
+  { pct: 65, band: 'advanced' },
+  { pct: 88, band: 'elite' },
+]
+
+/** Inverse of interpolateLevel: the ratio that lands exactly on `percentile`. */
+function ratioAtLevel(percentile: number, thresholds: number[]): number {
+  if (percentile <= 0) return 0
+  if (percentile <= LEVEL_PCT[0]) return (percentile / LEVEL_PCT[0]) * thresholds[0]
+  for (let i = 1; i < thresholds.length; i++) {
+    if (percentile <= LEVEL_PCT[i]) {
+      const t = (percentile - LEVEL_PCT[i - 1]) / (LEVEL_PCT[i] - LEVEL_PCT[i - 1])
+      return thresholds[i - 1] + t * (thresholds[i] - thresholds[i - 1])
+    }
+  }
+  const last = thresholds[thresholds.length - 1]
+  const lastPct = LEVEL_PCT[LEVEL_PCT.length - 1]
+  return last + ((percentile - lastPct) / (99 - lastPct)) * last * 0.25
+}
+
+/**
+ * The band above `percentile` and the ratio that unlocks it, or null at elite.
+ * The ratio is rounded up by the caller, so the number shown is always enough.
+ */
+function nextBand(percentile: number, thresholds: number[]): { band: string; ratio: number } | null {
+  const cut = BAND_CUTS.find((c) => c.pct > percentile)
+  if (cut == null) return null
+  return { band: cut.band, ratio: ratioAtLevel(cut.pct, thresholds) }
+}
 
 export type LiftResult = {
   /** Percentile vs. other men at this bodyweight, 0–99. */
@@ -248,7 +283,7 @@ export type LadderResult = {
   position: number
   band: string
   developmentScore: number
-  /** The rung above and what it takes to reach it; null once past Elite. */
+  /** The band above and what it takes to reach it; null once at Elite. */
   next: { band: string; value: number } | null
 }
 
@@ -265,15 +300,12 @@ export function ladderPosition(
   if (!(baseline > 0)) return null
   const mults = LADDER_MULTIPLES[kind]
   const position = Math.round(Math.max(0, Math.min(99, interpolateLevel(best / baseline, mults))))
-  const nextIdx = mults.findIndex((m) => baseline * m > best)
+  const up = nextBand(position, mults)
   return {
     position,
     band: bandFor(position),
     developmentScore: position / 100,
-    next:
-      nextIdx < 0
-        ? null
-        : { band: LEVEL_BANDS[nextIdx], value: Math.round(baseline * mults[nextIdx]) },
+    next: up && { band: up.band, value: Math.ceil(baseline * up.ratio) },
   }
 }
 
@@ -429,6 +461,11 @@ export type LiftReadout = {
   load: number
   percentile: number
   band: string
+  /**
+   * The band above and the load that unlocks it, in the same units as `load`
+   * (so pull-ups read as a total, matching the row above it). Null at elite.
+   */
+  next: { band: string; value: number } | null
 }
 
 /** Order lifts appear in the population readout. */
@@ -462,7 +499,15 @@ export function liftReadouts(logs: Record<string, ExerciseLog>, bodyweightLb: nu
     const load = bestLoad[lift]
     if (load == null) continue
     const r = liftPercentile(lift, load, bodyweightLb)
-    out.push({ lift, label: LIFT_LABELS[lift], load: Math.round(load), percentile: r.percentile, band: r.band })
+    const up = nextBand(r.percentile, STANDARDS[lift].map((s) => s * bracketFactor(bodyweightLb)))
+    out.push({
+      lift,
+      label: LIFT_LABELS[lift],
+      load: Math.round(load),
+      percentile: r.percentile,
+      band: r.band,
+      next: up && { band: up.band, value: Math.ceil(up.ratio * bodyweightLb) },
+    })
   }
   return out
 }

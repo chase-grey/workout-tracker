@@ -123,16 +123,30 @@ describe('baselineOf', () => {
 })
 
 describe('ladderPosition', () => {
-  it('puts your very first session at beginner, with novice as the next rung', () => {
+  it('puts your very first session at beginner, with novice as the next band', () => {
     const r = ladderPosition('load', 20, 20)
     expect(r!.band).toBe('beginner')
-    expect(r!.next).toEqual({ band: 'novice', value: 30 }) // 1.5× of 20
+    expect(r!.next).toEqual({ band: 'novice', value: 28 }) // 1.375× of 20
   })
 
   it('reads a doubled-and-a-bit load as intermediate', () => {
     // Rung three on the load ladder is 2.25× where you started.
     expect(ladderPosition('load', 20, 45)!.band).toBe('intermediate')
-    expect(ladderPosition('load', 20, 45)!.next).toEqual({ band: 'advanced', value: 65 })
+    expect(ladderPosition('load', 20, 45)!.next).toEqual({ band: 'advanced', value: 57 })
+  })
+
+  it('never names the band you are already in as the next one', () => {
+    for (const best of [20, 25, 29, 30, 31, 40, 45, 60, 80, 89]) {
+      const r = ladderPosition('load', 20, best)!
+      if (r.next) expect(r.next.band).not.toBe(r.band)
+    }
+  })
+
+  it('names a next load that actually reaches the band it promises', () => {
+    for (const best of [20, 25, 29, 31, 45, 60, 80]) {
+      const r = ladderPosition('load', 20, best)!
+      if (r.next) expect(ladderPosition('load', 20, r.next.value)!.band).toBe(r.next.band)
+    }
   })
 
   it('tops out at elite with no further rung', () => {
@@ -158,7 +172,7 @@ describe('ladderPosition', () => {
     // The plan graduates knee raises to full leg raises at 20 reps — clearing the
     // easier variation, with the harder one still to climb.
     expect(ladderPosition('reps', 10, 20)!.band).toBe('intermediate')
-    expect(ladderPosition('reps', 10, 20)!.next).toEqual({ band: 'advanced', value: 25 })
+    expect(ladderPosition('reps', 10, 20)!.next).toEqual({ band: 'advanced', value: 23 })
   })
 
   it('never falls back down the ladder, since the score reads the best session ever', () => {
@@ -294,6 +308,27 @@ describe('liftReadouts', () => {
   it('skips unscoreable and zero-load exercises', () => {
     expect(liftReadouts(logs({ iso_chest: 0, deadbug: 0 }), BW)).toHaveLength(0)
   })
+
+  it('names the load that unlocks the next band, above the current lift', () => {
+    // An intermediate squat (1.5×) climbs to advanced somewhere under 2.0×.
+    const [r] = liftReadouts(logs({ barbell_squat: 1.5 * BW }), BW)
+    expect(r.band).toBe('intermediate')
+    expect(r.next!.band).toBe('advanced')
+    expect(r.next!.value).toBeGreaterThan(r.load)
+    expect(r.next!.value).toBeLessThan(2.0 * BW)
+    // And that load really does read advanced.
+    expect(liftPercentile('squat', r.next!.value, BW).band).toBe('advanced')
+  })
+
+  it('has no next band once the lift is elite', () => {
+    expect(liftReadouts(logs({ barbell_squat: 3.5 * BW }), BW)[0].next).toBeNull()
+  })
+
+  it('quotes the pull-up target as a total load, like the row it sits under', () => {
+    const [r] = liftReadouts(logs({ weighted_pullups: 20 }), BW)
+    expect(r.load).toBe(BW + 20) // bodyweight + added
+    expect(r.next!.value).toBeGreaterThan(BW)
+  })
 })
 
 describe('ladderReadouts', () => {
@@ -307,7 +342,7 @@ describe('ladderReadouts', () => {
       baseline: 10,
       best: 25,
       band: 'intermediate',
-      next: { band: 'advanced', value: 33 }, // 3.25× of 10
+      next: { band: 'advanced', value: 29 }, // 2.85× of 10
     })
   })
 
