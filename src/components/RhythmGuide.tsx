@@ -37,15 +37,41 @@ function pickVariant(kind: MotionKind): Variant {
 const SCALE_MIN = 0.55
 const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
 
+/**
+ * Every shape draws from the same two-tone palette so that hitting the set's
+ * target lights the whole guide up at once: the accent goes from a washed-out
+ * fill to near-full opacity, which over the dark background is the difference
+ * between a dim green and an unmistakably bright one.
+ */
+function shapeTone(bright: boolean) {
+  return bright
+    ? {
+        fill: 'bg-accent-bright/80',
+        ring: 'ring-1 ring-accent-bright',
+        border: 'border-accent-bright',
+        track: 'bg-accent-bright/40',
+        /** Floor for shapes that fade parts in with depth — never fully dim. */
+        dimmest: 0.5,
+      }
+    : {
+        fill: 'bg-accent-bright/40',
+        ring: 'ring-1 ring-accent-bright/70',
+        border: 'border-accent-bright/70',
+        track: 'bg-accent-bright/15',
+        dimmest: 0.2,
+      }
+}
+
 /** Breathing family: a shape that expands (neutral) and contracts (deep). */
-function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
+function BreatheShape({ variant, scale, bright }: { variant: Variant; scale: number; bright: boolean }) {
   // Scale is interpolated per animation frame by the parent, so the shape needs
   // no CSS transition of its own — that would only lag behind the live value.
+  const tone = shapeTone(bright)
   switch (variant) {
     case 'square':
       return (
         <div
-          className="absolute h-[73%] w-[73%] rounded-[14%] bg-accent-bright/40 ring-1 ring-accent-bright/70"
+          className={`absolute h-[73%] w-[73%] rounded-[14%] ${tone.fill} ${tone.ring}`}
           style={{ transform: `scale(${scale}) rotate(${(scale - 0.55) * 25}deg)` }}
         />
       )
@@ -55,7 +81,7 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
           {[73, 53, 33].map((pct, i) => (
             <div
               key={i}
-              className="absolute rounded-full border border-accent-bright/70"
+              className={`absolute rounded-full border ${tone.border}`}
               style={{ width: `${pct}%`, height: `${pct}%`, transform: `scale(${scale})` }}
             />
           ))}
@@ -63,8 +89,8 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
       )
     case 'tide':
       return (
-        <div className="absolute h-[73%] w-[73%] overflow-hidden rounded-full ring-1 ring-accent-bright/70">
-          <div className="absolute bottom-0 left-0 w-full bg-accent-bright/40" style={{ height: `${scale * 100}%` }} />
+        <div className={`absolute h-[73%] w-[73%] overflow-hidden rounded-full ${tone.ring}`}>
+          <div className={`absolute bottom-0 left-0 w-full ${tone.fill}`} style={{ height: `${scale * 100}%` }} />
         </div>
       )
     case 'petals':
@@ -74,7 +100,9 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
         <div className="absolute h-[73%] w-[73%]">
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="absolute inset-0" style={{ transform: `rotate(${i * 60}deg) scale(${scale})` }}>
-              <div className="absolute left-1/2 top-0 h-[21%] w-[21%] -translate-x-1/2 rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70" />
+              <div
+                className={`absolute left-1/2 top-0 h-[21%] w-[21%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
+              />
             </div>
           ))}
         </div>
@@ -87,7 +115,7 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
           {[0.55, 0.8, 1, 0.8, 0.55].map((f, i) => (
             <div
               key={i}
-              className="w-[9%] rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+              className={`w-[9%] rounded-full ${tone.fill} ${tone.ring}`}
               style={{ height: `${f * scale * 100}%` }}
             />
           ))}
@@ -99,11 +127,11 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
       return (
         <>
           <div
-            className="absolute h-[58%] w-[58%] rounded-full bg-accent-bright/40 blur-2xl"
+            className={`absolute h-[58%] w-[58%] rounded-full blur-2xl ${tone.fill}`}
             style={{ transform: `scale(${scale})` }}
           />
           <div
-            className="absolute h-[73%] w-[73%] rounded-full border border-accent-bright/70"
+            className={`absolute h-[73%] w-[73%] rounded-full border ${tone.border}`}
             style={{ transform: `scale(${1 + SCALE_MIN - scale})` }}
           />
         </>
@@ -112,7 +140,7 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
     default:
       return (
         <div
-          className="absolute h-[73%] w-[73%] rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+          className={`absolute h-[73%] w-[73%] rounded-full ${tone.fill} ${tone.ring}`}
           style={{ transform: `scale(${scale})` }}
         />
       )
@@ -122,14 +150,15 @@ function BreatheShape({ variant, scale }: { variant: Variant; scale: number }) {
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
 /** Descent family: a shape that reaches/folds downward and settles deep. */
-function DescentShape({ variant, depth }: { variant: Variant; depth: number }) {
+function DescentShape({ variant, depth, bright }: { variant: Variant; depth: number; bright: boolean }) {
+  const tone = shapeTone(bright)
   switch (variant) {
     case 'fold':
       // A panel that hinges shut — upright when neutral, folded flat when deep,
       // like the body folding forward over the legs.
       return (
         <div
-          className="absolute h-[70%] w-[58%] rounded-[16%] bg-accent-bright/40 ring-1 ring-accent-bright/70"
+          className={`absolute h-[70%] w-[58%] rounded-[16%] ${tone.fill} ${tone.ring}`}
           style={{ transform: `scaleY(${1 - depth * 0.72}) scaleX(${1 + depth * 0.16})` }}
         />
       )
@@ -148,7 +177,10 @@ function DescentShape({ variant, depth }: { variant: Variant; depth: number }) {
                 key={i}
                 aria-hidden
                 className="-my-[6%] text-accent-bright"
-                style={{ opacity: 0.22 + lit * 0.78, transform: `translateY(${lit * 10}%)` }}
+                style={{
+                  opacity: tone.dimmest + lit * (1 - tone.dimmest),
+                  transform: `translateY(${lit * 10}%)`,
+                }}
               />
             )
           })}
@@ -160,11 +192,11 @@ function DescentShape({ variant, depth }: { variant: Variant; depth: number }) {
       return (
         <div className="absolute inset-0">
           <div
-            className="absolute bottom-[15%] left-1/2 h-[3%] -translate-x-1/2 rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+            className={`absolute bottom-[15%] left-1/2 h-[3%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
             style={{ width: `${16 + depth * 46}%` }}
           />
           <div
-            className="absolute left-1/2 h-[19%] w-[19%] rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+            className={`absolute left-1/2 h-[19%] w-[19%] rounded-full ${tone.fill} ${tone.ring}`}
             style={{
               top: `${16 + depth * 56}%`,
               transform: `translateX(-50%) scaleY(${1 + (1 - depth) * 0.4}) scaleX(${1 - (1 - depth) * 0.2})`,
@@ -184,7 +216,11 @@ function DescentShape({ variant, depth }: { variant: Variant; depth: number }) {
               <div
                 key={i}
                 className="absolute h-[7%] w-[28%] rounded-full bg-accent-bright"
-                style={{ left: `${18 + i * 12}%`, top: `${24 + i * 15}%`, opacity: 0.18 + lit * 0.72 }}
+                style={{
+                  left: `${18 + i * 12}%`,
+                  top: `${24 + i * 15}%`,
+                  opacity: tone.dimmest + lit * (1 - tone.dimmest),
+                }}
               />
             )
           })}
@@ -197,11 +233,11 @@ function DescentShape({ variant, depth }: { variant: Variant; depth: number }) {
       return (
         <div className="absolute inset-0">
           <div
-            className="absolute left-1/2 h-[8%] w-[54%] -translate-x-1/2 rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+            className={`absolute left-1/2 h-[8%] w-[54%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
             style={{ top: `${40 + depth * 20}%` }}
           />
           <div
-            className="absolute bottom-[18%] left-1/2 w-[36%] -translate-x-1/2 rounded-[14%] border border-accent-bright/70 bg-accent-bright/15"
+            className={`absolute bottom-[18%] left-1/2 w-[36%] -translate-x-1/2 rounded-[14%] border ${tone.border} ${tone.track}`}
             style={{ height: `${baseHeight}%` }}
           />
         </div>
@@ -213,9 +249,11 @@ function DescentShape({ variant, depth }: { variant: Variant; depth: number }) {
       // like reaching toward the floor and holding there.
       return (
         <div className="absolute inset-0">
-          <div className="absolute left-1/2 top-[14%] h-[68%] w-[2px] -translate-x-1/2 rounded-full bg-accent-bright/15" />
           <div
-            className="absolute left-1/2 h-[26%] w-[26%] rounded-full bg-accent-bright/40 ring-1 ring-accent-bright/70"
+            className={`absolute left-1/2 top-[14%] h-[68%] w-[2px] -translate-x-1/2 rounded-full ${tone.track}`}
+          />
+          <div
+            className={`absolute left-1/2 h-[26%] w-[26%] rounded-full ${tone.fill} ${tone.ring}`}
             style={{ top: `${20 + depth * 60}%`, transform: `translate(-50%, -50%) scale(${0.85 + depth * 0.35})` }}
           />
         </div>
@@ -310,8 +348,9 @@ export function RhythmGuide({
   const fadeIn = motion === 'descent' ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
   const showPrevRep = fadeIn < 1 && rep > startRep
 
-  // Once you've hit the target the whole count reads in the accent colour, so
-  // "done" is a single glance at the counter rather than a comparison.
+  // Once you've hit the target the count reads entirely in the accent colour and
+  // the shape brightens with it, so "done" is a single glance at the guide rather
+  // than a comparison of two numbers.
   const hitTarget = reps != null && rep >= reps
 
   return (
@@ -324,18 +363,18 @@ export function RhythmGuide({
                 className="absolute inset-0 flex items-center justify-center"
                 style={{ opacity: 1 - fadeIn }}
               >
-                <DescentShape variant={variant} depth={depths[depths.length - 1]} />
+                <DescentShape variant={variant} depth={depths[depths.length - 1]} bright={hitTarget} />
               </div>
             )}
             <div
               className="absolute inset-0 flex items-center justify-center"
               style={{ opacity: fadeIn }}
             >
-              <DescentShape variant={variant} depth={depth} />
+              <DescentShape variant={variant} depth={depth} bright={hitTarget} />
             </div>
           </>
         ) : (
-          <BreatheShape variant={variant} scale={scaleFromDepth(depth)} />
+          <BreatheShape variant={variant} scale={scaleFromDepth(depth)} bright={hitTarget} />
         )}
       </div>
       {/* Sits at the bottom of the guide, under the shape: the animation carries
