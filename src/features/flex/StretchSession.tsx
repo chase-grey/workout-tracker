@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { MdCheckCircle, MdChevronRight, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
@@ -237,6 +237,17 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
     if (photos.resumeIndex != null) advanceFrom(photos.resumeIndex, done)
   }
 
+  // Tapping the screen finishes the set — your hands are busy mid-stretch, so
+  // the whole page is the target rather than one button. Controls (the kebab,
+  // the core rep box) keep their own job, an overlay that owns the screen
+  // swallows the tap, and the last set still needs its explicit finish button.
+  const overlayUp = rest != null || photos != null || paused || showMeasure || showList || preparing
+  const onScreenTap = (e: MouseEvent) => {
+    if (atLast || overlayUp) return
+    if ((e.target as HTMLElement).closest('button, input, label, a')) return
+    completeSetAndAdvance()
+  }
+
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
@@ -260,7 +271,7 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   ]
 
   return (
-    <div className="flex min-h-full flex-col gap-3">
+    <div className="flex min-h-full flex-col gap-3" onClick={onScreenTap}>
       {/* Same bar, same place, as the rest screen's: how much of the whole
           routine is still ahead of you, at the top of the screen either way. */}
       <SessionProgress
@@ -319,20 +330,21 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         </div>
       )}
 
-      {/* Pinned to the bottom of the screen: thumb-reachable mid-stretch, and it
-          stays put as the guide above it changes size from set to set. */}
-      <div
-        className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex flex-col gap-2 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur"
-        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
-      >
-        <button
-          onClick={completeSetAndAdvance}
-          aria-label={atLast ? undefined : 'done'}
-          className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+      {/* Every other set advances on a tap anywhere; ending the whole routine is
+          worth an explicit button, pinned where a thumb can reach it. */}
+      {atLast && (
+        <div
+          className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex flex-col gap-2 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
         >
-          {atLast ? 'finish & log session' : <MdChevronRight className="text-2xl" aria-hidden />}
-        </button>
-      </div>
+          <button
+            onClick={completeSetAndAdvance}
+            className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+          >
+            finish &amp; log session
+          </button>
+        </div>
+      )}
 
       {rest != null && (
         <RestTimer
