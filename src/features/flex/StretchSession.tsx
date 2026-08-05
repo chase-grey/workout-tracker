@@ -327,15 +327,10 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
       >
         <button
           onClick={completeSetAndAdvance}
+          aria-label={atLast ? undefined : 'done'}
           className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
         >
-          {atLast ? (
-            'finish & log session'
-          ) : (
-            <>
-              done <MdChevronRight className="text-2xl" aria-hidden />
-            </>
-          )}
+          {atLast ? 'finish & log session' : <MdChevronRight className="text-2xl" aria-hidden />}
         </button>
       </div>
 
