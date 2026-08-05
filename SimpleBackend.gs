@@ -28,7 +28,8 @@
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
- *   POST ?route=calories      body: { date, calories, label } (upsert by date; calories = running daily total)
+ *   POST ?route=calories      body: { date, calories, label, loggedAt } (upsert by date; calories = running daily total,
+ *                 loggedAt = ISO time of the last tap made ON that date; omitted on a backfill, which keeps the stored one)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  *   POST ?route=durations     body: { date, kind, dayType, totalSec, restSec } (append)
  *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
@@ -64,7 +65,7 @@ const FLEX_HEADERS = [
   'note',
 ]
 const CONFIG_HEADERS = ['key', 'value']
-const CALORIE_HEADERS = ['date', 'calories', 'label']
+const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
 const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec']
 const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
@@ -386,7 +387,12 @@ function getCalories(since) {
     if (!r[0]) continue
     const date = isoDate(r[0])
     if (since && date < since) continue
-    out.push({ date: date, calories: Number(r[1]) || 0, label: String(r[2] || '') })
+    const entry = { date: date, calories: Number(r[1]) || 0, label: String(r[2] || '') }
+    // Only send a log time when one was actually recorded — a blank cell must
+    // reach the client as "unknown", not as an unparseable empty string.
+    const loggedAt = String(r[3] || '')
+    if (loggedAt) entry.loggedAt = loggedAt
+    out.push(entry)
   }
   return out
 }
@@ -404,27 +410,33 @@ function appendCalories(body) {
     if (!e || !e.date || !isFinite(Number(e.calories))) continue
     // A day's total is a running value that can be corrected down (the −100
     // button); never store a negative total.
-    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '')
+    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '')
     saved++
   }
   return { saved: saved }
 }
 
-function upsertCalorieDate(sh, date, calories, label) {
+function upsertCalorieDate(sh, date, calories, label, loggedAt) {
   const rows = sh.getDataRange().getValues()
   let firstRow = -1
+  let storedLoggedAt = ''
   const extraRows = []
   for (let r = 1; r < rows.length; r++) {
     if (rows[r][0] && isoDate(rows[r][0]) === date) {
-      if (firstRow === -1) firstRow = r + 1 // 1-based sheet row
-      else extraRows.push(r + 1)
+      if (firstRow === -1) {
+        firstRow = r + 1 // 1-based sheet row
+        storedLoggedAt = String(rows[r][3] || '')
+      } else extraRows.push(r + 1)
     }
   }
   if (firstRow === -1) {
-    sh.appendRow([date, calories, label])
+    sh.appendRow([date, calories, label, loggedAt])
     return
   }
-  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label]])
+  // A backfill sends no log time; keep the one already stored rather than
+  // blanking a real same-day timestamp with the correction's silence.
+  const at = loggedAt || storedLoggedAt
+  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at]])
   // Delete leftover legacy rows bottom-up so earlier indices stay valid.
   for (let k = extraRows.length - 1; k >= 0; k--) {
     sh.deleteRow(extraRows[k])

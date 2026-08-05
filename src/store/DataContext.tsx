@@ -494,12 +494,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const logCalories = useCallback(
     // `calories` is the amount to add; a day is stored as one running-total entry.
     async (calories: number, date?: string) => {
-      const day = date ?? toISODate(new Date())
+      const now = new Date()
+      const day = date ?? toISODate(now)
       const prevCals = storage.loadCalories()
       // `calories` may be negative (a −100 correction); never let a day go below 0.
       const newTotal = Math.max(0, totalForDate(prevCals, day) + calories)
-      const entry: CalorieEntry = { date: day, calories: newTotal }
-      const nextCals = setDayTotal(prevCals, day, newTotal)
+      // Stamp the log time only when logging TODAY. Backfilling an earlier day
+      // says nothing about when that day's food was eaten, so it leaves the
+      // existing timestamp (if any) alone rather than writing a misleading one.
+      const loggedAt = day === toISODate(now) ? now.toISOString() : undefined
+      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt)
+      const entry: CalorieEntry = { date: day, calories: newTotal, ...(loggedAt && { loggedAt }) }
       persistCalories(nextCals)
       // The queue holds at most the newest running total per date, so a stale
       // earlier total can never overwrite a newer one when the queue is flushed.

@@ -9,6 +9,10 @@ import {
   caloriePR,
   setDayTotal,
   mergeCaloriesByDate,
+  formatClock,
+  formatElapsed,
+  isFoodLogStale,
+  lastLoggedAt,
   type CalorieEntry,
 } from './calories'
 
@@ -113,6 +117,133 @@ describe('mergeCaloriesByDate', () => {
       { date: '2026-07-08', calories: 300 },
     ]
     expect(mergeCaloriesByDate([], server)).toEqual([{ date: '2026-07-08', calories: 800 }])
+  })
+})
+
+describe('lastLoggedAt', () => {
+  const AT_NOON = new Date(2026, 6, 8, 12, 0).toISOString()
+  const AT_6PM = new Date(2026, 6, 8, 18, 0).toISOString()
+
+  it('returns the newest timestamp for the date', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 500, loggedAt: AT_NOON },
+      { date: '2026-07-08', calories: 900, loggedAt: AT_6PM },
+      { date: '2026-07-09', calories: 100, loggedAt: new Date(2026, 6, 9, 8, 0).toISOString() },
+    ]
+    expect(lastLoggedAt(entries, '2026-07-08')).toEqual(new Date(AT_6PM))
+  })
+
+  it('is null for a date with entries but no timestamp', () => {
+    expect(lastLoggedAt([{ date: '2026-07-08', calories: 900 }], '2026-07-08')).toBeNull()
+  })
+
+  it('ignores an unparseable timestamp', () => {
+    const entries: CalorieEntry[] = [{ date: '2026-07-08', calories: 900, loggedAt: 'nonsense' }]
+    expect(lastLoggedAt(entries, '2026-07-08')).toBeNull()
+  })
+})
+
+describe('setDayTotal timestamps', () => {
+  const AT_NOON = new Date(2026, 6, 8, 12, 0).toISOString()
+  const AT_6PM = new Date(2026, 6, 8, 18, 0).toISOString()
+
+  it('stamps the date when a log time is given', () => {
+    expect(setDayTotal([], '2026-07-08', 500, AT_NOON)).toEqual([
+      { date: '2026-07-08', calories: 500, loggedAt: AT_NOON },
+    ])
+  })
+
+  it('replaces an older stamp with the newer tap', () => {
+    const prev: CalorieEntry[] = [{ date: '2026-07-08', calories: 500, loggedAt: AT_NOON }]
+    expect(setDayTotal(prev, '2026-07-08', 900, AT_6PM)).toEqual([
+      { date: '2026-07-08', calories: 900, loggedAt: AT_6PM },
+    ])
+  })
+
+  it('keeps the existing stamp when a backfill supplies none', () => {
+    const prev: CalorieEntry[] = [{ date: '2026-07-08', calories: 500, loggedAt: AT_NOON }]
+    expect(setDayTotal(prev, '2026-07-08', 900)).toEqual([
+      { date: '2026-07-08', calories: 900, loggedAt: AT_NOON },
+    ])
+  })
+})
+
+describe('mergeCaloriesByDate timestamps', () => {
+  const AT_NOON = new Date(2026, 6, 8, 12, 0).toISOString()
+  const AT_6PM = new Date(2026, 6, 8, 18, 0).toISOString()
+
+  it('takes the newer stamp even when the local total wins', () => {
+    const local: CalorieEntry[] = [{ date: '2026-07-08', calories: 800, loggedAt: AT_NOON }]
+    const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 500, loggedAt: AT_6PM }]
+    expect(mergeCaloriesByDate(local, server)).toEqual([
+      { date: '2026-07-08', calories: 800, loggedAt: AT_6PM },
+    ])
+  })
+
+  it('adopts the server stamp for a local entry that has none', () => {
+    const local: CalorieEntry[] = [{ date: '2026-07-08', calories: 800 }]
+    const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 800, loggedAt: AT_NOON }]
+    expect(mergeCaloriesByDate(local, server)).toEqual([
+      { date: '2026-07-08', calories: 800, loggedAt: AT_NOON },
+    ])
+  })
+
+  it('keeps the local stamp when the server has none', () => {
+    const local: CalorieEntry[] = [{ date: '2026-07-08', calories: 800, loggedAt: AT_6PM }]
+    const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 500 }]
+    expect(mergeCaloriesByDate(local, server)).toEqual([
+      { date: '2026-07-08', calories: 800, loggedAt: AT_6PM },
+    ])
+  })
+})
+
+describe('formatClock', () => {
+  it('formats 12-hour time with am/pm', () => {
+    expect(formatClock(new Date(2026, 6, 8, 15, 40))).toBe('3:40 pm')
+    expect(formatClock(new Date(2026, 6, 8, 9, 5))).toBe('9:05 am')
+  })
+
+  it('renders both noon and midnight as 12', () => {
+    expect(formatClock(new Date(2026, 6, 8, 12, 0))).toBe('12:00 pm')
+    expect(formatClock(new Date(2026, 6, 8, 0, 30))).toBe('12:30 am')
+  })
+})
+
+describe('formatElapsed', () => {
+  const NOW = new Date(2026, 6, 8, 18, 0)
+  const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000)
+
+  it('reads "just now" under a minute', () => {
+    expect(formatElapsed(minsAgo(0), NOW)).toBe('just now')
+  })
+
+  it('counts minutes, then hours, then days', () => {
+    expect(formatElapsed(minsAgo(45), NOW)).toBe('45m ago')
+    expect(formatElapsed(minsAgo(120), NOW)).toBe('2h ago')
+    expect(formatElapsed(minsAgo(125), NOW)).toBe('2h 5m ago')
+    expect(formatElapsed(minsAgo(60 * 24 * 3), NOW)).toBe('3d ago')
+  })
+})
+
+describe('isFoodLogStale', () => {
+  const at = (h: number, m = 0) => new Date(2026, 6, 8, h, m)
+
+  it('flags a four-hour gap inside the eating window', () => {
+    expect(isFoodLogStale(at(10), at(14))).toBe(true)
+  })
+
+  it('does not flag a recent log', () => {
+    expect(isFoodLogStale(at(12), at(14))).toBe(false)
+  })
+
+  it('stays quiet outside the eating window, however long the gap', () => {
+    expect(isFoodLogStale(at(20), at(23))).toBe(false)
+    expect(isFoodLogStale(at(20, 0), at(7, 0))).toBe(false) // overnight fast
+  })
+
+  it('treats a day with nothing logged as stale once the window is open', () => {
+    expect(isFoodLogStale(null, at(13))).toBe(true)
+    expect(isFoodLogStale(null, at(7))).toBe(false)
   })
 })
 

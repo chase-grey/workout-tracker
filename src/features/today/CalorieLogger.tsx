@@ -1,7 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { MdCheckCircle } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { CALORIE_GOAL, caloriePaceFraction, totalForDate } from '../../lib/calories'
+import {
+  CALORIE_GOAL,
+  caloriePaceFraction,
+  formatClock,
+  formatElapsed,
+  isFoodLogStale,
+  lastLoggedAt,
+  totalForDate,
+} from '../../lib/calories'
 import { mondayOf, toISODate } from '../../lib/dates'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
@@ -9,10 +17,18 @@ const QUICK_ADDS = [100, 500, 4000]
 
 export function CalorieLogger() {
   const { calorieEntries, logCalories } = useData()
-  const today = toISODate(new Date())
+  // Ticks so the "2h ago" since the last log ages on screen instead of freezing
+  // at whatever it read when the card mounted — the card is left open all day.
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const today = toISODate(now)
   const [selDate, setSelDate] = useState(today)
 
-  const monday = mondayOf(new Date())
+  const monday = mondayOf(now)
   const week = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
@@ -25,7 +41,21 @@ export function CalorieLogger() {
 
   // Pace marker: where you should be eating constantly across the 9am–9pm window.
   const isToday = selDate === today
-  const pace = isToday ? caloriePaceFraction(new Date()) : null
+  const pace = isToday ? caloriePaceFraction(now) : null
+
+  // When this day was last logged, so a skipped meal is visible at a glance.
+  // A day can have a total but no timestamp — logged before the field existed,
+  // or only ever backfilled — and then there's nothing honest to say, so the
+  // line is dropped. An empty today is the one exception: no total AND no
+  // timestamp is itself the answer.
+  const loggedAt = lastLoggedAt(calorieEntries, selDate)
+  const untouchedToday = isToday && !loggedAt && selTotal === 0
+  const stale = isToday && (loggedAt != null || untouchedToday) && isFoodLogStale(loggedAt, now)
+  const logLine = loggedAt
+    ? `logged ${formatClock(loggedAt)}${isToday ? ` · ${formatElapsed(loggedAt, now)}` : ''}`
+    : untouchedToday
+      ? 'nothing logged yet'
+      : null
 
   const add = (cal: number) => {
     if (cal === 0) return
@@ -35,9 +65,16 @@ export function CalorieLogger() {
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="flex items-baseline justify-between">
-        <p className="text-xs tracking-wider text-neutral-500">
-          calories · {selLabel}
-        </p>
+        <div>
+          <p className="text-xs tracking-wider text-neutral-500">
+            calories · {selLabel}
+          </p>
+          {logLine && (
+            <p className={`mt-0.5 text-[11px] ${stale ? 'text-amber-400' : 'text-neutral-600'}`}>
+              {logLine}
+            </p>
+          )}
+        </div>
         <p className="text-sm tabular-nums text-neutral-400">
           <span className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}>
             {selTotal}

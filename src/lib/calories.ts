@@ -1,12 +1,27 @@
 import { parseISODate, toISODate, weekStartISO } from './dates'
 
-export type CalorieEntry = { date: string /* YYYY-MM-DD */; calories: number; label?: string }
+export type CalorieEntry = {
+  date: string /* YYYY-MM-DD */
+  calories: number
+  label?: string
+  /**
+   * ISO timestamp of the most recent tap that changed this date's total, set
+   * only when the tap happened ON that date. Backfilling an earlier day leaves
+   * it alone: "logged at 3:40pm" has to mean 3:40pm on the day being shown, not
+   * the moment someone went back and corrected it. Absent on entries that
+   * predate the field.
+   */
+  loggedAt?: string
+}
 
 export const CALORIE_GOAL = 4000
 
 /** Eating window (hours) used to pace calories through the day. */
 export const EAT_START_HOUR = 9
 export const EAT_END_HOUR = 21
+
+/** Hours without a log, inside the eating window, before it reads as a missed meal. */
+export const STALE_LOG_HOURS = 4
 
 /**
  * Fraction of the eating window (default 9am–9pm) elapsed at `now`, clamped to
@@ -17,6 +32,41 @@ export function caloriePaceFraction(now: Date = new Date(), startHour = EAT_STAR
   if (h <= startHour) return 0
   if (h >= endHour) return 1
   return (h - startHour) / (endHour - startHour)
+}
+
+/** A wall-clock time, lowercase 12-hour: `3:40 pm`. */
+export function formatClock(d: Date): string {
+  const h24 = d.getHours()
+  const h = h24 % 12 === 0 ? 12 : h24 % 12
+  const m = String(d.getMinutes()).padStart(2, '0')
+  return `${h}:${m} ${h24 < 12 ? 'am' : 'pm'}`
+}
+
+/** How long ago `then` was, at a glance: `just now`, `45m ago`, `2h 5m ago`, `3d ago`. */
+export function formatElapsed(then: Date, now: Date = new Date()): string {
+  const min = Math.floor((now.getTime() - then.getTime()) / 60000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min}m ago`
+  const h = Math.floor(min / 60)
+  if (h < 24) {
+    const rem = min % 60
+    return rem ? `${h}h ${rem}m ago` : `${h}h ago`
+  }
+  const d = Math.floor(h / 24)
+  return `${d}d ago`
+}
+
+/**
+ * True when it's been {@link STALE_LOG_HOURS} or more since the last log while
+ * the eating window is open — the "you probably forgot a meal" signal. Outside
+ * the window a long gap is just the overnight fast, so nothing is flagged.
+ * A day with nothing logged at all (`last` = null) is stale on the same terms.
+ */
+export function isFoodLogStale(last: Date | null, now: Date = new Date()): boolean {
+  const h = now.getHours() + now.getMinutes() / 60
+  if (h < EAT_START_HOUR || h > EAT_END_HOUR) return false
+  if (!last) return true
+  return now.getTime() - last.getTime() >= STALE_LOG_HOURS * 3600_000
 }
 
 /** True when a calorie value is usable (finite and non-negative). */
@@ -40,12 +90,39 @@ export function totalForDate(entries: CalorieEntry[], date: string): number {
 }
 
 /**
+ * The most recent {@link CalorieEntry.loggedAt} recorded for `date`, or null
+ * when that day has no timestamp (never logged, or logged before the field
+ * existed / only ever backfilled).
+ */
+export function lastLoggedAt(entries: CalorieEntry[], date: string): Date | null {
+  let latest: Date | null = null
+  for (const entry of entries) {
+    if (entry.date !== date || !entry.loggedAt) continue
+    const at = new Date(entry.loggedAt)
+    if (Number.isNaN(at.getTime())) continue
+    if (latest === null || at > latest) latest = at
+  }
+  return latest
+}
+
+/**
  * Replace every entry for `date` with a single running-total entry. Used when
  * logging: a day's calories are stored as one total row, not one row per tap,
  * so the same-day quick-adds collapse into a single entry that we upsert.
+ *
+ * Omitting `loggedAt` keeps whatever timestamp the date already had rather than
+ * clearing it, so a backfill can't erase a real same-day log time.
  */
-export function setDayTotal(entries: CalorieEntry[], date: string, total: number): CalorieEntry[] {
-  return [...entries.filter((e) => e.date !== date), { date, calories: total }]
+export function setDayTotal(
+  entries: CalorieEntry[],
+  date: string,
+  total: number,
+  loggedAt?: string,
+): CalorieEntry[] {
+  const kept = loggedAt ?? lastLoggedAt(entries, date)?.toISOString()
+  const entry: CalorieEntry = { date, calories: total }
+  if (kept) entry.loggedAt = kept
+  return [...entries.filter((e) => e.date !== date), entry]
 }
 
 /**
@@ -59,6 +136,10 @@ export function setDayTotal(entries: CalorieEntry[], date: string, total: number
  * device won't overwrite this device's cached value until the cache is cleared;
  * acceptable for a single-logging-device app.) Totals are summed per date, so
  * legacy multi-row dates collapse to a single entry and the cache self-migrates.
+ *
+ * The log timestamp is merged separately from the total, taking the newer of
+ * the two sides: unlike the total it only ever moves forward, so a device that
+ * hasn't logged today can still learn when the logging device last did.
  */
 export function mergeCaloriesByDate(local: CalorieEntry[], server: CalorieEntry[]): CalorieEntry[] {
   const localTotals = dayTotals(local)
@@ -67,7 +148,12 @@ export function mergeCaloriesByDate(local: CalorieEntry[], server: CalorieEntry[
   const out: CalorieEntry[] = []
   for (const date of dates) {
     const total = localTotals.has(date) ? localTotals.get(date)! : serverTotals.get(date)!
-    out.push({ date, calories: total })
+    const localAt = lastLoggedAt(local, date)
+    const serverAt = lastLoggedAt(server, date)
+    const at = !localAt || (serverAt && serverAt > localAt) ? serverAt : localAt
+    const entry: CalorieEntry = { date, calories: total }
+    if (at) entry.loggedAt = at.toISOString()
+    out.push(entry)
   }
   return out.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))
 }
