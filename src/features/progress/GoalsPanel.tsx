@@ -85,11 +85,28 @@ function LockChart({
   const etaMs = parseISODate(lock.etaDate).getTime()
   const revisedMs = revisedEta && revisedEta !== lock.etaDate ? parseISODate(revisedEta).getTime() : null
   // A revised ETA past the locked one falls outside the data's own span, so the
-  // axis has to be widened by hand or the dot would be clipped off the edge.
+  // axis has to be widened by hand or the dot would be clipped off the edge. The
+  // extra padding is for the label under the last dot, which is centred on an x
+  // that would otherwise be the right edge itself.
   const xDomain = useMemo(() => {
     const ts = rows.map((r) => r.t)
-    return [Math.min(...ts), Math.max(...ts, revisedMs ?? -Infinity)] as [number, number]
+    const min = Math.min(...ts)
+    const max = Math.max(...ts, revisedMs ?? -Infinity)
+    return [min, max + (max - min) * 0.07] as [number, number]
   }, [rows, revisedMs])
+
+  // The curve runs from the corner the data started in to the target line, so
+  // every label goes on the side of that line the curve has already left: for a
+  // rising goal the target sits high and the labels hang under it, for a falling
+  // one it sits low and they sit above it. The lock marker goes to the opposite
+  // edge of the chart from the target line for the same reason.
+  const rising = lock.target > lock.startValue
+  const goalLabelPos = rising ? 'insideBottomLeft' : 'insideTopLeft'
+  const lockLabelPos = rising ? 'insideBottomRight' : 'insideTopRight'
+  const etaLabelPos = rising ? 'bottom' : 'top'
+  // The second date gets its own row instead of sharing one, so two ETAs a few
+  // days apart don't print on top of each other.
+  const revisedLabelDy = rising ? 11 : -11
 
   return (
     <div className="mt-3 rounded-xl bg-surface-2 p-1">
@@ -117,7 +134,7 @@ function LockChart({
             x={parseISODate(lock.lockedAt).getTime()}
             stroke="#facc15"
             strokeDasharray="3 3"
-            label={{ value: 'locked', fill: '#facc15', fontSize: 9, position: 'insideTopRight' }}
+            label={{ value: 'locked', fill: '#facc15', fontSize: 9, position: lockLabelPos }}
           />
           {/* The target the line is climbing toward, so the goal reads off the
               chart without doing the mental math from the projected curve's end. */}
@@ -125,7 +142,7 @@ function LockChart({
             y={lock.target}
             stroke="#facc15"
             strokeDasharray="5 4"
-            label={{ value: `goal ${lock.target}`, fill: '#facc15', fontSize: 9, position: 'insideTopLeft' }}
+            label={{ value: `goal ${lock.target}`, fill: '#facc15', fontSize: 9, position: goalLabelPos }}
           />
           {/* The commitment: where the locked curve meets the goal. */}
           <ReferenceDot
@@ -134,7 +151,7 @@ function LockChart({
             r={4}
             fill="#facc15"
             stroke="#0a0a0a"
-            label={{ value: fmtDate(lock.etaDate), fill: '#facc15', fontSize: 9, position: 'left' }}
+            label={{ value: fmtDate(lock.etaDate), fill: '#facc15', fontSize: 9, position: etaLabelPos }}
           />
           {/* Where the pace being held now would land instead — amber when that's
               later than the commitment, green when it beats it. */}
@@ -149,7 +166,8 @@ function LockChart({
                 value: fmtDate(revisedEta!),
                 fill: behind ? '#fbbf24' : LINE_PRIMARY,
                 fontSize: 9,
-                position: 'bottom',
+                position: etaLabelPos,
+                dy: revisedLabelDy,
               }}
             />
           )}
