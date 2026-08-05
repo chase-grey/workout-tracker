@@ -289,7 +289,7 @@ export function ProgressTab() {
       <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
       {bodyMetric === 'bf' && heightIn === 0 ? (
         <div className="flex h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          set your height in settings to estimate body fat % from your measurements.
+          set my height in settings to estimate body fat % from my measurements.
         </div>
       ) : (
         <MetricChart

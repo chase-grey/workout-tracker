@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { project } from './predictions'
 import {
+  adoptDecay,
   expectedAt,
   lockProjection,
   maybeLock,
@@ -232,5 +233,22 @@ describe('decayed locks', () => {
     const decayed = paceAgainstLock(DECAYED, 160, '2026-02-20', undefined, new Date(2026, 1, 20))
     expect(straight.status).toBe('ahead')
     expect(decayed.aheadBy).toBeLessThan(straight.aheadBy)
+  })
+})
+
+describe('adoptDecay', () => {
+  it('bends a pre-decay lock without moving its start, target or eta', () => {
+    const bent = adoptDecay(CLIMB, 0.95)
+    expect(bent.decayPerWeek).toBe(0.95)
+    expect(bent.startValue).toBe(CLIMB.startValue)
+    expect(bent.target).toBe(CLIMB.target)
+    expect(bent.etaDate).toBe(CLIMB.etaDate)
+    expect(expectedAt(bent, '2026-02-20')).toBeGreaterThan(expectedAt(CLIMB, '2026-02-20'))
+  })
+
+  it('leaves a lock alone when it already has a decay, or the goal projects straight', () => {
+    const already: LockedProjection = { ...CLIMB, decayPerWeek: 0.99 }
+    expect(adoptDecay(already, 0.95)).toBe(already)
+    expect(adoptDecay(CLIMB, undefined)).toBe(CLIMB)
   })
 })

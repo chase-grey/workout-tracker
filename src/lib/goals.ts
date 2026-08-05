@@ -3,8 +3,8 @@
  *
  * Both the Goals panel and the post-workout pace note need to know what the
  * goals are, what series each one tracks and what it's aiming at. Deriving them
- * here keeps the two in agreement — otherwise "you moved faster toward squatting
- * your bodyweight" could disagree with what the panel shows.
+ * here keeps the two in agreement — otherwise a pace note about "squat my
+ * bodyweight" could disagree with what the panel shows for that goal.
  *
  * Pure module — no React/DOM.
  */
@@ -117,7 +117,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
     },
     {
       id: GOAL_IDS.benchBodyweight,
-      title: `bench your bodyweight (${currentBw || '—'} lbs)`,
+      title: `bench my bodyweight (${currentBw || '—'} lbs)`,
       unit: 'lbs',
       exerciseKey: 'flat_bench',
       points: benchPoints,
@@ -128,7 +128,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
     },
     {
       id: GOAL_IDS.squatBodyweight,
-      title: 'squat your bodyweight',
+      title: 'squat my bodyweight',
       unit: 'lbs',
       exerciseKey: 'barbell_squat',
       points: squatPoints,

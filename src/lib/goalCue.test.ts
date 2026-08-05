@@ -19,7 +19,7 @@ const lock = (over: Partial<LockedProjection> = {}): LockedProjection => ({
 
 const goal = (over: Partial<GoalSpec> = {}): GoalSpec => ({
   id: 'squat_bodyweight',
-  title: 'squat your bodyweight',
+  title: 'squat my bodyweight',
   unit: 'lbs',
   exerciseKey: 'barbell_squat',
   points: [
@@ -37,7 +37,7 @@ describe('goalCueForExercise', () => {
     const cue = goalCueForExercise(locked, [goal()], 'barbell_squat', 5, TODAY)
     expect(cue).not.toBeNull()
     expect(cue!.reps).toBe(5)
-    expect(cue!.goalTitle).toBe('squat your bodyweight')
+    expect(cue!.goalTitle).toBe('squat my bodyweight')
     // The prescribed weight, at those reps, lands on the line's e1RM (inverse Epley).
     expect(Math.abs(epley1RM(cue!.weightLbs, cue!.reps) - cue!.lineE1RM)).toBeLessThan(1)
   })
@@ -60,7 +60,7 @@ describe('goalCueForExercise', () => {
   it('skips a goal already reached and picks the nearest un-reached one', () => {
     const reached = goal({
       id: 'squat_bodyweight',
-      title: 'squat your bodyweight',
+      title: 'squat my bodyweight',
       target: 185, // 190 latest already clears it
     })
     const nearer = goal({

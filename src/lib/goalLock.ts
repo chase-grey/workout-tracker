@@ -61,6 +61,20 @@ function decayOf(lock: LockedProjection): number {
   return lock.decayPerWeek ?? 1
 }
 
+/**
+ * Adopt a goal's decay into a lock frozen before the goal had one, keeping the
+ * commitment (start, target, ETA) but bending the line between them the way the
+ * goal now says gains taper. Returns the lock untouched when it already carries a
+ * decay or the goal projects straight, so callers can run this on every lock.
+ */
+export function adoptDecay(
+  lock: LockedProjection,
+  decayPerWeek: number | undefined,
+): LockedProjection {
+  if (lock.decayPerWeek != null || decayPerWeek == null) return lock
+  return { ...lock, decayPerWeek }
+}
+
 /** Days from `from` to `to` (negative when `to` precedes `from`). */
 function daysBetween(from: string, to: string): number {
   return Math.round((parseISODate(to).getTime() - parseISODate(from).getTime()) / MS_PER_DAY)
