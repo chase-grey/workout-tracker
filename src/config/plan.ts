@@ -57,6 +57,12 @@ export type PlannedExercise = {
   circuit?: string
   /** Per-variant deltas; absent means the exercise is identical in both. */
   byVariant?: Partial<Record<VariantKey, VariantOverride>>
+  /**
+   * Roll straight from this exercise's rest into its next set without waiting for
+   * a tap. Set from the session's overflow menu, so it sticks for every set of the
+   * move and for future sessions (it's stored on the plan like any other field).
+   */
+  autoAdvance?: boolean
 }
 
 export type DayPlan = {
@@ -84,8 +90,12 @@ export type Plan = Record<DayType, DayPlan>
  * 2 — push + core reworked: A/B press variants, arm circuit, 4 sets of core,
  *     overhead press moved before flys, lat-pulldown finisher retired, core added
  *     to pull + legs, full-body day introduced.
+ *
+ * 3 — pull + legs: calf raises added, a neck extension/flexion pair added as a
+ *     circuit, and the hanging raise moved up to directly after pull-ups so it
+ *     runs at the bar you're already hanging from.
  */
-export const PLAN_REVISION = 2
+export const PLAN_REVISION = 3
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -165,18 +175,31 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'hamstring_curl', name: 'hamstring curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'legs' },
       { key: 'leg_adductor', name: 'leg adductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
       { key: 'leg_abductor', name: 'leg abductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
+      // Squats never take the calves through range, so they get the only direct
+      // work they see all week. A hard pause at the bottom is the point — bouncing
+      // the stretch turns the whole set into tendon rebound.
+      { key: 'calf_raise', name: 'calf raise (paused)', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
 
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+
+      // Straight off the pull-up bar and into the raises — same station, nothing
+      // to walk to. Three sets, not the push day's four: it takes abs to 3× a week
+      // without tipping weekly volume past the point where more sets stop paying.
+      // Still after squats, so nothing pre-fatigues the core under the bar.
+      { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: 3, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
+
       { key: 'cable_row', name: 'cable row (neutral grip)', sets: 2, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'back' },
 
       { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 5, group: 'biceps' },
       { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'biceps' },
 
-      // Core lands last — you're already at the bar from pull-ups, and it would
-      // be a bad idea to pre-fatigue the core before squatting. Three sets, not
-      // the push day's four: it takes abs to 3× a week without tipping weekly
-      // volume past the point where more sets stop paying.
-      { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: 3, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
+      // Extension and flexion are antagonists, so they rotate as a circuit and the
+      // pair costs about as long as one of them would alone. Two directions is what
+      // changes how the neck reads front and back; lateral flexion is the slow
+      // third and isn't worth the sets yet. Load stays light and the reps stay
+      // high — the neck is the one place where grinding a heavy single is a bad bet.
+      { key: 'neck_extension', name: 'neck extension', sets: 3, repMin: 12, repMax: 20, restSec: 45, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
+      { key: 'neck_flexion', name: 'neck flexion', sets: 3, repMin: 12, repMax: 20, restSec: 45, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
     ],
   },
   fullbody: {

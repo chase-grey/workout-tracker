@@ -89,9 +89,9 @@ describe('the push + core day', () => {
 })
 
 describe('the pull + legs day', () => {
-  it('ends with a core block rather than opening with one', () => {
+  it('runs the hanging raise straight off the pull-up bar, still after squats', () => {
     const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
-    expect(keys[keys.length - 1]).toBe('hanging_leg_raise')
+    expect(keys.indexOf('hanging_leg_raise')).toBe(keys.indexOf('weighted_pullups') + 1)
     expect(keys.indexOf('barbell_squat')).toBeLessThan(keys.indexOf('hanging_leg_raise'))
   })
 
@@ -99,6 +99,18 @@ describe('the pull + legs day', () => {
     const pull = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'hanging_leg_raise')
     expect(pull?.sets).toBe(3)
     expect(pull!.sets).toBeLessThan(sets('A', 'hanging_leg_raise')!)
+  })
+
+  it('trains calves directly, since squats never take them through range', () => {
+    expect(DEFAULT_PLAN.pull.exercises.map((e) => e.key)).toContain('calf_raise')
+  })
+
+  it('pairs the two neck directions as a circuit', () => {
+    const neck = DEFAULT_PLAN.pull.exercises.filter((e) => e.circuit === 'neck')
+    expect(neck.map((e) => e.key)).toEqual(['neck_extension', 'neck_flexion'])
+    // Light and high-rep by design — the neck is the one place a heavy grind is a
+    // bad bet, so a low rep floor here would be a regression.
+    expect(neck.every((e) => e.repMin >= 12)).toBe(true)
   })
 })
 
