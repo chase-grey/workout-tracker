@@ -1,97 +1,75 @@
-import { useMemo, useState } from 'react'
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { useMemo } from 'react'
 import { useData } from '../store/DataContext'
-import { exerciseSeries, type Metric } from '../lib/progress'
 import type { VariantKey } from '../config/plan'
-import { epley1RM } from '../lib/epley'
-import { fmtDateLabel, LINE_PRIMARY, timeXAxis, withTime } from '../lib/chart'
-import type { Target } from '../lib/progression'
-
-const axisTick = { fill: '#737373', fontSize: 11 }
-const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+import { lastPerformance, type Target } from '../lib/progression'
+import {
+  exerciseHistory,
+  fmtBestSet,
+  fmtSessionDate,
+  fmtSet,
+  fmtTarget,
+  sessionsAtTargetLabel,
+  targetDeltaLabel,
+} from '../lib/exerciseHistory'
 
 /**
- * All-time chart for one exercise, opened from the target row mid-workout so the
- * set you're about to do lands in the context of everything you've lifted on it.
+ * Recent-performance sheet for one exercise, opened from the target row
+ * mid-workout so the set you're about to do lands against what you last actually
+ * did.
  *
- * The metric defaults to est. 1RM, which is the honest way to compare sets at
- * different weight × rep combinations. A reps-only move has no weight to work
- * from, so it charts total reps per session instead. The dashed line marks where
- * today's target sits against that history.
+ * It leads with today's target and how it differs from the last session, then
+ * lists the last few sessions set by set — the numbers as logged, so a session
+ * that fell apart on its third set still reads that way. The long view (trends,
+ * estimated 1RM) belongs to the progress tab, which owns the charts.
  */
 export function ExerciseHistorySheet({
   exerciseKey,
   name,
   target,
-  plannedSets,
   slot,
   repsOnly = false,
   onClose,
 }: {
   exerciseKey: string
   name: string
-  /** Today's prescribed target, drawn as a reference line. */
+  /** Today's prescribed target, shown at the top and compared against history. */
   target?: Target
-  /** Sets planned today, for scaling a per-set target onto a session-total axis. */
+  /**
+   * Sets planned today. Part of the caller's contract; this sheet reads sessions
+   * set by set, so it has no per-set target to scale onto a session total.
+   */
   plannedSets?: number
   /**
-   * The A/B slot today's set belongs to, so the chart shows the sessions today is
-   * actually comparable to — a second press reads against past second presses,
-   * not against the days the lift led. Absent for the lifts (and days) the
-   * variants train alike, which chart every session.
+   * The A/B slot today's set belongs to, so the sessions listed are the ones
+   * today is actually comparable to — a second press reads against past second
+   * presses, not against the days the lift led. Absent for the lifts (and days)
+   * the variants train alike, which list every session.
    */
   slot?: VariantKey
   /**
-   * The lift is tracked by reps alone, so weight-based metrics would chart a flat
-   * zero line. Taken from the plan rather than inferred from the target, which is
-   * also weightless on the first-ever session of a loaded lift.
+   * The lift is tracked by reps alone, so its sets and target read as bare reps.
+   * Taken from the plan rather than inferred from the target, which is also
+   * weightless on the first-ever session of a loaded lift.
    */
   repsOnly?: boolean
   onClose: () => void
 }) {
   const { workouts } = useData()
-  const [metric, setMetric] = useState<Metric>(repsOnly ? 'reps' : '1rm')
 
-  const data = useMemo(
-    () => exerciseSeries(workouts, exerciseKey, metric, slot),
-    [workouts, exerciseKey, metric, slot],
+  const history = useMemo(
+    () => exerciseHistory(workouts, exerciseKey, slot),
+    [workouts, exerciseKey, slot],
+  )
+  // Slot-scoped, so the delta reads against a session trained under the same
+  // fatigue. The sheet isn't handed the exercise's rep range, so repMin stays 1 —
+  // plain "heaviest set of the last session", which is what the delta claims.
+  const last = useMemo(
+    () => lastPerformance(workouts, exerciseKey, 1, slot),
+    [workouts, exerciseKey, slot],
   )
 
-  // Where today's target falls on the current metric's scale. The reps and volume
-  // series are session TOTALS (see exerciseSeries), but a target is per-set, so
-  // those have to be scaled by the number of sets planned or the line would sit on
-  // the chart floor claiming to be today's work.
-  const targetValue = useMemo(() => {
-    if (!target) return null
-    if (metric === 'reps') return plannedSets != null ? target.reps * plannedSets : null
-    if (target.weightLbs == null) return null
-    if (metric === '1rm') return Math.round(epley1RM(target.weightLbs, target.reps) * 10) / 10
-    if (metric === 'weight') return target.weightLbs
-    if (metric === 'volume') {
-      return plannedSets != null ? target.weightLbs * target.reps * plannedSets : null
-    }
-    return null
-  }, [target, metric, plannedSets])
-
-  const best = data.length ? Math.max(...data.map((p) => p.value)) : 0
-  const unit = metric === 'reps' ? 'reps' : metric === 'volume' ? 'vol' : 'lbs'
-  const options: { label: string; value: Metric }[] = repsOnly
-    ? [{ label: 'reps', value: 'reps' }]
-    : [
-        { label: 'est. 1rm', value: '1rm' },
-        { label: 'top set', value: 'weight' },
-        { label: 'volume', value: 'volume' },
-        { label: 'reps', value: 'reps' },
-      ]
+  const delta = targetDeltaLabel(target, last, repsOnly)
+  const atTarget = sessionsAtTargetLabel(history, target, repsOnly)
 
   return (
     // Above the rest overlay (z-50) so it's reachable from either screen.
@@ -101,65 +79,45 @@ export function ExerciseHistorySheet({
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
-        <div className="mb-3 flex items-baseline justify-between gap-2">
-          <h3 className="text-lg font-bold">{name}</h3>
-          <span className="text-sm text-neutral-400 tabular-nums">
-            {data.length ? `best ${best} ${unit}` : 'no history yet'}
-          </span>
-        </div>
+        <h3 className="mb-3 text-lg font-bold">{name}</h3>
 
-        {options.length > 1 && (
-          <div className="mb-3 flex gap-1 rounded-xl bg-surface-2 p-1">
-            {options.map((o) => (
-              <button
-                key={o.value}
-                onClick={() => setMetric(o.value)}
-                className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
-                  o.value === metric ? 'bg-accent text-black' : 'text-neutral-400'
-                }`}
-              >
-                {o.label}
-              </button>
-            ))}
+        {target && (
+          <div className="mb-3 rounded-2xl bg-surface-2 p-3">
+            <div className="text-xs text-neutral-500">today</div>
+            <div className="text-2xl font-bold tabular-nums">{fmtTarget(target, repsOnly)}</div>
+            {delta && <div className="text-sm text-neutral-400">{delta}</div>}
           </div>
         )}
 
-        {data.length === 0 ? (
-          <div className="flex h-40 items-center justify-center rounded-2xl bg-surface-2 text-sm text-neutral-500">
-            first time logging this — no chart yet
+        {history.recent.length === 0 ? (
+          <div className="flex h-24 items-center justify-center rounded-2xl bg-surface-2 text-sm text-neutral-500">
+            nothing logged for this yet
           </div>
         ) : (
-          <div className="rounded-2xl bg-surface-2 p-2">
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={withTime(data)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
-                <CartesianGrid stroke="#262626" vertical={false} />
-                <XAxis {...timeXAxis} tick={axisTick} />
-                <YAxis tick={axisTick} width={40} domain={['auto', 'auto']} />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  labelStyle={{ color: '#a3a3a3' }}
-                  labelFormatter={(ms) => fmtDateLabel(Number(ms))}
-                  formatter={(v) => [`${v} ${unit}`, metric]}
-                />
-                {targetValue != null && (
-                  <ReferenceLine
-                    y={targetValue}
-                    stroke="#facc15"
-                    strokeDasharray="4 4"
-                    label={{ value: 'today', fill: '#facc15', fontSize: 11, position: 'insideTopRight' }}
-                  />
-                )}
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke={LINE_PRIMARY}
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <>
+            <div className="mb-1 text-xs text-neutral-500">recent sessions</div>
+            <div className="divide-y divide-border rounded-2xl bg-surface-2 px-3">
+              {history.recent.map((s) => (
+                <div key={s.id} className="flex gap-3 py-2 text-sm">
+                  <span className="w-16 shrink-0 text-neutral-500">{fmtSessionDate(s.date)}</span>
+                  <span className="flex flex-wrap gap-x-3 gap-y-1 text-neutral-200 tabular-nums">
+                    {s.sets.map((set, i) => (
+                      <span key={i}>{fmtSet(set)}</span>
+                    ))}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 px-1 text-xs text-neutral-500 tabular-nums">
+              {history.best && (
+                <span>
+                  best {fmtBestSet(history.best)} · {fmtSessionDate(history.best.date)}
+                </span>
+              )}
+              {atTarget && <span>{atTarget}</span>}
+            </div>
+          </>
         )}
 
         <button
