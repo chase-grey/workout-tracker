@@ -91,9 +91,6 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
       <WeightCard />
 
       <div className="flex flex-col gap-2">
-        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
-          start a session
-        </p>
         <button
           onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
