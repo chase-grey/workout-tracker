@@ -44,6 +44,7 @@ import {
   type PR,
   type WeekCounts,
 } from '../lib/celebration'
+import { flexAngleCelebrations } from '../lib/flexCelebration'
 import { newRecords, type RecordSnapshot } from '../lib/records'
 import { goalPaceNotes, type GoalPaceNote } from '../lib/goalPace'
 import { graduationNote } from '../lib/graduation'
@@ -472,6 +473,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           celebrate(
             composeCelebration([
               stretchDoneCelebration,
+              // The angles measured during the session — a new best on a pose, a
+              // goal crossed — are cheered here, at the end, not when the camera
+              // caught them mid-stretch.
+              ...flexAngleCelebrations(nextFlex),
               ...weeklyCelebrations(before, after),
               ...newRecords(beforeRec, afterRec),
             ]),
