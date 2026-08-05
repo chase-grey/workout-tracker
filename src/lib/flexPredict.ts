@@ -17,17 +17,38 @@ export type FlexGoal = {
   kind: 'split' | 'tailors'
   label: string
   target: number
+  /**
+   * Already hit, so there's nothing left to project. Decided here rather than
+   * read off the projection: `project` only reports an ETA, and a reading that
+   * has sailed *past* the target has no ETA to give — the gap now points the
+   * opposite way from the trend, which reads as "not trending toward it".
+   *
+   * Judged on the best reading ever taken, not the latest. These are milestones:
+   * a 111° split doesn't stop having happened because the next session came in
+   * tight.
+   */
+  reached: boolean
   proj: Projection
+}
+
+/** The highest value in a series, or null when it holds none. */
+function bestOf(points: { value: number }[]): number | null {
+  let best: number | null = null
+  for (const p of points) if (best == null || p.value > best) best = p.value
+  return best
 }
 
 /**
  * Project every split and tailor's goal from the given entries. Split goals come
- * first (ascending), then tailor's goals. Each goal is always included; the
- * embedded `Projection` conveys whether it is on track and any ETA.
+ * first (ascending), then tailor's goals. Each goal is always included; `reached`
+ * says whether it's already in the bag, and the embedded `Projection` conveys
+ * whether it is on track and any ETA.
  */
 export function flexGoalPredictions(entries: FlexEntry[], today?: Date): FlexGoal[] {
   const split = warmSplitSeries(entries)
   const tailors = tailorsAvgSeries(entries)
+  const splitBest = bestOf(split)
+  const tailorsBest = bestOf(tailors)
 
   const goals: FlexGoal[] = []
 
@@ -36,6 +57,7 @@ export function flexGoalPredictions(entries: FlexEntry[], today?: Date): FlexGoa
       kind: 'split',
       label: `${target}° split`,
       target,
+      reached: splitBest != null && splitBest >= target,
       proj: project(split, target, today),
     })
   }
@@ -45,6 +67,7 @@ export function flexGoalPredictions(entries: FlexEntry[], today?: Date): FlexGoa
       kind: 'tailors',
       label: `${target}° tailor's pose`,
       target,
+      reached: tailorsBest != null && tailorsBest >= target,
       proj: project(tailors, target, today),
     })
   }

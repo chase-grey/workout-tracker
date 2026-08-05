@@ -50,9 +50,34 @@ describe('flexGoalPredictions', () => {
     const reached = flexGoalPredictions(entries, TODAY).find(
       (g) => g.kind === 'split' && g.target === 100,
     )!
+    expect(reached.reached).toBe(true)
     expect(reached.proj.onTrack).toBe(true)
     expect(reached.proj.etaWeeks).toBe(0)
     expect(reached.proj.etaDate).toBe('2026-01-22')
+  })
+
+  it('marks a goal the readings have sailed past as reached', () => {
+    // 111.6° is well beyond the 100° goal — the projector has no ETA to give for
+    // a gap pointing the other way, so `reached` is what says it's done.
+    const past = [...entries, { date: '2026-01-29', splitDeg: 111.6, tailorsLeftDeg: null, tailorsRightDeg: null }]
+    const goals = flexGoalPredictions(past, new Date(2026, 0, 29))
+    const hundred = goals.find((g) => g.kind === 'split' && g.target === 100)!
+    expect(hundred.reached).toBe(true)
+    expect(goals.find((g) => g.kind === 'split' && g.target === 120)!.reached).toBe(false)
+  })
+
+  it('keeps a goal reached after a tighter session', () => {
+    // A milestone doesn't un-happen: the best reading decides, not the latest.
+    const backslid = [...entries, { date: '2026-01-29', splitDeg: 94, tailorsLeftDeg: null, tailorsRightDeg: null }]
+    const hundred = flexGoalPredictions(backslid, new Date(2026, 0, 29)).find(
+      (g) => g.kind === 'split' && g.target === 100,
+    )!
+    expect(hundred.reached).toBe(true)
+  })
+
+  it('leaves every goal unreached with no measurements', () => {
+    expect(flexGoalPredictions([], TODAY).every((g) => g.reached)).toBe(false)
+    expect(flexGoalPredictions([], TODAY).some((g) => g.reached)).toBe(false)
   })
 
   it('gives a far, still-improving goal a future etaDate (or null if unreachable)', () => {

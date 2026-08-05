@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { MdCelebration } from 'react-icons/md'
 import {
   CartesianGrid,
   Legend,
@@ -36,13 +37,16 @@ function Projections({ goals }: { goals: FlexGoal[] }) {
       {goals.map((g) => (
         <div key={g.label} className="flex items-center justify-between rounded-xl bg-surface px-3 py-2 text-sm">
           <span className="font-medium">{g.label}</span>
-          <span className="text-neutral-400">
-            {g.proj.onTrack && g.proj.etaWeeks === 0
-              ? 'reached ✓'
-              : g.proj.onTrack
-                ? `eta ${fmtDate(g.proj.etaDate)}`
-                : 'need more data / not trending'}
-          </span>
+          {g.reached ? (
+            <span className="font-medium text-accent-2">
+              <MdCelebration className="mr-1 inline align-text-bottom" aria-hidden />
+              done
+            </span>
+          ) : (
+            <span className="text-neutral-400">
+              {g.proj.onTrack ? `eta ${fmtDate(g.proj.etaDate)}` : 'need more data / not trending'}
+            </span>
+          )}
         </div>
       ))}
     </div>
