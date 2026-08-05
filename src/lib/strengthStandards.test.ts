@@ -1,15 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import {
+  baselineOf,
   bandFor,
+  ladderPosition,
+  ladderReadouts,
   legsVsUpper,
   liftPercentile,
   liftReadouts,
   muscleDevelopment,
   PRESENCE_DEV,
+  type ExerciseLog,
   type MuscleScore,
 } from './strengthStandards'
 
 const BW = 180 // reference bracket (factor ~1.0)
+
+/** An exercise logged once at `v` — best and baseline are the same value. */
+const at = (v: number): ExerciseLog => ({ best: v, earliest: [v] })
+
+/** An exercise that started at `from` and has climbed to `to`. */
+const grew = (from: number, to: number): ExerciseLog => ({ best: to, earliest: [from] })
+
+const logs = (m: Record<string, number>): Record<string, ExerciseLog> =>
+  Object.fromEntries(Object.entries(m).map(([k, v]) => [k, at(v)]))
 
 describe('liftPercentile — lookup', () => {
   it('places an intermediate squat near the median', () => {
@@ -39,6 +52,17 @@ describe('liftPercentile — lookup', () => {
     const light = liftPercentile('squat', 1.0 * BW, BW).percentile
     const heavy = liftPercentile('squat', 2.2 * BW, BW).percentile
     expect(heavy).toBeGreaterThan(light)
+  })
+})
+
+describe('liftPercentile — calf raise', () => {
+  it('scores the machine load, on the far heavier calf scale', () => {
+    // Strength Level's male table reads ~317 lb Intermediate at 180 lb bodyweight.
+    const r = liftPercentile('calfraise', 317, BW)
+    expect(r.band).toBe('intermediate')
+    // A load that would be an elite squat is only a novice calf raise.
+    expect(liftPercentile('calfraise', 2.6 * BW, BW).band).toBe('advanced')
+    expect(liftPercentile('calfraise', 1.0 * BW, BW).band).toBe('novice')
   })
 })
 
@@ -74,81 +98,269 @@ describe('bandFor', () => {
   })
 })
 
+describe('baselineOf', () => {
+  it('takes the median of the first three sessions', () => {
+    expect(baselineOf([20, 30, 25])).toBe(25)
+  })
+
+  it('ignores sessions past the first three', () => {
+    expect(baselineOf([20, 30, 25, 500, 900])).toBe(25)
+  })
+
+  it('averages the middle pair when only two sessions exist', () => {
+    expect(baselineOf([20, 30])).toBe(25)
+  })
+
+  it('is the lone value after one session', () => {
+    expect(baselineOf([20])).toBe(20)
+  })
+
+  it('skips zero/blank sessions and reports 0 when there are none left', () => {
+    expect(baselineOf([0, 20, 0, 40])).toBe(30)
+    expect(baselineOf([0, 0])).toBe(0)
+    expect(baselineOf([])).toBe(0)
+  })
+})
+
+describe('ladderPosition', () => {
+  it('puts your very first session at beginner, with novice as the next rung', () => {
+    const r = ladderPosition('load', 20, 20)
+    expect(r!.band).toBe('beginner')
+    expect(r!.next).toEqual({ band: 'novice', value: 30 }) // 1.5× of 20
+  })
+
+  it('reads a doubled-and-a-bit load as intermediate', () => {
+    // Rung three on the load ladder is 2.25× where you started.
+    expect(ladderPosition('load', 20, 45)!.band).toBe('intermediate')
+    expect(ladderPosition('load', 20, 45)!.next).toEqual({ band: 'advanced', value: 65 })
+  })
+
+  it('tops out at elite with no further rung', () => {
+    const r = ladderPosition('load', 20, 200) // well past 4.5×
+    expect(r!.band).toBe('elite')
+    expect(r!.next).toBeNull()
+    expect(r!.developmentScore).toBeLessThanOrEqual(1)
+  })
+
+  it('climbs monotonically', () => {
+    const a = ladderPosition('load', 20, 25)!.position
+    const b = ladderPosition('load', 20, 50)!.position
+    expect(b).toBeGreaterThan(a)
+  })
+
+  it('uses gentler rungs for reps than for load', () => {
+    // 1.9× reps is intermediate; 1.9× load is only novice.
+    expect(ladderPosition('reps', 10, 19)!.band).toBe('intermediate')
+    expect(ladderPosition('load', 10, 19)!.band).toBe('novice')
+  })
+
+  it('puts the hanging-raise graduation rep count mid-intermediate', () => {
+    // The plan graduates knee raises to full leg raises at 20 reps — clearing the
+    // easier variation, with the harder one still to climb.
+    expect(ladderPosition('reps', 10, 20)!.band).toBe('intermediate')
+    expect(ladderPosition('reps', 10, 20)!.next).toEqual({ band: 'advanced', value: 25 })
+  })
+
+  it('never falls back down the ladder, since the score reads the best session ever', () => {
+    // Graduation makes the movement harder under the same key, so reps drop.
+    expect(ladderPosition('reps', 10, 20)!.position).toBeGreaterThan(
+      ladderPosition('reps', 10, 10)!.position,
+    )
+  })
+
+  it('has no ladder without a usable anchor', () => {
+    expect(ladderPosition('load', 0, 50)).toBeNull()
+    expect(ladderPosition('reps', -1, 50)).toBeNull()
+  })
+})
+
 describe('muscleDevelopment — mapping', () => {
   it('maps compound lifts to the right muscles', () => {
-    const best = {
-      barbell_squat: 1.5 * BW, // quads
-      flat_bench: 1.0 * BW, // chest
-      db_overhead_press: 0.7 * BW, // shoulders
-      cable_row: 0.95 * BW, // back
-      incline_db_curl: 0.6 * BW, // biceps
-      tricep_pushdown: 0.6 * BW, // triceps
-      hamstring_curl: 0.55 * BW, // hamstrings
-    }
-    const scores = muscleDevelopment(best, BW)
-    for (const m of ['quads', 'chest', 'shoulders', 'back', 'biceps', 'triceps', 'hamstrings'] as const) {
-      expect(scores[m].hasData).toBe(true)
-      if (scores[m].hasData) {
-        expect((scores[m] as Extract<MuscleScore, { hasData: true }>).hasStandard).toBe(true)
-      }
+    const scores = muscleDevelopment(
+      logs({
+        barbell_squat: 1.5 * BW, // quads
+        flat_bench: 1.0 * BW, // chest
+        db_overhead_press: 0.7 * BW, // shoulders
+        cable_row: 0.95 * BW, // back
+        incline_db_curl: 0.6 * BW, // biceps
+        tricep_pushdown: 0.6 * BW, // triceps
+        hamstring_curl: 0.55 * BW, // hamstrings
+        calf_raise: 1.75 * BW, // calves
+      }),
+      BW,
+    )
+    for (const m of [
+      'quads',
+      'chest',
+      'shoulders',
+      'back',
+      'biceps',
+      'triceps',
+      'hamstrings',
+      'calves',
+    ] as const) {
+      const s = scores[m] as Extract<MuscleScore, { hasData: true }>
+      expect(s.hasData).toBe(true)
+      expect(s.basis).toBe('standard')
     }
   })
 
   it('marks a muscle with no logged exercise as "no data" (not 0)', () => {
-    const scores = muscleDevelopment({ flat_bench: 1.0 * BW }, BW)
+    const scores = muscleDevelopment(logs({ flat_bench: 1.0 * BW }), BW)
     expect(scores.quads.hasData).toBe(false)
-    expect(scores.hamstrings.hasData).toBe(false)
+    expect(scores.calves.hasData).toBe(false)
+    expect(scores.neck.hasData).toBe(false)
     expect(scores.chest.hasData).toBe(true)
   })
 
-  it('treats standard-less work (dead bug, fly) as trained at PRESENCE_DEV', () => {
-    const scores = muscleDevelopment({ deadbug: 0, iso_chest: 0 }, BW)
-    expect(scores.core.hasData).toBe(true)
-    if (scores.core.hasData) {
-      expect(scores.core.hasStandard).toBe(false)
-      expect(scores.core.developmentScore).toBe(PRESENCE_DEV)
-      expect(scores.core.percentile).toBeNull()
+  it('treats unscoreable work (fly, lateral raise) as trained at PRESENCE_DEV', () => {
+    const scores = muscleDevelopment(logs({ iso_chest: 0, lateral_raise: 0 }), BW)
+    for (const m of ['chest', 'shoulders'] as const) {
+      const s = scores[m] as Extract<MuscleScore, { hasData: true }>
+      expect(s.basis).toBe('presence')
+      expect(s.developmentScore).toBe(PRESENCE_DEV)
+      expect(s.percentile).toBeNull()
     }
-    if (scores.chest.hasData) expect(scores.chest.hasStandard).toBe(false)
   })
 
   it('takes the best percentile across a muscle with several sources', () => {
     // A heavier incline set outranks a lighter flat bench (both feed chest).
-    const scores = muscleDevelopment({ flat_bench: 0.8 * BW, incline_bench: 0.9 * BW }, BW)
-    const flatOnly = muscleDevelopment({ flat_bench: 0.8 * BW }, BW)
+    const scores = muscleDevelopment(logs({ flat_bench: 0.8 * BW, incline_bench: 0.9 * BW }), BW)
+    const flatOnly = muscleDevelopment(logs({ flat_bench: 0.8 * BW }), BW)
     if (scores.chest.hasData && flatOnly.chest.hasData) {
       expect(scores.chest.developmentScore).toBeGreaterThan(flatOnly.chest.developmentScore)
     }
   })
 })
 
+describe('muscleDevelopment — personal ladders', () => {
+  it('scores the neck off its own baseline, not a population table', () => {
+    const scores = muscleDevelopment({ neck_extension: grew(10, 25) }, BW)
+    const s = scores.neck as Extract<MuscleScore, { hasData: true }>
+    expect(s.basis).toBe('ladder')
+    expect(s.percentile).toBeNull()
+    expect(s.band).toBe('intermediate') // 2.5× where it started
+  })
+
+  it('takes the neck rung of whichever direction has climbed further', () => {
+    const scores = muscleDevelopment(
+      { neck_extension: grew(10, 12), neck_flexion: grew(10, 33) },
+      BW,
+    )
+    expect((scores.neck as Extract<MuscleScore, { hasData: true }>).band).toBe('advanced')
+  })
+
+  it('starts a freshly logged neck at beginner rather than at zero', () => {
+    const scores = muscleDevelopment({ neck_extension: at(10) }, BW)
+    const s = scores.neck as Extract<MuscleScore, { hasData: true }>
+    expect(s.band).toBe('beginner')
+    expect(s.developmentScore).toBeGreaterThan(0)
+  })
+
+  it('ladders core off the cable crunch and the bodyweight raises alike', () => {
+    const weighted = muscleDevelopment({ cable_crunch: grew(40, 90) }, BW)
+    expect((weighted.core as Extract<MuscleScore, { hasData: true }>).band).toBe('intermediate')
+
+    const reps = muscleDevelopment({ hanging_leg_raise: grew(10, 25) }, BW)
+    const s = reps.core as Extract<MuscleScore, { hasData: true }>
+    expect(s.basis).toBe('ladder')
+    expect(s.band).toBe('advanced')
+  })
+
+  it('falls back to presence for laddered work with no anchor yet', () => {
+    // Reps-only work logged with no reps recorded — nothing to measure from.
+    const scores = muscleDevelopment({ deadbug: { best: 0, earliest: [0] } }, BW)
+    const s = scores.core as Extract<MuscleScore, { hasData: true }>
+    expect(s.basis).toBe('presence')
+    expect(s.developmentScore).toBe(PRESENCE_DEV)
+  })
+})
+
 describe('liftReadouts', () => {
   it('emits one readout per standardized lift with data, in order', () => {
-    const readouts = liftReadouts({ barbell_squat: 1.5 * BW, flat_bench: 1.0 * BW }, BW)
+    const readouts = liftReadouts(logs({ barbell_squat: 1.5 * BW, flat_bench: 1.0 * BW }), BW)
     expect(readouts.map((r) => r.lift)).toEqual(['squat', 'bench'])
     expect(readouts[0].load).toBe(Math.round(1.5 * BW))
   })
 
-  it('skips standard-less and zero-load exercises', () => {
-    const readouts = liftReadouts({ iso_chest: 0, deadbug: 0 }, BW)
-    expect(readouts).toHaveLength(0)
+  it('puts the calf raise last and leaves laddered work out entirely', () => {
+    const readouts = liftReadouts(
+      logs({ calf_raise: 300, barbell_squat: 1.5 * BW, neck_extension: 25, cable_crunch: 90 }),
+      BW,
+    )
+    expect(readouts.map((r) => r.lift)).toEqual(['squat', 'calfraise'])
+  })
+
+  it('skips unscoreable and zero-load exercises', () => {
+    expect(liftReadouts(logs({ iso_chest: 0, deadbug: 0 }), BW)).toHaveLength(0)
+  })
+})
+
+describe('ladderReadouts', () => {
+  it('reports where you started, where you are, and the next rung', () => {
+    const rows = ladderReadouts({ neck_extension: grew(10, 25) })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      key: 'neck_extension',
+      label: 'neck extension',
+      unit: 'lbs',
+      baseline: 10,
+      best: 25,
+      band: 'intermediate',
+      next: { band: 'advanced', value: 33 }, // 3.25× of 10
+    })
+  })
+
+  it('labels reps ladders in reps', () => {
+    const rows = ladderReadouts({ hanging_leg_raise: grew(10, 14) })
+    expect(rows[0].unit).toBe('reps')
+  })
+
+  it('orders neck before core work and skips exercises with no anchor', () => {
+    const rows = ladderReadouts({
+      cable_crunch: grew(40, 90),
+      deadbug: { best: 0, earliest: [0] },
+      neck_flexion: grew(5, 10),
+    })
+    expect(rows.map((r) => r.key)).toEqual(['neck_flexion', 'cable_crunch'])
+  })
+
+  it('leaves standard-backed lifts out', () => {
+    expect(ladderReadouts(logs({ barbell_squat: 300, calf_raise: 300 }))).toHaveLength(0)
   })
 })
 
 describe('legsVsUpper', () => {
   it('returns null without both a leg and an upper data point', () => {
-    expect(legsVsUpper(muscleDevelopment({ barbell_squat: 1.5 * BW }, BW))).toBeNull()
+    expect(legsVsUpper(muscleDevelopment(logs({ barbell_squat: 1.5 * BW }), BW))).toBeNull()
   })
 
   it('calls out legs ahead of upper body', () => {
-    const b = legsVsUpper(muscleDevelopment({ barbell_squat: 2.2 * BW, flat_bench: 0.6 * BW }, BW))
+    const b = legsVsUpper(
+      muscleDevelopment(logs({ barbell_squat: 2.2 * BW, flat_bench: 0.6 * BW }), BW),
+    )
     expect(b).not.toBeNull()
     expect(b!.legs).toBeGreaterThan(b!.upper)
     expect(b!.verdict).toMatch(/legs are proportionally ahead/i)
   })
 
   it('calls out a balanced physique', () => {
-    const b = legsVsUpper(muscleDevelopment({ barbell_squat: 1.5 * BW, flat_bench: 1.0 * BW }, BW))
+    const b = legsVsUpper(
+      muscleDevelopment(logs({ barbell_squat: 1.5 * BW, flat_bench: 1.0 * BW }), BW),
+    )
     expect(b!.verdict).toMatch(/balance/i)
+  })
+
+  it('counts calves as legs and leaves the neck out of both columns', () => {
+    const withNeck = muscleDevelopment(
+      { calf_raise: at(2.55 * BW), flat_bench: at(1.0 * BW), neck_extension: grew(10, 45) },
+      BW,
+    )
+    const withoutNeck = muscleDevelopment(
+      { calf_raise: at(2.55 * BW), flat_bench: at(1.0 * BW) },
+      BW,
+    )
+    expect(legsVsUpper(withNeck)).toEqual(legsVsUpper(withoutNeck))
+    expect(legsVsUpper(withNeck)!.legs).toBeGreaterThan(0.7) // an advanced calf raise
   })
 })

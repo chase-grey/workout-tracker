@@ -4,7 +4,13 @@ import { epley1RM } from './epley'
 import { parseISODate } from './dates'
 import { leadVariantForKey } from './pushVariant'
 
-export type Metric = '1rm' | 'weight' | 'volume' | 'reps'
+/**
+ * `topreps` is the best single set's reps, as opposed to `reps`, which totals the
+ * session. It isn't offered as a chart pill — it exists because the muscle
+ * avatar's personal ladders need a rep figure that doesn't move when a day
+ * prescribes three sets instead of four (see strengthStandards.LADDER_MULTIPLES).
+ */
+export type Metric = '1rm' | 'weight' | 'volume' | 'reps' | 'topreps'
 export type Point = { date: string; value: number }
 
 /**
@@ -31,7 +37,7 @@ export type SlotScope = 'lead' | 'all' | VariantKey
  * sets are real work that really was done — so those count every session.
  */
 function defaultSlot(metric: Metric): SlotScope {
-  return metric === 'volume' || metric === 'reps' ? 'all' : 'lead'
+  return metric === 'volume' || metric === 'reps' || metric === 'topreps' ? 'all' : 'lead'
 }
 
 /** One data point per session for a given exercise, sorted oldest → newest. */
@@ -77,6 +83,8 @@ export function exerciseSeries(
       // Total reps in the session — the growth signal for bodyweight work
       // (deadbugs, hanging leg raises) where weight-based metrics stay flat.
       value = g.sets.reduce((s, x) => s + x.reps, 0)
+    } else if (metric === 'topreps') {
+      value = g.sets.reduce((s, x) => Math.max(s, x.reps), 0)
     } else {
       for (const x of g.sets) {
         if (x.w == null) continue
