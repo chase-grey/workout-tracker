@@ -14,22 +14,24 @@
  *   measurements: date, waist_in, neck_in, note
  *   durations:    date, kind, day_type, total_sec, rest_sec  (per-session; feeds Time-spent report)
  *   exercise_times: exercise, avg_active_sec, n  (per-exercise rolling averages
- *                 for time-left estimates; a sentinel exercise "__rest__" row
- *                 holds the pooled average rest per interval)
+ *                 for time-left estimates; a sentinel exercise "__rest_ratio__"
+ *                 row holds the pooled observed÷prescribed rest ratio, and the
+ *                 legacy "__rest__" row holds pooled rest seconds — still written
+ *                 for older clients, no longer served)
  *
  * Routes:
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
  *   GET  ?route=bodyweight[&since=YYYY-MM-DD]
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
  *   GET  ?route=durations[&since=YYYY-MM-DD]
- *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, rest: {avgSec,n} }
+ *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
  *   POST ?route=calories      body: { date, calories, label } (upsert by date; calories = running daily total)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  *   POST ?route=durations     body: { date, kind, dayType, totalSec, restSec } (append)
- *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restCount }
+ *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
  *                 (folds a finished session's per-set active times + rests into the rolling averages)
  */
 
@@ -66,8 +68,15 @@ const CALORIE_HEADERS = ['date', 'calories', 'label']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
 const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec']
 const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
-// Sentinel "exercise" key whose row stores the pooled average rest per interval.
+// Sentinel "exercise" key whose row stores the pooled average rest per interval,
+// in seconds. Retired: pooling full rests, circuit station changes and capped
+// transitions into one duration underestimates every long rest. Still written so
+// an older client keeps working, but no longer read back.
 const REST_KEY = '__rest__'
+// Sentinel key whose row stores the pooled rest RATIO (observed ÷ prescribed) in
+// the avg_active_sec column and the interval count in n. Unitless, so each step
+// can be priced against its own prescribed rest.
+const REST_RATIO_KEY = '__rest_ratio__'
 
 function doGet(e) {
   try {
@@ -512,28 +521,32 @@ function appendDurations(body) {
 
 /* ---------------------------------------------- per-exercise time averages */
 
-// Returns { active: { exerciseKey: {avgSec, n} }, rest: {avgSec, n} }. The
-// sentinel REST_KEY row (if present) supplies the pooled rest average.
+// Returns { active: { exerciseKey: {avgSec, n} }, restRatio: {ratio, n} }. The
+// sentinel REST_RATIO_KEY row (if present) supplies the pooled rest ratio; the
+// legacy REST_KEY row is skipped rather than reported, since its seconds would
+// read as a ratio.
 function getExerciseTimes() {
   const sh = sheet('exercise_times', EXERCISE_TIME_HEADERS)
   const rows = sh.getDataRange().getValues()
   const active = {}
-  let rest = { avgSec: 0, n: 0 }
+  let restRatio = { ratio: 1, n: 0 }
   for (let i = 1; i < rows.length; i++) {
     const key = String(rows[i][0] || '')
-    if (!key) continue
-    const entry = { avgSec: Number(rows[i][1]) || 0, n: Number(rows[i][2]) || 0 }
-    if (key === REST_KEY) rest = entry
-    else active[key] = entry
+    if (!key || key === REST_KEY) continue
+    if (key === REST_RATIO_KEY) {
+      restRatio = { ratio: Number(rows[i][1]) || 1, n: Number(rows[i][2]) || 0 }
+    } else {
+      active[key] = { avgSec: Number(rows[i][1]) || 0, n: Number(rows[i][2]) || 0 }
+    }
   }
-  return { active: active, rest: rest }
+  return { active: active, restRatio: restRatio }
 }
 
 // Folds a finished session's samples into the rolling averages. For each
 // exercise the running mean over all set-samples is exact:
 //   newAvg = (avg*n + totalActiveSec) / (n + sets); n += sets
-// The pooled rest row is folded the same way over rest intervals. Upserts one
-// row per exercise key (plus the REST_KEY row).
+// The pooled rest rows are folded the same way over rest intervals. Upserts one
+// row per exercise key (plus the REST_KEY / REST_RATIO_KEY rows).
 function foldExerciseTimes(body) {
   const sh = sheet('exercise_times', EXERCISE_TIME_HEADERS)
   const list = Array.isArray(body.exercises) ? body.exercises : []
@@ -572,7 +585,18 @@ function foldExerciseTimes(body) {
     upsert(String(e.exercise), Number(e.totalActiveSec), Number(e.sets))
     saved++
   }
-  if (Number(body.restCount) > 0) upsert(REST_KEY, Number(body.restTotalSec), Number(body.restCount))
+  const restCount = Number(body.restCount)
+  const restPrescribed = Number(body.restPrescribedSec)
+  if (restCount > 0) {
+    // Legacy pooled-seconds row, kept current only for older clients reading it.
+    upsert(REST_KEY, Number(body.restTotalSec), restCount)
+    if (restPrescribed > 0) {
+      // Clamped to 0.25×–4× so one freak session can't wreck the mean, then
+      // folded as `restCount` samples of this session's ratio.
+      const ratio = Math.min(4, Math.max(0.25, Number(body.restTotalSec) / restPrescribed))
+      upsert(REST_RATIO_KEY, ratio * restCount, restCount)
+    }
+  }
   return { saved: saved }
 }
 

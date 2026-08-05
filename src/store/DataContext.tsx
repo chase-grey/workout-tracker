@@ -22,6 +22,7 @@ import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp
 import {
   applySessionSamples,
   isSaneDuration,
+  normalizeExerciseAverages,
   type ExerciseAverages,
   type SessionDuration,
   type SessionTimeSamples,
@@ -282,7 +283,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       const ex = await api.fetchExerciseTimes()
       // The backend is authoritative for the rolling averages; replace local.
-      if (ex && typeof ex === 'object' && ex.active) persistExerciseAverages(ex)
+      // Normalised on the way in, so a backend still serving the old pooled rest
+      // *seconds* degrades to "no rest samples" instead of a nonsense ratio — and
+      // when it has no ratio to give, this device keeps the one it learned rather
+      // than dropping back to raw prescribed rest.
+      if (ex && typeof ex === 'object' && ex.active) {
+        const fetched = normalizeExerciseAverages(ex)
+        const local = storage.loadExerciseAverages()
+        persistExerciseAverages(
+          fetched.restRatio.n > 0 ? fetched : { ...fetched, restRatio: local.restRatio },
+        )
+      }
     } catch {
       /* ignore — an older backend won't have this route */
     }
