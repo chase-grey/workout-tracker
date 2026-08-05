@@ -290,35 +290,36 @@ function GoalRow({
         </p>
       ) : lock ? (
         <>
-          <div className="mt-1 flex items-baseline justify-between gap-2">
-            <p className="text-sm text-neutral-300">
-              locked eta {fmtDate(lock.etaDate)}
-              {pace && pace.revisedEta && pace.revisedEta !== lock.etaDate && (
-                <span className="text-neutral-500"> · at this pace {fmtDate(pace.revisedEta)}</span>
-              )}
-            </p>
+          {/* Both ETAs live on the chart below; this row is the ahead/behind
+              reading and the re-lock control. */}
+          <div className="mt-1 flex items-baseline gap-2">
+            {pace && (
+              <p
+                className={`text-sm font-medium ${
+                  pace.status === 'behind' ? 'text-amber-400' : 'text-accent-2'
+                }`}
+              >
+                {pace.status === 'on'
+                  ? 'right on the line'
+                  : pace.status === 'ahead'
+                    ? `${Math.abs(pace.aheadBy)} ${goal.unit} ahead of the line`
+                    : `${Math.abs(pace.aheadBy)} ${goal.unit} behind the line`}
+              </p>
+            )}
             <button
               onClick={onRecalculate}
               aria-label="recalculate time left"
-              className="shrink-0 rounded-lg bg-surface-2 p-1.5 text-base text-neutral-400 active:opacity-70"
+              className="ml-auto shrink-0 rounded-lg bg-surface-2 p-1.5 text-base text-neutral-400 active:opacity-70"
             >
               <MdRefresh aria-hidden />
             </button>
           </div>
-          {pace && (
-            <p
-              className={`mt-1 text-sm font-medium ${
-                pace.status === 'behind' ? 'text-amber-400' : 'text-accent-2'
-              }`}
-            >
-              {pace.status === 'on'
-                ? 'right on the line'
-                : pace.status === 'ahead'
-                  ? `${Math.abs(pace.aheadBy)} ${goal.unit} ahead of the line`
-                  : `${Math.abs(pace.aheadBy)} ${goal.unit} behind the line`}
-            </p>
-          )}
-          <LockChart lock={lock} actual={goal.points} />
+          <LockChart
+            lock={lock}
+            actual={goal.points}
+            revisedEta={pace?.revisedEta ?? null}
+            behind={pace?.status === 'behind'}
+          />
         </>
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
