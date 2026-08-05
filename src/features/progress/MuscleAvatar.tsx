@@ -85,18 +85,18 @@ function titleFor(muscle: Muscle, score: MuscleScore | undefined): string {
  */
 /** The shoulder cap, bridging the arm's top and the torso's upper corner. */
 const DELTS = [
-  'M55 110 Q58 88 76 78 Q93 84 92 102 Q74 114 55 110 Z',
-  'M165 110 Q162 88 144 78 Q127 84 128 102 Q146 114 165 110 Z',
+  'M50 110 Q53 87 76 78 Q94 83 93 103 Q72 116 50 110 Z',
+  'M170 110 Q167 87 144 78 Q126 83 127 103 Q148 116 170 110 Z',
 ]
 const UPPER_ARMS = [
-  'M55 104 Q52 140 53 176 L64 176 Q67 140 70 104 Z',
-  'M165 104 Q168 140 167 176 L156 176 Q153 140 150 104 Z',
+  'M52 104 Q51 140 53 176 L64 176 Q67 140 71 104 Z',
+  'M168 104 Q169 140 167 176 L156 176 Q153 140 149 104 Z',
 ]
 const THIGHS = ['M82 260 Q74 306 78 352 L99 352 L103 260 Z', 'M138 260 Q146 306 142 352 L121 352 L117 260 Z']
-const CALVES = ['M77 372 Q72 402 80 434 L94 434 Q102 402 99 372 Z', 'M143 372 Q148 402 140 434 L126 434 Q118 402 121 372 Z']
+const CALVES = ['M79 372 Q77 402 82 434 L93 434 Q99 402 97 372 Z', 'M141 372 Q143 402 138 434 L127 434 Q121 402 123 372 Z']
 const PECS = [
-  'M75 92 Q88 84 107 89 L107 119 Q88 127 77 116 Q72 104 75 92 Z',
-  'M145 92 Q132 84 113 89 L113 119 Q132 127 143 116 Q148 104 145 92 Z',
+  'M71 92 Q86 82 107 88 L107 121 Q86 130 74 117 Q67 105 71 92 Z',
+  'M149 92 Q134 82 113 88 L113 121 Q134 130 146 117 Q153 105 149 92 Z',
 ]
 /** Starts below the rib cage, not at the pec line — the gap is where the ribs are. */
 const ABS = ['M95 144 L125 144 Q132 172 126 208 L94 208 Q88 172 95 144 Z']
@@ -104,7 +104,7 @@ const NECK_FRONT = ['M101 60 L119 60 L119 74 Q119 79 114 79 L106 79 Q101 79 101 
 /** Neck + the upper-trap yoke it feeds — what neck extension actually changes. */
 const NECK_BACK = ['M101 60 L119 60 L119 76 Q128 80 130 93 Q121 88 110 88 Q99 88 90 93 Q92 80 101 76 Z']
 /** The lat V, which is the whole of what's colorable on the upper back. */
-const LATS = ['M80 92 Q73 130 86 176 Q98 196 110 199 Q122 196 134 176 Q147 130 140 92 Q110 84 80 92 Z']
+const LATS = ['M73 92 Q67 132 85 176 Q98 196 110 199 Q122 196 135 176 Q153 132 147 92 Q110 82 73 92 Z']
 
 /** One muscle's regions, filled from its development score. */
 function Regions({
@@ -144,16 +144,16 @@ function Silhouette({ label, children }: { label: string; children: ReactNode })
         <g fill={BODY_BASE} stroke="#3f3f46" strokeWidth={1.5}>
           <ellipse cx="110" cy="38" rx="19" ry="23" />
           <rect x="100" y="54" width="20" height="26" rx="5" />
-          <path d="M74 78 Q110 70 146 78 Q150 120 143 152 Q139 190 132 214 L88 214 Q81 190 77 152 Q70 120 74 78 Z" />
-          <path d="M74 82 Q55 88 52 116 L50 188 Q50 220 57 252 L70 250 Q64 218 66 180 L71 118 Q72 96 78 86 Z" />
-          <path d="M146 82 Q165 88 168 116 L170 188 Q170 220 163 252 L150 250 Q156 218 154 180 L149 118 Q148 96 142 86 Z" />
+          <path d="M70 78 Q110 68 150 78 Q155 118 145 152 Q140 190 132 214 L88 214 Q80 190 75 152 Q65 118 70 78 Z" />
+          <path d="M74 82 Q52 86 48 116 L49 188 Q50 220 57 252 L70 250 Q64 218 66 180 L71 118 Q72 96 78 86 Z" />
+          <path d="M146 82 Q168 86 172 116 L171 188 Q170 220 163 252 L150 250 Q156 218 154 180 L149 118 Q148 96 142 86 Z" />
           <path d="M56 246 L71 246 Q74 262 67 272 Q59 275 55 265 Q53 255 56 246 Z" />
           <path d="M164 246 L149 246 Q146 262 153 272 Q161 275 165 265 Q167 255 164 246 Z" />
           <path d="M88 212 L132 212 Q143 234 141 260 L79 260 Q77 234 88 212 Z" />
-          <path d="M80 252 Q69 306 76 364 Q69 400 80 446 L95 446 Q105 400 101 362 Q104 302 107 252 Z" />
-          <path d="M140 252 Q151 306 144 364 Q151 400 140 446 L125 446 Q115 400 119 362 Q116 302 113 252 Z" />
-          <path d="M79 440 L96 440 Q98 452 95 459 L73 459 Q71 447 79 440 Z" />
-          <path d="M141 440 L124 440 Q122 452 125 459 L147 459 Q149 447 141 440 Z" />
+          <path d="M80 252 Q69 306 76 364 Q74 400 82 446 L95 446 Q100 400 99 362 Q104 302 107 252 Z" />
+          <path d="M140 252 Q151 306 144 364 Q146 400 138 446 L125 446 Q120 400 121 362 Q116 302 113 252 Z" />
+          <path d="M81 440 L96 440 Q98 452 95 459 L73 459 Q71 447 81 440 Z" />
+          <path d="M139 440 L124 440 Q122 452 125 459 L147 459 Q149 447 139 440 Z" />
         </g>
         {children}
       </svg>
