@@ -29,6 +29,13 @@ const GET_READY_SEC = 5
 const GET_READY_SEC_BY_EX: Record<string, number> = { tailors_pose: 10 }
 
 /**
+ * Seconds to get into position when crossing from the mobility routine into the
+ * core block. The pancake hang leaves you rested enough — no recovery rest, just
+ * time to set up the first dead bug.
+ */
+const CORE_ENTRY_GET_READY_SEC = 10
+
+/**
  * A photo screen waiting to be shown, plus the set it interrupts. `resumeIndex`
  * is the step whose rest starts once the screen is dismissed, or null for the
  * cold screen, which runs before the routine has started.
@@ -165,6 +172,17 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const step = steps[safeCurrent]
   const atLast = safeCurrent >= N - 1
 
+  // Seconds to settle into the current set before its work begins: the
+  // per-stretch value for a mobility set, a brief reposition when first entering
+  // the core block (round 0, reached from the pancake), and none between the
+  // dead-bug sets — those get a real rest instead.
+  const getReadySec =
+    step.kind === 'flex'
+      ? GET_READY_SEC_BY_EX[step.exKey] ?? GET_READY_SEC
+      : step.round === 0
+        ? CORE_ENTRY_GET_READY_SEC
+        : 0
+
   // Route a captured angle into the right field. The shot fixes cold vs warm;
   // which pose it lands in follows the angles the camera actually returned, so
   // switching pose mid-capture still logs the reading somewhere sensible.
@@ -205,13 +223,22 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
     if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
     restStartRef.current = 0
     setRest(null)
-    setPreparing(true)
+    // Hand off to the get-into-position count only when the upcoming set has one;
+    // otherwise (a between-dead-bugs set) go straight to the set.
+    setPreparing(getReadySec > 0)
   }
 
   // Start the finished set's rest and move on — or wrap up, on the last step.
   const advanceFrom = (index: number, doneSet: Set<string>) => {
     if (index >= N - 1) {
       finishWith(doneSet)
+      return
+    }
+    // Crossing from the mobility routine into the core block skips the rest — the
+    // pancake hang leaves you rested, so go straight to a get-into-position count.
+    if (steps[index].kind === 'flex' && steps[index + 1].kind === 'core') {
+      goToStep(index + 1)
+      setPreparing(true)
       return
     }
     restStartRef.current = Date.now()
@@ -360,13 +387,10 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         />
       )}
       {/* The get-into-position count waits its turn behind a photo screen, and
-          is skipped for dead-bug core sets — there's no pace to settle into. */}
-      {preparing && photos == null && step.kind === 'flex' && (
-        <GetReady
-          seconds={GET_READY_SEC_BY_EX[step.exKey] ?? GET_READY_SEC}
-          label={step.exName}
-          onDone={() => setPreparing(false)}
-        />
+          only shows for a set that has one — mobility sets and the first core
+          set; skipped between dead-bug sets, which rest instead. */}
+      {preparing && photos == null && getReadySec > 0 && (
+        <GetReady seconds={getReadySec} label={step.exName} onDone={() => setPreparing(false)} />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
