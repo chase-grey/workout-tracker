@@ -58,6 +58,20 @@ export function sessionToRows(s: WorkoutSession): WorkoutRow[] {
   return rows
 }
 
+/**
+ * The most recent training session (excluding supplemental-only ones), or null if
+ * there's no training history yet. Dates are YYYY-MM-DD, so a plain string compare
+ * orders them; `>=` lets a later row-order session win a same-day tie, since rows
+ * are appended chronologically.
+ */
+export function lastTrainingSession(rows: WorkoutRow[]): TrainingSession | null {
+  let latest: TrainingSession | null = null
+  for (const s of trainingSessions(rows)) {
+    if (!latest || s.date >= latest.date) latest = s
+  }
+  return latest
+}
+
 /** Rows that carry at least one completed set (a rep count > 0). */
 export function hasLoggedSets(s: WorkoutSession): boolean {
   return s.exercises.some((ex) => ex.sets.some((set) => set.reps > 0))

@@ -7,6 +7,7 @@ import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
 import { DAY_TYPES, type VariantKey } from '../../config/plan'
+import { lastTrainingSession } from '../../lib/session'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 
@@ -40,6 +41,13 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
     setFlash(m)
     setTimeout(() => setFlash(null), 1800)
   }
+
+  // If the last training day was push or pull, dim that day's button so the app
+  // nudges you toward the other half of the split. A full-body day trains both, so
+  // it dims neither; stretch + core isn't training and never changes this. Dimming
+  // is only a hint — the button still starts the session.
+  const lastDay = lastTrainingSession(workouts)?.dayType ?? null
+  const dimmedDay: DayType | null = lastDay === 'push' || lastDay === 'pull' ? lastDay : null
 
   return (
     // No bottom padding of its own: `main` already pads below the scroll area, and
@@ -96,7 +104,9 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
           <button
             key={t}
             onClick={() => onStart(t)}
-            className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
+            className={`min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2 ${
+              t === dimmedDay ? 'opacity-50' : ''
+            }`}
           >
             {plan[t].label}
           </button>
