@@ -135,8 +135,6 @@ export function FlexProgress() {
         </div>
       )}
       <Projections goals={tailorsGoals} />
-
-      <p className="px-1 text-xs text-neutral-500">log measurements during a stretch session (kebab → log measurement).</p>
     </div>
   )
 }
