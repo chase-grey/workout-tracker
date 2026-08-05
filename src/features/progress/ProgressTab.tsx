@@ -4,7 +4,6 @@ import {
   Legend,
   Line,
   LineChart,
-  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -25,10 +24,10 @@ import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withT
 import { AxisBreak } from '../../components/AxisBreak'
 import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
+import { MetricChart } from './MetricChart'
 import { MuscleAvatar } from './MuscleAvatar'
 import { FlexProgress } from '../flex/FlexProgress'
 import { TimeSpent } from './TimeSpent'
-import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
 import { bodyFatSeries, waistSeries, latestMeasurement, effectiveBodyFat } from '../../lib/bodyComp'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
@@ -87,129 +86,6 @@ function Pills<T extends string | number | null>({
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
-/** Merge a metric series with a calorie-surplus series into one row per date. */
-function mergeCalories(data: Point[], calories: Point[]) {
-  const m = new Map<string, { date: string; value?: number; cal?: number }>()
-  for (const p of data) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), value: p.value })
-  for (const p of calories) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), cal: p.value })
-  return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
-}
-
-function Chart({
-  data,
-  unit,
-  label,
-  calories,
-  goalLines,
-}: {
-  data: Point[]
-  unit: string
-  /** Series name shown in the legend/tooltip when the calorie overlay is on. */
-  label?: string
-  /** Optional weekly-avg calorie surplus (intake − goal) to overlay on a right axis. */
-  calories?: Point[]
-  /** Targets of goals now close enough to be worth seeing on the chart. */
-  goalLines?: { value: number; label: string }[]
-}) {
-  const overlay = calories != null && calories.length > 0
-  // The left axis must also frame any goal line, or a target above the data
-  // would sit off the top of the chart.
-  const yScale = useMemo(
-    () => niceScale([...data.map((p) => p.value), ...(goalLines?.map((g) => g.value) ?? [])]),
-    [data, goalLines],
-  )
-  const calScale = useMemo(() => niceScale((calories ?? []).map((p) => p.value)), [calories])
-  const rows = useMemo(
-    () => (overlay ? withTime(mergeCalories(data, calories!)) : withTime(data)),
-    [overlay, data, calories],
-  )
-
-  if (data.length === 0) {
-    return (
-      <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
-        no data in this range
-      </div>
-    )
-  }
-  return (
-    <div className="rounded-2xl bg-surface p-2">
-      <ResponsiveContainer width="100%" height={224}>
-        <LineChart data={rows} margin={{ top: 8, right: overlay ? 0 : 12, bottom: 0, left: -12 }}>
-          <CartesianGrid stroke="#262626" vertical={false} />
-          <XAxis {...timeXAxis} tick={axisTick} />
-          <YAxis
-            yAxisId="left"
-            tick={axisTick}
-            width={40}
-            domain={yScale.domain}
-            ticks={yScale.ticks}
-          />
-          <AxisBreak broken={yScale.broken} bg="#171717" />
-          {overlay && (
-            <YAxis
-              yAxisId="cal"
-              orientation="right"
-              tick={axisTick}
-              width={44}
-              domain={calScale.domain}
-              ticks={calScale.ticks}
-              tickFormatter={(v) => (v > 0 ? `+${v}` : String(v))}
-            />
-          )}
-          <Tooltip
-            contentStyle={tooltipStyle}
-            labelStyle={{ color: '#a3a3a3' }}
-            labelFormatter={(ms) => fmtDateLabel(Number(ms))}
-            formatter={(v, n) =>
-              n === 'cal'
-                ? [`${Number(v) > 0 ? '+' : ''}${v} cal/day`, 'vs goal (weekly avg)']
-                : [`${v} ${unit}`, label ?? '']
-            }
-          />
-          {/* Goals whose projected finish is inside the lock-in horizon get a
-              target line, so the chart shows what you're actually driving at. */}
-          {goalLines?.map((g) => (
-            <ReferenceLine
-              key={g.label}
-              yAxisId="left"
-              y={g.value}
-              stroke="#facc15"
-              strokeDasharray="5 4"
-              label={{ value: g.label, fill: '#facc15', fontSize: 10, position: 'insideTopLeft' }}
-            />
-          ))}
-          {overlay && (
-            <>
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <ReferenceLine yAxisId="cal" y={0} stroke="#404040" strokeDasharray="3 3" />
-              <Line
-                yAxisId="cal"
-                type="monotone"
-                dataKey="cal"
-                name="cal surplus"
-                stroke={LINE_SECONDARY}
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            </>
-          )}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="value"
-            name={label}
-            stroke={LINE_PRIMARY}
-            strokeWidth={2}
-            dot={{ r: 2 }}
-            connectNulls
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
 function mergeSeries(flat: Point[], incline: Point[]) {
   const m = new Map<string, { date: string; flat?: number; incline?: number }>()
   for (const p of flat) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), flat: p.value })
@@ -262,7 +138,6 @@ export function ProgressTab() {
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [months, setMonths] = useState<number | null>(null)
-  const [showWeight, setShowWeight] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [bodyMetric, setBodyMetric] = useState<'bf' | 'waist'>('bf')
   const [recap, setRecap] = useState<Review | null>(null)
@@ -296,8 +171,6 @@ export function ProgressTab() {
     setRecap(buildReview(reviewData, kind, key))
   }
 
-  const latestWeight = bodyWeights.filter((b) => b.weightLbs >= 50).slice(-1)[0]
-
   const heightIn = settings.heightIn ?? 0
   const lastMeasure = latestMeasurement(measurements)
   const latestBf = lastMeasure ? effectiveBodyFat(lastMeasure, heightIn) : null
@@ -317,26 +190,14 @@ export function ProgressTab() {
     [calorieEntries, months],
   )
 
-  // Targets for goals whose projection has been locked in (ETA within six
-  // months), split by which chart they belong on.
-  const goalLines = useMemo(() => {
-    const specs = buildGoals({ workouts, bodyWeights, measurements, heightIn })
+  // The 6-pack target, once its projection has been locked in (ETA within six
+  // months). The locked target, not the live one — the same number the goals
+  // panel measures pace against, so the chart line and the panel agree.
+  const bodyFatGoalLines = useMemo(() => {
     const locked = settings.lockedGoals ?? {}
-    // The locked target, not the live one — the same number the goals panel
-    // measures pace against, so the chart line and the panel agree.
-    const targetOf = (id: string, fallback: number) => locked[id]?.target ?? fallback
-    const within = (id: string) => locked[id] != null
-    return {
-      weight: specs
-        .filter((g) => (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) && within(g.id))
-        .map((g) => ({
-          value: targetOf(g.id, g.target),
-          label: g.title.replace('bodyweight → ', 'goal '),
-        })),
-      bodyFat: specs
-        .filter((g) => g.id === GOAL_IDS.sixPack && within(g.id))
-        .map((g) => ({ value: targetOf(g.id, g.target), label: '6-pack' })),
-    }
+    return buildGoals({ workouts, bodyWeights, measurements, heightIn })
+      .filter((g) => g.id === GOAL_IDS.sixPack && locked[g.id] != null)
+      .map((g) => ({ value: locked[g.id]!.target, label: '6-pack' }))
   }, [workouts, bodyWeights, measurements, heightIn, settings.lockedGoals])
 
   // Most-trained first, so the picker leads with the lifts actually in rotation.
@@ -351,15 +212,6 @@ export function ProgressTab() {
     }
     return [combo, ...exercisesByFrequency(workouts)].sort((a, b) => b.sessions - a.sessions)
   }, [workouts])
-
-  const weightSeries = useMemo(
-    () =>
-      filterRange(
-        bodyWeights.filter((b) => b.weightLbs >= 50).map((b) => ({ date: b.date, value: b.weightLbs })),
-        months,
-      ),
-    [bodyWeights, months],
-  )
 
   const series = useMemo(
     () => filterRange(exerciseSeries(workouts, exercise, metric), months),
@@ -403,26 +255,22 @@ export function ProgressTab() {
 
       <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold tracking-wider text-neutral-500">
-          body weight{latestWeight ? ` · ${latestWeight.weightLbs} lbs` : ''}
-        </h3>
-        <button
-          onClick={() => setShowWeight(true)}
-          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
-        >
-          log weight
-        </button>
-      </div>
-      <Chart
-        data={weightSeries}
-        unit="lbs"
-        label="weight"
-        calories={calorieSurplus}
-        goalLines={goalLines.weight}
-      />
+      <GoalsPanel months={months} />
 
-      <div className="flex items-center justify-between">
+      <MuscleAvatar />
+
+      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
+      <ExercisePicker options={exerciseOptions} value={exercise} onChange={setExercise} />
+      <Pills options={METRICS} value={metric} onChange={setMetric} />
+      {exercise === BENCH_COMBO ? (
+        <BenchChart data={benchSeries} unit={unit} />
+      ) : (
+        <MetricChart data={series} unit={unit} />
+      )}
+
+      <FlexProgress />
+
+      <div className="mt-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold tracking-wider text-neutral-500">
           body fat
           {latestBf != null
@@ -444,29 +292,17 @@ export function ProgressTab() {
           set your height in settings to estimate body fat % from your measurements.
         </div>
       ) : (
-        <Chart
+        <MetricChart
           data={bodySeries}
           unit={bodyMetric === 'bf' ? '%' : 'in'}
           label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
           calories={calorieSurplus}
-          goalLines={bodyMetric === 'bf' ? goalLines.bodyFat : undefined}
+          goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
         />
       )}
 
-      <GoalsPanel />
-
-      <MuscleAvatar />
-
-      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
-      <ExercisePicker options={exerciseOptions} value={exercise} onChange={setExercise} />
-      <Pills options={METRICS} value={metric} onChange={setMetric} />
-      {exercise === BENCH_COMBO ? <BenchChart data={benchSeries} unit={unit} /> : <Chart data={series} unit={unit} />}
-
-      <FlexProgress />
-
       <TimeSpent months={months} />
 
-      {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
       {showMeasure && <MeasurementLogSheet onClose={() => setShowMeasure(false)} />}
       {recap && <ReviewOverlay review={recap} onClose={() => setRecap(null)} />}
     </div>

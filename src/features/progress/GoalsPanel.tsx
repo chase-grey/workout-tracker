@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -10,9 +10,10 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
-import { combinedRepsSeries } from '../../lib/progress'
+import { combinedRepsSeries, filterRange } from '../../lib/progress'
+import { weeklyCalorieSurplusSeries } from '../../lib/calories'
 import { absExerciseKeys } from '../../config/plan'
-import { buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
+import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
 import {
   lockProjection,
   maybeLock,
@@ -27,6 +28,8 @@ import {
   personalSixPackTarget,
   type VisibilityObservation,
 } from '../../lib/bodyComp'
+import { MetricChart } from './MetricChart'
+import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MdCelebration, MdRefresh } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -223,9 +226,10 @@ function GoalRow({
   )
 }
 
-export function GoalsPanel() {
-  const { workouts, bodyWeights, measurements, settings, plan, updateSettings } = useData()
+export function GoalsPanel({ months }: { months: number | null }) {
+  const { workouts, bodyWeights, measurements, settings, plan, calorieEntries, updateSettings } = useData()
   const heightIn = settings.heightIn ?? 0
+  const [showWeight, setShowWeight] = useState(false)
 
   const goals = useMemo(
     () => buildGoals({ workouts, bodyWeights, measurements, heightIn }),
@@ -237,7 +241,7 @@ export function GoalsPanel() {
     [goals],
   )
 
-  const locked = settings.lockedGoals ?? {}
+  const locked = useMemo(() => settings.lockedGoals ?? {}, [settings.lockedGoals])
 
   // Lock any goal that has just come inside the horizon. Done as an effect rather
   // than during render because it writes settings — and only when something
@@ -268,6 +272,34 @@ export function GoalsPanel() {
     updateSettings({ ...settings, lockedGoals: next })
   }
 
+  // The weigh-ins the two bodyweight goals are projected from — shown alongside
+  // them, since the goals are only as good as the log behind them. The heading
+  // reads the whole log, not the visible range, so it agrees with the goal rows
+  // even when the range holds no weigh-ins.
+  const weightPoints = useMemo(() => bodyWeightPoints(bodyWeights), [bodyWeights])
+  const weightSeries = useMemo(() => filterRange(weightPoints, months), [weightPoints, months])
+  const latestWeight = weightPoints.length ? weightPoints[weightPoints.length - 1].value : null
+
+  // Weekly rather than daily, complete days only, unlogged days assumed —
+  // see weeklyCalorieSurplusSeries.
+  const calorieSurplus = useMemo(
+    () => filterRange(weeklyCalorieSurplusSeries(calorieEntries), months),
+    [calorieEntries, months],
+  )
+
+  // Targets for the bodyweight goals whose projection has been locked in. The
+  // locked target, not the live one, so the chart line and the row agree.
+  const weightGoalLines = useMemo(
+    () =>
+      goals
+        .filter((g) => (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) && locked[g.id] != null)
+        .map((g) => ({
+          value: locked[g.id]!.target,
+          label: g.title.replace('bodyweight → ', 'goal '),
+        })),
+    [goals, locked],
+  )
+
   // Bespoke context lines that hang off particular goals.
   const { leanest } = personalSixPackTarget(measurements, heightIn)
   const absReps = combinedRepsSeries(workouts, absExerciseKeys(plan))
@@ -297,23 +329,51 @@ export function GoalsPanel() {
     ),
   }
 
+  const bodyWeightBlock = (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold tracking-wider text-neutral-500">
+          body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
+        </h4>
+        <button
+          onClick={() => setShowWeight(true)}
+          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
+        >
+          log weight
+        </button>
+      </div>
+      <MetricChart
+        data={weightSeries}
+        unit="lbs"
+        label="weight"
+        calories={calorieSurplus}
+        goalLines={weightGoalLines}
+        empty="log your weight to project these goals"
+      />
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
       {goals.map((g) => {
         const proj = projections.get(g.id)!
         return (
-          <GoalRow
-            key={g.id}
-            goal={g}
-            proj={proj}
-            lock={locked[g.id]}
-            onRecalculate={() => recalculate(g)}
-          >
-            {extras[g.id]}
-          </GoalRow>
+          <Fragment key={g.id}>
+            {/* The weigh-in history sits ahead of the goals it feeds. */}
+            {g.id === GOAL_IDS.weight180 && bodyWeightBlock}
+            <GoalRow
+              goal={g}
+              proj={proj}
+              lock={locked[g.id]}
+              onRecalculate={() => recalculate(g)}
+            >
+              {extras[g.id]}
+            </GoalRow>
+          </Fragment>
         )
       })}
+      {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
     </div>
   )
 }
