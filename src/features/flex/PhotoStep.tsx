@@ -67,6 +67,7 @@ export function PhotoStep({
       {open && (
         <CameraMeasure
           mode={PHOTO_SHOT[open].mode}
+          temp={PHOTO_SHOT[open].cold ? 'cold' : 'warm'}
           onClose={() => setOpen(null)}
           onDone={(result) => {
             onCapture(open, result)

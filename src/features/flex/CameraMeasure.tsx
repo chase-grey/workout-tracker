@@ -19,6 +19,11 @@ import { AngleEditor } from './AngleEditor'
 
 type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
 type Facing = 'user' | 'environment'
+/** Whether the shot is a cold or warm reading; absent when it's neither. */
+export type MeasureTemp = 'cold' | 'warm'
+
+/** Pill fill per reading, matching the cold blue / warm green of the charts. */
+const TEMP_COLOR: Record<MeasureTemp, string> = { cold: '#38bdf8', warm: '#22c55e' }
 
 const TIMER_CHOICES = [10, 20, 30, 45] as const
 
@@ -52,14 +57,16 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
 /**
  * Burn the measurement onto the photo: draw the same lines and dots the editor
  * showed, label each line with its angle, and stamp a caption (pose + angles +
- * date) so the saved image is self-explanatory. Returns a fresh JPEG blob, or
- * null if the image can't be drawn (caller falls back to the raw photo).
+ * date) so the saved image is self-explanatory. A cold/warm reading also gets a
+ * pill in the top-right corner. Returns a fresh JPEG blob, or null if the image
+ * can't be drawn (caller falls back to the raw photo).
  */
 async function renderMeasuredPhoto(
   imageUrl: string,
   mode: MeasureMode,
   handles: Handles,
   result: MeasureResult,
+  temp?: MeasureTemp,
 ): Promise<Blob | null> {
   const img = new Image()
   img.src = imageUrl
@@ -161,6 +168,29 @@ async function renderMeasuredPhoto(
   ctx.fillStyle = '#d4d4d4'
   ctx.fillText(toISODate(new Date()), W / 2, H - capH * 0.24)
 
+  // Cold/warm pill, top-right.
+  if (temp) {
+    const pillFont = Math.round(unit * 0.04)
+    ctx.font = `bold ${pillFont}px system-ui, sans-serif`
+    const padX = pillFont * 0.7
+    const pillH = Math.round(pillFont * 1.8)
+    const pillW = Math.round(ctx.measureText(temp).width + padX * 2)
+    const margin = Math.round(unit * 0.035)
+    const x = W - margin - pillW
+    const y = margin
+    ctx.beginPath()
+    // roundRect is missing on older Safari; a square pill beats losing the photo.
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, pillW, pillH, pillH / 2)
+    else ctx.rect(x, y, pillW, pillH)
+    ctx.fillStyle = TEMP_COLOR[temp]
+    ctx.fill()
+    ctx.lineWidth = Math.max(2, pillFont * 0.1)
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'
+    ctx.stroke()
+    ctx.fillStyle = '#000000'
+    ctx.fillText(temp, x + pillW / 2, y + pillH / 2)
+  }
+
   return canvasToBlob(canvas)
 }
 
@@ -172,10 +202,14 @@ async function renderMeasuredPhoto(
  */
 export function CameraMeasure({
   mode: initialMode,
+  temp,
   onDone,
   onClose,
 }: {
   mode: MeasureMode
+  /** Tags the saved photo — a corner pill and a filename token — when the shot
+   *  is a cold or warm reading. */
+  temp?: MeasureTemp
   onDone: (result: MeasureResult) => void
   onClose: () => void
 }) {
@@ -346,13 +380,15 @@ export function CameraMeasure({
   }
 
   const handleSave = (result: MeasureResult, handles: Handles) => {
-    const name = `stretch-${toISODate(new Date())}-${mode}.jpg`
+    const name = `stretch-${toISODate(new Date())}-${mode}${temp ? `-${temp}` : ''}.jpg`
     const raw = blobRef.current
     const src = shot?.url
     void (async () => {
       // Save the photo with the angle lines + measurements burned in; fall back
       // to the plain capture if compositing fails for any reason.
-      const composed = src ? await renderMeasuredPhoto(src, mode, handles, result).catch(() => null) : null
+      const composed = src
+        ? await renderMeasuredPhoto(src, mode, handles, result, temp).catch(() => null)
+        : null
       const out = composed ?? raw
       if (out) await savePhoto(out, name).catch(() => {})
     })()
