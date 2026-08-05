@@ -4,7 +4,6 @@ import { useData } from '../../store/DataContext'
 import {
   CALORIE_GOAL,
   caloriePaceFraction,
-  formatClock,
   formatElapsed,
   isFoodLogStale,
   lastLoggedAt,
@@ -37,25 +36,27 @@ export function CalorieLogger() {
 
   const selTotal = totalForDate(calorieEntries, selDate)
   const pct = Math.min(selTotal / CALORIE_GOAL, 1) * 100
-  const selLabel = selDate === today ? 'today' : `${selDate.slice(5)}`
 
   // Pace marker: where you should be eating constantly across the 9am–9pm window.
   const isToday = selDate === today
   const pace = isToday ? caloriePaceFraction(now) : null
 
-  // When this day was last logged, so a skipped meal is visible at a glance.
-  // A day can have a total but no timestamp — logged before the field existed,
-  // or only ever backfilled — and then there's nothing honest to say, so the
-  // line is dropped. An empty today is the one exception: no total AND no
-  // timestamp is itself the answer.
+  // Today's label is how long it's been since the last log — more useful than
+  // the word "today", which the header position already implies. A day can have
+  // a total but no timestamp — logged before the field existed, or only ever
+  // backfilled — and then there's nothing honest to say, so it falls back to
+  // "today". An empty today is the one exception: no total AND no timestamp is
+  // itself the answer.
   const loggedAt = lastLoggedAt(calorieEntries, selDate)
   const untouchedToday = isToday && !loggedAt && selTotal === 0
   const stale = isToday && (loggedAt != null || untouchedToday) && isFoodLogStale(loggedAt, now)
-  const logLine = loggedAt
-    ? `logged ${formatClock(loggedAt)}${isToday ? ` · ${formatElapsed(loggedAt, now)}` : ''}`
-    : untouchedToday
-      ? 'nothing logged yet'
-      : null
+  const selLabel = !isToday
+    ? selDate.slice(5)
+    : loggedAt
+      ? formatElapsed(loggedAt, now)
+      : untouchedToday
+        ? 'nothing logged yet'
+        : 'today'
 
   const add = (cal: number) => {
     if (cal === 0) return
@@ -65,16 +66,9 @@ export function CalorieLogger() {
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="flex items-baseline justify-between">
-        <div>
-          <p className="text-xs tracking-wider text-neutral-500">
-            calories · {selLabel}
-          </p>
-          {logLine && (
-            <p className={`mt-0.5 text-[11px] ${stale ? 'text-amber-400' : 'text-neutral-600'}`}>
-              {logLine}
-            </p>
-          )}
-        </div>
+        <p className="text-xs tracking-wider text-neutral-500">
+          calories · <span className={stale ? 'text-amber-400' : undefined}>{selLabel}</span>
+        </p>
         <p className="text-sm tabular-nums text-neutral-400">
           <span className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}>
             {selTotal}
