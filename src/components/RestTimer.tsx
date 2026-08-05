@@ -188,18 +188,30 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
     )
   }
 
-  // 'dune': sand piles up across the floor of the screen as the rest runs down,
-  // so the dune's height is the time already spent.
-  const piled = `${(1 - fraction) * 100}%`
+  // 'dune': sand falls from the top of the screen and piles into a mound on the
+  // floor. The mound grows taller *and* wider as it fills — the way real sand
+  // spreads at its angle of repose — so its size is the time already spent, and
+  // the falling stream always lands on the growing peak.
+  const grow = 1 - fraction
+  const moundH = grow * 52 // capped so the pile never climbs the whole screen
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      <div className="absolute inset-x-0 bottom-0" style={{ height: piled, ...drain }}>
-        <div className="absolute inset-0 rounded-t-[50%] bg-accent-bright/25" />
-        <div className="absolute inset-x-0 top-0 h-[3px] rounded-t-[50%] bg-accent-bright/80" />
-      </div>
+      {/* The stream runs from the top of the screen down to the mound's peak. */}
       {fraction > 0 && (
-        <div className="rest-stream absolute left-1/2 top-0 h-[22%] w-[3px] -translate-x-1/2" />
+        <div
+          className="rest-stream absolute left-1/2 top-0 w-[3px] -translate-x-1/2"
+          style={{ height: `${100 - moundH}%`, transition: 'height 260ms linear' }}
+        />
       )}
+      {/* The mound: two stacked domes give it a brighter, denser center ridge
+          and a soft rounded peak — no straight edges to read as a seam. */}
+      <div
+        className="absolute bottom-0 left-1/2 -translate-x-1/2"
+        style={{ height: `${moundH}%`, width: `${34 + grow * 56}%`, ...drain }}
+      >
+        <div className="absolute inset-0 rounded-t-[50%] bg-accent-bright/25" />
+        <div className="absolute inset-x-[20%] bottom-0 h-[66%] rounded-t-[50%] bg-accent-bright/30" />
+      </div>
     </div>
   )
 }
