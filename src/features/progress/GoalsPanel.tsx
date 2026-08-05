@@ -11,7 +11,6 @@ import {
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
 import { combinedRepsSeries } from '../../lib/progress'
-import { squatBodyweightGoal } from '../../lib/squatGoal'
 import { absExerciseKeys } from '../../config/plan'
 import { buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
 import {
@@ -235,22 +234,10 @@ export function GoalsPanel() {
   }
 
   // Bespoke context lines that hang off particular goals.
-  const bwPoints = goals.find((g) => g.id === GOAL_IDS.weight180)?.points ?? []
-  const currentBw = bwPoints.length ? bwPoints[bwPoints.length - 1].value : 0
-  const squatPoints = goals.find((g) => g.id === GOAL_IDS.squatOneAndAHalf)?.points ?? []
-  const squatEst1RM = squatPoints.length ? squatPoints[squatPoints.length - 1].value : 0
-  const squat = squatBodyweightGoal(squatEst1RM, currentBw)
   const { leanest } = personalSixPackTarget(measurements, heightIn)
   const absReps = combinedRepsSeries(workouts, absExerciseKeys(plan))
 
   const extras: Record<string, React.ReactNode> = {
-    [GOAL_IDS.squatOneAndAHalf]: (
-      <p className="mt-2 text-xs text-neutral-500 tabular-nums">
-        {squat.bodyweight
-          ? `${squat.multiple}× bodyweight · 1× ${squat.milestone}${squat.hitMilestone ? ' ✓' : ''} · 1.5× ${squat.target}`
-          : 'log a weigh-in to set your squat targets.'}
-      </p>
-    ),
     [GOAL_IDS.sixPack]: (
       <>
         {leanest && (
