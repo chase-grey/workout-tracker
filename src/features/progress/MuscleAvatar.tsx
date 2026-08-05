@@ -85,20 +85,21 @@ function titleFor(muscle: Muscle, score: MuscleScore | undefined): string {
  */
 /** The shoulder cap, bridging the arm's top and the torso's upper corner. */
 const DELTS = [
-  'M57 110 Q55 88 76 79 Q93 84 92 102 Q74 114 57 110 Z',
-  'M163 110 Q165 88 144 79 Q127 84 128 102 Q146 114 163 110 Z',
+  'M55 110 Q58 88 76 78 Q93 84 92 102 Q74 114 55 110 Z',
+  'M165 110 Q162 88 144 78 Q127 84 128 102 Q146 114 165 110 Z',
 ]
 const UPPER_ARMS = [
-  'M58 106 Q55 141 56 176 L66 176 Q68 141 70 106 Z',
-  'M162 106 Q165 141 164 176 L154 176 Q152 141 150 106 Z',
+  'M55 104 Q52 140 53 176 L64 176 Q67 140 70 104 Z',
+  'M165 104 Q168 140 167 176 L156 176 Q153 140 150 104 Z',
 ]
-const THIGHS = ['M87 260 Q80 306 85 352 L101 352 L103 260 Z', 'M133 260 Q140 306 135 352 L119 352 L117 260 Z']
-const CALVES = ['M87 366 Q84 396 88 426 L101 426 L102 366 Z', 'M133 366 Q136 396 132 426 L119 426 L118 366 Z']
+const THIGHS = ['M82 260 Q74 306 78 352 L99 352 L103 260 Z', 'M138 260 Q146 306 142 352 L121 352 L117 260 Z']
+const CALVES = ['M77 372 Q72 402 80 434 L94 434 Q102 402 99 372 Z', 'M143 372 Q148 402 140 434 L126 434 Q118 402 121 372 Z']
 const PECS = [
   'M75 92 Q88 84 107 89 L107 119 Q88 127 77 116 Q72 104 75 92 Z',
   'M145 92 Q132 84 113 89 L113 119 Q132 127 143 116 Q148 104 145 92 Z',
 ]
-const ABS = ['M92 128 L128 128 Q131 166 123 208 L97 208 Q89 166 92 128 Z']
+/** Starts below the rib cage, not at the pec line — the gap is where the ribs are. */
+const ABS = ['M95 144 L125 144 Q132 172 126 208 L94 208 Q88 172 95 144 Z']
 const NECK_FRONT = ['M101 60 L119 60 L119 74 Q119 79 114 79 L106 79 Q101 79 101 74 Z']
 /** Neck + the upper-trap yoke it feeds — what neck extension actually changes. */
 const NECK_BACK = ['M101 60 L119 60 L119 76 Q128 80 130 93 Q121 88 110 88 Q99 88 90 93 Q92 80 101 76 Z']
@@ -163,6 +164,11 @@ function Silhouette({ label, children }: { label: string; children: ReactNode })
 function FrontView({ scores }: { scores: Record<Muscle, MuscleScore> }) {
   return (
     <Silhouette label="front">
+      {/* The only thing telling the two views apart. */}
+      <g fill="#a1a1aa">
+        <ellipse cx="102" cy="34" rx="2.6" ry="3" />
+        <ellipse cx="118" cy="34" rx="2.6" ry="3" />
+      </g>
       <Regions muscle="neck" scores={scores} paths={NECK_FRONT} />
       {/* Pecs before the delts: the shoulder cap sits in front of the chest's
           upper-outer corner, the way it does on a body. */}
