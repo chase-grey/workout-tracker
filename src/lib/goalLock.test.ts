@@ -32,28 +32,28 @@ const FALL: LockedProjection = {
   slopePerWeek: -0.7,
 }
 
+/** A climbing series with enough readings for `project` to fit a pace on. */
+const CLIMBING = [
+  { date: '2025-11-01', value: 80 },
+  { date: '2025-12-01', value: 100 },
+  { date: '2026-01-01', value: 120 },
+]
+
+/** Effectively stalled: 2 lbs over two months. */
+const STALLED = [
+  { date: '2025-11-01', value: 99 },
+  { date: '2025-12-01', value: 100 },
+  { date: '2026-01-01', value: 101 },
+]
+
 describe('withinHorizon', () => {
   it('is true for an eta inside six months', () => {
-    const proj = project(
-      [
-        { date: '2025-12-01', value: 100 },
-        { date: '2026-01-01', value: 120 },
-      ],
-      140,
-      TODAY,
-    )
+    const proj = project(CLIMBING, 140, TODAY)
     expect(withinHorizon(proj, TODAY)).toBe(true)
   })
 
   it('is false for an eta years out', () => {
-    const proj = project(
-      [
-        { date: '2025-12-01', value: 100 },
-        { date: '2026-01-01', value: 101 },
-      ],
-      500,
-      TODAY,
-    )
+    const proj = project(STALLED, 500, TODAY)
     expect(withinHorizon(proj, TODAY)).toBe(false)
   })
 
@@ -65,14 +65,7 @@ describe('withinHorizon', () => {
 
 describe('lockProjection', () => {
   it('snapshots the current value, target and eta', () => {
-    const proj = project(
-      [
-        { date: '2025-12-01', value: 100 },
-        { date: '2026-01-01', value: 120 },
-      ],
-      140,
-      TODAY,
-    )
+    const proj = project(CLIMBING, 140, TODAY)
     const lock = lockProjection('squat', proj, TODAY)
     expect(lock).toMatchObject({ goalId: 'squat', lockedAt: '2026-01-01', startValue: 120, target: 140 })
     expect(lock?.etaDate).toBe(proj.etaDate)
@@ -85,26 +78,12 @@ describe('lockProjection', () => {
 
 describe('maybeLock', () => {
   it('keeps an existing lock even once the eta drifts back out', () => {
-    const drifted = project(
-      [
-        { date: '2025-12-01', value: 100 },
-        { date: '2026-01-01', value: 101 },
-      ],
-      500,
-      TODAY,
-    )
+    const drifted = project(STALLED, 500, TODAY)
     expect(maybeLock(CLIMB, 'squat', drifted, TODAY)).toBe(CLIMB)
   })
 
   it('leaves a far-off goal unlocked', () => {
-    const far = project(
-      [
-        { date: '2025-12-01', value: 100 },
-        { date: '2026-01-01', value: 101 },
-      ],
-      500,
-      TODAY,
-    )
+    const far = project(STALLED, 500, TODAY)
     expect(maybeLock(undefined, 'squat', far, TODAY)).toBeUndefined()
   })
 })
@@ -178,6 +157,20 @@ describe('paceAgainstLock', () => {
 
   it('has no revised eta when moving away from the target', () => {
     expect(paceAgainstLock(CLIMB, 90, halfway).revisedEta).toBeNull()
+  })
+
+  it('revises from the recent pace when one is given, not the average since the lock', () => {
+    // 40 gained in 50 days averages 0.8/day, which lands past the locked eta —
+    // but the recent pace is 14/wk (2/day), which lands well before it.
+    expect(paceAgainstLock(CLIMB, 140, halfway).revisedEta! > CLIMB.etaDate).toBe(true)
+    const recent = paceAgainstLock(CLIMB, 140, halfway, 14)
+    expect(recent.revisedEta).toBe('2026-03-22') // 60 left at 2/day
+    // The ahead/behind reading still measures against the locked line.
+    expect(recent.status).toBe('behind')
+  })
+
+  it('reports no revised eta when the recent pace is flat', () => {
+    expect(paceAgainstLock(CLIMB, 140, halfway, 0).revisedEta).toBeNull()
   })
 })
 

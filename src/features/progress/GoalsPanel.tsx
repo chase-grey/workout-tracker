@@ -124,7 +124,10 @@ function GoalRow({
   // so the live one can drift away from it — show the number the pace reading is
   // actually measured against, or the two would contradict each other.
   const shownTarget = lock ? lock.target : goal.target
-  const pace = lock && has && !reached ? paceAgainstLock(lock, proj.current) : null
+  const pace =
+    lock && has && !reached
+      ? paceAgainstLock(lock, proj.current, undefined, proj.slopePerWeek)
+      : null
 
   return (
     <div className="rounded-2xl bg-surface p-4">
@@ -179,7 +182,11 @@ function GoalRow({
         </p>
       ) : (
         <p className="mt-1 text-sm text-neutral-500">
-          {has ? 'not trending toward this yet — keep at it.' : 'log data to project this.'}
+          {!has
+            ? 'log data to project this.'
+            : proj.basis.thin
+              ? 'not enough recent data to project.'
+              : 'not trending toward this yet — keep at it.'}
         </p>
       )}
 

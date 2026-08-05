@@ -158,11 +158,17 @@ export type Pace = {
  * "Ahead" always means *closer to the target than planned*, whichever direction
  * the metric moves — losing body fat faster and adding squat weight faster both
  * count as ahead.
+ *
+ * `recentSlopePerWeek` is the pace to revise the ETA from — pass the live
+ * projection's slope (see predictions.TREND_WINDOW). Without it the revision
+ * averages the whole stretch since the lock, which a month lost to illness skews
+ * long after the ground was made back up.
  */
 export function paceAgainstLock(
   lock: LockedProjection,
   actual: number,
   today: Date = new Date(),
+  recentSlopePerWeek?: number,
 ): Pace {
   const todayISO = toISODate(today)
   const expected = expectedAt(lock, todayISO)
@@ -171,20 +177,19 @@ export function paceAgainstLock(
   const aheadBy = round1((actual - expected) * toward)
   const status = Math.abs(aheadBy) < 0.05 ? 'on' : aheadBy > 0 ? 'ahead' : 'behind'
 
-  // Re-derive an ETA from the pace actually held since the lock. A pace barely
-  // above flat implies an absurdly distant date, which says nothing useful — past
+  // Re-derive an ETA from the pace actually being held. A pace barely above flat
+  // implies an absurdly distant date, which says nothing useful — past
   // MAX_REVISED_ETA_DAYS we report no revised date rather than the year 2081.
   const elapsedDays = daysBetween(lock.lockedAt, todayISO)
+  const sinceLockPerDay = elapsedDays > 0 ? (actual - lock.startValue) / elapsedDays : 0
+  const realSlopePerDay = recentSlopePerWeek != null ? recentSlopePerWeek / 7 : sinceLockPerDay
+  const remaining = lock.target - actual
   let revisedEta: string | null = null
-  if (elapsedDays > 0) {
-    const realSlopePerDay = (actual - lock.startValue) / elapsedDays
-    const remaining = lock.target - actual
-    if (realSlopePerDay !== 0 && Math.sign(remaining) === Math.sign(realSlopePerDay)) {
-      const daysLeft = Math.round(remaining / realSlopePerDay)
-      if (daysLeft <= MAX_REVISED_ETA_DAYS) {
-        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysLeft)
-        revisedEta = toISODate(d)
-      }
+  if (realSlopePerDay !== 0 && Math.sign(remaining) === Math.sign(realSlopePerDay)) {
+    const daysLeft = Math.round(remaining / realSlopePerDay)
+    if (daysLeft <= MAX_REVISED_ETA_DAYS) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysLeft)
+      revisedEta = toISODate(d)
     }
   }
 

@@ -13,6 +13,7 @@
 import type { WorkoutRow } from '../types'
 import { exerciseSeries } from './progress'
 import { paceAgainstLock, type LockedProjections } from './goalLock'
+import { project } from './predictions'
 import { buildGoals, type GoalInputs } from './goals'
 
 export type GoalPaceNote = {
@@ -55,7 +56,8 @@ export function goalPaceNotes(
     if (after == null) continue
     const before = latest(exerciseSeries(prev, goal.exerciseKey, '1rm'))
 
-    const pace = paceAgainstLock(lock, after, today)
+    const { slopePerWeek } = project(goal.points, lock.target, today)
+    const pace = paceAgainstLock(lock, after, today, slopePerWeek)
     // Toward the target is positive whichever way the metric moves.
     const toward = Math.sign(lock.target - lock.startValue) || 1
     const moved = before == null ? 0 : Math.round((after - before) * toward * 10) / 10
