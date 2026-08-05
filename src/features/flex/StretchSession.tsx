@@ -347,7 +347,7 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
       {/* The get-into-position count waits its turn behind a photo screen, and
           is skipped for dead-bug core sets — there's no pace to settle into. */}
       {preparing && photos == null && step.kind === 'flex' && (
-        <GetReady seconds={GET_READY_SEC} onDone={() => setPreparing(false)} />
+        <GetReady seconds={GET_READY_SEC} label={step.exName} onDone={() => setPreparing(false)} />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
