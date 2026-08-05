@@ -133,7 +133,7 @@ export function TimeSpent({ months }: { months: number | null }) {
           {monthly.length > 1 && (
             <div className="rounded-2xl bg-surface p-2">
               <ResponsiveContainer width="100%" height={224}>
-                <LineChart data={monthly} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+                <LineChart data={monthly} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
                   <CartesianGrid stroke="#262626" vertical={false} />
                   <XAxis dataKey="month" tick={axisTick} />
                   <YAxis

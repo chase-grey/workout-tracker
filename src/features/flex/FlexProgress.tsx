@@ -96,7 +96,7 @@ export function FlexProgress() {
       {split.length >= 2 ? (
         <div className="rounded-2xl bg-surface p-2">
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={withTime(split)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+            <LineChart data={withTime(split)} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#262626" vertical={false} />
               <XAxis {...timeXAxis} tick={axisTick} />
               <YAxis tick={axisTick} width={32} domain={splitScale.domain} ticks={splitScale.ticks} />
@@ -129,7 +129,7 @@ export function FlexProgress() {
       {tailors.length >= 2 ? (
         <div className="rounded-2xl bg-surface p-2">
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={withTime(tailors)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+            <LineChart data={withTime(tailors)} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#262626" vertical={false} />
               <XAxis {...timeXAxis} tick={axisTick} />
               <YAxis tick={axisTick} width={32} domain={tailorsScale.domain} ticks={tailorsScale.ticks} />
