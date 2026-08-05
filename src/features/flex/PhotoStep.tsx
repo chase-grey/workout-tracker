@@ -70,11 +70,11 @@ export function PhotoStep({
           onClose={() => setOpen(null)}
           onDone={(result) => {
             onCapture(open, result)
-            setTaken((prev) => ({
-              ...prev,
-              [open]: summarizeResult(PHOTO_SHOT[open].mode, result),
-            }))
+            const next = { ...taken, [open]: summarizeResult(PHOTO_SHOT[open].mode, result) }
+            setTaken(next)
             setOpen(null)
+            // Every shot this screen asked for is in — move on without a tap.
+            if (gate.shots.every((k) => next[k])) onDone()
           }}
         />
       )}
