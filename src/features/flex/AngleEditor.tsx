@@ -12,6 +12,9 @@ import {
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
 
+/** Distance from a dot to the tab you grab it by, so a finger never covers the dot. */
+const GRIP_OFFSET_PX = 44
+
 /**
  * Overlay the captured photo with draggable handles + lines so the user can
  * correct the auto-detected angle. Live-recomputes the angle(s) as they drag.
@@ -32,23 +35,29 @@ export function AngleEditor({
   const [handles, setHandles] = useState<Handles>(initial)
   const containerRef = useRef<HTMLDivElement>(null)
   const activeKey = useRef<string | null>(null)
+  /** Dot position minus pointer position at grab time, so the dot keeps its offset from the finger. */
+  const grabOffset = useRef({ x: 0, y: 0 })
 
   const specs = HANDLES[mode]
   const segments = SEGMENTS[mode]
   const result = anglesFromHandles(mode, handles)
 
+  /** Pointer position in 0..1 image space, unclamped so grab offsets stay accurate at the edges. */
   const coordFromEvent = (e: PointerEvent): { x: number; y: number } | null => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect || rect.width === 0 || rect.height === 0) return null
     return {
-      x: clamp01((e.clientX - rect.left) / rect.width),
-      y: clamp01((e.clientY - rect.top) / rect.height),
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
     }
   }
 
   const onHandleDown = (key: string) => (e: PointerEvent) => {
     e.preventDefault()
     activeKey.current = key
+    const pt = coordFromEvent(e)
+    const p = handles[key]
+    grabOffset.current = pt && p ? { x: p.x - pt.x, y: p.y - pt.y } : { x: 0, y: 0 }
     containerRef.current?.setPointerCapture(e.pointerId)
   }
 
@@ -57,7 +66,8 @@ export function AngleEditor({
     const pt = coordFromEvent(e)
     if (!pt) return
     const key = activeKey.current
-    setHandles((prev) => ({ ...prev, [key]: pt }))
+    const { x: dx, y: dy } = grabOffset.current
+    setHandles((prev) => ({ ...prev, [key]: { x: clamp01(pt.x + dx), y: clamp01(pt.y + dy) } }))
   }
 
   const onUp = (e: PointerEvent) => {
@@ -76,7 +86,7 @@ export function AngleEditor({
 
       <div className="flex-1 overflow-y-auto p-4">
         <p className="mb-3 text-sm text-neutral-400">
-          drag the dots so the lines trace your body. the angle updates live.
+          drag the tabs so the lines trace your body. the angle updates live.
         </p>
 
         <div
@@ -116,16 +126,36 @@ export function AngleEditor({
           {specs.map((spec) => {
             const p = handles[spec.key]
             if (!p) return null
+            // Grab tab sits above the dot, or below it when the dot is too near the top edge.
+            const below = p.y < 0.15
+            const dir = below ? 1 : -1
+            const pos = { left: `${p.x * 100}%`, top: `${p.y * 100}%` }
             return (
-              <button
-                key={spec.key}
-                onPointerDown={onHandleDown(spec.key)}
-                aria-label={`move ${spec.label}`}
-                className="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full active:scale-110"
-                style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
-              >
-                <span className="h-5 w-5 rounded-full border-2 border-white bg-accent/80 shadow" />
-              </button>
+              <div key={spec.key}>
+                <span
+                  className="pointer-events-none absolute w-0.5 bg-white/60"
+                  style={{
+                    ...pos,
+                    height: GRIP_OFFSET_PX,
+                    transform: `translateX(-50%) translateY(${below ? '0' : '-100%'})`,
+                  }}
+                />
+                <span
+                  className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent/80 shadow"
+                  style={pos}
+                />
+                <button
+                  onPointerDown={onHandleDown(spec.key)}
+                  aria-label={`move ${spec.label}`}
+                  className="absolute flex h-11 w-11 items-center justify-center active:scale-110"
+                  style={{ ...pos, transform: `translate(-50%, calc(-50% + ${dir * GRIP_OFFSET_PX}px))` }}
+                >
+                  <span className="flex h-6 w-9 items-center justify-center gap-1 rounded-full border-2 border-white bg-accent/80 shadow">
+                    <span className="h-3 w-0.5 rounded-full bg-black/50" />
+                    <span className="h-3 w-0.5 rounded-full bg-black/50" />
+                  </span>
+                </button>
+              </div>
             )
           })}
         </div>
