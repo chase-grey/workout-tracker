@@ -3,6 +3,7 @@ import {
   MdBolt,
   MdCheckCircle,
   MdChevronRight,
+  MdFlag,
   MdRadioButtonUnchecked,
   MdShowChart,
   MdTrackChanges,
@@ -11,6 +12,8 @@ import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
 import { repRangeLabel, variantExercises, type PlannedExercise } from '../../config/plan'
 import { nextTarget, type Target } from '../../lib/progression'
+import { buildGoals } from '../../lib/goals'
+import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder } from '../../lib/circuit'
@@ -68,8 +71,17 @@ function targetLabel(target: Target | undefined): string | null {
 
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
 export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize }: Props) {
-  const { plan, workouts, exerciseAverages, logSessionDuration, logExerciseTimes, updatePlan } =
-    useData()
+  const {
+    plan,
+    workouts,
+    bodyWeights,
+    measurements,
+    settings,
+    exerciseAverages,
+    logSessionDuration,
+    logExerciseTimes,
+    updatePlan,
+  } = useData()
   // A rest still running when the app closed resumes with its real remaining
   // time (it's wall-clock based, so the time away counts) unless it's long stale.
   const [rest, setRest] = useState<ActiveRest | null>(() => {
@@ -189,6 +201,15 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     () => (target ? isChallenge(workouts, planned.key, target, planned.repMin, slot) : false),
     [target, workouts, planned.key, planned.repMin, slot],
   )
+
+  // The nudge from a locked goal riding on this lift: the weight to hit at the
+  // reps you're about to do so this set lands on the goal's line. Only surfaced
+  // when you're not already ahead of it — hitting a lower number isn't the ask.
+  const goalCue = useMemo(() => {
+    const goals = buildGoals({ workouts, bodyWeights, measurements, heightIn: settings.heightIn ?? 0 })
+    const reps = target?.reps ?? planned.repMin
+    return goalCueForExercise(settings.lockedGoals ?? {}, goals, planned.key, reps)
+  }, [workouts, bodyWeights, measurements, settings.heightIn, settings.lockedGoals, target?.reps, planned.key, planned.repMin])
 
   const totals = useMemo(() => {
     let done = 0
@@ -465,6 +486,12 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
               <MdShowChart aria-hidden />
             </button>
           </div>
+          {goalCue && goalCue.standing !== 'ahead' && (
+            <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-accent-2">
+              <MdFlag aria-hidden />
+              {goalCue.goalTitle}: {goalCue.weightLbs} × {goalCue.reps}
+            </p>
+          )}
           <div className="flex items-end justify-center gap-3">
             {/* A move that's never loaded (hanging raises, dead bugs) gets no
                 weight field at all rather than an empty "added lbs" box. */}

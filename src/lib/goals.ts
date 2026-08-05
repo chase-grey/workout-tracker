@@ -13,6 +13,15 @@ import type { BodyWeightEntry, WorkoutRow } from '../types'
 import { exerciseSeries, type Point } from './progress'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 
+/**
+ * Weekly decay of the gain rate strength projections assume (see
+ * predictions.weeksToClose). Strength gains taper — a straight-line projection
+ * off a few promising early sessions arrives too soon and draws a line too steep
+ * to hold — so their ETAs and locked lines bend, easing ~3% off the pace each
+ * week. Body-composition goals keep a straight line (no decay).
+ */
+export const STRENGTH_GAIN_DECAY = 0.97
+
 /** Stable ids, used as the keys locked projections are stored under. */
 export const GOAL_IDS = {
   weight180: 'bodyweight_180',
@@ -43,6 +52,11 @@ export type GoalSpec = {
   direction: 'up' | 'down'
   /** True when the target itself moves with bodyweight (bench/squat multiples). */
   movingTarget?: boolean
+  /**
+   * Weekly decay of the gain rate for this goal's projection (see
+   * STRENGTH_GAIN_DECAY). Omitted for goals that project as a straight line.
+   */
+  decayPerWeek?: number
 }
 
 /** Whether the latest value has met or passed the goal's target. */
@@ -110,6 +124,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
+      decayPerWeek: STRENGTH_GAIN_DECAY,
     },
     {
       id: GOAL_IDS.squatBodyweight,
@@ -120,6 +135,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
+      decayPerWeek: STRENGTH_GAIN_DECAY,
     },
     {
       id: GOAL_IDS.squatOneAndAHalf,
@@ -130,6 +146,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
       target: bwTarget(1.5),
       direction: 'up',
       movingTarget: true,
+      decayPerWeek: STRENGTH_GAIN_DECAY,
     },
     {
       id: GOAL_IDS.sixPack,

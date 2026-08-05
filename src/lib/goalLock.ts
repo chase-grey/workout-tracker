@@ -17,7 +17,7 @@
  */
 
 import { parseISODate, toISODate } from './dates'
-import type { Projection } from './predictions'
+import { weeksToClose, type Projection } from './predictions'
 
 /** A goal enters lock-in once its projected ETA is this close. */
 export const LOCK_HORIZON_MONTHS = 6
@@ -45,9 +45,21 @@ export type LockedProjection = {
   etaDate: string
   /** Slope the lock was taken at, in metric units per week. */
   slopePerWeek: number
+  /**
+   * Weekly decay of the gain rate the line was drawn with, bending it the way
+   * gains actually taper (see predictions.weeksToClose). Absent on locks frozen
+   * before decay shipped — those stay the straight lines they were committed as,
+   * so `decayOf` reads a missing value as 1 (none).
+   */
+  decayPerWeek?: number
 }
 
 export type LockedProjections = Record<string, LockedProjection>
+
+/** The decay a lock was drawn with; 1 (a straight line) for pre-decay locks. */
+function decayOf(lock: LockedProjection): number {
+  return lock.decayPerWeek ?? 1
+}
 
 /** Days from `from` to `to` (negative when `to` precedes `from`). */
 function daysBetween(from: string, to: string): number {
@@ -86,6 +98,7 @@ export function lockProjection(
     target: proj.target,
     etaDate: proj.etaDate,
     slopePerWeek: proj.slopePerWeek,
+    decayPerWeek: proj.decayPerWeek,
   }
 }
 
@@ -106,9 +119,14 @@ export function maybeLock(
 }
 
 /**
- * Where the locked line says the metric should be on `date` — a straight line
- * from (lockedAt, startValue) to (etaDate, target). Before the lock date it
- * reads startValue; after the ETA it reads target.
+ * Where the locked line says the metric should be on `date` — a curve from
+ * (lockedAt, startValue) to (etaDate, target). Before the lock date it reads
+ * startValue; after the ETA it reads target.
+ *
+ * With decay (see LockedProjection.decayPerWeek) the curve is concave: it climbs
+ * fast early and eases off near the target, matching how gains taper. The
+ * fraction of the way covered by week t of a span of S weeks is
+ * (1 − rᵗ)/(1 − rˢ), which collapses to the straight-line t/S when r is 1.
  */
 export function expectedAt(lock: LockedProjection, date: string): number {
   const span = daysBetween(lock.lockedAt, lock.etaDate)
@@ -116,7 +134,13 @@ export function expectedAt(lock: LockedProjection, date: string): number {
   const elapsed = daysBetween(lock.lockedAt, date)
   if (elapsed <= 0) return round1(lock.startValue)
   if (elapsed >= span) return round1(lock.target)
-  return round1(lock.startValue + ((lock.target - lock.startValue) * elapsed) / span)
+
+  const r = decayOf(lock)
+  const fraction =
+    r >= 1
+      ? elapsed / span
+      : (1 - Math.pow(r, elapsed / 7)) / (1 - Math.pow(r, span / 7))
+  return round1(lock.startValue + (lock.target - lock.startValue) * fraction)
 }
 
 /**
@@ -143,7 +167,7 @@ export function projectedSeries(lock: LockedProjection): { date: string; value: 
 export type Pace = {
   /** Positive = ahead of the locked line, negative = behind it. */
   aheadBy: number
-  /** Where the locked line expected you to be today. */
+  /** Where the locked line expected you to be on the reading's date. */
   expected: number
   actual: number
   status: 'ahead' | 'behind' | 'on'
@@ -152,8 +176,14 @@ export type Pace = {
 }
 
 /**
- * How the latest actual value compares with the locked line, and what ETA the
- * pace you've really held implies.
+ * How a reading compares with the locked line, and what ETA the pace you've
+ * really held implies.
+ *
+ * The reading is measured against the line *on its own date* (`actualDate`), not
+ * against today. A goal you can only move on leg day shouldn't slide "behind"
+ * every rest day just because the calendar advanced while the line kept climbing
+ * and your last number stood still — the honest question is where you stood the
+ * last time you actually trained it, which is what next session has to beat.
  *
  * "Ahead" always means *closer to the target than planned*, whichever direction
  * the metric moves — losing body fat faster and adding squat weight faster both
@@ -162,31 +192,34 @@ export type Pace = {
  * `recentSlopePerWeek` is the pace to revise the ETA from — pass the live
  * projection's slope (see predictions.TREND_WINDOW). Without it the revision
  * averages the whole stretch since the lock, which a month lost to illness skews
- * long after the ground was made back up.
+ * long after the ground was made back up. The revision decays with the lock (see
+ * predictions.weeksToClose), so it can't promise a date a stalling pace won't hit.
  */
 export function paceAgainstLock(
   lock: LockedProjection,
   actual: number,
-  today: Date = new Date(),
+  actualDate: string,
   recentSlopePerWeek?: number,
+  today: Date = new Date(),
 ): Pace {
-  const todayISO = toISODate(today)
-  const expected = expectedAt(lock, todayISO)
+  const expected = expectedAt(lock, actualDate)
   // Sign so that "ahead" is always progress toward the target.
   const toward = Math.sign(lock.target - lock.startValue) || 1
   const aheadBy = round1((actual - expected) * toward)
   const status = Math.abs(aheadBy) < 0.05 ? 'on' : aheadBy > 0 ? 'ahead' : 'behind'
 
-  // Re-derive an ETA from the pace actually being held. A pace barely above flat
-  // implies an absurdly distant date, which says nothing useful — past
-  // MAX_REVISED_ETA_DAYS we report no revised date rather than the year 2081.
-  const elapsedDays = daysBetween(lock.lockedAt, todayISO)
-  const sinceLockPerDay = elapsedDays > 0 ? (actual - lock.startValue) / elapsedDays : 0
-  const realSlopePerDay = recentSlopePerWeek != null ? recentSlopePerWeek / 7 : sinceLockPerDay
+  // Re-derive an ETA from the pace actually being held, letting it decay the same
+  // way the lock does. A pace barely above flat implies an absurdly distant date,
+  // which says nothing useful — past MAX_REVISED_ETA_DAYS we report no revised
+  // date rather than the year 2081.
+  const weeksSinceLock = daysBetween(lock.lockedAt, actualDate) / 7
+  const sinceLockPerWeek = weeksSinceLock > 0 ? (actual - lock.startValue) / weeksSinceLock : 0
+  const realSlopePerWeek = recentSlopePerWeek != null ? recentSlopePerWeek : sinceLockPerWeek
   const remaining = lock.target - actual
+  const weeksLeft = weeksToClose(remaining, realSlopePerWeek, decayOf(lock))
   let revisedEta: string | null = null
-  if (realSlopePerDay !== 0 && Math.sign(remaining) === Math.sign(realSlopePerDay)) {
-    const daysLeft = Math.round(remaining / realSlopePerDay)
+  if (weeksLeft != null) {
+    const daysLeft = Math.round(weeksLeft * 7)
     if (daysLeft <= MAX_REVISED_ETA_DAYS) {
       const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysLeft)
       revisedEta = toISODate(d)

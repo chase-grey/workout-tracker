@@ -11,6 +11,8 @@ export type Projection = {
   etaWeeks: number | null // weeks from today to reach target; null if not trending toward it
   etaDate: string | null // ISO YYYY-MM-DD; null if etaWeeks null
   onTrack: boolean // true iff etaWeeks is a positive finite number
+  /** Weekly decay of the gain rate the ETA assumes (1 = none, i.e. straight line). */
+  decayPerWeek: number
   /** What the slope was read from. */
   basis: ProjectionBasis
 }
@@ -107,11 +109,40 @@ function fitSlopePerWeek(points: { date: string; value: number }[]): number {
   return sxx === 0 ? 0 : round3(sxy / sxx)
 }
 
+/**
+ * Weeks to close a `gap` starting at `slopePerWeek`, letting the weekly gain
+ * decay by `decayPerWeek` each week (a straight line when it's 1).
+ *
+ * Real strength gains taper — the first pounds come quickly and the last ones
+ * grind — so extrapolating this week's pace in a straight line arrives too soon
+ * and draws a line too steep to actually hold. Modelling the gain rate as
+ * geometrically decaying (week n adds slope·rⁿ) bends the projection the way a
+ * lifter's progress actually bends.
+ *
+ * The flip side of a decaying pace is a ceiling: the most it can ever add is
+ * slope/(1−decay). A gap past that ceiling is unreachable at this pace, which
+ * reads as null (no ETA) rather than a fantasy date — "gaining, but not fast
+ * enough for this" is the honest answer, and the caller says exactly that.
+ *
+ * Returns null when the pace is flat, pointed away from the gap, or short of the
+ * ceiling. Otherwise a positive number of weeks.
+ */
+export function weeksToClose(gap: number, slopePerWeek: number, decayPerWeek = 1): number | null {
+  if (slopePerWeek === 0 || Math.sign(gap) !== Math.sign(slopePerWeek)) return null
+  if (decayPerWeek >= 1) return gap / slopePerWeek
+  // Cumulative gain over w weeks is slope·(1 − rʷ)/(1 − r); solve it for w.
+  const ratio = 1 - (gap * (1 - decayPerWeek)) / slopePerWeek // = rʷ, in (0, 1) when reachable
+  if (ratio <= 0) return null // gap sits past the ceiling slope/(1 − decay)
+  return Math.log(ratio) / Math.log(decayPerWeek)
+}
+
 export function project(
   points: { date: string; value: number }[],
   target: number,
   today: Date = new Date(),
   window: TrendWindow = TREND_WINDOW,
+  /** Weekly decay of the gain rate for the ETA (see weeksToClose). 1 = straight line. */
+  decayPerWeek = 1,
 ): Projection {
   if (points.length === 0) {
     return {
@@ -121,6 +152,7 @@ export function project(
       etaWeeks: null,
       etaDate: null,
       onTrack: false,
+      decayPerWeek,
       basis: { points: 0, spanDays: 0, thin: true },
     }
   }
@@ -150,14 +182,16 @@ export function project(
       etaWeeks: 0,
       etaDate: toISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate())),
       onTrack: true,
+      decayPerWeek,
       basis,
     }
   }
 
-  // Trending toward the target: sign of remaining gap matches sign of slope.
-  const towardTarget = slopePerWeek !== 0 && Math.sign(diff) === Math.sign(slopePerWeek)
-  if (towardTarget) {
-    const etaWeeks = diff / slopePerWeek // > 0 by construction
+  // Trending toward the target and projected to reach it, once the gain rate is
+  // allowed to decay (a straight line when decayPerWeek is 1). null otherwise:
+  // flat, moving away, or gaining too slowly to ever close the gap at this pace.
+  const etaWeeks = weeksToClose(diff, slopePerWeek, decayPerWeek)
+  if (etaWeeks != null) {
     return {
       slopePerWeek,
       current,
@@ -165,11 +199,12 @@ export function project(
       etaWeeks,
       etaDate: addDaysISO(today, Math.round(etaWeeks * 7)),
       onTrack: true,
+      decayPerWeek,
       basis,
     }
   }
 
-  // Too little recent data to read, flat, or moving away from the target.
+  // Too little recent data to read, flat, moving away, or short of the ceiling.
   return {
     slopePerWeek,
     current,
@@ -177,6 +212,7 @@ export function project(
     etaWeeks: null,
     etaDate: null,
     onTrack: false,
+    decayPerWeek,
     basis,
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { project, trendPoints, weeklyTarget, TREND_WINDOW } from './predictions'
+import { project, trendPoints, weeklyTarget, weeksToClose, TREND_WINDOW } from './predictions'
 
 describe('project', () => {
   it('increasing bodyweight trending toward a higher target is on track', () => {
@@ -186,6 +186,57 @@ describe('trendPoints', () => {
     ])
     expect(kept.map((p) => p.date)).toEqual(['2026-02-01', '2026-02-08', '2026-02-14'])
     expect(trendPoints([])).toEqual([])
+  })
+})
+
+describe('weeksToClose', () => {
+  it('is a straight line when the pace does not decay', () => {
+    expect(weeksToClose(25, 5, 1)).toBe(5)
+    expect(weeksToClose(25, 5)).toBe(5)
+  })
+
+  it('takes longer once the pace is allowed to decay', () => {
+    expect(weeksToClose(25, 5, 0.9)!).toBeGreaterThan(5)
+  })
+
+  it('returns null for a gap past the ceiling a decaying pace can reach', () => {
+    // 5/wk decaying 10%/wk can only ever add slope/(1 - decay) = 50.
+    expect(weeksToClose(49, 5, 0.9)).not.toBeNull()
+    expect(weeksToClose(51, 5, 0.9)).toBeNull()
+  })
+
+  it('returns null when flat or pointed away from the gap', () => {
+    expect(weeksToClose(25, 0, 0.9)).toBeNull()
+    expect(weeksToClose(25, -5, 0.9)).toBeNull()
+  })
+})
+
+describe('project with a decaying gain rate', () => {
+  const gaining = [
+    { date: '2026-01-05', value: 100 },
+    { date: '2026-01-12', value: 105 },
+    { date: '2026-01-19', value: 110 },
+    { date: '2026-01-26', value: 115 },
+  ]
+  const today = new Date(2026, 0, 26)
+
+  it('projects a later eta than a straight line off the same pace', () => {
+    const straight = project(gaining, 140, today)
+    const decayed = project(gaining, 140, today, undefined, 0.9)
+    expect(straight.onTrack).toBe(true)
+    expect(decayed.onTrack).toBe(true)
+    expect(decayed.decayPerWeek).toBe(0.9)
+    expect((decayed.etaWeeks as number) > (straight.etaWeeks as number)).toBe(true)
+    expect((decayed.etaDate as string) > (straight.etaDate as string)).toBe(true)
+  })
+
+  it('reports a goal beyond the decaying ceiling as not on track', () => {
+    // A straight line always reaches it; a decaying pace tops out first.
+    const straight = project(gaining, 400, today)
+    const decayed = project(gaining, 400, today, undefined, 0.9)
+    expect(straight.onTrack).toBe(true)
+    expect(decayed.onTrack).toBe(false)
+    expect(decayed.etaWeeks).toBeNull()
   })
 })
 

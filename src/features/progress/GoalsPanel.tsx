@@ -124,10 +124,22 @@ function GoalRow({
   // so the live one can drift away from it — show the number the pace reading is
   // actually measured against, or the two would contradict each other.
   const shownTarget = lock ? lock.target : goal.target
+  // The date of the latest reading: the pace is measured against the line on that
+  // date, not against today, so a goal sits where the last session left it rather
+  // than drifting behind as rest days pass (see paceAgainstLock).
+  const lastReadingDate = goal.points.length ? goal.points[goal.points.length - 1].date : null
   const pace =
-    lock && has && !reached
-      ? paceAgainstLock(lock, proj.current, undefined, proj.slopePerWeek)
+    lock && has && !reached && lastReadingDate
+      ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek)
       : null
+  // Gaining toward the target but, once the pace is allowed to decay, not fast
+  // enough to actually reach it — distinct from flat or moving away.
+  const gainingButShort =
+    has &&
+    !proj.onTrack &&
+    !proj.basis.thin &&
+    proj.slopePerWeek !== 0 &&
+    Math.sign(goal.target - proj.current) === Math.sign(proj.slopePerWeek)
 
   return (
     <div className="rounded-2xl bg-surface p-4">
@@ -167,7 +179,7 @@ function GoalRow({
               }`}
             >
               {pace.status === 'on'
-                ? `right on the line (${pace.expected} ${goal.unit} expected today)`
+                ? 'right on the line'
                 : pace.status === 'ahead'
                   ? `${Math.abs(pace.aheadBy)} ${goal.unit} ahead of the line`
                   : `${Math.abs(pace.aheadBy)} ${goal.unit} behind the line`}
@@ -186,7 +198,9 @@ function GoalRow({
             ? 'log data to project this.'
             : proj.basis.thin
               ? 'not enough recent data to project.'
-              : 'not trending toward this yet — keep at it.'}
+              : gainingButShort
+                ? 'gaining, but not fast enough to reach this yet.'
+                : 'not trending toward this yet — keep at it.'}
         </p>
       )}
 
@@ -205,7 +219,7 @@ export function GoalsPanel() {
   )
 
   const projections = useMemo(
-    () => new Map(goals.map((g) => [g.id, project(g.points, g.target)])),
+    () => new Map(goals.map((g) => [g.id, project(g.points, g.target, undefined, undefined, g.decayPerWeek)])),
     [goals],
   )
 
