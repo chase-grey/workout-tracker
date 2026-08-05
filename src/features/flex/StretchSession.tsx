@@ -25,6 +25,9 @@ const SEC_PER_REP = 5
 /** Seconds to get into position at the start and after each rest, before the pace starts. */
 const GET_READY_SEC = 5
 
+/** Stretches that take longer than the default to settle into, by exercise key. */
+const GET_READY_SEC_BY_EX: Record<string, number> = { tailors_pose: 10 }
+
 /**
  * A photo screen waiting to be shown, plus the set it interrupts. `resumeIndex`
  * is the step whose rest starts once the screen is dismissed, or null for the
@@ -359,7 +362,11 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
       {/* The get-into-position count waits its turn behind a photo screen, and
           is skipped for dead-bug core sets — there's no pace to settle into. */}
       {preparing && photos == null && step.kind === 'flex' && (
-        <GetReady seconds={GET_READY_SEC} label={step.exName} onDone={() => setPreparing(false)} />
+        <GetReady
+          seconds={GET_READY_SEC_BY_EX[step.exKey] ?? GET_READY_SEC}
+          label={step.exName}
+          onDone={() => setPreparing(false)}
+        />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
       {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
