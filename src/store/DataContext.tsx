@@ -256,7 +256,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Best-effort extras — tolerate an older backend without these routes.
     try {
       const f = await api.fetchFlex()
-      if (Array.isArray(f)) persistFlex(dedupeFlexByDate(f))
+      // Merge rather than replace: a fetched value wins for the field it carries,
+      // but a field the backend has nothing for keeps this device's reading. A
+      // deployment that predates a column (the cold/warm angles, say) returns
+      // those as null for every row, and replacing wholesale would erase the
+      // angles this session just measured.
+      if (Array.isArray(f)) persistFlex(dedupeFlexByDate([...storage.loadFlex(), ...f]))
     } catch {
       /* ignore */
     }
