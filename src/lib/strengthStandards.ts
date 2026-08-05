@@ -54,8 +54,11 @@ export type Muscle =
   | 'biceps'
   | 'triceps'
   | 'core'
+  | 'glutes'
   | 'quads'
   | 'hamstrings'
+  | 'adductors'
+  | 'abductors'
   | 'calves'
 
 export const MUSCLES: Muscle[] = [
@@ -66,8 +69,11 @@ export const MUSCLES: Muscle[] = [
   'biceps',
   'triceps',
   'core',
+  'glutes',
   'quads',
   'hamstrings',
+  'adductors',
+  'abductors',
   'calves',
 ]
 
@@ -309,9 +315,14 @@ export function ladderPosition(
   }
 }
 
-/** How a plan exercise key contributes to a band and a muscle region. */
+/** How a plan exercise key contributes to a band and one or more muscle regions. */
 type ExerciseSource = {
-  muscle: Muscle
+  /**
+   * Every region the movement colors. Usually one; the squat lists two, since it
+   * drives the glutes as hard as it drives the quads and there's no separate
+   * glute lift in the plan to score them from.
+   */
+  muscles: Muscle[]
   /** Population standard to rank against, when one fits this movement. */
   lift?: Lift
   /**
@@ -341,28 +352,37 @@ type ExerciseSource = {
  * because "neck extension" pools a plate balanced on the head, a harness, and a
  * four-way machine whose lever arm does most of the work. Ranking the plan's
  * light, high-rep neck work against that mixture would be a made-up number.
+ *
+ * The hip machines are laddered for a different reason: there is no population
+ * table worth ranking against. Published abduction/adduction figures come from
+ * seated machines whose pad position, start angle and pulley ratio differ from
+ * gym to gym, so the same hips read wildly differently on two machines — a
+ * percentile off that is noise dressed as a number. Measured against where YOU
+ * started on YOUR machine, the climb is real.
  */
 export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
-  barbell_squat: { lift: 'squat', muscle: 'quads' },
-  flat_bench: { lift: 'bench', muscle: 'chest' },
-  incline_bench: { lift: 'bench', muscle: 'chest' },
-  iso_chest: { muscle: 'chest' }, // chest fly / pec deck — no standard
-  db_overhead_press: { lift: 'ohp', muscle: 'shoulders' },
-  lateral_raise: { muscle: 'shoulders' }, // isolation — no standard
-  weighted_pullups: { lift: 'pullup', muscle: 'back', toLoad: (e, bw) => e + bw },
-  pullups_or_pulldown: { lift: 'pullup', muscle: 'back', toLoad: (e, bw) => e + bw },
-  cable_row: { lift: 'row', muscle: 'back' },
-  incline_db_curl: { lift: 'curl', muscle: 'biceps' },
-  hammer_curl: { lift: 'curl', muscle: 'biceps' },
-  tricep_pushdown: { lift: 'tricep', muscle: 'triceps' },
-  overhead_tricep_ext: { lift: 'tricep', muscle: 'triceps' },
-  hamstring_curl: { lift: 'legcurl', muscle: 'hamstrings' },
-  calf_raise: { lift: 'calfraise', muscle: 'calves' },
-  neck_extension: { ladder: 'load', muscle: 'neck' },
-  neck_flexion: { ladder: 'load', muscle: 'neck' },
-  cable_crunch: { ladder: 'load', muscle: 'core' },
-  hanging_leg_raise: { ladder: 'reps', muscle: 'core' },
-  deadbug: { ladder: 'reps', muscle: 'core' },
+  barbell_squat: { lift: 'squat', muscles: ['quads', 'glutes'] },
+  flat_bench: { lift: 'bench', muscles: ['chest'] },
+  incline_bench: { lift: 'bench', muscles: ['chest'] },
+  iso_chest: { muscles: ['chest'] }, // chest fly / pec deck — no standard
+  db_overhead_press: { lift: 'ohp', muscles: ['shoulders'] },
+  lateral_raise: { muscles: ['shoulders'] }, // isolation — no standard
+  weighted_pullups: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
+  pullups_or_pulldown: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
+  cable_row: { lift: 'row', muscles: ['back'] },
+  incline_db_curl: { lift: 'curl', muscles: ['biceps'] },
+  hammer_curl: { lift: 'curl', muscles: ['biceps'] },
+  tricep_pushdown: { lift: 'tricep', muscles: ['triceps'] },
+  overhead_tricep_ext: { lift: 'tricep', muscles: ['triceps'] },
+  hamstring_curl: { lift: 'legcurl', muscles: ['hamstrings'] },
+  calf_raise: { lift: 'calfraise', muscles: ['calves'] },
+  leg_adductor: { ladder: 'load', muscles: ['adductors'] },
+  leg_abductor: { ladder: 'load', muscles: ['abductors'] },
+  neck_extension: { ladder: 'load', muscles: ['neck'] },
+  neck_flexion: { ladder: 'load', muscles: ['neck'] },
+  cable_crunch: { ladder: 'load', muscles: ['core'] },
+  hanging_leg_raise: { ladder: 'reps', muscles: ['core'] },
+  deadbug: { ladder: 'reps', muscles: ['core'] },
 }
 
 /** Every plan key the avatar reads, for building the logs map. */
@@ -429,7 +449,7 @@ export function muscleDevelopment(
   const out = {} as Record<Muscle, MuscleScore>
   for (const muscle of MUSCLES) {
     const keys = AVATAR_EXERCISE_KEYS.filter(
-      (k) => EXERCISE_SOURCES[k].muscle === muscle && k in logs,
+      (k) => EXERCISE_SOURCES[k].muscles.includes(muscle) && k in logs,
     )
     if (keys.length === 0) {
       out[muscle] = { hasData: false }
@@ -534,6 +554,8 @@ const LADDER_ORDER: string[] = [
   'cable_crunch',
   'hanging_leg_raise',
   'deadbug',
+  'leg_adductor',
+  'leg_abductor',
 ]
 
 /**
@@ -562,8 +584,13 @@ export function ladderReadouts(logs: Record<string, ExerciseLog>): LadderReadout
   return out
 }
 
-/** Calves carry the body the same way quads and hamstrings do, so they count as legs. */
-const LEG_MUSCLES: Muscle[] = ['quads', 'hamstrings', 'calves']
+/**
+ * Calves carry the body the same way quads and hamstrings do, so they count as
+ * legs. The hips (adductors, abductors) don't appear here: like the neck and
+ * core they ride personal ladders, and averaging a ladder rung in with a
+ * percentile would make the comparison meaningless (see legsVsUpper).
+ */
+const LEG_MUSCLES: Muscle[] = ['glutes', 'quads', 'hamstrings', 'calves']
 const UPPER_MUSCLES: Muscle[] = ['chest', 'shoulders', 'back', 'biceps', 'triceps']
 
 function avgDev(scores: Record<Muscle, MuscleScore>, muscles: Muscle[]): number | null {

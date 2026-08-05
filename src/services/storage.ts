@@ -93,7 +93,16 @@ export type Settings = {
    * device's view of the data, and recalculating is a deliberate user action.
    */
   lockedGoals?: LockedProjections
+  /**
+   * Whether the abs are visible yet, as judged in the mirror rather than
+   * projected off a body-fat estimate. Drives the six-pack goal row and the
+   * avatar's ab lines. Unset means not yet.
+   */
+  sixPackStatus?: SixPackStatus
 }
+
+/** The three answers the six-pack goal accepts. */
+export type SixPackStatus = 'none' | 'close' | 'have'
 
 const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }
 

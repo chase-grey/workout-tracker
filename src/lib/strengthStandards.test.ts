@@ -219,6 +219,19 @@ describe('muscleDevelopment — mapping', () => {
     }
   })
 
+  it('colors the glutes off the squat, at the same score as the quads', () => {
+    const scores = muscleDevelopment(logs({ barbell_squat: 1.5 * BW }), BW)
+    const quads = scores.quads as Extract<MuscleScore, { hasData: true }>
+    const glutes = scores.glutes as Extract<MuscleScore, { hasData: true }>
+    expect(glutes.hasData).toBe(true)
+    expect(glutes.basis).toBe('standard')
+    expect(glutes.developmentScore).toBe(quads.developmentScore)
+  })
+
+  it('leaves the glutes at "no data" when nothing squat-like is logged', () => {
+    expect(muscleDevelopment(logs({ hamstring_curl: 0.55 * BW }), BW).glutes.hasData).toBe(false)
+  })
+
   it('marks a muscle with no logged exercise as "no data" (not 0)', () => {
     const scores = muscleDevelopment(logs({ flat_bench: 1.0 * BW }), BW)
     expect(scores.quads.hasData).toBe(false)
@@ -279,6 +292,34 @@ describe('muscleDevelopment — personal ladders', () => {
     const s = reps.core as Extract<MuscleScore, { hasData: true }>
     expect(s.basis).toBe('ladder')
     expect(s.band).toBe('advanced')
+  })
+
+  it('ladders the hips off the machines, keeping the two sides apart', () => {
+    const scores = muscleDevelopment(
+      { leg_adductor: grew(40, 90), leg_abductor: grew(40, 45) },
+      BW,
+    )
+    const add = scores.adductors as Extract<MuscleScore, { hasData: true }>
+    const abd = scores.abductors as Extract<MuscleScore, { hasData: true }>
+    expect(add.basis).toBe('ladder')
+    expect(add.percentile).toBeNull()
+    expect(add.band).toBe('intermediate') // 2.25× where it started
+    expect(abd.band).toBe('beginner')
+  })
+
+  it('leaves the hips out of the legs-vs-upper balance, being on a personal scale', () => {
+    const laddered = muscleDevelopment(
+      { leg_adductor: grew(40, 200), leg_abductor: grew(40, 200) },
+      BW,
+    )
+    expect(legsVsUpper(laddered)).toBeNull() // no standard-scored leg to compare
+
+    const withLift = muscleDevelopment(
+      { ...logs({ barbell_squat: 1.5 * BW, flat_bench: 1.0 * BW }), leg_adductor: grew(40, 200) },
+      BW,
+    )
+    const noHips = muscleDevelopment(logs({ barbell_squat: 1.5 * BW, flat_bench: 1.0 * BW }), BW)
+    expect(legsVsUpper(withLift)!.legs).toBe(legsVsUpper(noHips)!.legs)
   })
 
   it('falls back to presence for laddered work with no anchor yet', () => {

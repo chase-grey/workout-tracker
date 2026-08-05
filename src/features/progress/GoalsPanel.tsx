@@ -11,11 +11,12 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { project, type Projection } from '../../lib/predictions'
-import { combinedRepsSeries, filterRange, type Point } from '../../lib/progress'
+import { filterRange, type Point } from '../../lib/progress'
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
-import { absExerciseKeys } from '../../config/plan'
 import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
+import type { SixPackStatus } from '../../services/storage'
 import {
+  adoptDecay,
   lockProjection,
   maybeLock,
   paceAgainstLock,
@@ -24,11 +25,8 @@ import {
   type LockedProjections,
 } from '../../lib/goalLock'
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { parseISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
-import {
-  personalSixPackTarget,
-  type VisibilityObservation,
-} from '../../lib/bodyComp'
 import { MetricChart } from './MetricChart'
 import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MdCelebration, MdRefresh } from 'react-icons/md'
@@ -37,12 +35,6 @@ function fmtDate(iso: string | null): string {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
   return `${m}/${d}/${y.slice(2)}`
-}
-
-const VIS_TEXT: Record<VisibilityObservation['visibility'], string> = {
-  none: 'abs not visible',
-  faint: 'abs faintly visible',
-  clear: 'abs clearly visible',
 }
 
 const axisTick = { fill: '#737373', fontSize: 10 }
@@ -299,8 +291,50 @@ function GoalRow({
   )
 }
 
+const SIX_PACK_OPTIONS: { value: SixPackStatus; label: string }[] = [
+  { value: 'none', label: 'not yet' },
+  { value: 'close', label: 'close' },
+  { value: 'have', label: 'got it' },
+]
+
+/**
+ * The six-pack goal, answered rather than projected. A body-fat estimate off a
+ * tape measure can't see abs, and the mirror can — so this one is called by eye,
+ * and calling it "got it" is what draws the ab lines on the strength map.
+ */
+function SixPackRow({
+  title,
+  status,
+  onChange,
+}: {
+  title: string
+  status: SixPackStatus
+  onChange: (s: SixPackStatus) => void
+}) {
+  return (
+    <div className="rounded-2xl bg-surface p-4">
+      <h4 className="font-semibold">{title}</h4>
+      <div role="radiogroup" aria-label={title} className="mt-3 flex gap-1 rounded-xl bg-surface-2 p-1">
+        {SIX_PACK_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            role="radio"
+            aria-checked={status === o.value}
+            onClick={() => onChange(o.value)}
+            className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
+              status === o.value ? 'bg-accent text-black' : 'text-neutral-400'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function GoalsPanel({ months }: { months: number | null }) {
-  const { workouts, bodyWeights, measurements, settings, plan, calorieEntries, updateSettings } = useData()
+  const { workouts, bodyWeights, measurements, settings, calorieEntries, updateSettings } = useData()
   const heightIn = settings.heightIn ?? 0
   const [showWeight, setShowWeight] = useState(false)
 
@@ -323,10 +357,24 @@ export function GoalsPanel({ months }: { months: number | null }) {
     const next: LockedProjections = { ...locked }
     let changed = false
     for (const g of goals) {
+      // The six-pack goal is answered by eye, not projected — nothing to lock.
+      if (g.id === GOAL_IDS.sixPack) continue
       const proj = projections.get(g.id)
       if (!proj) continue
-      const lock = maybeLock(next[g.id], g.id, proj)
-      if (lock && !next[g.id]) {
+      const existing = next[g.id]
+      // A lock frozen before strength projections tapered carries no decay, so it
+      // draws dead straight against a goal that no longer projects that way. Take
+      // the goal's decay without touching the ETA it committed to.
+      if (existing) {
+        const bent = adoptDecay(existing, g.decayPerWeek)
+        if (bent !== existing) {
+          next[g.id] = bent
+          changed = true
+        }
+        continue
+      }
+      const lock = maybeLock(existing, g.id, proj)
+      if (lock) {
         next[g.id] = lock
         changed = true
       }
@@ -373,35 +421,6 @@ export function GoalsPanel({ months }: { months: number | null }) {
     [goals, locked],
   )
 
-  // Bespoke context lines that hang off particular goals.
-  const { leanest } = personalSixPackTarget(measurements, heightIn)
-  const absReps = combinedRepsSeries(workouts, absExerciseKeys(plan))
-
-  const extras: Record<string, React.ReactNode> = {
-    [GOAL_IDS.sixPack]: (
-      <>
-        {leanest && (
-          <p className="mt-2 text-xs text-neutral-500">
-            leanest logged: {leanest.bodyFat}% on {fmtDate(leanest.date)} → {VIS_TEXT[leanest.visibility]}.
-            {leanest.visibility !== 'clear' && ' building ab muscle raises the bf% where they show.'}
-          </p>
-        )}
-        <p className="mt-1 text-xs text-neutral-500">
-          {absReps.length > 0
-            ? `ab work: ${absReps[0].value}${
-                absReps.length > 1 ? ` → ${absReps[absReps.length - 1].value}` : ''
-              } reps/session.`
-            : 'ab work: none logged — do my core exercises or a stretch + core session to build ab muscle.'}
-        </p>
-        {heightIn === 0 && (
-          <p className="mt-1 text-xs text-neutral-600">
-            set my height in settings so tape measurements also feed this.
-          </p>
-        )}
-      </>
-    ),
-  }
-
   const bodyWeightBlock = (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -435,15 +454,23 @@ export function GoalsPanel({ months }: { months: number | null }) {
           <Fragment key={g.id}>
             {/* The weigh-in history sits ahead of the goals it feeds. */}
             {g.id === GOAL_IDS.weight180 && bodyWeightBlock}
-            <GoalRow
-              goal={g}
-              proj={proj}
-              lock={locked[g.id]}
-              onRecalculate={() => recalculate(g)}
-              showData={g.id === GOAL_IDS.benchBodyweight}
-            >
-              {extras[g.id]}
-            </GoalRow>
+            {g.id === GOAL_IDS.sixPack ? (
+              <SixPackRow
+                title={g.title}
+                status={settings.sixPackStatus ?? 'none'}
+                onChange={(s) => updateSettings({ ...settings, sixPackStatus: s })}
+              />
+            ) : (
+              /* Lift goals plot their own series; body-composition ones are already
+                 charted by the blocks above them. */
+              <GoalRow
+                goal={g}
+                proj={proj}
+                lock={locked[g.id]}
+                onRecalculate={() => recalculate(g)}
+                showData={g.exerciseKey != null}
+              />
+            )}
           </Fragment>
         )
       })}
