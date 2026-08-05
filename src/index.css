@@ -77,21 +77,43 @@ input[type='number'] {
   will-change: transform, opacity;
 }
 
-/* Candle: the flame flickers from its base without shifting the wax level. */
+/* Candle: the flame flickers from its base without shifting the wax level.
+   Horizontal centering is left to the element's `-translate-x-1/2` (Tailwind's
+   `translate` property); the keyframes touch only `transform` so the two don't
+   stack into a double leftward shift. */
 @keyframes rest-flame {
   0%,
   100% {
-    transform: translateX(-50%) scale(1);
+    transform: scale(1);
     opacity: 0.9;
   }
   50% {
-    transform: translateX(-50%) scaleY(1.16) scaleX(0.92);
+    transform: scaleY(1.16) scaleX(0.92);
     opacity: 1;
   }
 }
 .rest-flame {
   transform-origin: 50% 100%;
   animation: rest-flame 1.1s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Candle embers: sparks that lift off the flame's tip, drifting up and dimming. */
+@keyframes rest-ember {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-320%) scale(0.3);
+    opacity: 0;
+  }
+}
+.rest-ember {
+  animation: rest-ember 1.8s ease-out infinite;
   will-change: transform, opacity;
 }
 
@@ -132,9 +154,14 @@ input[type='number'] {
 @media (prefers-reduced-motion: reduce) {
   .rest-bubble,
   .rest-flame,
+  .rest-ember,
   .rest-pip,
   .rest-perimeter-glow {
     animation: none;
+  }
+  /* No flying sparks for reduced motion — hide them rather than freeze mid-air. */
+  .rest-ember {
+    display: none;
   }
   /* Keep a settled stream in the neck rather than animating the grains. */
   .rest-stream {

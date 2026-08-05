@@ -227,21 +227,47 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
         </div>
       )
     case 'candle':
-      // A candle burning down: the wax height is the time left and the flame
-      // rides its top downward, guttering out as it reaches the base.
+      // A candle burning down: the wax column (darker green) is squared off like
+      // a real candle and its height is the time left; the flame (brighter green)
+      // rides its top downward, shedding embers, and gutters out at the base.
       return (
-        <div className="absolute bottom-[12%] left-1/2 h-[74%] w-[22%] -translate-x-1/2">
+        <div className="absolute bottom-[12%] left-1/2 h-[74%] w-[24%] -translate-x-1/2">
           {/* Faint full-height guide so the shrinking wax reads against a whole. */}
-          <div className="absolute inset-0 rounded-t-[45%] rounded-b-[14%] bg-accent-bright/12" />
+          <div className="absolute inset-0 rounded-t-[16%] rounded-b-[8%] bg-accent-deep/12" />
           <div
-            className="absolute inset-x-0 bottom-0 rounded-t-[45%] rounded-b-[14%] bg-accent-bright/70"
+            className="absolute inset-x-0 bottom-0 rounded-t-[16%] rounded-b-[8%] bg-accent-deep/70"
             style={{ height: level, ...drain }}
-          />
+          >
+            {/* Melted rim across the wax top, so it reads as a candle's flat top. */}
+            <div className="absolute inset-x-[10%] top-0 h-[9%] -translate-y-1/2 rounded-[50%] bg-accent-deep" />
+          </div>
           {fraction > 0 && (
             <div
-              className="rest-flame absolute left-1/2 h-[15%] w-[64%] -translate-x-1/2 rounded-[50%_50%_50%_50%/72%_72%_38%_38%] bg-accent-bright"
-              style={{ bottom: level, marginBottom: '-3%', transition: 'bottom 260ms linear' }}
-            />
+              className="pointer-events-none absolute left-1/2 h-[30%] w-[64%] -translate-x-1/2"
+              style={{ bottom: level, marginBottom: '-4%', transition: 'bottom 260ms linear' }}
+            >
+              {/* Flame: a pointed teardrop with a denser inner core for depth. The
+                  wide, faint outer body reads as the flame's glow. */}
+              <svg
+                className="rest-flame absolute bottom-0 left-1/2 h-[66%] w-[88%] -translate-x-1/2 text-accent-bright"
+                viewBox="0 0 100 100"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M50 4 C 70 30 84 44 74 68 C 68 84 60 92 50 96 C 40 92 32 84 26 68 C 16 44 30 30 50 4 Z" opacity="0.4" />
+                <path d="M50 34 C 60 46 66 54 61 68 C 58 80 54 86 50 91 C 46 86 42 80 39 68 C 34 54 40 46 50 34 Z" />
+              </svg>
+              {/* Embers lifting off the flame's tip and winking out. */}
+              <span className="rest-ember absolute bottom-[56%] left-[42%] h-[8%] w-[8%] rounded-full bg-accent-bright" />
+              <span
+                className="rest-ember absolute bottom-[62%] left-[56%] h-[6%] w-[6%] rounded-full bg-accent-bright"
+                style={{ animationDelay: '0.7s' }}
+              />
+              <span
+                className="rest-ember absolute bottom-[58%] left-[50%] h-[5%] w-[5%] rounded-full bg-accent-bright"
+                style={{ animationDelay: '1.3s' }}
+              />
+            </div>
           )}
         </div>
       )
