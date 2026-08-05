@@ -17,6 +17,21 @@ import { AxisBreak } from '../../components/AxisBreak'
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
+/** Legend that follows the axes: the left-axis series sits left, cal surplus right. */
+function SplitLegend({ payload }: { payload?: { value?: unknown; dataKey?: unknown; color?: string }[] }) {
+  const items = [...(payload ?? [])].sort((a, b) => Number(a.dataKey === 'cal') - Number(b.dataKey === 'cal'))
+  return (
+    <div className="flex justify-between px-3 text-xs text-neutral-400">
+      {items.map((e) => (
+        <span key={String(e.value)} className="flex items-center gap-1.5">
+          <span className="h-0.5 w-3 rounded-full" style={{ background: e.color }} />
+          {String(e.value)}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /** Merge a metric series with a calorie-surplus series into one row per date. */
 function mergeCalories(data: Point[], calories: Point[]) {
   const m = new Map<string, { date: string; value?: number; cal?: number }>()
@@ -113,7 +128,7 @@ export function MetricChart({
           ))}
           {overlay && (
             <>
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Legend content={<SplitLegend />} />
               <ReferenceLine yAxisId="cal" y={0} stroke="#404040" strokeDasharray="3 3" />
               <Line
                 yAxisId="cal"
