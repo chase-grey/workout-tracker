@@ -62,16 +62,19 @@ function decayOf(lock: LockedProjection): number {
 }
 
 /**
- * Adopt a goal's decay into a lock frozen before the goal had one, keeping the
- * commitment (start, target, ETA) but bending the line between them the way the
- * goal now says gains taper. Returns the lock untouched when it already carries a
- * decay or the goal projects straight, so callers can run this on every lock.
+ * Adopt a goal's current decay into a lock, keeping the commitment (start,
+ * target, ETA) but bending the line between them the way the goal now says gains
+ * taper. The decay is a curve-shape assumption, not part of the commitment, so a
+ * lock always renders with the goal's latest one — this covers both a lock frozen
+ * before decay shipped and a lock frozen at an older decay value that's since
+ * been retuned. Returns the lock untouched when it already matches, or when the
+ * goal projects straight (no decay), so callers can run it on every lock.
  */
 export function adoptDecay(
   lock: LockedProjection,
   decayPerWeek: number | undefined,
 ): LockedProjection {
-  if (lock.decayPerWeek != null || decayPerWeek == null) return lock
+  if (decayPerWeek == null || lock.decayPerWeek === decayPerWeek) return lock
   return { ...lock, decayPerWeek }
 }
 

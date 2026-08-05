@@ -17,10 +17,10 @@ import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './b
  * Weekly decay of the gain rate strength projections assume (see
  * predictions.weeksToClose). Strength gains taper — a straight-line projection
  * off a few promising early sessions arrives too soon and draws a line too steep
- * to hold — so their ETAs and locked lines bend, easing ~3% off the pace each
+ * to hold — so their ETAs and locked lines bend, easing ~7% off the pace each
  * week. Body-composition goals keep a straight line (no decay).
  */
-export const STRENGTH_GAIN_DECAY = 0.97
+export const STRENGTH_GAIN_DECAY = 0.93
 
 /** Stable ids, used as the keys locked projections are stored under. */
 export const GOAL_IDS = {
