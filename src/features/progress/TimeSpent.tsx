@@ -19,6 +19,8 @@ import {
   monthlyActivity,
   secToMin,
 } from '../../lib/activityTime'
+import { niceScale } from '../../lib/chart'
+import { AxisBreak } from '../../components/AxisBreak'
 
 /** Distinct hues for the three buckets — green work, deep-green stretch, amber rest. */
 const COLORS = { workout: '#22c55e', stretch: '#15803d', rest: '#f59e0b' } as const
@@ -69,6 +71,11 @@ export function TimeSpent({ months }: { months: number | null }) {
         rest: secToMin(m.restSec),
       })),
     [inRange],
+  )
+
+  const minutesScale = useMemo(
+    () => niceScale(monthly.flatMap((m) => [m.workout, m.stretch, m.rest])),
+    [monthly],
   )
 
   return (
@@ -129,7 +136,14 @@ export function TimeSpent({ months }: { months: number | null }) {
                 <LineChart data={monthly} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
                   <CartesianGrid stroke="#262626" vertical={false} />
                   <XAxis dataKey="month" tick={axisTick} />
-                  <YAxis tick={axisTick} width={40} unit="m" />
+                  <YAxis
+                    tick={axisTick}
+                    width={40}
+                    unit="m"
+                    domain={minutesScale.domain}
+                    ticks={minutesScale.ticks}
+                  />
+                  <AxisBreak broken={minutesScale.broken} bg="#171717" />
                   <Tooltip
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: '#a3a3a3' }}

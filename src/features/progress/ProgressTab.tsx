@@ -21,7 +21,8 @@ import {
 } from '../../lib/progress'
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
 import { buildGoals, GOAL_IDS } from '../../lib/goals'
-import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
+import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { AxisBreak } from '../../components/AxisBreak'
 import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
 import { MuscleAvatar } from './MuscleAvatar'
@@ -110,6 +111,19 @@ function Chart({
   /** Targets of goals now close enough to be worth seeing on the chart. */
   goalLines?: { value: number; label: string }[]
 }) {
+  const overlay = calories != null && calories.length > 0
+  // The left axis must also frame any goal line, or a target above the data
+  // would sit off the top of the chart.
+  const yScale = useMemo(
+    () => niceScale([...data.map((p) => p.value), ...(goalLines?.map((g) => g.value) ?? [])]),
+    [data, goalLines],
+  )
+  const calScale = useMemo(() => niceScale((calories ?? []).map((p) => p.value)), [calories])
+  const rows = useMemo(
+    () => (overlay ? withTime(mergeCalories(data, calories!)) : withTime(data)),
+    [overlay, data, calories],
+  )
+
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
@@ -117,22 +131,28 @@ function Chart({
       </div>
     )
   }
-  const overlay = calories != null && calories.length > 0
-  const rows = overlay ? withTime(mergeCalories(data, calories)) : withTime(data)
   return (
     <div className="rounded-2xl bg-surface p-2">
       <ResponsiveContainer width="100%" height={224}>
         <LineChart data={rows} margin={{ top: 8, right: overlay ? 0 : 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
-          <YAxis yAxisId="left" tick={axisTick} width={40} domain={['auto', 'auto']} />
+          <YAxis
+            yAxisId="left"
+            tick={axisTick}
+            width={40}
+            domain={yScale.domain}
+            ticks={yScale.ticks}
+          />
+          <AxisBreak broken={yScale.broken} bg="#171717" />
           {overlay && (
             <YAxis
               yAxisId="cal"
               orientation="right"
               tick={axisTick}
               width={44}
-              domain={['auto', 'auto']}
+              domain={calScale.domain}
+              ticks={calScale.ticks}
               tickFormatter={(v) => (v > 0 ? `+${v}` : String(v))}
             />
           )}
@@ -198,6 +218,10 @@ function mergeSeries(flat: Point[], incline: Point[]) {
 }
 
 function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit: string }) {
+  const yScale = useMemo(
+    () => niceScale(data.flatMap((r) => [r.flat, r.incline]).filter((v): v is number => v != null)),
+    [data],
+  )
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
@@ -211,7 +235,8 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
         <LineChart data={withTime(data)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
-          <YAxis tick={axisTick} width={40} domain={['auto', 'auto']} />
+          <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
+          <AxisBreak broken={yScale.broken} bg="#171717" />
           <Tooltip
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}

@@ -137,22 +137,25 @@ function Regions({
 /** The neutral silhouette both views draw their regions on. */
 function Silhouette({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <figure className="flex flex-col items-center gap-1">
+    <figure className="flex items-center justify-center">
       <svg viewBox="0 0 220 470" className="h-auto w-full" role="img" aria-label={`${label} muscle map`}>
-        {/* Head, neck, torso, arms, pelvis, legs. */}
+        {/* Head, neck, torso, arms, hands, pelvis, legs, feet. */}
         <g fill={BODY_BASE} stroke="#3f3f46" strokeWidth={1.5}>
           <ellipse cx="110" cy="38" rx="19" ry="23" />
           <rect x="100" y="54" width="20" height="26" rx="5" />
           <path d="M74 78 Q110 70 146 78 Q150 120 143 152 Q139 190 132 214 L88 214 Q81 190 77 152 Q70 120 74 78 Z" />
-          <path d="M74 82 Q58 90 54 118 L52 186 Q51 214 58 248 L69 245 Q64 214 66 178 L70 120 Q71 96 78 86 Z" />
-          <path d="M146 82 Q162 90 166 118 L168 186 Q169 214 162 248 L151 245 Q156 214 154 178 L150 120 Q149 96 142 86 Z" />
-          <path d="M88 212 L132 212 Q138 236 135 258 L85 258 Q82 236 88 212 Z" />
-          <path d="M85 250 Q76 305 82 362 Q80 412 84 458 L98 458 Q101 412 102 360 Q104 300 106 250 Z" />
-          <path d="M135 250 Q144 305 138 362 Q140 412 136 458 L122 458 Q119 412 118 360 Q116 300 114 250 Z" />
+          <path d="M74 82 Q55 88 52 116 L50 188 Q50 220 57 252 L70 250 Q64 218 66 180 L71 118 Q72 96 78 86 Z" />
+          <path d="M146 82 Q165 88 168 116 L170 188 Q170 220 163 252 L150 250 Q156 218 154 180 L149 118 Q148 96 142 86 Z" />
+          <path d="M56 246 L71 246 Q74 262 67 272 Q59 275 55 265 Q53 255 56 246 Z" />
+          <path d="M164 246 L149 246 Q146 262 153 272 Q161 275 165 265 Q167 255 164 246 Z" />
+          <path d="M88 212 L132 212 Q143 234 141 260 L79 260 Q77 234 88 212 Z" />
+          <path d="M80 252 Q69 306 76 364 Q69 400 80 446 L95 446 Q105 400 101 362 Q104 302 107 252 Z" />
+          <path d="M140 252 Q151 306 144 364 Q151 400 140 446 L125 446 Q115 400 119 362 Q116 302 113 252 Z" />
+          <path d="M79 440 L96 440 Q98 452 95 459 L73 459 Q71 447 79 440 Z" />
+          <path d="M141 440 L124 440 Q122 452 125 459 L147 459 Q149 447 141 440 Z" />
         </g>
         {children}
       </svg>
-      <figcaption className="text-xs tracking-wider text-neutral-500">{label}</figcaption>
     </figure>
   )
 }

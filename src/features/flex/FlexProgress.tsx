@@ -13,7 +13,8 @@ import {
 import { useData } from '../../store/DataContext'
 import { flexStats, splitSeries, tailorsSeries } from '../../lib/flex'
 import { flexGoalPredictions, type FlexGoal } from '../../lib/flexPredict'
-import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
+import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { AxisBreak } from '../../components/AxisBreak'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
@@ -67,6 +68,23 @@ export function FlexProgress() {
   const split = useMemo(() => splitSeries(flexEntries), [flexEntries])
   const tailors = useMemo(() => tailorsSeries(flexEntries), [flexEntries])
 
+  // Frame each axis with the goal (180° / 90°) so its dashed target line always
+  // sits inside the chart.
+  const splitScale = useMemo(
+    () => niceScale([...split.flatMap((r) => [r.cold, r.warm]).filter((v): v is number => v != null), 180]),
+    [split],
+  )
+  const tailorsScale = useMemo(
+    () =>
+      niceScale([
+        ...tailors
+          .flatMap((r) => [r.coldLeft, r.coldRight, r.warmLeft, r.warmRight])
+          .filter((v): v is number => v != null),
+        90,
+      ]),
+    [tailors],
+  )
+
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold tracking-wider text-neutral-500">side splits</h3>
@@ -81,7 +99,8 @@ export function FlexProgress() {
             <LineChart data={withTime(split)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
               <CartesianGrid stroke="#262626" vertical={false} />
               <XAxis {...timeXAxis} tick={axisTick} />
-              <YAxis tick={axisTick} width={32} domain={['auto', 180]} />
+              <YAxis tick={axisTick} width={32} domain={splitScale.domain} ticks={splitScale.ticks} />
+              <AxisBreak broken={splitScale.broken} bg="#171717" />
               <Tooltip
                 contentStyle={tooltipStyle}
                 labelFormatter={(ms) => fmtDateLabel(Number(ms))}
@@ -113,7 +132,8 @@ export function FlexProgress() {
             <LineChart data={withTime(tailors)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
               <CartesianGrid stroke="#262626" vertical={false} />
               <XAxis {...timeXAxis} tick={axisTick} />
-              <YAxis tick={axisTick} width={32} domain={['auto', 90]} />
+              <YAxis tick={axisTick} width={32} domain={tailorsScale.domain} ticks={tailorsScale.ticks} />
+              <AxisBreak broken={tailorsScale.broken} bg="#171717" />
               <Tooltip
                 contentStyle={tooltipStyle}
                 labelFormatter={(ms) => fmtDateLabel(Number(ms))}
