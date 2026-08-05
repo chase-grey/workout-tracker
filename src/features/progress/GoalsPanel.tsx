@@ -21,7 +21,7 @@ import {
   type LockedProjection,
   type LockedProjections,
 } from '../../lib/goalLock'
-import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, timeXAxis, withTime } from '../../lib/chart'
+import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import {
   personalSixPackTarget,
   type VisibilityObservation,
@@ -52,6 +52,28 @@ function mergeActualProjected(actual: { date: string; value: number }[], project
 }
 
 /**
+ * The little zigzag sitting on the Y axis just above the X axis, marking that
+ * the scale doesn't start at zero. Positioned to land on the axis line: the
+ * chart's left padding (4) + the YAxis width (40) puts the axis at x≈44, and the
+ * default X-axis band (~30) + padding puts the baseline ~34 up from the bottom.
+ */
+function AxisBreak() {
+  return (
+    <svg
+      className="pointer-events-none absolute"
+      style={{ left: 39, bottom: 27 }}
+      width={10}
+      height={16}
+      viewBox="0 0 10 16"
+      aria-hidden
+    >
+      <rect x={0} y={0} width={10} height={16} fill="#262626" />
+      <path d="M5 0 L5 5 L1 7 L9 11 L5 13 L5 16" fill="none" stroke="#737373" strokeWidth={1.5} />
+    </svg>
+  )
+}
+
+/**
  * Actual vs. projected for a locked goal: the real series against the straight
  * line the lock committed to. Only drawn from the lock date onward — the history
  * before the lock isn't something the projection was ever measured against.
@@ -62,13 +84,25 @@ function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: s
     return withTime(mergeActualProjected(since, projectedSeries(lock)))
   }, [lock, actual])
 
+  const yScale = useMemo(
+    () => niceScale(rows.flatMap((r) => [r.actual, r.projected]).filter((v): v is number => v != null)),
+    [rows],
+  )
+
   return (
-    <div className="mt-3 rounded-xl bg-surface-2 p-1">
+    <div className="relative mt-3 rounded-xl bg-surface-2 p-1">
       <ResponsiveContainer width="100%" height={120}>
-        <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: -20 }}>
+        <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
-          <YAxis tick={axisTick} width={36} domain={['auto', 'auto']} />
+          <YAxis
+            tick={axisTick}
+            width={40}
+            domain={yScale.domain}
+            ticks={yScale.ticks}
+            allowDecimals={false}
+            interval={0}
+          />
           <Tooltip
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
@@ -95,6 +129,7 @@ function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: s
           />
         </LineChart>
       </ResponsiveContainer>
+      {yScale.broken && <AxisBreak />}
     </div>
   )
 }
