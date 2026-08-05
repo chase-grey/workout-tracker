@@ -175,7 +175,7 @@ export function CameraMeasure({
   const { settings, updateSettings } = useData()
   const [mode, setMode] = useState<MeasureMode>(initialMode)
   const [phase, setPhase] = useState<Phase>('setup')
-  const [facing, setFacing] = useState<Facing>('environment')
+  const [facing, setFacing] = useState<Facing>('user')
   const [timerSec, setTimerSec] = useState<number>(settings.measureTimerSec ?? 30)
   const [remaining, setRemaining] = useState(timerSec)
   const [error, setError] = useState<string | null>(null)
