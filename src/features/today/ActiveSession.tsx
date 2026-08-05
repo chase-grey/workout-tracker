@@ -541,7 +541,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           exerciseKey={planned.key}
           name={planned.name}
           target={target}
-          plannedSets={step.setCount}
           slot={slot ?? undefined}
           // Only a genuinely unloadable move charts as reps: weighted pull-ups are
           // flagged `bodyweight` but do take added weight, so they keep the

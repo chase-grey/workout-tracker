@@ -35,11 +35,6 @@ export function ExerciseHistorySheet({
   /** Today's prescribed target, shown at the top and compared against history. */
   target?: Target
   /**
-   * Sets planned today. Part of the caller's contract; this sheet reads sessions
-   * set by set, so it has no per-set target to scale onto a session total.
-   */
-  plannedSets?: number
-  /**
    * The A/B slot today's set belongs to, so the sessions listed are the ones
    * today is actually comparable to — a second press reads against past second
    * presses, not against the days the lift led. Absent for the lifts (and days)
