@@ -7,7 +7,6 @@ import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
 import { DAY_TYPES, type VariantKey } from '../../config/plan'
-import { nextVariant, otherVariant } from '../../lib/pushVariant'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 
@@ -87,46 +86,21 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
         <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
           start a session
         </p>
-        {DAY_TYPES.map((t) => {
-          // Push + Core alternates A/B by position in the week, so the button
-          // says which one is up. The small button beside it takes the other.
-          const auto = nextVariant(workouts, t)
-          if (auto == null) {
-            return (
-              <button
-                key={t}
-                onClick={() => onStart(t)}
-                className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
-              >
-                {plan[t].label}
-              </button>
-            )
-          }
-          const other = otherVariant(auto)
-          return (
-            <div key={t} className="flex gap-2">
-              <button
-                onClick={() => onStart(t, auto)}
-                className="min-h-[52px] flex-1 rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
-              >
-                {plan[t].label} {auto}
-              </button>
-              <button
-                onClick={() => onStart(t, other)}
-                aria-label={`${plan[t].label} ${other} instead`}
-                className="min-h-[52px] w-14 rounded-2xl bg-surface text-lg font-bold text-neutral-500 active:bg-surface-2"
-              >
-                {other}
-              </button>
-            </div>
-          )
-        })}
         <button
           onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
         >
           stretch + core
         </button>
+        {DAY_TYPES.map((t) => (
+          <button
+            key={t}
+            onClick={() => onStart(t)}
+            className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
+          >
+            {plan[t].label}
+          </button>
+        ))}
       </div>
     </div>
   )
