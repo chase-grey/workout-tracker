@@ -9,6 +9,7 @@ import {
   type Handles,
 } from './measure'
 import { POSE, type Pt } from './splitAngle'
+import type { Landmark } from './pose'
 
 describe('defaultHandles', () => {
   it('provides every handle key each mode declares', () => {
@@ -36,7 +37,19 @@ describe('anglesFromHandles', () => {
       ankleL: { x: 0.1, y: 0.5 },
       ankleR: { x: 0.9, y: 0.5 },
     }
-    expect(anglesFromHandles('split', h).splitDeg).toBeCloseTo(180, 0)
+    expect(anglesFromHandles('split', h, 1).splitDeg).toBeCloseTo(180, 0)
+  })
+
+  it('split: reads the angle drawn on the photo, not the normalized one', () => {
+    // Same handles, 45° apart from vertical on a square photo. A 3:4 portrait
+    // shot squeezes the horizontal reach, so the real angle is narrower.
+    const h: Handles = {
+      hip: { x: 0.5, y: 0.5 },
+      ankleL: { x: 0.2, y: 0.8 },
+      ankleR: { x: 0.8, y: 0.8 },
+    }
+    expect(anglesFromHandles('split', h, 1).splitDeg).toBeCloseTo(90, 0)
+    expect(anglesFromHandles('split', h, 0.75).splitDeg).toBeCloseTo(73.7, 1)
   })
 
   it('tailors: knees level with the center dot read ~90° off vertical', () => {
@@ -45,7 +58,7 @@ describe('anglesFromHandles', () => {
       kneeL: { x: 0.3, y: 0.7 },
       kneeR: { x: 0.7, y: 0.7 },
     }
-    const r = anglesFromHandles('tailors', h)
+    const r = anglesFromHandles('tailors', h, 0.75)
     expect(r.tailorsLeftDeg).toBeCloseTo(90, 0)
     expect(r.tailorsRightDeg).toBeCloseTo(90, 0)
   })
@@ -56,7 +69,7 @@ describe('anglesFromHandles', () => {
       kneeL: { x: 0.5, y: 0.4 },
       kneeR: { x: 0.7, y: 0.55 },
     }
-    const r = anglesFromHandles('tailors', h)
+    const r = anglesFromHandles('tailors', h, 0.75)
     expect(r.tailorsLeftDeg).toBeCloseTo(0, 0)
   })
 })
@@ -77,6 +90,22 @@ describe('handlesFromLandmarks', () => {
     const h = handlesFromLandmarks('split', lms)
     expect(h).not.toBeNull()
     expect(h!.hip).toEqual({ x: 0.5, y: 0.5 })
+  })
+
+  it('rejects landmarks the detector says it could not see', () => {
+    const lms: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.9 }))
+    expect(handlesFromLandmarks('split', lms)).not.toBeNull()
+
+    lms[POSE.LEFT_ANKLE] = { x: 0.1, y: 0.6, visibility: 0.1 }
+    expect(handlesFromLandmarks('split', lms)).toBeNull()
+  })
+
+  it('tailors: needs both knees and both ankles seen', () => {
+    const lms: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.9 }))
+    expect(handlesFromLandmarks('tailors', lms)).not.toBeNull()
+
+    lms[POSE.RIGHT_KNEE] = { x: 0.7, y: 0.8, visibility: 0.2 }
+    expect(handlesFromLandmarks('tailors', lms)).toBeNull()
   })
 })
 

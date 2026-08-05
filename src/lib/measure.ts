@@ -4,13 +4,16 @@ import {
   angleBetweenVectors,
   type Pt,
 } from './splitAngle'
+import type { Landmark } from './pose'
 
 /**
  * Photo-based angle measurement: the two supported poses, how their draggable
  * handles map to landmarks, and how the handles turn back into logged angles.
  *
  * Handles are stored in normalized image coordinates (0..1, origin top-left) so
- * they render the same regardless of the photo's pixel size.
+ * they render the same regardless of the photo's pixel size. Because x and y are
+ * each normalized against a different dimension, every angle has to be computed
+ * with the photo's aspect ratio — see `anglesFromHandles`.
  */
 
 export type MeasureMode = 'split' | 'tailors'
@@ -72,33 +75,50 @@ export const SEGMENTS: Record<MeasureMode, Segment[]> = {
   ],
 }
 
-/** Fallback handle positions when pose detection fails — a rough centered pose. */
+/**
+ * Fallback handle positions when pose detection fails. Placed where a full-body
+ * phone shot of each pose usually lands — the dots still need dragging, but from
+ * roughly the right part of the body rather than the middle of the frame.
+ */
 export function defaultHandles(mode: MeasureMode): Handles {
   if (mode === 'split') {
     return {
-      hip: { x: 0.5, y: 0.45 },
-      ankleL: { x: 0.2, y: 0.6 },
-      ankleR: { x: 0.8, y: 0.6 },
+      hip: { x: 0.5, y: 0.55 },
+      ankleL: { x: 0.14, y: 0.88 },
+      ankleR: { x: 0.86, y: 0.88 },
     }
   }
   return {
-    center: { x: 0.5, y: 0.72 },
-    kneeL: { x: 0.35, y: 0.55 },
-    kneeR: { x: 0.65, y: 0.55 },
+    center: { x: 0.5, y: 0.88 },
+    kneeL: { x: 0.3, y: 0.8 },
+    kneeR: { x: 0.7, y: 0.8 },
   }
 }
 
-/** Build initial handles from detected landmarks, or null if too few points. */
-export function handlesFromLandmarks(mode: MeasureMode, lms: Pt[]): Handles | null {
+/**
+ * Below this, MediaPipe is telling us the point is occluded or out of frame and
+ * its position is a guess — better to fall back to draggable defaults than to
+ * present a guessed landmark as a measurement.
+ */
+const MIN_VISIBILITY = 0.5
+
+const seen = (p: Landmark | undefined): p is Landmark =>
+  p !== undefined && (p.visibility === undefined || p.visibility >= MIN_VISIBILITY)
+
+/**
+ * Build initial handles from detected landmarks. Returns null when the points
+ * this pose needs are missing or were not confidently seen, which the caller
+ * reports rather than quietly papering over.
+ */
+export function handlesFromLandmarks(mode: MeasureMode, lms: Landmark[]): Handles | null {
   if (lms.length <= POSE.RIGHT_ANKLE) return null
-  const at = (i: number): Pt | undefined => lms[i]
 
   if (mode === 'split') {
-    const hipL = at(POSE.LEFT_HIP)
-    const hipR = at(POSE.RIGHT_HIP)
-    const ankleL = at(POSE.LEFT_ANKLE)
-    const ankleR = at(POSE.RIGHT_ANKLE)
-    if (!hipL || !hipR || !ankleL || !ankleR) return null
+    const hipL = lms[POSE.LEFT_HIP]
+    const hipR = lms[POSE.RIGHT_HIP]
+    const ankleL = lms[POSE.LEFT_ANKLE]
+    const ankleR = lms[POSE.RIGHT_ANKLE]
+    if (![hipL, hipR, ankleL, ankleR].every(seen)) return null
     return {
       hip: midpoint(hipL, hipR),
       ankleL: { x: ankleL.x, y: ankleL.y },
@@ -107,7 +127,7 @@ export function handlesFromLandmarks(mode: MeasureMode, lms: Pt[]): Handles | nu
   }
 
   const need = [POSE.LEFT_KNEE, POSE.RIGHT_KNEE, POSE.LEFT_ANKLE, POSE.RIGHT_ANKLE]
-  if (need.some((i) => at(i) === undefined)) return null
+  if (!need.every((i) => seen(lms[i]))) return null
   return {
     center: midpoint(lms[POSE.LEFT_ANKLE], lms[POSE.RIGHT_ANKLE]),
     kneeL: { x: lms[POSE.LEFT_KNEE].x, y: lms[POSE.LEFT_KNEE].y },
@@ -115,18 +135,36 @@ export function handlesFromLandmarks(mode: MeasureMode, lms: Pt[]): Handles | nu
   }
 }
 
-const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y })
+/**
+ * Difference of two handles in units where both axes share a scale. Handles are
+ * normalized per-axis, so on a portrait photo one normalized step across is a
+ * much shorter distance than one step down; scaling x by the aspect ratio
+ * (width / height) undoes that stretch. Skip it and the angle we report is not
+ * the angle between the lines the user drew.
+ */
+const sub = (a: Pt, b: Pt, aspect: number): Pt => ({
+  x: (a.x - b.x) * aspect,
+  y: a.y - b.y,
+})
 
-/** Compute the logged angle(s) from the current handle positions. */
-export function anglesFromHandles(mode: MeasureMode, h: Handles): MeasureResult {
+/**
+ * Compute the logged angle(s) from the current handle positions.
+ * `aspect` is the photo's width / height.
+ */
+export function anglesFromHandles(mode: MeasureMode, h: Handles, aspect: number): MeasureResult {
   if (mode === 'split') {
-    return { splitDeg: angleBetweenVectors(sub(h.ankleL, h.hip), sub(h.ankleR, h.hip)) }
+    return {
+      splitDeg: angleBetweenVectors(
+        sub(h.ankleL, h.hip, aspect),
+        sub(h.ankleR, h.hip, aspect),
+      ),
+    }
   }
   // Each knee line's angle off straight-up: knee directly overhead = 0°, knee
   // dropped out to the side = 90° (bigger = more open hip).
   return {
-    tailorsLeftDeg: angleBetweenVectors(UP, sub(h.kneeL, h.center)),
-    tailorsRightDeg: angleBetweenVectors(UP, sub(h.kneeR, h.center)),
+    tailorsLeftDeg: angleBetweenVectors(UP, sub(h.kneeL, h.center, aspect)),
+    tailorsRightDeg: angleBetweenVectors(UP, sub(h.kneeR, h.center, aspect)),
   }
 }
 

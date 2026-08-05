@@ -17,10 +17,17 @@ import {
 import { toISODate } from '../../lib/dates'
 import { AngleEditor } from './AngleEditor'
 
-type Phase = 'setup' | 'countdown' | 'editing'
+type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
 type Facing = 'user' | 'environment'
 
 const TIMER_CHOICES = [10, 20, 30, 45] as const
+
+/** A detection that produced nothing usable, and what left the handles guessed. */
+const DETECT_NOTE = {
+  model: "couldn't load the pose model — these dots are a rough guess.",
+  'no-pose': "couldn't find a body in this photo — these dots are a rough guess.",
+  partial: "couldn't make out your legs clearly — these dots are a rough guess.",
+} as const
 
 /** Hand the captured JPEG to the OS share/save sheet; fall back to a download. */
 async function savePhoto(blob: Blob, name: string): Promise<void> {
@@ -180,13 +187,23 @@ export function CameraMeasure({
   const [remaining, setRemaining] = useState(timerSec)
   const [error, setError] = useState<string | null>(null)
 
-  // Result of a capture, handed to the editor.
-  const [shot, setShot] = useState<{ url: string; handles: Handles } | null>(null)
+  // Result of a capture, handed to the editor. `aspect` is the photo's
+  // width / height, which the angle math needs; `note` is set when detection
+  // failed and the handles are defaults rather than landmarks.
+  const [shot, setShot] = useState<{
+    url: string
+    aspect: number
+    handles: Handles
+    note: string | null
+  } | null>(null)
+  const [redetecting, setRedetecting] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const blobRef = useRef<Blob | null>(null)
   const capturedRef = useRef(false)
+  /** The captured frame, kept so a failed detection can be retried on it. */
+  const sourceRef = useRef<HTMLCanvasElement | null>(null)
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -217,18 +234,32 @@ export function CameraMeasure({
     return stopStream
   }, [phase, startStream, stopStream])
 
+  /**
+   * Place the handles from detected landmarks. When detection fails, or the
+   * landmarks it wants aren't confidently visible, fall back to defaults and
+   * say so — a silent fallback reads as a bad measurement.
+   */
   const runDetection = useCallback(
-    async (canvas: HTMLCanvasElement): Promise<Handles> => {
-      try {
-        const lms = await detectPose(canvas)
-        if (lms) return handlesFromLandmarks(mode, lms) ?? defaultHandles(mode)
-      } catch {
-        /* offline / model failed — fall back to manual placement */
-      }
-      return defaultHandles(mode)
+    async (canvas: HTMLCanvasElement): Promise<{ handles: Handles; note: string | null }> => {
+      const res = await detectPose(canvas)
+      if (!res.ok) return { handles: defaultHandles(mode), note: DETECT_NOTE[res.reason] }
+      const handles = handlesFromLandmarks(mode, res.landmarks)
+      return handles
+        ? { handles, note: null }
+        : { handles: defaultHandles(mode), note: DETECT_NOTE.partial }
     },
     [mode],
   )
+
+  /** Retry detection on the frame already captured, without retaking the photo. */
+  const redetect = useCallback(async () => {
+    const canvas = sourceRef.current
+    if (!canvas || redetecting) return
+    setRedetecting(true)
+    const { handles, note } = await runDetection(canvas)
+    setShot((prev) => (prev ? { ...prev, handles, note } : prev))
+    setRedetecting(false)
+  }, [redetecting, runDetection])
 
   const capture = useCallback(async () => {
     if (capturedRef.current) return
@@ -246,9 +277,13 @@ export function CameraMeasure({
 
     blobRef.current = await canvasToBlob(canvas)
     const url = canvas.toDataURL('image/jpeg', 0.9)
-    const handles = await runDetection(canvas)
+    sourceRef.current = canvas
     stopStream()
-    setShot({ url, handles })
+    // Detection downloads its model on first use, which is slow enough to need
+    // a state of its own rather than a frozen preview.
+    setPhase('detecting')
+    const { handles, note } = await runDetection(canvas)
+    setShot({ url, aspect: canvas.width / canvas.height, handles, note })
     setPhase('editing')
   }, [runDetection, stopStream])
 
@@ -292,11 +327,19 @@ export function CameraMeasure({
       canvas.width = img.naturalWidth
       canvas.height = img.naturalHeight
       canvas.getContext('2d')?.drawImage(img, 0, 0)
-      const handles = await runDetection(canvas)
-      setShot({ url: canvas.toDataURL('image/jpeg', 0.9), handles })
+      sourceRef.current = canvas
+      setPhase('detecting')
+      const { handles, note } = await runDetection(canvas)
+      setShot({
+        url: canvas.toDataURL('image/jpeg', 0.9),
+        aspect: canvas.width / canvas.height,
+        handles,
+        note,
+      })
       setPhase('editing')
     } catch {
       setError("couldn't read that image.")
+      setPhase('setup')
     } finally {
       URL.revokeObjectURL(url)
     }
@@ -319,6 +362,7 @@ export function CameraMeasure({
 
   const retake = () => {
     blobRef.current = null
+    sourceRef.current = null
     capturedRef.current = false
     setShot(null)
     setPhase('setup')
@@ -326,7 +370,17 @@ export function CameraMeasure({
 
   if (phase === 'editing' && shot) {
     return (
-      <AngleEditor mode={mode} imageUrl={shot.url} initial={shot.handles} onSave={handleSave} onCancel={retake} />
+      <AngleEditor
+        mode={mode}
+        imageUrl={shot.url}
+        aspect={shot.aspect}
+        initial={shot.handles}
+        note={shot.note}
+        detecting={redetecting}
+        onRedetect={() => void redetect()}
+        onSave={handleSave}
+        onCancel={retake}
+      />
     )
   }
 
@@ -348,6 +402,12 @@ export function CameraMeasure({
               {remaining}
             </span>
             <span className="text-sm tracking-widest text-white/80">get into position</span>
+          </div>
+        )}
+
+        {phase === 'detecting' && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70">
+            <span className="text-lg font-semibold text-white">finding your body…</span>
           </div>
         )}
 

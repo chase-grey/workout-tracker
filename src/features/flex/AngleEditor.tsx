@@ -18,17 +18,30 @@ const GRIP_OFFSET_PX = 44
 /**
  * Overlay the captured photo with draggable handles + lines so the user can
  * correct the auto-detected angle. Live-recomputes the angle(s) as they drag.
+ *
+ * `aspect` is the photo's width / height — handles are normalized per-axis, so
+ * the angle can't be computed without it. `note` reports a detection that
+ * failed or came back unusable, leaving the handles at their defaults;
+ * `onRedetect` retries on the same photo.
  */
 export function AngleEditor({
   mode,
   imageUrl,
+  aspect,
   initial,
+  note,
+  detecting,
+  onRedetect,
   onSave,
   onCancel,
 }: {
   mode: MeasureMode
   imageUrl: string
+  aspect: number
   initial: Handles
+  note?: string | null
+  detecting?: boolean
+  onRedetect?: () => void
   onSave: (result: MeasureResult, handles: Handles) => void
   onCancel: () => void
 }) {
@@ -38,9 +51,16 @@ export function AngleEditor({
   /** Dot position minus pointer position at grab time, so the dot keeps its offset from the finger. */
   const grabOffset = useRef({ x: 0, y: 0 })
 
+  // A retry hands down fresh handles, which replace whatever is on screen.
+  const shown = useRef(initial)
+  if (shown.current !== initial) {
+    shown.current = initial
+    setHandles(initial)
+  }
+
   const specs = HANDLES[mode]
   const segments = SEGMENTS[mode]
-  const result = anglesFromHandles(mode, handles)
+  const result = anglesFromHandles(mode, handles, aspect)
 
   /** Pointer position in 0..1 image space, unclamped so grab offsets stay accurate at the edges. */
   const coordFromEvent = (e: PointerEvent): { x: number; y: number } | null => {
@@ -88,6 +108,21 @@ export function AngleEditor({
         <p className="mb-3 text-sm text-neutral-400">
           drag the tabs so the lines trace your body. the angle updates live.
         </p>
+
+        {note && (
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-surface p-3 text-sm text-neutral-300">
+            <span className="flex-1">{note}</span>
+            {onRedetect && (
+              <button
+                onClick={onRedetect}
+                disabled={detecting}
+                className="min-h-[40px] shrink-0 rounded-xl bg-surface-2 px-3 font-semibold disabled:opacity-40"
+              >
+                {detecting ? 'detecting…' : 'try again'}
+              </button>
+            )}
+          </div>
+        )}
 
         <div
           ref={containerRef}

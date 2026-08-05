@@ -6,6 +6,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 import http from 'node:http'
 import https from 'node:https'
 import { execSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { existsSync } from 'node:fs'
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 
 // Repo name — used as the GitHub Pages base path in production.
 const REPO = 'workout-tracker'
@@ -20,6 +24,89 @@ const COMMIT = (() => {
   }
 })()
 const BUILD_TIME = new Date().toISOString()
+
+/**
+ * Pose detection needs a wasm runtime and a model file at measure time. Both
+ * used to come from public CDNs, so a phone that couldn't reach them — spotty
+ * gym wifi, a network that blocks them — got no measurement at all. Serve them
+ * from our own origin instead: the wasm comes out of node_modules (so it always
+ * matches the JS bundle we import) and the model is fetched once at build time.
+ * The service worker caches both on first use, so later measurements work
+ * offline. See src/lib/pose.ts for the consuming side.
+ */
+const MEDIAPIPE_DIR = 'mediapipe'
+const POSE_MODEL_FILE = 'pose_landmarker_full.task'
+const POSE_MODEL_URL = `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/${POSE_MODEL_FILE}`
+// Only the variants FilesetResolver actually asks for: it picks the nosimd pair
+// when the browser lacks wasm SIMD, and the plain pair otherwise.
+const WASM_FILES = [
+  'vision_wasm_internal.js',
+  'vision_wasm_internal.wasm',
+  'vision_wasm_nosimd_internal.js',
+  'vision_wasm_nosimd_internal.wasm',
+]
+
+const wasmSourceDir = path.join(
+  path.dirname(createRequire(import.meta.url).resolve('@mediapipe/tasks-vision')),
+  'wasm',
+)
+// Downloaded once and kept out of git; CI re-fetches it on a cold cache.
+const modelCachePath = path.join('node_modules', '.cache', MEDIAPIPE_DIR, POSE_MODEL_FILE)
+
+async function cachedModel(): Promise<string> {
+  if (!existsSync(modelCachePath)) {
+    const res = await fetch(POSE_MODEL_URL)
+    if (!res.ok) throw new Error(`pose model download failed: ${res.status} ${POSE_MODEL_URL}`)
+    await mkdir(path.dirname(modelCachePath), { recursive: true })
+    await writeFile(modelCachePath, Buffer.from(await res.arrayBuffer()))
+  }
+  return modelCachePath
+}
+
+/** Serve the pose runtime + model from our own origin, in dev and in the build. */
+function mediapipeAssets(): PluginOption {
+  const served = `/${MEDIAPIPE_DIR}/`
+  return {
+    name: 'mediapipe-assets',
+    configureServer(server) {
+      server.middlewares.use(served, (req, res, next) => {
+        const name = path.basename((req.url || '').split('?')[0])
+        const file =
+          name === POSE_MODEL_FILE
+            ? null
+            : WASM_FILES.includes(name)
+              ? path.join(wasmSourceDir, name)
+              : undefined
+        if (file === undefined) return next()
+        void (async () => {
+          try {
+            const source = file ?? (await cachedModel())
+            res.setHeader(
+              'content-type',
+              source.endsWith('.wasm')
+                ? 'application/wasm'
+                : source.endsWith('.js')
+                  ? 'text/javascript'
+                  : 'application/octet-stream',
+            )
+            res.end(await readFile(source))
+          } catch (err) {
+            res.statusCode = 500
+            res.end(String(err))
+          }
+        })()
+      })
+    },
+    async writeBundle(options) {
+      const outDir = path.join(options.dir || 'dist', MEDIAPIPE_DIR)
+      await mkdir(outDir, { recursive: true })
+      for (const name of WASM_FILES) {
+        await copyFile(path.join(wasmSourceDir, name), path.join(outDir, name))
+      }
+      await copyFile(await cachedModel(), path.join(outDir, POSE_MODEL_FILE))
+    },
+  }
+}
 
 /**
  * POST JSON to an upstream. Internal Epic hosts present a cert Node doesn't trust
@@ -137,6 +224,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      mediapipeAssets(),
       llmProxy({
         apiKey: env.OPENAI_API_KEY || '',
         baseUrl,
@@ -146,6 +234,23 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.svg', 'icon.svg'],
+        workbox: {
+          // The pose runtime and model are tens of megabytes — far too big to
+          // precache on install. Cache them the first time a measurement runs
+          // instead, after which measuring works offline.
+          globIgnores: [`**/${MEDIAPIPE_DIR}/**`],
+          runtimeCaching: [
+            {
+              urlPattern: new RegExp(`/${MEDIAPIPE_DIR}/`),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'pose-detector',
+                expiration: { maxEntries: WASM_FILES.length + 1 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+          ],
+        },
         manifest: {
           name: 'Workout Tracker',
           short_name: 'Lift',
