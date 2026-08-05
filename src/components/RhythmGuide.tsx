@@ -292,7 +292,6 @@ export function RhythmGuide({
   if (phases.length === 0) return null
 
   const i = idx % phases.length
-  const phase = phases[i]
   // Interpolate from the previous phase's depth to this phase's depth so the
   // motion flows continuously. A breathe cycle ends back at the top (an "up"
   // phase returns to 0), so resuming from the previous phase is right. A descent
@@ -311,8 +310,12 @@ export function RhythmGuide({
   const fadeIn = motion === 'descent' ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
   const showPrevRep = fadeIn < 1 && rep > startRep
 
+  // Once you've hit the target the whole count reads in the accent colour, so
+  // "done" is a single glance at the counter rather than a comparison.
+  const hitTarget = reps != null && rep >= reps
+
   return (
-    <div className="flex flex-col items-center py-3">
+    <div className="flex flex-1 flex-col items-center py-3">
       <div className="relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
         {motion === 'descent' ? (
           <>
@@ -335,14 +338,15 @@ export function RhythmGuide({
           <BreatheShape variant={variant} scale={scaleFromDepth(depth)} />
         )}
       </div>
-      <div className="mt-2 text-center">
-        {/* The phase word leads: it's the instruction you act on, so it sits
-            above the rep count, which is only a running tally. */}
-        <div className="text-3xl font-semibold leading-tight text-white">{phase.label}</div>
-        <div className="mt-1 text-xl font-bold tabular-nums text-accent-bright">
-          rep {rep}
-          {reps ? <span className="text-neutral-400"> / {reps}</span> : ''}
-        </div>
+      {/* Sits at the bottom of the guide, under the shape: the animation carries
+          the pace, so the count is the only thing worth reading. */}
+      <div className="mt-auto pt-4 text-center text-4xl font-bold tabular-nums text-accent-bright">
+        rep {rep}
+        {reps ? (
+          <span className={hitTarget ? undefined : 'text-neutral-400'}> / {reps}</span>
+        ) : (
+          ''
+        )}
       </div>
     </div>
   )
