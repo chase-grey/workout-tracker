@@ -92,12 +92,12 @@ function titleFor(muscle: Muscle, score: MuscleScore | undefined): string {
  */
 /** The shoulder cap, bridging the arm's top and the torso's upper corner. */
 const DELTS = [
-  'M45 110 Q50 86 76 78 Q94 83 93 103 Q71 118 45 110 Z',
-  'M175 110 Q170 86 144 78 Q126 83 127 103 Q149 118 175 110 Z',
+  'M45 110 Q49 85 76 78 Q95 84 93 103 Q70 119 45 110 Z',
+  'M175 110 Q171 85 144 78 Q125 84 127 103 Q150 119 175 110 Z',
 ]
 const UPPER_ARMS = [
-  'M47 104 Q45 140 47 176 L64 176 Q67 140 71 104 Z',
-  'M173 104 Q175 140 173 176 L156 176 Q153 140 149 104 Z',
+  'M47 104 Q44 140 47 176 Q56 180 64 176 Q68 140 71 104 Q59 99 47 104 Z',
+  'M173 104 Q176 140 173 176 Q164 180 156 176 Q152 140 149 104 Q161 99 173 104 Z',
 ]
 /**
  * The whole thigh mass: the hamstrings from behind, the quads from the front.
@@ -105,32 +105,45 @@ const UPPER_ARMS = [
  * thigh stays one solid mass either way round, with the inner and outer bands
  * simply taking their own color.
  */
-const THIGHS = ['M82 260 Q74 306 78 352 L99 352 L103 260 Z', 'M138 260 Q146 306 142 352 L121 352 L117 260 Z']
+const THIGHS = [
+  'M82 260 Q72 306 78 352 Q89 357 99 352 Q101 306 103 260 Q92 255 82 260 Z',
+  'M138 260 Q148 306 142 352 Q131 357 121 352 Q119 306 117 260 Q128 255 138 260 Z',
+]
 /** The inner thigh, running the length of the mass. */
-const ADDUCTORS = ['M103 260 L99 352 L93 352 L96 260 Z', 'M117 260 L121 352 L127 352 L124 260 Z']
+const ADDUCTORS = [
+  'M103 260 Q101 306 99 352 Q96 355 93 352 Q95 306 96 260 Q100 256 103 260 Z',
+  'M117 260 Q119 306 121 352 Q124 355 127 352 Q125 306 124 260 Q120 256 117 260 Z',
+]
 /** The outer hip, where abduction actually shows — high on the thigh, not down it. */
 const ABDUCTORS = [
-  'M80 252 Q78 280 77 306 L84 306 Q86 278 88 252 Z',
-  'M140 252 Q142 280 143 306 L136 306 Q134 278 132 252 Z',
+  'M80 252 Q76 280 77 306 Q81 309 84 306 Q86 278 88 252 Q84 248 80 252 Z',
+  'M140 252 Q144 280 143 306 Q139 309 136 306 Q134 278 132 252 Q136 248 140 252 Z',
 ]
 /** Both cheeks, filling the pelvis on the back view. */
 const GLUTES = [
   'M88 218 Q79 226 80 244 Q86 258 97 255 Q107 248 106 234 Q100 220 88 218 Z',
   'M132 218 Q141 226 140 244 Q134 258 123 255 Q113 248 114 234 Q120 220 132 218 Z',
 ]
-const CALVES = ['M80 372 Q80 402 84 434 L92 434 Q95 402 95 372 Z', 'M140 372 Q140 402 136 434 L128 434 Q125 402 125 372 Z']
+const CALVES = [
+  'M80 372 Q79 402 84 434 Q88 437 92 434 Q97 402 95 372 Q88 367 80 372 Z',
+  'M140 372 Q141 402 136 434 Q132 437 128 434 Q123 402 125 372 Q132 367 140 372 Z',
+]
 const PECS = [
-  'M71 92 Q86 82 107 88 L107 121 Q86 130 74 117 Q67 105 71 92 Z',
-  'M149 92 Q134 82 113 88 L113 121 Q134 130 146 117 Q153 105 149 92 Z',
+  'M71 92 Q86 81 107 88 Q109 105 107 121 Q86 131 74 117 Q66 105 71 92 Z',
+  'M149 92 Q134 81 113 88 Q111 105 113 121 Q134 131 146 117 Q154 105 149 92 Z',
 ]
 /**
  * Starts below the rib cage, not at the pec line — the gap is where the ribs are —
  * and runs down past the navel to the V of the lower abs at the groin.
  */
-const ABS = ['M95 144 L125 144 Q132 172 127 208 Q124 234 116 246 L104 246 Q96 234 93 208 Q88 172 95 144 Z']
-const NECK_FRONT = ['M101 60 L119 60 L119 74 Q119 79 114 79 L106 79 Q101 79 101 74 Z']
+const ABS = [
+  'M95 144 Q110 139 125 144 Q132 172 127 208 Q124 234 116 246 Q110 250 104 246 Q96 234 93 208 Q88 172 95 144 Z',
+]
+const NECK_FRONT = ['M101 60 Q110 56 119 60 Q120 70 119 74 Q116 80 110 80 Q104 80 101 74 Q100 70 101 60 Z']
 /** Neck + the upper-trap yoke it feeds — what neck extension actually changes. */
-const NECK_BACK = ['M101 60 L119 60 L119 76 Q128 80 130 93 Q121 88 110 88 Q99 88 90 93 Q92 80 101 76 Z']
+const NECK_BACK = [
+  'M101 60 Q110 56 119 60 Q120 69 119 76 Q128 80 130 93 Q121 87 110 87 Q99 87 90 93 Q92 80 101 76 Q100 69 101 60 Z',
+]
 /** The lat V, which is the whole of what's colorable on the upper back. */
 const LATS = ['M73 92 Q67 132 85 176 Q98 196 110 199 Q122 196 135 176 Q153 132 147 92 Q110 82 73 92 Z']
 
@@ -154,6 +167,7 @@ function Regions({
           fill={fillFor(score)}
           stroke={STROKE}
           strokeWidth={1}
+          strokeLinejoin="round"
           className="motion-safe:transition-[fill] motion-safe:duration-500"
         >
           <title>{titleFor(muscle, score)}</title>
@@ -169,19 +183,19 @@ function Silhouette({ label, children }: { label: string; children: ReactNode })
     <figure className="flex items-center justify-center">
       <svg viewBox="0 0 220 470" className="h-auto w-full" role="img" aria-label={`${label} muscle map`}>
         {/* Head, neck, torso, arms, hands, pelvis, legs, feet. */}
-        <g fill={BODY_BASE} stroke="#3f3f46" strokeWidth={1.5}>
-          <ellipse cx="110" cy="38" rx="19" ry="23" />
-          <rect x="100" y="54" width="20" height="26" rx="5" />
-          <path d="M70 78 Q110 68 150 78 Q155 118 145 152 Q140 190 132 214 L88 214 Q80 190 75 152 Q65 118 70 78 Z" />
-          <path d="M74 82 Q48 84 43 116 L45 190 Q46 220 55 252 L70 250 Q63 218 66 180 L71 118 Q72 96 78 86 Z" />
-          <path d="M146 82 Q172 84 177 116 L175 190 Q174 220 165 252 L150 250 Q157 218 154 180 L149 118 Q148 96 142 86 Z" />
-          <path d="M52 246 L67 246 Q70 262 63 272 Q55 275 51 265 Q49 255 52 246 Z" />
-          <path d="M168 246 L153 246 Q150 262 157 272 Q165 275 169 265 Q171 255 168 246 Z" />
-          <path d="M88 212 L132 212 Q143 234 141 260 L79 260 Q77 234 88 212 Z" />
-          <path d="M80 252 Q69 306 76 364 Q78 400 83 446 L94 446 Q96 400 98 362 Q104 302 107 252 Z" />
-          <path d="M140 252 Q151 306 144 364 Q142 400 137 446 L126 446 Q124 400 122 362 Q116 302 113 252 Z" />
-          <path d="M83 440 L96 440 Q98 452 95 459 L73 459 Q71 447 83 440 Z" />
-          <path d="M137 440 L124 440 Q122 452 125 459 L147 459 Q149 447 137 440 Z" />
+        <g fill={BODY_BASE} stroke="#3f3f46" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round">
+          <path d="M110 14 C123 14 130 24 129 37 C128 50 121 62 110 62 C99 62 92 50 91 37 C90 24 97 14 110 14 Z" />
+          <path d="M101 52 C100 66 98 76 94 82 Q110 88 126 82 C122 76 120 66 119 52 Z" />
+          <path d="M70 78 Q110 66 150 78 C157 100 156 130 145 152 C141 180 137 199 132 214 Q110 221 88 214 C83 199 79 180 75 152 C64 130 63 100 70 78 Z" />
+          <path d="M74 82 C56 82 45 96 43 116 C42 140 43 166 45 190 C46 214 49 234 55 252 Q62 255 70 250 C64 230 63 204 66 180 C68 158 69 136 71 118 C72 102 74 92 78 86 Z" />
+          <path d="M146 82 C164 82 175 96 177 116 C178 140 177 166 175 190 C174 214 171 234 165 252 Q158 255 150 250 C156 230 157 204 154 180 C152 158 151 136 149 118 C148 102 146 92 142 86 Z" />
+          <path d="M53 245 Q60 243 67 246 Q71 261 64 271 Q55 276 51 266 Q48 254 53 245 Z" />
+          <path d="M167 245 Q160 243 153 246 Q149 261 156 271 Q165 276 169 266 Q172 254 167 245 Z" />
+          <path d="M88 212 Q110 206 132 212 Q143 234 141 258 Q110 266 79 258 Q77 234 88 212 Z" />
+          <path d="M80 252 C70 286 70 330 76 364 C78 392 81 420 83 446 Q89 451 94 446 C96 418 97 390 98 362 C102 322 105 286 107 252 Z" />
+          <path d="M140 252 C150 286 150 330 144 364 C142 392 139 420 137 446 Q131 451 126 446 C124 418 123 390 122 362 C118 322 115 286 113 252 Z" />
+          <path d="M83 440 Q90 437 96 441 Q99 452 95 459 Q83 462 73 458 Q70 447 83 440 Z" />
+          <path d="M137 440 Q130 437 124 441 Q121 452 125 459 Q137 462 147 458 Q150 447 137 440 Z" />
         </g>
         {children}
       </svg>
@@ -197,7 +211,7 @@ function Silhouette({ label, children }: { label: string; children: ReactNode })
 function SixPackLines() {
   return (
     <g fill="none" stroke={STROKE} strokeWidth={1.6} strokeLinecap="round" opacity={0.8}>
-      <path d="M110 152 L110 214" />
+      <path d="M110 152 Q112 183 110 214" />
       <path d="M94 172 Q110 176 126 172" />
       <path d="M95 194 Q110 198 125 194" />
       <path d="M98 214 Q110 218 122 214" />
@@ -209,7 +223,7 @@ function FrontView({ scores, sixPack }: { scores: Record<Muscle, MuscleScore>; s
   return (
     <Silhouette label="front">
       {/* The only thing telling the two views apart. */}
-      <g fill="#a1a1aa">
+      <g fill={NO_DATA}>
         <ellipse cx="102" cy="34" rx="2.6" ry="3" />
         <ellipse cx="118" cy="34" rx="2.6" ry="3" />
       </g>
