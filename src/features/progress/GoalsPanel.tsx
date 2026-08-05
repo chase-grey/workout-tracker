@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo } from 'react'
 import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -28,7 +29,6 @@ import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withT
 import { parseISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
 import { MetricChart } from './MetricChart'
-import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MdCelebration, MdRefresh } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -54,8 +54,24 @@ function mergeActualProjected(actual: { date: string; value: number }[], project
  * projection was measured against, but it's the run-up that earned the pace — a
  * chart starting at the lock date shows one or two points and reads as a straight
  * segment. A marker on the lock date separates the two halves.
+ *
+ * Both ETAs are dots on the target line rather than text above the chart: the
+ * locked one where the committed curve lands, and the one the current pace implies
+ * where that pace would land instead — so the gap between the two dates is a
+ * distance you can see.
  */
-function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: string; value: number }[] }) {
+function LockChart({
+  lock,
+  actual,
+  revisedEta,
+  behind,
+}: {
+  lock: LockedProjection
+  actual: { date: string; value: number }[]
+  /** ETA implied by the pace actually being held, when it differs from the lock's. */
+  revisedEta?: string | null
+  behind?: boolean
+}) {
   const rows = useMemo(
     () => withTime(mergeActualProjected(actual, projectedSeries(lock))),
     [lock, actual],
@@ -66,12 +82,21 @@ function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: s
     [rows],
   )
 
+  const etaMs = parseISODate(lock.etaDate).getTime()
+  const revisedMs = revisedEta && revisedEta !== lock.etaDate ? parseISODate(revisedEta).getTime() : null
+  // A revised ETA past the locked one falls outside the data's own span, so the
+  // axis has to be widened by hand or the dot would be clipped off the edge.
+  const xDomain = useMemo(() => {
+    const ts = rows.map((r) => r.t)
+    return [Math.min(...ts), Math.max(...ts, revisedMs ?? -Infinity)] as [number, number]
+  }, [rows, revisedMs])
+
   return (
     <div className="mt-3 rounded-xl bg-surface-2 p-1">
       <ResponsiveContainer width="100%" height={140}>
         <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#262626" vertical={false} />
-          <XAxis {...timeXAxis} tick={axisTick} />
+          <XAxis {...timeXAxis} domain={xDomain} tick={axisTick} />
           <YAxis
             tick={axisTick}
             width={40}
@@ -94,6 +119,40 @@ function LockChart({ lock, actual }: { lock: LockedProjection; actual: { date: s
             strokeDasharray="3 3"
             label={{ value: 'locked', fill: '#facc15', fontSize: 9, position: 'insideTopRight' }}
           />
+          {/* The target the line is climbing toward, so the goal reads off the
+              chart without doing the mental math from the projected curve's end. */}
+          <ReferenceLine
+            y={lock.target}
+            stroke="#facc15"
+            strokeDasharray="5 4"
+            label={{ value: `goal ${lock.target}`, fill: '#facc15', fontSize: 9, position: 'insideTopLeft' }}
+          />
+          {/* The commitment: where the locked curve meets the goal. */}
+          <ReferenceDot
+            x={etaMs}
+            y={lock.target}
+            r={4}
+            fill="#facc15"
+            stroke="#0a0a0a"
+            label={{ value: fmtDate(lock.etaDate), fill: '#facc15', fontSize: 9, position: 'left' }}
+          />
+          {/* Where the pace being held now would land instead — amber when that's
+              later than the commitment, green when it beats it. */}
+          {revisedMs != null && (
+            <ReferenceDot
+              x={revisedMs}
+              y={lock.target}
+              r={4}
+              fill={behind ? '#fbbf24' : LINE_PRIMARY}
+              stroke="#0a0a0a"
+              label={{
+                value: fmtDate(revisedEta!),
+                fill: behind ? '#fbbf24' : LINE_PRIMARY,
+                fontSize: 9,
+                position: 'bottom',
+              }}
+            />
+          )}
           <Line
             type="monotone"
             dataKey="projected"
@@ -336,7 +395,6 @@ function SixPackRow({
 export function GoalsPanel({ months }: { months: number | null }) {
   const { workouts, bodyWeights, measurements, settings, calorieEntries, updateSettings } = useData()
   const heightIn = settings.heightIn ?? 0
-  const [showWeight, setShowWeight] = useState(false)
 
   const goals = useMemo(
     () => buildGoals({ workouts, bodyWeights, measurements, heightIn }),
@@ -423,17 +481,9 @@ export function GoalsPanel({ months }: { months: number | null }) {
 
   const bodyWeightBlock = (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold tracking-wider text-neutral-500">
-          body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
-        </h4>
-        <button
-          onClick={() => setShowWeight(true)}
-          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
-        >
-          log weight
-        </button>
-      </div>
+      <h4 className="text-sm font-semibold tracking-wider text-neutral-500">
+        body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
+      </h4>
       <MetricChart
         data={weightSeries}
         unit="lbs"
@@ -474,7 +524,6 @@ export function GoalsPanel({ months }: { months: number | null }) {
           </Fragment>
         )
       })}
-      {showWeight && <WeightLogSheet onClose={() => setShowWeight(false)} />}
     </div>
   )
 }
