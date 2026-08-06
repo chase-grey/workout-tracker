@@ -22,6 +22,7 @@ import {
   withTime,
 } from '../../lib/chart'
 import { AxisBreak } from '../../components/AxisBreak'
+import { ChartTag } from '../../components/ChartTag'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
@@ -40,6 +41,9 @@ export function SplitLegend({ payload }: { payload?: { value?: unknown; dataKey?
     </div>
   )
 }
+
+/** One plotted row: the metric, the calorie surplus beside it, or either alone. */
+type Row = { date: string; t: number; value?: number; cal?: number }
 
 /** Merge a metric series with a calorie-surplus series into one row per date. */
 function mergeCalories(data: Point[], calories: Point[]) {
@@ -76,7 +80,9 @@ export function MetricChart({
     [data, goalLines],
   )
   const calScale = useMemo(() => niceScale((calories ?? []).map((p) => p.value)), [calories])
-  const rows = useMemo(
+  // Annotated so both branches land on one row type — the chart infers its data
+  // type from whichever arm comes first otherwise, and rejects the other.
+  const rows: Row[] = useMemo(
     () => (overlay ? withTime(mergeCalories(data, calories!)) : withTime(data)),
     [overlay, data, calories],
   )
@@ -132,7 +138,7 @@ export function MetricChart({
               y={g.value}
               stroke={LINE_GOAL}
               strokeDasharray="5 4"
-              label={{ value: g.label, fill: LINE_GOAL_LABEL, fontSize: 10, position: 'insideTopLeft' }}
+              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg="#171717" size={10} />}
             />
           ))}
           {overlay && (
