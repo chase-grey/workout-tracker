@@ -19,11 +19,11 @@ import {
   monthlyActivity,
   secToMin,
 } from '../../lib/activityTime'
-import { niceScale } from '../../lib/chart'
+import { LINE_GOAL, LINE_PRIMARY, LINE_SECONDARY, niceScale } from '../../lib/chart'
 import { AxisBreak } from '../../components/AxisBreak'
 
-/** Distinct hues for the three buckets — green work, deep-green stretch, amber rest. */
-const COLORS = { workout: '#22c55e', stretch: '#15803d', rest: '#f59e0b' } as const
+/** The green ladder, brightest bucket first: work, then stretch, then rest. */
+const COLORS = { workout: LINE_PRIMARY, stretch: LINE_SECONDARY, rest: LINE_GOAL } as const
 
 const MONTH_ABBR = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 

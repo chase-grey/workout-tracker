@@ -24,9 +24,16 @@ export function fmtDateLabel(ms: number): string {
   return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`
 }
 
-/** Line colors: bright green for the primary series, darker green for the second. */
+/**
+ * A three-step green ladder for chart marks: bright green for the series being
+ * read, dark green for its companion, and real dark green for goal furniture —
+ * target lines, lock marks, ETA dots — which should sit behind the data.
+ */
 export const LINE_PRIMARY = '#22c55e'
 export const LINE_SECONDARY = '#15803d'
+export const LINE_GOAL = '#14532d'
+/** Goal labels step up the ladder: 9px type at {@link LINE_GOAL} is too dim to read. */
+export const LINE_GOAL_LABEL = LINE_SECONDARY
 
 /** Props for a time-scaled X axis over a numeric `t` timestamp key. */
 export const timeXAxis = {

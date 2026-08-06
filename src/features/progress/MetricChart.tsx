@@ -11,7 +11,16 @@ import {
   YAxis,
 } from 'recharts'
 import type { Point } from '../../lib/progress'
-import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import {
+  fmtDateLabel,
+  LINE_GOAL,
+  LINE_GOAL_LABEL,
+  LINE_PRIMARY,
+  LINE_SECONDARY,
+  niceScale,
+  timeXAxis,
+  withTime,
+} from '../../lib/chart'
 import { AxisBreak } from '../../components/AxisBreak'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
@@ -121,9 +130,9 @@ export function MetricChart({
               key={g.label}
               yAxisId="left"
               y={g.value}
-              stroke="#facc15"
+              stroke={LINE_GOAL}
               strokeDasharray="5 4"
-              label={{ value: g.label, fill: '#facc15', fontSize: 10, position: 'insideTopLeft' }}
+              label={{ value: g.label, fill: LINE_GOAL_LABEL, fontSize: 10, position: 'insideTopLeft' }}
             />
           ))}
           {overlay && (

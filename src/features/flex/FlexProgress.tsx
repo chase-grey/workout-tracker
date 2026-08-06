@@ -20,7 +20,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 /** Cold lines run cool — blue for the left/only reading, violet for the right —
- *  against the warm lines' green and amber. */
+ *  against the warm lines' greens. */
 const COLD_A = '#38bdf8'
 const COLD_B = '#a78bfa'
 
