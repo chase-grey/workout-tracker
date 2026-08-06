@@ -322,7 +322,7 @@ function LockInPrompt({
           className="min-h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-black active:opacity-70 disabled:opacity-40"
         >
           <MdLockOutline className="inline align-text-bottom mr-1" aria-hidden />
-          lock in
+          commit
         </button>
       </div>
     </div>
@@ -389,8 +389,18 @@ function GoalRow({
     proj.slopePerWeek !== 0 &&
     Math.sign(goal.target - proj.current) === Math.sign(proj.slopePerWeek)
 
+  // A committed goal wears a light green box, so the set of things being tracked
+  // against a promise reads as a group. The one being asked to commit wears the
+  // same box in the darker accent — drawn a step heavier, since the darker green
+  // gives up some of the contrast the lighter one has against the surface.
+  const ring = lockable
+    ? 'ring-2 ring-accent'
+    : lock && !reached
+      ? 'ring-1 ring-accent-2/60'
+      : ''
+
   return (
-    <div className={`rounded-2xl bg-surface p-4 ${lockable ? 'ring-1 ring-accent-2/60' : ''}`}>
+    <div className={`rounded-2xl bg-surface p-4 ${ring}`}>
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="font-semibold">{goal.title}</h4>
         {/* A goal charted above already shows how far along it is, so the row
