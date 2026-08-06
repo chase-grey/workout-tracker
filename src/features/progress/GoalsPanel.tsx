@@ -42,6 +42,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
 import { CommitChart } from './CommitChart'
+import { FlexLadderBlock, type Ladder } from './FlexLadderBlock'
 import { MdBolt, MdCelebration, MdLockOutline, MdRefresh } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -730,6 +731,36 @@ export function GoalsPanel({ months }: { months: number | null }) {
     </div>
   )
 
+  // The flexibility ladders, each collapsed into one block the way the bodyweight
+  // pair is: every rung reading off a single chart of the stretch log, in place of
+  // a row per rung that re-plotted that log apiece — and in place of the side
+  // split / tailor's pose section that carried a second copy of it further down
+  // the tab.
+  const ladders = useMemo(
+    () =>
+      (['split', 'tailors'] as Ladder[]).map((ladder) => {
+        const rungs = goals.filter((g) => goalFamily(g) === `flex:${ladder}`)
+        return {
+          ladder,
+          rungs,
+          node: (
+            <FlexLadderBlock
+              key={ladder}
+              ladder={ladder}
+              entries={flexEntries}
+              months={months}
+              rungs={rungs}
+              locked={locked}
+              ring={blockRing(rungs)}
+              renderRow={(g) => goalRow(g, true)}
+            />
+          ),
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [goals, flexEntries, months, locked, projections],
+  )
+
   // The date a goal has committed to, or null if it isn't a locked, still-open
   // commitment — reached goals and unlocked ones don't count as commitments.
   const committedEta = (g: GoalSpec): string | null => {
@@ -797,6 +828,22 @@ export function GoalsPanel({ months }: { months: number | null }) {
         })
         continue
       }
+      const ladder = ladders.find((l) => l.rungs.some((r) => r.id === g.id))
+      if (ladder) {
+        // One block per ladder, standing in for its first rung. Its rungs stay
+        // together, cleared ones included: a ladder is a progression, so a rung
+        // already hit belongs under the chart that shows it being hit rather than
+        // off in the reached band on its own.
+        if (ladder.rungs[0].id !== g.id) continue
+        out.push({
+          done: ladder.rungs.every(isReached),
+          eta: soonest(ladder.rungs.map(committedEta)),
+          projEta: soonest(ladder.rungs.map(projectedEta)),
+          family: goalFamily(g),
+          node: ladder.node,
+        })
+        continue
+      }
       out.push({
         done: isReached(g),
         eta: committedEta(g),
@@ -807,7 +854,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, locked, projections, settings])
+  }, [goals, locked, projections, settings, months, ladders])
 
   // Four bands: goals already reached first, then committed ones, then the rest
   // by how far off their projection is, then the six-pack. Reached goals have no

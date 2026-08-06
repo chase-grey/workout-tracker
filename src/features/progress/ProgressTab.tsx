@@ -26,7 +26,6 @@ import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
 import { MetricChart } from './MetricChart'
 import { MuscleAvatar } from './MuscleAvatar'
-import { FlexProgress } from '../flex/FlexProgress'
 import { TimeSpent } from './TimeSpent'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
 import { bodyFatSeries, waistSeries, latestMeasurement, effectiveBodyFat } from '../../lib/bodyComp'
@@ -267,8 +266,6 @@ export function ProgressTab() {
       ) : (
         <MetricChart data={series} unit={unit} />
       )}
-
-      <FlexProgress />
 
       <div className="mt-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold tracking-wider text-neutral-500">

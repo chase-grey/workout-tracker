@@ -185,8 +185,15 @@ export function exercisesByFrequency(
     .sort((a, b) => b.sessions - a.sessions)
 }
 
-/** Keep points within the last `months` (null = all time). */
-export function filterRange(points: Point[], months: number | null, today: Date = new Date()): Point[] {
+/**
+ * Keep rows within the last `months` (null = all time). Generic over the row, so
+ * the same range pill trims a plain series and a multi-reading chart row alike.
+ */
+export function filterRange<T extends { date: string }>(
+  points: T[],
+  months: number | null,
+  today: Date = new Date(),
+): T[] {
   if (months == null) return points
   const cutoff = new Date(today.getFullYear(), today.getMonth() - months, today.getDate())
   return points.filter((p) => parseISODate(p.date) >= cutoff)

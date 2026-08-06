@@ -35,6 +35,13 @@ export const LINE_GOAL = '#14532d'
 /** Goal labels step up the ladder: 9px type at {@link LINE_GOAL} is too dim to read. */
 export const LINE_GOAL_LABEL = LINE_SECONDARY
 
+/**
+ * Cold stretch readings run cool against the warm ones' greens — blue for the
+ * left (or only) reading, violet for the right.
+ */
+export const LINE_COLD = '#38bdf8'
+export const LINE_COLD_2 = '#a78bfa'
+
 /** Props for a time-scaled X axis over a numeric `t` timestamp key. */
 export const timeXAxis = {
   dataKey: 't',
