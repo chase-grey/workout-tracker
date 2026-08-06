@@ -5,6 +5,12 @@
  * ("Execute as: Me", "Who has access: Anyone") and put the /exec URL into the
  * app's Settings (or VITE_API_URL at build time).
  *
+ * Two rules hold across every write here, both learned from losing data:
+ *   - Mutating routes run under `withLock` (see it for the race they lose).
+ *   - A write that stores nothing THROWS rather than returning {saved: 0}. Apps
+ *     Script can't set a status code, so a cheerful zero is indistinguishable
+ *     from a real save: the client marks the row synced and drops it forever.
+ *
  * Tabs (created automatically on first write):
  *   workouts:     session_id, date, day_type, exercise, set_number,
  *                 weight_lbs, reps, notes, is_historical, variant
@@ -106,27 +112,50 @@ function doGet(e) {
   }
 }
 
+/**
+ * Serialise every mutating request.
+ *
+ * Apps Script runs concurrent requests from the same user in parallel, and each
+ * write below is a read-modify-write over a whole tab. Two overlapping calls
+ * both read the pre-write state, so an upsert appends a duplicate row instead of
+ * updating one and a fresh tab gets inserted twice. Finishing a session fires
+ * three POSTs at once (session + duration + exercise times), which is exactly
+ * that race.
+ *
+ * Failing to get the lock throws rather than returning a cheerful `{saved: 0}`,
+ * so the client treats it as a failed write and retries from its queue.
+ */
+function withLock(fn) {
+  const lock = LockService.getScriptLock()
+  if (!lock.tryLock(30000)) throw new Error('Backend busy, write not attempted')
+  try {
+    return fn()
+  } finally {
+    lock.releaseLock()
+  }
+}
+
 function doPost(e) {
   try {
     const body = e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {}
     switch (e.parameter.route) {
       case 'session':
       case 'import':
-        return json(appendWorkoutRows(body.rows))
+        return json(withLock(function () { return appendWorkoutRows(body.rows) }))
       case 'bodyweight':
-        return json(appendBodyWeight(body))
+        return json(withLock(function () { return appendBodyWeight(body) }))
       case 'flexibility':
-        return json(appendFlex(body))
+        return json(withLock(function () { return appendFlex(body) }))
       case 'calories':
-        return json(appendCalories(body))
+        return json(withLock(function () { return appendCalories(body) }))
       case 'measurements':
-        return json(appendMeasurements(body))
+        return json(withLock(function () { return appendMeasurements(body) }))
       case 'durations':
-        return json(appendDurations(body))
+        return json(withLock(function () { return appendDurations(body) }))
       case 'exercise_times':
-        return json(foldExerciseTimes(body))
+        return json(withLock(function () { return foldExerciseTimes(body) }))
       case 'plan':
-        return json(savePlan(body.plan))
+        return json(withLock(function () { return savePlan(body.plan) }))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -413,6 +442,9 @@ function appendCalories(body) {
     upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '')
     saved++
   }
+  if (saved === 0 && list.length) {
+    throw new Error('No valid calorie rows among ' + list.length + ' submitted')
+  }
   return { saved: saved }
 }
 
@@ -490,6 +522,11 @@ function appendMeasurements(body) {
       }
       saved++
     })
+  // A measurement that fails the waist/neck check would otherwise be reported
+  // as saved and dropped by the client.
+  if (saved === 0 && list.length) {
+    throw new Error('No valid measurement rows among ' + list.length + ' submitted')
+  }
   return { saved: saved }
 }
 
@@ -527,6 +564,11 @@ function appendDurations(body) {
     })
   if (values.length) {
     sh.getRange(sh.getLastRow() + 1, 1, values.length, DURATION_HEADERS.length).setValues(values)
+  } else if (list.length) {
+    // Every submitted row failed the filter. Returning {saved: 0} would read as
+    // a successful save, so the client would drop the session and never retry —
+    // the exact way the durations tab stayed empty. Say so instead.
+    throw new Error('No valid duration rows among ' + list.length + ' submitted')
   }
   return { saved: values.length }
 }
@@ -570,8 +612,10 @@ function foldExerciseTimes(body) {
     if (key && !(key in rowByKey)) rowByKey[key] = i + 1 // 1-based sheet row
   }
 
+  // Returns whether the row was actually folded, so the caller can tell a
+  // rejected sample from a written one.
   function upsert(key, addSumSec, addCount) {
-    if (!key || !(addCount > 0) || !isFinite(Number(addSumSec)) || Number(addSumSec) < 0) return
+    if (!key || !(addCount > 0) || !isFinite(Number(addSumSec)) || Number(addSumSec) < 0) return false
     const existingRow = rowByKey[key]
     let avg = 0
     let n = 0
@@ -588,26 +632,34 @@ function foldExerciseTimes(body) {
       sh.appendRow([key, newAvg, newN])
       rowByKey[key] = sh.getLastRow()
     }
+    return true
   }
 
   let saved = 0
+  let folded = 0
   for (let i = 0; i < list.length; i++) {
     const e = list[i]
     if (!e || !e.exercise || !(Number(e.sets) > 0)) continue
-    upsert(String(e.exercise), Number(e.totalActiveSec), Number(e.sets))
+    if (upsert(String(e.exercise), Number(e.totalActiveSec), Number(e.sets))) folded++
     saved++
   }
   const restCount = Number(body.restCount)
   const restPrescribed = Number(body.restPrescribedSec)
   if (restCount > 0) {
     // Legacy pooled-seconds row, kept current only for older clients reading it.
-    upsert(REST_KEY, Number(body.restTotalSec), restCount)
+    if (upsert(REST_KEY, Number(body.restTotalSec), restCount)) folded++
     if (restPrescribed > 0) {
       // Clamped to 0.25×–4× so one freak session can't wreck the mean, then
       // folded as `restCount` samples of this session's ratio.
       const ratio = Math.min(4, Math.max(0.25, Number(body.restTotalSec) / restPrescribed))
-      upsert(REST_RATIO_KEY, ratio * restCount, restCount)
+      if (upsert(REST_RATIO_KEY, ratio * restCount, restCount)) folded++
     }
+  }
+  // Nothing folded at all, from a payload that carried something: same silent
+  // drop as appendDurations. The client only ever posts samples it has (see the
+  // guard in logExerciseTimes), so this means a real bug, not an empty session.
+  if (folded === 0 && (list.length || restCount > 0)) {
+    throw new Error('No exercise time samples folded')
   }
   return { saved: saved }
 }
@@ -647,7 +699,16 @@ function savePlan(plan) {
 function sheet(name, headers) {
   let sh = ss.getSheetByName(name)
   if (!sh) {
-    sh = ss.insertSheet(name)
+    // A read isn't lock-held, so it can race a write to create the same tab.
+    // insertSheet throws on a name that now exists — whoever won made it, so
+    // take theirs rather than failing the request.
+    try {
+      sh = ss.insertSheet(name)
+    } catch (err) {
+      sh = ss.getSheetByName(name)
+      if (!sh) throw err
+      return sh
+    }
     sh.getRange(1, 1, 1, headers.length).setValues([headers])
     return sh
   }
