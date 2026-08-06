@@ -48,9 +48,9 @@ export type LockedProjection = {
   slopePerWeek: number
   /**
    * Weekly decay of the gain rate the goal itself projects with (see
-   * predictions.weeksToClose), carried over so a revised ETA is re-derived
-   * through the same model. Absent for goals that project straight — the drawn
-   * line still curves, on the default commitment shape (see {@link curveOf}).
+   * predictions.weeksToClose), carried over so the committed line is drawn — and
+   * a revised ETA re-derived — through the same model the ETA came from. Absent
+   * for goals that project straight; their line is straight too.
    */
   decayPerWeek?: number
 }
@@ -58,56 +58,24 @@ export type LockedProjection = {
 export type LockedProjections = Record<string, LockedProjection>
 
 /**
- * The goal's own physiological taper, or 1 when it has none. This is what a
- * *revised* ETA is re-derived through — the question "at the pace I'm really
- * holding, when do I arrive?" has to use the model the goal believes about
- * itself, not the shape its committed line happens to be drawn with.
+ * The weekly taper a lock is drawn and judged with: the goal's own, or 1 — a
+ * straight line — for the goals that project straight (bodyweight, body fat,
+ * flexibility).
+ *
+ * This has to be the same model the ETA came from, and the line has to be shaped
+ * by the *pace* rather than by the span, or the commitment starts asking for
+ * things the date never did. Bending a straight projection's line demands a pace
+ * its own date wasn't computed from — you read as behind in week one while
+ * holding exactly the pace you were quoted. Worse, normalising a shape to each
+ * goal's own span makes two targets on one metric disagree: 180 and 190 are the
+ * same climb, but the longer span front-loads over a longer ruler, so the line to
+ * 190 crosses 180 about a fifth of its span before the line to 180 arrives there
+ * and the further goal quietly asks for the faster bulk. One pace, one line: the
+ * two coincide up to the nearer target, which is the only thing "both from the
+ * default projection" can honestly mean.
  */
 function decayOf(lock: LockedProjection): number {
   return lock.decayPerWeek ?? 1
-}
-
-/**
- * How far along a committed line sits at the halfway point of its span, for a
- * goal whose own projection runs straight (bodyweight, body fat, flexibility).
- *
- * A commitment isn't a physiological model, it's a plan — and a plan that says
- * "same gain every week for six months" is the one nobody keeps. The ground you
- * make early is the ground you make cheaply: the first weeks run on fresh
- * motivation and whatever slack was left in the routine, and the last ones are
- * the grind. Committing to a front-loaded line puts the demand where it can
- * actually be met and leaves room at the end, so a slow final month reads as the
- * taper it is rather than as failure.
- *
- * Strength goals don't use this — they carry a real measured taper of their own
- * (see goals.STRENGTH_GAIN_DECAY), which is steeper than this over most spans.
- */
-export const COMMITMENT_HALFWAY_SHARE = 0.6
-
-/**
- * The weekly decay that draws {@link COMMITMENT_HALFWAY_SHARE} of the distance
- * in the first half of a `weeks`-long span.
- *
- * From the curve in {@link expectedAt}: over a span of S weeks the shape depends
- * only on k = rˢ, and the halfway share works out to 1/(1 + √k). Solving that
- * for k and taking the S-th root gives the per-week decay that hits it — so the
- * curve keeps the same shape whether the span is two months or two years.
- */
-function commitmentDecay(weeks: number): number {
-  const k = Math.pow((1 - COMMITMENT_HALFWAY_SHARE) / COMMITMENT_HALFWAY_SHARE, 2)
-  return Math.pow(k, 1 / weeks)
-}
-
-/**
- * The weekly decay a lock's line is actually *drawn* with: the goal's own taper
- * when it has one, and the default commitment shape when it doesn't. Either way
- * the line is front-loaded — every commitment expects more early than late.
- */
-function curveOf(lock: LockedProjection): number {
-  const own = lock.decayPerWeek
-  if (own != null && own < 1) return own
-  const weeks = daysBetween(lock.lockedAt, lock.etaDate) / 7
-  return weeks > 0 ? commitmentDecay(weeks) : 1
 }
 
 /**
@@ -237,14 +205,14 @@ export function lockProjectionByDate(
 }
 
 /**
- * Where the locked line says the metric should be on `date` — a curve from
+ * Where the locked line says the metric should be on `date` — the line from
  * (lockedAt, startValue) to (etaDate, target). Before the lock date it reads
  * startValue; after the ETA it reads target.
  *
- * The curve is concave: it climbs fast early and eases off near the target,
- * matching how gains actually come (see {@link curveOf}). The fraction of the way
- * covered by week t of a span of S weeks is (1 − rᵗ)/(1 − rˢ), which collapses to
- * the straight-line t/S when r is 1.
+ * A goal whose gains taper (see {@link decayOf}) is drawn concave, climbing fast
+ * early and easing off near the target the way its ETA assumed: the fraction of
+ * the way covered by week t of a span of S weeks is (1 − rᵗ)/(1 − rˢ), which
+ * collapses to the straight-line t/S when r is 1.
  */
 export function expectedAt(lock: LockedProjection, date: string): number {
   const span = daysBetween(lock.lockedAt, lock.etaDate)
@@ -253,7 +221,7 @@ export function expectedAt(lock: LockedProjection, date: string): number {
   if (elapsed <= 0) return round1(lock.startValue)
   if (elapsed >= span) return round1(lock.target)
 
-  const r = curveOf(lock)
+  const r = decayOf(lock)
   const fraction =
     r >= 1
       ? elapsed / span
