@@ -5,6 +5,8 @@ import {
   ROLE_COLOR,
   MEASURE_LABEL,
   anglesFromHandles,
+  hasSides,
+  swapSides,
   type Handles,
   type MeasureMode,
   type MeasureResult,
@@ -212,6 +214,14 @@ export function AngleEditor({
                 <p className="text-4xl font-bold tabular-nums">{result.tailorsRightDeg ?? 0}°</p>
               </div>
             </div>
+          )}
+          {hasSides(mode) && (
+            <button
+              onClick={() => setHandles((prev) => swapSides(mode, prev))}
+              className="mt-3 min-h-[40px] rounded-xl bg-surface-2 px-4 text-sm font-semibold"
+            >
+              swap left / right
+            </button>
           )}
         </div>
       </div>

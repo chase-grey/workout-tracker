@@ -5,7 +5,9 @@ import {
   anglesFromHandles,
   defaultHandles,
   handlesFromLandmarks,
+  hasSides,
   summarizeResult,
+  swapSides,
   type Handles,
 } from './measure'
 import { POSE, type Pt } from './splitAngle'
@@ -106,6 +108,52 @@ describe('handlesFromLandmarks', () => {
 
     lms[POSE.RIGHT_KNEE] = { x: 0.7, y: 0.8, visibility: 0.2 }
     expect(handlesFromLandmarks('tailors', lms)).toBeNull()
+  })
+
+  it('tailors: reads a mirrored photo onto the side the body calls left', () => {
+    const lms: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.9, visibility: 0.9 }))
+    lms[POSE.LEFT_KNEE] = { x: 0.7, y: 0.8, visibility: 0.9 }
+    lms[POSE.RIGHT_KNEE] = { x: 0.3, y: 0.8, visibility: 0.9 }
+
+    expect(handlesFromLandmarks('tailors', lms)!.kneeL.x).toBe(0.7)
+    // A front-camera shot flips the body, so the detector's "left knee" is the
+    // knee the user calls right.
+    expect(handlesFromLandmarks('tailors', lms, true)!.kneeL.x).toBe(0.3)
+    expect(handlesFromLandmarks('tailors', lms, true)!.kneeR.x).toBe(0.7)
+  })
+
+  it('split: mirroring swaps the ankles but leaves the hip midpoint alone', () => {
+    const lms: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.9 }))
+    lms[POSE.LEFT_HIP] = { x: 0.4, y: 0.5, visibility: 0.9 }
+    lms[POSE.RIGHT_HIP] = { x: 0.6, y: 0.5, visibility: 0.9 }
+    lms[POSE.LEFT_ANKLE] = { x: 0.9, y: 0.6, visibility: 0.9 }
+    lms[POSE.RIGHT_ANKLE] = { x: 0.1, y: 0.6, visibility: 0.9 }
+
+    const h = handlesFromLandmarks('split', lms, true)!
+    expect(h.hip).toEqual({ x: 0.5, y: 0.5 })
+    expect(h.ankleL.x).toBe(0.1)
+    expect(h.ankleR.x).toBe(0.9)
+  })
+})
+
+describe('swapSides', () => {
+  it('trades the two tailors knees, and reverses the logged angles with them', () => {
+    const h: Handles = {
+      center: { x: 0.5, y: 0.9 },
+      kneeL: { x: 0.5, y: 0.6 },
+      kneeR: { x: 0.2, y: 0.9 },
+    }
+    const before = anglesFromHandles('tailors', h, 0.75)
+    const after = anglesFromHandles('tailors', swapSides('tailors', h), 0.75)
+    expect(after.tailorsLeftDeg).toBe(before.tailorsRightDeg)
+    expect(after.tailorsRightDeg).toBe(before.tailorsLeftDeg)
+  })
+
+  it('leaves the split alone — it has one angle across both legs', () => {
+    expect(hasSides('split')).toBe(false)
+    expect(hasSides('tailors')).toBe(true)
+    const h = defaultHandles('split')
+    expect(swapSides('split', h)).toBe(h)
   })
 })
 

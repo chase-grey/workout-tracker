@@ -112,15 +112,27 @@ const seen = (p: Landmark | undefined): p is Landmark =>
  * Build initial handles from detected landmarks. Returns null when the points
  * this pose needs are missing or were not confidently seen, which the caller
  * reports rather than quietly papering over.
+ *
+ * `mirrored` says the photo is a mirror image of the body — a front-camera
+ * selfie. The detector names sides from what it sees, and a mirrored body looks
+ * like an ordinary one facing the lens, so the knee it calls left is the one you
+ * call right. Swapping the pairs back keeps a handle labelled "left" on the side
+ * you'd call left, which is the side the angle gets logged under.
  */
-export function handlesFromLandmarks(mode: MeasureMode, lms: Landmark[]): Handles | null {
+export function handlesFromLandmarks(
+  mode: MeasureMode,
+  lms: Landmark[],
+  mirrored = false,
+): Handles | null {
   if (lms.length <= POSE.RIGHT_ANKLE) return null
+  const sides = <T,>(l: T, r: T): [T, T] => (mirrored ? [r, l] : [l, r])
 
   if (mode === 'split') {
+    const [iAnkleL, iAnkleR] = sides(POSE.LEFT_ANKLE, POSE.RIGHT_ANKLE)
     const hipL = lms[POSE.LEFT_HIP]
     const hipR = lms[POSE.RIGHT_HIP]
-    const ankleL = lms[POSE.LEFT_ANKLE]
-    const ankleR = lms[POSE.RIGHT_ANKLE]
+    const ankleL = lms[iAnkleL]
+    const ankleR = lms[iAnkleR]
     if (![hipL, hipR, ankleL, ankleR].every(seen)) return null
     return {
       hip: midpoint(hipL, hipR),
@@ -131,11 +143,33 @@ export function handlesFromLandmarks(mode: MeasureMode, lms: Landmark[]): Handle
 
   const need = [POSE.LEFT_KNEE, POSE.RIGHT_KNEE, POSE.LEFT_ANKLE, POSE.RIGHT_ANKLE]
   if (!need.every((i) => seen(lms[i]))) return null
+  const [iKneeL, iKneeR] = sides(POSE.LEFT_KNEE, POSE.RIGHT_KNEE)
   return {
     center: midpoint(lms[POSE.LEFT_ANKLE], lms[POSE.RIGHT_ANKLE]),
-    kneeL: { x: lms[POSE.LEFT_KNEE].x, y: lms[POSE.LEFT_KNEE].y },
-    kneeR: { x: lms[POSE.RIGHT_KNEE].x, y: lms[POSE.RIGHT_KNEE].y },
+    kneeL: { x: lms[iKneeL].x, y: lms[iKneeL].y },
+    kneeR: { x: lms[iKneeR].x, y: lms[iKneeR].y },
   }
+}
+
+/** The left/right handle pair each mode has, if any. */
+const SIDE_PAIR: Record<MeasureMode, [string, string] | null> = {
+  split: null, // the split is one angle across both legs — sides don't change it
+  tailors: ['kneeL', 'kneeR'],
+}
+
+/** Whether swapping sides would change what gets logged for this mode. */
+export const hasSides = (mode: MeasureMode): boolean => SIDE_PAIR[mode] !== null
+
+/**
+ * Trade the left and right handles, for when a photo's mirroring wasn't what we
+ * assumed and the two angles came out under the wrong sides.
+ */
+export function swapSides(mode: MeasureMode, h: Handles): Handles {
+  const pair = SIDE_PAIR[mode]
+  if (!pair) return h
+  const [a, b] = pair
+  if (!h[a] || !h[b]) return h
+  return { ...h, [a]: h[b], [b]: h[a] }
 }
 
 /**

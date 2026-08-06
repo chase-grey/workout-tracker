@@ -229,6 +229,8 @@ export function CameraMeasure({
     handles: Handles
     note: string | null
   } | null>(null)
+  /** Whether the frame we're working on is a mirror image (front-camera shot). */
+  const mirroredRef = useRef(false)
   const [redetecting, setRedetecting] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -276,7 +278,7 @@ export function CameraMeasure({
     async (canvas: HTMLCanvasElement): Promise<{ handles: Handles; note: string | null }> => {
       const res = await detectPose(canvas)
       if (!res.ok) return { handles: defaultHandles(mode), note: DETECT_NOTE[res.reason] }
-      const handles = handlesFromLandmarks(mode, res.landmarks)
+      const handles = handlesFromLandmarks(mode, res.landmarks, mirroredRef.current)
       return handles
         ? { handles, note: null }
         : { handles: defaultHandles(mode), note: DETECT_NOTE.partial }
@@ -311,6 +313,9 @@ export function CameraMeasure({
     blobRef.current = await canvasToBlob(canvas)
     const url = canvas.toDataURL('image/jpeg', 0.9)
     sourceRef.current = canvas
+    // The front camera hands back a mirror image, so the detector's sides are
+    // reversed; the editor can flip this back if a device disagrees.
+    mirroredRef.current = facing === 'user'
     stopStream()
     // Detection downloads its model on first use, which is slow enough to need
     // a state of its own rather than a frozen preview.
@@ -318,7 +323,7 @@ export function CameraMeasure({
     const { handles, note } = await runDetection(canvas)
     setShot({ url, aspect: canvas.width / canvas.height, handles, note })
     setPhase('editing')
-  }, [runDetection, stopStream])
+  }, [facing, runDetection, stopStream])
 
   // Wall-clock countdown (survives background throttling) → auto-capture at 0.
   useEffect(() => {
@@ -361,6 +366,7 @@ export function CameraMeasure({
       canvas.height = img.naturalHeight
       canvas.getContext('2d')?.drawImage(img, 0, 0)
       sourceRef.current = canvas
+      mirroredRef.current = false
       setPhase('detecting')
       const { handles, note } = await runDetection(canvas)
       setShot({
