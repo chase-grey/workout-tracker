@@ -18,6 +18,7 @@ import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, type GoalSpec } from
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptDecay,
+  commitRange,
   lockProjection,
   lockProjectionByDate,
   paceAgainstLock,
@@ -36,9 +37,11 @@ import {
   timeXAxis,
   withTime,
 } from '../../lib/chart'
-import { parseISODate, toISODate } from '../../lib/dates'
+import { parseISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
+import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
+import { CommitChart } from './CommitChart'
 import { MdBolt, MdCelebration, MdLockOutline, MdRefresh } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -106,17 +109,15 @@ function LockChart({
   }, [rows, revisedMs])
 
   // The curve runs from the corner the data started in to the target line, so
-  // every label goes on the side of that line the curve has already left: for a
-  // rising goal the target sits high and the labels hang under it, for a falling
-  // one it sits low and they sit above it. The lock marker goes to the opposite
-  // edge of the chart from the target line for the same reason.
+  // every tag goes in a corner the curve has already left: a rising goal frees
+  // the top-left and bottom-right, a falling one the opposite pair. So a rising
+  // goal's target sits high with its tag under the line, its lock rule carries
+  // its tag along the bottom, and the ETA dates hang below the target line.
   const rising = lock.target > lock.startValue
-  const goalLabelPos = rising ? 'insideBottomLeft' : 'insideTopLeft'
-  const lockLabelPos = rising ? 'insideBottomRight' : 'insideTopRight'
-  const etaLabelPos = rising ? 'bottom' : 'top'
+  const tagSide = rising ? 'below' : 'above'
   // The second date gets its own row instead of sharing one, so two ETAs a few
   // days apart don't print on top of each other.
-  const revisedLabelDy = rising ? 11 : -11
+  const revisedNudge = rising ? 12 : -12
 
   return (
     <div className="mt-3 rounded-xl bg-surface-2 p-1">
@@ -144,7 +145,7 @@ function LockChart({
             x={parseISODate(lock.lockedAt).getTime()}
             stroke={LINE_GOAL}
             strokeDasharray="3 3"
-            label={{ value: 'locked', fill: LINE_GOAL_LABEL, fontSize: 9, position: lockLabelPos }}
+            label={<ChartTag text="locked" color={LINE_GOAL_LABEL} bg="#262626" side={tagSide} />}
           />
           {/* The target the line is climbing toward, so the goal reads off the
               chart without doing the mental math from the projected curve's end. */}
@@ -152,7 +153,7 @@ function LockChart({
             y={lock.target}
             stroke={LINE_GOAL}
             strokeDasharray="5 4"
-            label={{ value: `goal ${lock.target}`, fill: LINE_GOAL_LABEL, fontSize: 9, position: goalLabelPos }}
+            label={<ChartTag text={`goal ${lock.target}`} color={LINE_GOAL_LABEL} bg="#262626" side={tagSide} />}
           />
           {/* The commitment: where the locked curve meets the goal. */}
           <ReferenceDot
@@ -161,7 +162,9 @@ function LockChart({
             r={4}
             fill={LINE_GOAL}
             stroke="#0a0a0a"
-            label={{ value: fmtDate(lock.etaDate), fill: LINE_GOAL_LABEL, fontSize: 9, position: etaLabelPos }}
+            label={
+              <ChartTag text={fmtDate(lock.etaDate)} color={LINE_GOAL_LABEL} bg="#262626" align="center" side={tagSide} />
+            }
           />
           {/* Where the pace being held now would land instead — dark green when
               that's later than the commitment, bright when it beats it. */}
@@ -172,13 +175,16 @@ function LockChart({
               r={4}
               fill={behind ? LINE_SECONDARY : LINE_PRIMARY}
               stroke="#0a0a0a"
-              label={{
-                value: fmtDate(revisedEta!),
-                fill: behind ? LINE_SECONDARY : LINE_PRIMARY,
-                fontSize: 9,
-                position: etaLabelPos,
-                dy: revisedLabelDy,
-              }}
+              label={
+                <ChartTag
+                  text={fmtDate(revisedEta!)}
+                  color={behind ? LINE_SECONDARY : LINE_PRIMARY}
+                  bg="#262626"
+                  align="center"
+                  side={tagSide}
+                  nudge={revisedNudge}
+                />
+              }
             />
           )}
           <Line
@@ -240,7 +246,7 @@ function DataChart({ points, target, targetLabel }: { points: Point[]; target: n
             y={target}
             stroke={LINE_GOAL}
             strokeDasharray="5 4"
-            label={{ value: targetLabel, fill: LINE_GOAL_LABEL, fontSize: 10, position: 'insideTopLeft' }}
+            label={<ChartTag text={targetLabel} color={LINE_GOAL_LABEL} bg="#262626" size={10} />}
           />
           <Line
             type="monotone"
@@ -271,35 +277,41 @@ function paceLabel(proj: Projection, unit: string): string {
 /**
  * The lit-up state a goal reaches once its projected ETA lands within
  * {@link LOCK_HORIZON_MONTHS}: the projection isn't frozen on its own anymore, so
- * the row offers the commitment instead. The projected date is the default, and
- * the user can pull it sooner or push it later before locking it in.
+ * the row offers the commitment instead.
+ *
+ * The projected date is where the handle starts, and the chart is how it gets
+ * moved — drag the finish line along the target and the curve you'd be signing
+ * up for redraws against the machine's own, which stays where it is. The date
+ * field is the same value spelled out, for setting it exactly.
  */
 function LockInPrompt({
+  goal,
   proj,
-  unit,
   onLock,
 }: {
+  goal: GoalSpec
   proj: Projection
-  unit: string
   onLock: (etaDate: string) => void
 }) {
   const [date, setDate] = useState(proj.etaDate ?? '')
-  const todayIso = toISODate(new Date())
-  const valid = date > todayIso
+  const range = useMemo(() => commitRange(proj.etaDate!), [proj.etaDate])
+  const valid = date >= range.soonest && date <= range.latest
 
   return (
     <div className="mt-2 rounded-xl bg-accent-2/10 p-3">
       <p className="text-sm font-medium text-accent-2">
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
-        in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, unit)})
+        in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
       </p>
+      <CommitChart goalId={goal.id} proj={proj} points={goal.points} date={date} onChange={setDate} />
       <div className="mt-3 flex items-center gap-2">
         <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
           hit it by
           <input
             type="date"
             value={date}
-            min={todayIso}
+            min={range.soonest}
+            max={range.latest}
             onChange={(e) => setDate(e.target.value)}
             className="min-h-[36px] flex-1 rounded-lg bg-surface-2 px-2 text-sm text-neutral-200 [color-scheme:dark]"
           />
@@ -445,7 +457,7 @@ function GoalRow({
           )}
         </>
       ) : lockable ? (
-        <LockInPrompt proj={proj} unit={goal.unit} onLock={onLock} />
+        <LockInPrompt goal={goal} proj={proj} onLock={onLock} />
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
           on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})

@@ -5,10 +5,11 @@
  * A live projection (see predictions.project) refits its slope every time new
  * data lands, so its ETA slides around and you can never actually be "behind" —
  * the line just re-aims at wherever you are. Once a goal comes within
- * LOCK_HORIZON_MONTHS, we snapshot the projection instead: a fixed start point,
- * target, and ETA. From then on the chart can draw that straight line as
- * *projected* and the real series as *actual*, and every new entry is either
- * ahead of the line or behind it.
+ * LOCK_HORIZON_MONTHS, the user commits instead: a fixed start point, target,
+ * and ETA — the last of which they can pull sooner or push later than the
+ * estimate. From then on the chart can draw that committed curve as *projected*
+ * and the real series as *actual*, and every new entry is either ahead of the
+ * line or behind it.
  *
  * The lock is a snapshot, not a verdict — recalculate() re-locks from today's
  * data whenever the user asks for a fresh estimate.
@@ -46,26 +47,74 @@ export type LockedProjection = {
   /** Slope the lock was taken at, in metric units per week. */
   slopePerWeek: number
   /**
-   * Weekly decay of the gain rate the line was drawn with, bending it the way
-   * gains actually taper (see predictions.weeksToClose). Absent on locks frozen
-   * before decay shipped — those stay the straight lines they were committed as,
-   * so `decayOf` reads a missing value as 1 (none).
+   * Weekly decay of the gain rate the goal itself projects with (see
+   * predictions.weeksToClose), carried over so a revised ETA is re-derived
+   * through the same model. Absent for goals that project straight — the drawn
+   * line still curves, on the default commitment shape (see {@link curveOf}).
    */
   decayPerWeek?: number
 }
 
 export type LockedProjections = Record<string, LockedProjection>
 
-/** The decay a lock was drawn with; 1 (a straight line) for pre-decay locks. */
+/**
+ * The goal's own physiological taper, or 1 when it has none. This is what a
+ * *revised* ETA is re-derived through — the question "at the pace I'm really
+ * holding, when do I arrive?" has to use the model the goal believes about
+ * itself, not the shape its committed line happens to be drawn with.
+ */
 function decayOf(lock: LockedProjection): number {
   return lock.decayPerWeek ?? 1
 }
 
 /**
+ * How far along a committed line sits at the halfway point of its span, for a
+ * goal whose own projection runs straight (bodyweight, body fat, flexibility).
+ *
+ * A commitment isn't a physiological model, it's a plan — and a plan that says
+ * "same gain every week for six months" is the one nobody keeps. The ground you
+ * make early is the ground you make cheaply: the first weeks run on fresh
+ * motivation and whatever slack was left in the routine, and the last ones are
+ * the grind. Committing to a front-loaded line puts the demand where it can
+ * actually be met and leaves room at the end, so a slow final month reads as the
+ * taper it is rather than as failure.
+ *
+ * Strength goals don't use this — they carry a real measured taper of their own
+ * (see goals.STRENGTH_GAIN_DECAY), which is steeper than this over most spans.
+ */
+export const COMMITMENT_HALFWAY_SHARE = 0.6
+
+/**
+ * The weekly decay that draws {@link COMMITMENT_HALFWAY_SHARE} of the distance
+ * in the first half of a `weeks`-long span.
+ *
+ * From the curve in {@link expectedAt}: over a span of S weeks the shape depends
+ * only on k = rˢ, and the halfway share works out to 1/(1 + √k). Solving that
+ * for k and taking the S-th root gives the per-week decay that hits it — so the
+ * curve keeps the same shape whether the span is two months or two years.
+ */
+function commitmentDecay(weeks: number): number {
+  const k = Math.pow((1 - COMMITMENT_HALFWAY_SHARE) / COMMITMENT_HALFWAY_SHARE, 2)
+  return Math.pow(k, 1 / weeks)
+}
+
+/**
+ * The weekly decay a lock's line is actually *drawn* with: the goal's own taper
+ * when it has one, and the default commitment shape when it doesn't. Either way
+ * the line is front-loaded — every commitment expects more early than late.
+ */
+function curveOf(lock: LockedProjection): number {
+  const own = lock.decayPerWeek
+  if (own != null && own < 1) return own
+  const weeks = daysBetween(lock.lockedAt, lock.etaDate) / 7
+  return weeks > 0 ? commitmentDecay(weeks) : 1
+}
+
+/**
  * Adopt a goal's current decay into a lock, keeping the commitment (start,
  * target, ETA) but bending the line between them the way the goal now says gains
- * taper. The decay is a curve-shape assumption, not part of the commitment, so a
- * lock always renders with the goal's latest one — this covers both a lock frozen
+ * taper. The decay is a model assumption, not part of the commitment, so a
+ * lock always reads with the goal's latest one — this covers both a lock frozen
  * before decay shipped and a lock frozen at an older decay value that's since
  * been retuned. Returns the lock untouched when it already matches, or when the
  * goal projects straight (no decay), so callers can run it on every lock.
@@ -81,6 +130,12 @@ export function adoptDecay(
 /** Days from `from` to `to` (negative when `to` precedes `from`). */
 function daysBetween(from: string, to: string): number {
   return Math.round((parseISODate(to).getTime() - parseISODate(from).getTime()) / MS_PER_DAY)
+}
+
+/** The ISO date `days` after `from` (before it, when negative). */
+export function addDays(from: string, days: number): string {
+  const d = parseISODate(from)
+  return toISODate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days))
 }
 
 /**
@@ -117,6 +172,36 @@ export function lockProjection(
     slopePerWeek: proj.slopePerWeek,
     decayPerWeek: proj.decayPerWeek,
   }
+}
+
+/** How soon a commitment may be set for: a line shorter than this can't be held. */
+const SOONEST_COMMIT_DAYS = 7
+/** How far out one may be pushed: another span again past the projected date… */
+const LATEST_COMMIT_MULTIPLE = 2
+/** …but always at least this much slack, so a near date still has room to give. */
+const MIN_COMMIT_SLACK_DAYS = 30
+
+/** The window of dates a goal may be committed to. */
+export type CommitRange = { soonest: string; latest: string }
+
+/**
+ * How far either side of the projected date a commitment may be set.
+ *
+ * The point of choosing the date is to be able to make the goal harder or easier
+ * than the estimate, so the window has to open both ways — but not without
+ * limit. A date next week isn't a plan, and one four times the projected span out
+ * isn't a commitment. Every control that sets the date shares this range, so they
+ * can't disagree about what they'll accept.
+ */
+export function commitRange(etaDate: string, today: Date = new Date()): CommitRange {
+  const todayIso = toISODate(today)
+  const projected = Math.max(1, daysBetween(todayIso, etaDate))
+  const soonest = addDays(todayIso, SOONEST_COMMIT_DAYS)
+  const latest = addDays(
+    todayIso,
+    Math.max(projected * LATEST_COMMIT_MULTIPLE, projected + MIN_COMMIT_SLACK_DAYS),
+  )
+  return { soonest, latest: latest > soonest ? latest : addDays(soonest, MIN_COMMIT_SLACK_DAYS) }
 }
 
 /**
@@ -156,10 +241,10 @@ export function lockProjectionByDate(
  * (lockedAt, startValue) to (etaDate, target). Before the lock date it reads
  * startValue; after the ETA it reads target.
  *
- * With decay (see LockedProjection.decayPerWeek) the curve is concave: it climbs
- * fast early and eases off near the target, matching how gains taper. The
- * fraction of the way covered by week t of a span of S weeks is
- * (1 − rᵗ)/(1 − rˢ), which collapses to the straight-line t/S when r is 1.
+ * The curve is concave: it climbs fast early and eases off near the target,
+ * matching how gains actually come (see {@link curveOf}). The fraction of the way
+ * covered by week t of a span of S weeks is (1 − rᵗ)/(1 − rˢ), which collapses to
+ * the straight-line t/S when r is 1.
  */
 export function expectedAt(lock: LockedProjection, date: string): number {
   const span = daysBetween(lock.lockedAt, lock.etaDate)
@@ -168,7 +253,7 @@ export function expectedAt(lock: LockedProjection, date: string): number {
   if (elapsed <= 0) return round1(lock.startValue)
   if (elapsed >= span) return round1(lock.target)
 
-  const r = decayOf(lock)
+  const r = curveOf(lock)
   const fraction =
     r >= 1
       ? elapsed / span

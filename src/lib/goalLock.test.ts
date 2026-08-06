@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { project } from './predictions'
 import {
   adoptDecay,
+  commitRange,
   expectedAt,
   lockProjection,
   lockProjectionByDate,
@@ -13,7 +14,12 @@ import {
 
 const TODAY = new Date(2026, 0, 1)
 
-/** A lock that climbs 100 → 200 over exactly 100 days. */
+/**
+ * A lock that climbs 100 → 200 over exactly 100 days, on the default commitment
+ * shape — no goal decay of its own, so it's drawn at COMMITMENT_HALFWAY_SHARE:
+ * 60 of the 100 in the first 50 days, so the line expects 160 at the halfway
+ * mark. Most of the assertions below hang off that number.
+ */
 const CLIMB: LockedProjection = {
   goalId: 'squat',
   lockedAt: '2026-01-01',
@@ -106,15 +112,39 @@ describe('lockProjectionByDate', () => {
   })
 })
 
+describe('commitRange', () => {
+  it('opens a week out and reaches twice the projected span', () => {
+    // 100 days projected → 200 days of room to push it out.
+    const { soonest, latest } = commitRange('2026-04-11', TODAY)
+    expect(soonest).toBe('2026-01-08')
+    expect(latest).toBe('2026-07-20')
+  })
+
+  it('leaves room to give even when the projected date is close', () => {
+    // Twice a fortnight is still inside the earliest date allowed, so the window
+    // opens on the slack instead — a near goal can always be pushed back.
+    const { soonest, latest } = commitRange('2026-01-15', TODAY)
+    expect(soonest).toBe('2026-01-08')
+    expect(latest > soonest).toBe(true)
+    expect(latest).toBe('2026-02-14')
+  })
+})
+
 describe('expectedAt', () => {
   it('reads the start value on the lock date and the target at the eta', () => {
     expect(expectedAt(CLIMB, '2026-01-01')).toBe(100)
     expect(expectedAt(CLIMB, '2026-04-11')).toBe(200)
   })
 
-  it('interpolates linearly in between', () => {
-    // 50 of 100 days elapsed → halfway from 100 to 200.
-    expect(expectedAt(CLIMB, '2026-02-20')).toBe(150)
+  it('front-loads the gains in between', () => {
+    // 50 of 100 days elapsed, and a commitment expects more of the distance early
+    // than late — 60% of it by the halfway mark, not 50%.
+    expect(expectedAt(CLIMB, '2026-02-20')).toBe(160)
+  })
+
+  it('curves a falling goal the same way', () => {
+    // Down 6 of the 10 by halfway, mirroring the climb.
+    expect(expectedAt(FALL, '2026-02-20')).toBe(14)
   })
 
   it('clamps outside the locked window', () => {
@@ -137,28 +167,28 @@ describe('projectedSeries', () => {
 })
 
 describe('paceAgainstLock', () => {
-  const HALFWAY_ISO = '2026-02-20' // 50 days in; the line expects 150
+  const HALFWAY_ISO = '2026-02-20' // 50 days in; the line expects 160
   const halfway = new Date(2026, 1, 20)
 
   it('calls beating the line ahead', () => {
-    const pace = paceAgainstLock(CLIMB, 160, HALFWAY_ISO, undefined, halfway)
+    const pace = paceAgainstLock(CLIMB, 170, HALFWAY_ISO, undefined, halfway)
     expect(pace.status).toBe('ahead')
     expect(pace.aheadBy).toBe(10)
   })
 
   it('calls trailing the line behind', () => {
-    const pace = paceAgainstLock(CLIMB, 140, HALFWAY_ISO, undefined, halfway)
+    const pace = paceAgainstLock(CLIMB, 150, HALFWAY_ISO, undefined, halfway)
     expect(pace.status).toBe('behind')
     expect(pace.aheadBy).toBe(-10)
   })
 
   it('treats sitting on the line as on', () => {
-    expect(paceAgainstLock(CLIMB, 150, HALFWAY_ISO, undefined, halfway).status).toBe('on')
+    expect(paceAgainstLock(CLIMB, 160, HALFWAY_ISO, undefined, halfway).status).toBe('on')
   })
 
   it('counts falling faster as ahead for a downward goal', () => {
-    // The line expects 15% body fat halfway; 14% is better, so ahead.
-    const pace = paceAgainstLock(FALL, 14, HALFWAY_ISO, undefined, halfway)
+    // The line expects 14% body fat halfway; 13% is better, so ahead.
+    const pace = paceAgainstLock(FALL, 13, HALFWAY_ISO, undefined, halfway)
     expect(pace.status).toBe('ahead')
     expect(pace.aheadBy).toBe(1)
   })
@@ -167,16 +197,16 @@ describe('paceAgainstLock', () => {
     // Right on the line at the halfway session, then three idle weeks pass. The
     // reading hasn't changed, so the standing must not — the calendar advancing
     // while the line kept climbing can't push a real result "behind".
-    const onTheLine = paceAgainstLock(CLIMB, 150, HALFWAY_ISO, undefined, halfway)
+    const onTheLine = paceAgainstLock(CLIMB, 160, HALFWAY_ISO, undefined, halfway)
     expect(onTheLine.status).toBe('on')
     const threeWeeksLater = new Date(2026, 2, 13)
-    const stillOn = paceAgainstLock(CLIMB, 150, HALFWAY_ISO, undefined, threeWeeksLater)
+    const stillOn = paceAgainstLock(CLIMB, 160, HALFWAY_ISO, undefined, threeWeeksLater)
     expect(stillOn.status).toBe('on')
     expect(stillOn.aheadBy).toBe(onTheLine.aheadBy)
   })
 
   it('revises the eta earlier when running ahead', () => {
-    const pace = paceAgainstLock(CLIMB, 160, HALFWAY_ISO, undefined, halfway)
+    const pace = paceAgainstLock(CLIMB, 170, HALFWAY_ISO, undefined, halfway)
     expect(pace.revisedEta).not.toBeNull()
     expect(pace.revisedEta! < CLIMB.etaDate).toBe(true)
   })
@@ -231,26 +261,47 @@ describe('degenerate locks', () => {
   })
 })
 
+describe('the commitment curve', () => {
+  it('keeps its shape whatever the span', () => {
+    // 60% of the distance by the halfway mark, over 100 days and over 700.
+    const long: LockedProjection = { ...CLIMB, etaDate: '2027-12-02' } // 700 days
+    expect(expectedAt(CLIMB, '2026-02-20')).toBe(160)
+    expect(expectedAt(long, '2026-12-17')).toBe(160) // 350 days in
+  })
+
+  it('still lands exactly on the endpoints', () => {
+    expect(expectedAt(CLIMB, '2026-01-01')).toBe(100)
+    expect(expectedAt(CLIMB, '2026-04-11')).toBe(200)
+  })
+})
+
 describe('decayed locks', () => {
   /** Same 100 → 200 over 100 days, but with the gain rate easing 5%/week. */
   const DECAYED: LockedProjection = { ...CLIMB, decayPerWeek: 0.95 }
+  /** …and one that barely eases at all, so its line runs close to straight. */
+  const GENTLE: LockedProjection = { ...CLIMB, decayPerWeek: 0.99 }
 
-  it('draws a concave line: ahead of the straight line early, target at the eta', () => {
-    // Start and end pinned to the same points as the straight line...
+  it('draws the steeper decay further along early, both landing on the eta', () => {
+    // Start and end pinned to the same points...
     expect(expectedAt(DECAYED, '2026-01-01')).toBe(100)
     expect(expectedAt(DECAYED, '2026-04-11')).toBe(200)
-    // ...but partway through it has already climbed past the straight-line value,
-    // because a decaying pace front-loads the gains.
-    expect(expectedAt(DECAYED, '2026-02-20')).toBeGreaterThan(expectedAt(CLIMB, '2026-02-20'))
+    // ...but a faster-decaying pace has more of the climb behind it by halfway.
+    expect(expectedAt(DECAYED, '2026-02-20')).toBeGreaterThan(expectedAt(GENTLE, '2026-02-20'))
   })
 
-  it('holds a reading that beats the straight line to the steeper decayed line', () => {
-    // 160 is ahead of the straight line's 150 halfway, but the decayed line
-    // expects more than that by now, so the same reading reads behind.
-    const straight = paceAgainstLock(CLIMB, 160, '2026-02-20', undefined, new Date(2026, 1, 20))
+  it('overrides the default commitment shape with the goal\'s own taper', () => {
+    // 5%/week over this span is gentler than the default 60%-by-halfway curve, so
+    // a goal that carries a real taper is judged against that instead.
+    expect(expectedAt(DECAYED, '2026-02-20')).toBeLessThan(expectedAt(CLIMB, '2026-02-20'))
+  })
+
+  it('holds a reading to whichever line it is actually committed to', () => {
+    // 160 is well clear of the gentle line but only a hair over the steeper one,
+    // so the same reading is worth far less against the decayed commitment.
+    const gentle = paceAgainstLock(GENTLE, 160, '2026-02-20', undefined, new Date(2026, 1, 20))
     const decayed = paceAgainstLock(DECAYED, 160, '2026-02-20', undefined, new Date(2026, 1, 20))
-    expect(straight.status).toBe('ahead')
-    expect(decayed.aheadBy).toBeLessThan(straight.aheadBy)
+    expect(gentle.status).toBe('ahead')
+    expect(decayed.aheadBy).toBeLessThan(gentle.aheadBy)
   })
 })
 
@@ -261,7 +312,8 @@ describe('adoptDecay', () => {
     expect(bent.startValue).toBe(CLIMB.startValue)
     expect(bent.target).toBe(CLIMB.target)
     expect(bent.etaDate).toBe(CLIMB.etaDate)
-    expect(expectedAt(bent, '2026-02-20')).toBeGreaterThan(expectedAt(CLIMB, '2026-02-20'))
+    // The commitment is untouched; only the line between its ends has moved.
+    expect(expectedAt(bent, '2026-02-20')).not.toBe(expectedAt(CLIMB, '2026-02-20'))
   })
 
   it('re-bends a lock frozen at an older decay to the goal\'s current one', () => {
