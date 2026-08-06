@@ -27,7 +27,7 @@ const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
 /** Legend that follows the axes: the left-axis series sits left, cal surplus right. */
-function SplitLegend({ payload }: { payload?: { value?: unknown; dataKey?: unknown; color?: string }[] }) {
+export function SplitLegend({ payload }: { payload?: { value?: unknown; dataKey?: unknown; color?: string }[] }) {
   const items = [...(payload ?? [])].sort((a, b) => Number(a.dataKey === 'cal') - Number(b.dataKey === 'cal'))
   return (
     <div className="flex justify-between px-3 text-xs text-neutral-400">

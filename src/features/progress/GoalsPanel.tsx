@@ -38,7 +38,7 @@ import {
 } from '../../lib/chart'
 import { parseISODate, toISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
-import { MetricChart } from './MetricChart'
+import { BodyWeightChart } from './BodyWeightChart'
 import { MdBolt, MdCelebration, MdLockOutline, MdRefresh } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -331,6 +331,7 @@ function GoalRow({
   onRecalculate,
   onLock,
   showData,
+  inlineChart = true,
   children,
 }: {
   goal: GoalSpec
@@ -341,6 +342,11 @@ function GoalRow({
   onLock: (etaDate: string) => void
   /** Plot the goal's own series (with its target line) while it's unlocked. */
   showData?: boolean
+  /**
+   * Draw the locked actual-vs-projected chart inside the row. Off for the
+   * bodyweight goals, whose lines already share the chart above them.
+   */
+  inlineChart?: boolean
   children?: React.ReactNode
 }) {
   const has = Number.isFinite(proj.current)
@@ -385,8 +391,9 @@ function GoalRow({
         </p>
       ) : lock ? (
         <>
-          {/* Both ETAs live on the chart below; this row is the ahead/behind
-              reading and the re-lock control. */}
+          {/* Both ETAs live on the chart — the row's own when it has one, the
+              shared one above it otherwise; this row is the ahead/behind reading
+              and the re-lock control. */}
           <div className="mt-1 flex items-baseline gap-2">
             {pace && (
               <p
@@ -409,12 +416,14 @@ function GoalRow({
               <MdRefresh aria-hidden />
             </button>
           </div>
-          <LockChart
-            lock={lock}
-            actual={goal.points}
-            revisedEta={pace?.revisedEta ?? null}
-            behind={pace?.status === 'behind'}
-          />
+          {inlineChart && (
+            <LockChart
+              lock={lock}
+              actual={goal.points}
+              revisedEta={pace?.revisedEta ?? null}
+              behind={pace?.status === 'behind'}
+            />
+          )}
         </>
       ) : lockable ? (
         <LockInPrompt proj={proj} unit={goal.unit} onLock={onLock} />
@@ -570,32 +579,68 @@ export function GoalsPanel({ months }: { months: number | null }) {
     [calorieEntries, months],
   )
 
-  // Targets for the bodyweight goals whose projection has been locked in. The
-  // locked target, not the live one, so the chart line and the row agree.
-  const weightGoalLines = useMemo(
-    () =>
-      goals
-        .filter((g) => (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) && locked[g.id] != null)
-        .map((g) => ({
-          value: locked[g.id]!.target,
-          label: g.title.replace('bodyweight → ', 'goal '),
-        })),
-    [goals, locked],
+  // The two bodyweight goals, which share one chart instead of drawing the same
+  // weigh-in history over again apiece.
+  const weightGoals = useMemo(
+    () => goals.filter((g) => g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190),
+    [goals],
   )
 
+  // What the shared chart draws per goal: the target line always, and the
+  // committed curve with its two dates once the goal is locked and still open. A
+  // lock froze the target it committed to, so the line comes off the lock rather
+  // than the live goal — or the chart and the row below would disagree.
+  const weightGoalLines = useMemo(
+    () =>
+      weightGoals.map((g) => {
+        const lock = isReached(g) ? undefined : locked[g.id]
+        const proj = projections.get(g.id)
+        const lastReadingDate = g.points.length ? g.points[g.points.length - 1].date : null
+        const pace =
+          lock && proj && Number.isFinite(proj.current) && lastReadingDate
+            ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek)
+            : null
+        return {
+          label: g.title.replace('bodyweight → ', 'goal '),
+          target: lock ? lock.target : g.target,
+          lock,
+          revisedEta: pace?.revisedEta ?? null,
+          behind: pace?.status === 'behind',
+        }
+      }),
+    [weightGoals, locked, projections],
+  )
+
+  /* Lift and flexibility goals plot their own series; body-composition ones are
+     already charted by the block above them. */
+  const goalRow = (g: GoalSpec, inlineChart = true) => (
+    <GoalRow
+      key={g.id}
+      goal={g}
+      proj={projections.get(g.id)!}
+      lock={locked[g.id]}
+      onRecalculate={() => recalculate(g)}
+      onLock={(etaDate) => lockIn(g, etaDate)}
+      showData={g.exerciseKey != null || g.milestone}
+      inlineChart={inlineChart}
+    />
+  )
+
+  // One chart carrying the weigh-ins, both targets and both commitments, with the
+  // two goals reading off it underneath — each a row that turns itself over to
+  // "goal reached!" the moment a weigh-in gets there.
   const bodyWeightBlock = (
     <div className="flex flex-col gap-3">
       <h4 className="text-sm font-semibold tracking-wider text-neutral-500">
         body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
       </h4>
-      <MetricChart
-        data={weightSeries}
-        unit="lbs"
-        label="weight"
+      <BodyWeightChart
+        points={weightSeries}
         calories={calorieSurplus}
-        goalLines={weightGoalLines}
+        goals={weightGoalLines}
         empty="log my weight to project these goals"
       />
+      {weightGoals.map((g) => goalRow(g, false))}
     </div>
   )
 
@@ -603,31 +648,21 @@ export function GoalsPanel({ months }: { months: number | null }) {
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
       {goals.map((g) => {
-        const proj = projections.get(g.id)!
-        return (
-          <Fragment key={g.id}>
-            {/* The weigh-in history sits ahead of the goals it feeds. */}
-            {g.id === GOAL_IDS.weight180 && bodyWeightBlock}
-            {g.id === GOAL_IDS.sixPack ? (
-              <SixPackRow
-                title={g.title}
-                status={settings.sixPackStatus ?? 'none'}
-                onChange={(s) => updateSettings({ ...settings, sixPackStatus: s })}
-              />
-            ) : (
-              /* Lift and flexibility goals plot their own series; body-composition
-                 ones are already charted by the blocks above them. */
-              <GoalRow
-                goal={g}
-                proj={proj}
-                lock={locked[g.id]}
-                onRecalculate={() => recalculate(g)}
-                onLock={(etaDate) => lockIn(g, etaDate)}
-                showData={g.exerciseKey != null || g.milestone}
-              />
-            )}
-          </Fragment>
-        )
+        // Both bodyweight goals live in the block under their shared chart, which
+        // takes the place of the first of them.
+        if (g.id === GOAL_IDS.weight190) return null
+        if (g.id === GOAL_IDS.weight180) return <Fragment key={g.id}>{bodyWeightBlock}</Fragment>
+        if (g.id === GOAL_IDS.sixPack) {
+          return (
+            <SixPackRow
+              key={g.id}
+              title={g.title}
+              status={settings.sixPackStatus ?? 'none'}
+              onChange={(s) => updateSettings({ ...settings, sixPackStatus: s })}
+            />
+          )
+        }
+        return goalRow(g)
       })}
     </div>
   )
