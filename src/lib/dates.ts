@@ -13,6 +13,11 @@ export function parseISODate(s: string): Date {
   return new Date(y, m - 1, d)
 }
 
+/** Days from `from` to `to` (negative when `to` precedes `from`). */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((parseISODate(to).getTime() - parseISODate(from).getTime()) / 86400000)
+}
+
 /** The Monday (local midnight) of the week containing `d`. */
 export function mondayOf(d: Date): Date {
   const date = new Date(d.getFullYear(), d.getMonth(), d.getDate())

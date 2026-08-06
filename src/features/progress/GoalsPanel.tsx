@@ -14,7 +14,7 @@ import { useData } from '../../store/DataContext'
 import { isPaceCapped, project, type Projection } from '../../lib/predictions'
 import { filterRange, type Point } from '../../lib/progress'
 import { calorieHitsByWeek } from '../../lib/calories'
-import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
+import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, reachedDate, type GoalSpec } from '../../lib/goals'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptDecay,
@@ -37,7 +37,7 @@ import {
   timeXAxis,
   withTime,
 } from '../../lib/chart'
-import { parseISODate } from '../../lib/dates'
+import { daysBetween, parseISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
@@ -385,6 +385,17 @@ function GoalRow({
 }) {
   const has = Number.isFinite(proj.current)
   const reached = isReached(goal)
+  const doneDate = reached ? reachedDate(goal) : null
+  // How the finish landed against the date the goal committed to. Only a finish
+  // at or before that date gets said out loud — one that ran late is left as
+  // just the date, which tells that story on its own for anyone who wants it.
+  const earlyBy = lock && doneDate ? daysBetween(doneDate, lock.etaDate) : null
+  const scheduleNote =
+    earlyBy == null || earlyBy < 0
+      ? null
+      : earlyBy === 0
+        ? 'right on schedule'
+        : `${earlyBy} ${earlyBy === 1 ? 'day' : 'days'} early`
   // Within reach but not yet committed: the row lights up and offers a lock-in,
   // rather than freezing the projection on its own.
   const lockable = !lock && !reached && withinHorizon(proj)
@@ -436,6 +447,8 @@ function GoalRow({
         <p className="mt-1 text-sm text-accent-2">
           <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
           goal reached!
+          {doneDate && <span className="tabular-nums"> · {fmtDate(doneDate)}</span>}
+          {scheduleNote && ` · ${scheduleNote}`}
         </p>
       ) : lock ? (
         <>
@@ -779,6 +792,14 @@ export function GoalsPanel({ months }: { months: number | null }) {
     return set.length ? set[0] : null
   }
 
+  // When a finished block finished: the last of its goals to fall, since that's
+  // the day the block as a whole was done. A block still carrying an open goal
+  // isn't in the reached band, so nothing reads this until every date is in.
+  const latest = (dates: (string | null)[]): string | null => {
+    const set = dates.filter((d): d is string => d != null).sort()
+    return set.length ? set[set.length - 1] : null
+  }
+
   // Each thing the panel draws as its own block, in the default (buildGoals)
   // order. The two bodyweight goals collapse into one shared-chart block, so it
   // moves as a unit and carries whichever of its two dates comes first.
@@ -786,6 +807,8 @@ export function GoalsPanel({ months }: { months: number | null }) {
     const out: {
       /** Already achieved — the band that sits above everything else. */
       done: boolean
+      /** The day it was achieved, which is how the reached band orders itself. */
+      doneDate: string | null
       eta: string | null
       projEta: string | null
       /** The family this block clusters with when committed (see goalFamily). */
@@ -801,6 +824,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           // weigh-in targets are met — otherwise the block would go up top
           // carrying a goal that's still open.
           done: weightGoals.every(isReached),
+          doneDate: latest(weightGoals.map(reachedDate)),
           eta: soonest(weightGoals.map(committedEta)),
           projEta: soonest(weightGoals.map(projectedEta)),
           family: goalFamily(g),
@@ -810,9 +834,11 @@ export function GoalsPanel({ months }: { months: number | null }) {
       }
       if (g.id === GOAL_IDS.sixPack) {
         // Answered by eye rather than projected, so it has no date to sort by —
-        // it sits at the bottom of the panel until it's called done.
+        // it sits at the bottom of the panel until it's called done, and at the
+        // back of the reached band after that.
         out.push({
           done: (settings.sixPackStatus ?? 'none') === 'have',
+          doneDate: null,
           eta: null,
           projEta: null,
           family: goalFamily(g),
@@ -837,6 +863,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
         if (ladder.rungs[0].id !== g.id) continue
         out.push({
           done: ladder.rungs.every(isReached),
+          doneDate: latest(ladder.rungs.map(reachedDate)),
           eta: soonest(ladder.rungs.map(committedEta)),
           projEta: soonest(ladder.rungs.map(projectedEta)),
           family: goalFamily(g),
@@ -846,6 +873,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
       }
       out.push({
         done: isReached(g),
+        doneDate: reachedDate(g),
         eta: committedEta(g),
         projEta: projectedEta(g),
         family: goalFamily(g),
@@ -857,9 +885,10 @@ export function GoalsPanel({ months }: { months: number | null }) {
   }, [goals, locked, projections, settings, months, ladders])
 
   // Four bands: goals already reached first, then committed ones, then the rest
-  // by how far off their projection is, then the six-pack. Reached goals have no
-  // date left to sort by, so they hold the panel's default order among
-  // themselves. In both dated bands related goals (the two
+  // by how far off their projection is, then the six-pack. The reached band runs
+  // newest first — the thing just cleared is the thing worth seeing, and the
+  // early wins settle toward the bottom as more land on top of them. In both
+  // dated bands related goals (the two
   // squat targets, a flexibility ladder) cluster into families rather than
   // interleaving by date — each family is placed by its soonest date within that
   // band (its nearest commitment when committed, its nearest projection when
@@ -896,8 +925,21 @@ export function GoalsPanel({ months }: { months: number | null }) {
         const ba = band(a.u)
         const bb = band(b.u)
         if (ba !== bb) return ba - bb
-        // Within a band, order families by their soonest date (dated families
-        // ahead of dateless ones), then keep a family's members in date order.
+        if (ba === 0) {
+          // Reached: straight reverse chronological, no family clustering — a
+          // finished goal's date is the only thing left to say about it, so the
+          // band reads as the log of what's been done, newest at the top. The
+          // six-pack, called by eye with no date behind it, falls to the back.
+          const ad = a.u.doneDate
+          const bd = b.u.doneDate
+          if (ad && bd && ad !== bd) return ad > bd ? -1 : 1
+          if (ad && !bd) return -1
+          if (!ad && bd) return 1
+          return a.i - b.i
+        }
+        // Within a dated band, order families by their soonest date (dated
+        // families ahead of dateless ones), then keep a family's members in date
+        // order.
         if (a.u.family !== b.u.family) {
           const sa = familySoonest.get(key(a.u))
           const sb = familySoonest.get(key(b.u))

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { BODYWEIGHT_GAIN_CAP, buildGoals, GOAL_IDS, isReached } from './goals'
+import { BODYWEIGHT_GAIN_CAP, buildGoals, GOAL_IDS, isReached, reachedDate } from './goals'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import type { FlexEntry } from './flex'
 import { project } from './predictions'
@@ -113,5 +113,33 @@ describe('isReached judges milestones on the best reading, others on the latest'
       ]),
     )
     expect(isReached(slid.find((g) => g.id === GOAL_IDS.weight180)!)).toBe(false)
+  })
+})
+
+describe('reachedDate reports the day the target was first met', () => {
+  it('dates a milestone to the session that crossed it', () => {
+    const entries: FlexEntry[] = [
+      { date: '2026-01-01', splitDeg: 94, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-01-08', splitDeg: 103, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-01-15', splitDeg: 108, tailorsLeftDeg: null, tailorsRightDeg: null },
+    ]
+    const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: entries })
+    expect(reachedDate(goals.find((g) => g.id === 'split_100')!)).toBe('2026-01-08')
+  })
+
+  it('keeps the original date when a goal falls back off and returns', () => {
+    const goals = buildGoals(
+      inputs([
+        { date: '2026-01-31', weightLbs: 181 },
+        { date: '2026-02-07', weightLbs: 176 },
+        { date: '2026-02-14', weightLbs: 182 },
+      ]),
+    )
+    expect(reachedDate(goals.find((g) => g.id === GOAL_IDS.weight180)!)).toBe('2026-01-31')
+  })
+
+  it('gives no date for a target no reading ever met', () => {
+    const goals = buildGoals(inputs(HOT_FORTNIGHT))
+    expect(reachedDate(goals.find((g) => g.id === GOAL_IDS.weight190)!)).toBeNull()
   })
 })

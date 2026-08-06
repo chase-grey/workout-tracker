@@ -104,6 +104,18 @@ export function isReached(goal: GoalSpec): boolean {
   return goal.direction === 'up' ? measured >= goal.target : measured <= goal.target
 }
 
+/**
+ * The date the goal's target was first met, or null if no reading ever met it.
+ * The first crossing rather than the latest one: that's the day it happened, and
+ * it's the day a commitment should be judged against. A non-milestone goal that
+ * fell back off the target and climbed to it again therefore still reports the
+ * original date — the achievement keeps the date it was earned on.
+ */
+export function reachedDate(goal: GoalSpec): string | null {
+  const hit = goal.points.find((p) => (goal.direction === 'up' ? p.value >= goal.target : p.value <= goal.target))
+  return hit ? hit.date : null
+}
+
 export type GoalInputs = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
