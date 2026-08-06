@@ -13,6 +13,8 @@ import {
   MAX_REST_RATIO,
   median,
   medianTotalSec,
+  mergeDurations,
+  mergeExerciseAverages,
   MIN_REST_RATIO,
   normalizeExerciseAverages,
   remainingSecs,
@@ -315,6 +317,61 @@ describe('normalizeExerciseAverages', () => {
       restCount: 6,
     })
     expect(normalizeExerciseAverages(JSON.parse(JSON.stringify(folded)))).toEqual(folded)
+  })
+})
+
+describe('mergeExerciseAverages', () => {
+  const local: ExerciseAverages = {
+    active: { bench: { avgSec: 40, n: 9 }, squat: { avgSec: 55, n: 4 } },
+    restRatio: { ratio: 1.2, n: 30 },
+  }
+
+  it('keeps everything local when the backend has folded nothing', () => {
+    expect(mergeExerciseAverages(local, EMPTY_EXERCISE_AVERAGES)).toEqual(local)
+  })
+
+  it('lets the backend win per exercise but keeps ones it does not know', () => {
+    const got = mergeExerciseAverages(local, {
+      active: { bench: { avgSec: 44, n: 20 } },
+      restRatio: { ratio: 0.9, n: 50 },
+    })
+    expect(got.active.bench).toEqual({ avgSec: 44, n: 20 }) // backend pooled more
+    expect(got.active.squat).toEqual({ avgSec: 55, n: 4 }) // local-only, survives
+    expect(got.restRatio).toEqual({ ratio: 0.9, n: 50 })
+  })
+
+  it('keeps the local rest ratio when the backend has no samples for it', () => {
+    const got = mergeExerciseAverages(local, {
+      active: { bench: { avgSec: 44, n: 20 } },
+      restRatio: EMPTY_REST_RATIO,
+    })
+    expect(got.restRatio).toEqual({ ratio: 1.2, n: 30 })
+  })
+})
+
+describe('mergeDurations', () => {
+  const a: SessionDuration = { date: '2026-08-02', kind: 'workout', dayType: 'push', totalSec: 3600, restSec: 900 }
+  const b: SessionDuration = { date: '2026-08-05', kind: 'stretch', totalSec: 900, restSec: 60 }
+
+  it('keeps local history when the backend returns nothing', () => {
+    expect(mergeDurations([a, b], [])).toEqual([a, b])
+  })
+
+  it('unions both sides and sorts by date', () => {
+    expect(mergeDurations([b], [a])).toEqual([a, b])
+  })
+
+  it('does not duplicate a session both sides already have', () => {
+    expect(mergeDurations([a, b], [a])).toEqual([a, b])
+  })
+
+  it('keeps two same-day sessions of different kinds apart', () => {
+    const stretchSameDay: SessionDuration = { ...b, date: '2026-08-02' }
+    expect(mergeDurations([a], [stretchSameDay])).toHaveLength(2)
+  })
+
+  it('keeps two workouts of the same day type but different lengths apart', () => {
+    expect(mergeDurations([a], [{ ...a, totalSec: 2400 }])).toHaveLength(2)
   })
 })
 

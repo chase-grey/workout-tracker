@@ -22,6 +22,8 @@ import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp
 import {
   applySessionSamples,
   isSaneDuration,
+  mergeDurations,
+  mergeExerciseAverages,
   normalizeExerciseAverages,
   type ExerciseAverages,
   type SessionDuration,
@@ -276,28 +278,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     try {
       const m = await api.fetchMeasurements()
-      if (Array.isArray(m)) persistMeasurements(dedupeMeasurementsByDate(m))
+      // Merge rather than replace, for the same reason as flex: a fetched date
+      // wins, but a backend with nothing to say can't blank this device's log.
+      if (Array.isArray(m))
+        persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), ...m]))
     } catch {
       /* ignore */
     }
     try {
       const d = await api.fetchDurations()
-      if (Array.isArray(d)) persistDurations(d)
+      // Merge rather than replace: the Time-spent report reads this cache, and a
+      // backend holding no duration rows returns [] — replacing wholesale would
+      // erase every session this device recorded, including ones still queued.
+      if (Array.isArray(d)) persistDurations(mergeDurations(storage.loadDurations(), d))
     } catch {
       /* ignore */
     }
     try {
       const ex = await api.fetchExerciseTimes()
-      // The backend is authoritative for the rolling averages; replace local.
-      // Normalised on the way in, so a backend still serving the old pooled rest
-      // *seconds* degrades to "no rest samples" instead of a nonsense ratio — and
-      // when it has no ratio to give, this device keeps the one it learned rather
-      // than dropping back to raw prescribed rest.
+      // The backend pools every device's samples, so it wins per exercise where
+      // it has any — but it can't reset an average it has nothing for, or an
+      // empty `active` map would wipe everything learned locally. Normalised on
+      // the way in, so a backend still serving the old pooled rest *seconds*
+      // degrades to "no rest samples" instead of a nonsense ratio.
       if (ex && typeof ex === 'object' && ex.active) {
-        const fetched = normalizeExerciseAverages(ex)
-        const local = storage.loadExerciseAverages()
         persistExerciseAverages(
-          fetched.restRatio.n > 0 ? fetched : { ...fetched, restRatio: local.restRatio },
+          mergeExerciseAverages(storage.loadExerciseAverages(), normalizeExerciseAverages(ex)),
         )
       }
     } catch {

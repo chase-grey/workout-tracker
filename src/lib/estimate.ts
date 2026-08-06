@@ -126,6 +126,26 @@ export function normalizeExerciseAverages(raw: unknown): ExerciseAverages {
   return { active, restRatio }
 }
 
+/**
+ * Reconcile fetched rolling averages against this device's copy.
+ *
+ * The backend pools every device's samples, so it wins for any exercise it has
+ * samples for — but an exercise it knows nothing about keeps what this device
+ * learned rather than being reset to zero. A backend that has never folded a
+ * session returns an empty `active` map, and replacing wholesale would throw
+ * away every average the app had learned locally.
+ */
+export function mergeExerciseAverages(
+  local: ExerciseAverages,
+  fetched: ExerciseAverages,
+): ExerciseAverages {
+  const active: Record<string, Avg> = { ...local.active }
+  for (const [key, avg] of Object.entries(fetched.active)) {
+    if (avg.n > 0) active[key] = avg
+  }
+  return { active, restRatio: fetched.restRatio.n > 0 ? fetched.restRatio : local.restRatio }
+}
+
 /** The learned rest ratio, or null while there's nothing trustworthy to apply. */
 export function learnedRestRatio(averages: ExerciseAverages): number | null {
   const r = averages.restRatio
@@ -236,6 +256,30 @@ export function median(nums: number[]): number {
   const sorted = [...nums].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+}
+
+/**
+ * Union of local and fetched session durations.
+ *
+ * A duration is an append-only event with no id, so identity is the session it
+ * describes: date, kind, day type and length to the second. Two real sessions
+ * won't collide on all four, and the fetched copy wins where they do.
+ *
+ * Merging rather than replacing matters because the backend can legitimately
+ * have fewer rows than this device — nothing at all, if no write ever landed —
+ * and the Time-spent report is drawn from this cache. Replacing wholesale turns
+ * an empty response into permanent local data loss.
+ */
+export function mergeDurations(
+  local: SessionDuration[],
+  fetched: SessionDuration[],
+): SessionDuration[] {
+  const byKey = new Map<string, SessionDuration>()
+  for (const d of [...local, ...fetched]) {
+    if (!d || !d.date) continue
+    byKey.set(`${d.date}|${d.kind}|${d.dayType ?? ''}|${Math.round(d.totalSec)}`, d)
+  }
+  return [...byKey.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 }
 
 /** Whether a recorded total duration is plausible enough to learn from. */
