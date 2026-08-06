@@ -139,10 +139,15 @@ const PECS = [
 const ABS = [
   'M95 144 Q110 139 125 144 Q132 172 127 208 Q124 234 116 246 Q110 250 104 246 Q96 234 93 208 Q88 172 95 144 Z',
 ]
-const NECK_FRONT = ['M101 60 Q110 56 119 60 Q120 70 119 74 Q116 80 110 80 Q104 80 101 74 Q100 70 101 60 Z']
+/*
+ * Both neck regions run up past the jaw to y=55, well inside the skull, so no
+ * sliver of base color shows at the corners where the jaw curves away. The head
+ * is drawn over them, which is what keeps the face in front of the neck.
+ */
+const NECK_FRONT = ['M101 55 Q110 59 119 55 Q120 70 119 74 Q116 80 110 80 Q104 80 101 74 Q100 70 101 55 Z']
 /** Neck + the upper-trap yoke it feeds — what neck extension actually changes. */
 const NECK_BACK = [
-  'M101 60 Q110 56 119 60 Q120 69 119 76 Q128 80 130 93 Q121 87 110 87 Q99 87 90 93 Q92 80 101 76 Q100 69 101 60 Z',
+  'M101 55 Q110 59 119 55 Q120 69 119 76 Q128 80 130 93 Q121 87 110 87 Q99 87 90 93 Q92 80 101 76 Q100 69 101 55 Z',
 ]
 /** The lat V, which is the whole of what's colorable on the upper back. */
 const LATS = ['M73 92 Q67 132 85 176 Q98 196 110 199 Q122 196 135 176 Q153 132 147 92 Q110 82 73 92 Z']
@@ -177,14 +182,21 @@ function Regions({
   )
 }
 
-/** The neutral silhouette both views draw their regions on. */
-function Silhouette({ label, children }: { label: string; children: ReactNode }) {
+const HEAD = 'M110 14 C123 14 130 24 129 37 C128 50 121 62 110 62 C99 62 92 50 91 37 C90 24 97 14 110 14 Z'
+
+/**
+ * The neutral silhouette both views draw their regions on. The head is drawn
+ * last, over the regions, because the neck runs up behind the jaw — from the
+ * front the face has to sit in front of it, and from the back the skull does.
+ * Anything in `face` goes on top of the head.
+ */
+function Silhouette({ label, face, children }: { label: string; face?: ReactNode; children: ReactNode }) {
+  const bodyFill = { fill: BODY_BASE, stroke: '#3f3f46', strokeWidth: 1.5 } as const
   return (
     <figure className="flex items-center justify-center">
       <svg viewBox="0 0 220 470" className="h-auto w-full" role="img" aria-label={`${label} muscle map`}>
-        {/* Head, neck, torso, arms, hands, pelvis, legs, feet. */}
-        <g fill={BODY_BASE} stroke="#3f3f46" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round">
-          <path d="M110 14 C123 14 130 24 129 37 C128 50 121 62 110 62 C99 62 92 50 91 37 C90 24 97 14 110 14 Z" />
+        {/* Neck, torso, arms, hands, pelvis, legs, feet. */}
+        <g {...bodyFill} strokeLinejoin="round" strokeLinecap="round">
           <path d="M101 52 C100 66 98 76 94 82 Q110 88 126 82 C122 76 120 66 119 52 Z" />
           <path d="M70 78 Q110 66 150 78 C157 100 156 130 145 152 C141 180 137 199 132 214 Q110 221 88 214 C83 199 79 180 75 152 C64 130 63 100 70 78 Z" />
           <path d="M74 82 C56 82 45 96 43 116 C42 140 43 166 45 190 C46 214 49 234 55 252 Q62 255 70 250 C64 230 63 204 66 180 C68 158 69 136 71 118 C72 102 74 92 78 86 Z" />
@@ -198,6 +210,8 @@ function Silhouette({ label, children }: { label: string; children: ReactNode })
           <path d="M137 440 Q130 437 124 441 Q121 452 125 459 Q137 462 147 458 Q150 447 137 440 Z" />
         </g>
         {children}
+        <path {...bodyFill} strokeLinejoin="round" d={HEAD} />
+        {face}
       </svg>
     </figure>
   )
@@ -221,12 +235,16 @@ function SixPackLines() {
 
 function FrontView({ scores, sixPack }: { scores: Record<Muscle, MuscleScore>; sixPack: boolean }) {
   return (
-    <Silhouette label="front">
-      {/* The only thing telling the two views apart. */}
-      <g fill={NO_DATA}>
-        <ellipse cx="102" cy="34" rx="2.6" ry="3" />
-        <ellipse cx="118" cy="34" rx="2.6" ry="3" />
-      </g>
+    <Silhouette
+      label="front"
+      /* The only thing telling the two views apart. */
+      face={
+        <g fill={NO_DATA}>
+          <ellipse cx="102" cy="34" rx="2.6" ry="3" />
+          <ellipse cx="118" cy="34" rx="2.6" ry="3" />
+        </g>
+      }
+    >
       <Regions muscle="neck" scores={scores} paths={NECK_FRONT} />
       {/* Pecs before the delts: the shoulder cap sits in front of the chest's
           upper-outer corner, the way it does on a body. */}
