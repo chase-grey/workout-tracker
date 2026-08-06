@@ -168,6 +168,20 @@ export function calorieHitDates(entries: CalorieEntry[], goal: number = CALORIE_
 }
 
 /**
+ * How many days met the goal in each Mon–Sun week, keyed by that week's Monday.
+ * Weeks with no qualifying day are absent rather than zero, so a lookup miss and
+ * a washed-out week read the same.
+ */
+export function calorieHitsByWeek(entries: CalorieEntry[], goal: number = CALORIE_GOAL): Map<string, number> {
+  const weeks = new Map<string, number>()
+  for (const date of calorieHitDates(entries, goal)) {
+    const week = weekStartISO(date)
+    weeks.set(week, (weeks.get(week) ?? 0) + 1)
+  }
+  return weeks
+}
+
+/**
  * A "calorie PR": the highest single-day total in the current week (week of
  * `today`), if that total is >= goal AND strictly greater than the highest
  * single-day total on any day before this week. Returns that day, else null.
