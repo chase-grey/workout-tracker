@@ -12,6 +12,8 @@
 import type { BodyWeightEntry, WorkoutRow } from '../types'
 import { exerciseSeries, type Point } from './progress'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
+import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
+import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 
 /**
  * Weekly decay of the gain rate strength projections assume (see
@@ -21,6 +23,18 @@ import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './b
  * week. Body-composition goals keep a straight line (no decay).
  */
 export const STRENGTH_GAIN_DECAY = 0.93
+
+/**
+ * The fastest weekly bodyweight change the goals will project against, in lbs.
+ *
+ * Lean gain runs about half a pound to a pound a week, and a pound is what a very
+ * good eating week looks like — anything past that is food weight and water, which
+ * comes back off. But a two-week fit doesn't know the difference: one heavy
+ * weekend reads as +3 lbs/week and the ETA it draws is a fantasy. Holding the
+ * projected pace to a pound (see predictions.capSlope) keeps the direction the
+ * weigh-ins actually show while refusing to promise a date only water could hit.
+ */
+export const BODYWEIGHT_GAIN_CAP = 1
 
 /** Stable ids, used as the keys locked projections are stored under. */
 export const GOAL_IDS = {
@@ -53,17 +67,41 @@ export type GoalSpec = {
   /** True when the target itself moves with bodyweight (bench/squat multiples). */
   movingTarget?: boolean
   /**
+   * A milestone that stays earned: "reached" is judged on the best reading ever
+   * taken, not the latest (see {@link isReached}). Set on the flexibility goals —
+   * a 111° split doesn't stop having happened because the next session came in
+   * tight — where a strength or bodyweight goal is only reached while you're
+   * actually there.
+   */
+  milestone?: boolean
+  /**
    * Weekly decay of the gain rate for this goal's projection (see
    * STRENGTH_GAIN_DECAY). Omitted for goals that project as a straight line.
    */
   decayPerWeek?: number
+  /**
+   * Fastest weekly change this goal's ETA may be projected from, in the goal's
+   * unit (see BODYWEIGHT_GAIN_CAP). Omitted for goals with no physiological
+   * ceiling worth naming — a 1RM's own decay already keeps its projection honest.
+   */
+  capPerWeek?: number
 }
 
-/** Whether the latest value has met or passed the goal's target. */
+/**
+ * Whether the goal's target has been met. A milestone is judged on the best
+ * reading ever taken and stays reached once hit (see GoalSpec.milestone); every
+ * other goal is judged on the latest value, so a bodyweight that touched 180 and
+ * slid back isn't at 180 now.
+ */
 export function isReached(goal: GoalSpec): boolean {
-  const latest = goal.points.length ? goal.points[goal.points.length - 1].value : null
-  if (latest == null) return false
-  return goal.direction === 'up' ? latest >= goal.target : latest <= goal.target
+  if (goal.points.length === 0) return false
+  const values = goal.points.map((p) => p.value)
+  const measured = goal.milestone
+    ? goal.direction === 'up'
+      ? Math.max(...values)
+      : Math.min(...values)
+    : values[values.length - 1]
+  return goal.direction === 'up' ? measured >= goal.target : measured <= goal.target
 }
 
 export type GoalInputs = {
@@ -71,6 +109,13 @@ export type GoalInputs = {
   bodyWeights: BodyWeightEntry[]
   measurements: MeasurementEntry[]
   heightIn: number
+  /**
+   * Stretch logs, feeding the flexibility goals. Optional: the goals are always
+   * listed (empty when omitted), and the callers that don't display them — the
+   * post-workout pace note, the in-session lift cue — filter to exercise-driven
+   * goals anyway. Only the Goals panel needs to pass real entries.
+   */
+  flexEntries?: FlexEntry[]
 }
 
 /** Weigh-ins, minus implausible values (stray test rows) that would skew a fit. */
@@ -81,9 +126,16 @@ export function bodyWeightPoints(bodyWeights: BodyWeightEntry[]): Point[] {
 /**
  * Every goal, in the order they should be shown. Strength goals expressed as a
  * multiple of bodyweight come in ascending order, so the nearer milestone is
- * always listed (and reached) before the harder one.
+ * always listed (and reached) before the harder one. The flexibility ladders
+ * (side split, then tailor's pose) come last, each ascending for the same reason.
  */
-export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: GoalInputs): GoalSpec[] {
+export function buildGoals({
+  workouts,
+  bodyWeights,
+  measurements,
+  heightIn,
+  flexEntries = [],
+}: GoalInputs): GoalSpec[] {
   const bwPoints = bodyWeightPoints(bodyWeights)
   const currentBw = bwPoints.length ? bwPoints[bwPoints.length - 1].value : 0
 
@@ -91,6 +143,32 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
   const squatPoints = exerciseSeries(workouts, 'barbell_squat', '1rm')
   const bfPoints = bodyFatSeries(measurements, heightIn)
   const { target: bfTarget } = personalSixPackTarget(measurements, heightIn)
+
+  // The flexibility ladders run on the same series their projections and
+  // celebrations do: the warm side split, and the average of the warm tailor's
+  // left/right. Each milestone angle becomes its own goal.
+  const splitPoints = warmSplitSeries(flexEntries)
+  const tailorsPoints = tailorsAvgSeries(flexEntries)
+  const splitGoals: GoalSpec[] = SPLIT_GOALS.map((deg): GoalSpec => ({
+    id: `split_${deg}`,
+    title: `${deg}° split`,
+    unit: '°',
+    exerciseKey: null,
+    points: splitPoints,
+    target: deg,
+    direction: 'up',
+    milestone: true,
+  }))
+  const tailorsGoals: GoalSpec[] = TAILORS_GOALS.map((deg): GoalSpec => ({
+    id: `tailors_${deg}`,
+    title: `${deg}° tailor's pose`,
+    unit: '°',
+    exerciseKey: null,
+    points: tailorsPoints,
+    target: deg,
+    direction: 'up',
+    milestone: true,
+  }))
 
   // 999 stands in for "no bodyweight logged yet", so a moving target can't be 0
   // and read as already reached.
@@ -105,6 +183,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
       points: bwPoints,
       target: 180,
       direction: 'up',
+      capPerWeek: BODYWEIGHT_GAIN_CAP,
     },
     {
       id: GOAL_IDS.weight190,
@@ -114,6 +193,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
       points: bwPoints,
       target: 190,
       direction: 'up',
+      capPerWeek: BODYWEIGHT_GAIN_CAP,
     },
     {
       id: GOAL_IDS.benchBodyweight,
@@ -157,5 +237,7 @@ export function buildGoals({ workouts, bodyWeights, measurements, heightIn }: Go
       target: bfTarget,
       direction: 'down',
     },
+    ...splitGoals,
+    ...tailorsGoals,
   ]
 }

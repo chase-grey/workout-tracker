@@ -120,19 +120,35 @@ export function lockProjection(
 }
 
 /**
- * Lock a goal if it has come within the horizon and isn't locked already.
- * Returns the existing lock untouched otherwise, so an ETA that later drifts
- * back out past six months doesn't silently discard the commitment.
+ * Freeze a projection to a target date the user chose rather than the one the
+ * current pace projects — the commitment they're willing to be held to, which
+ * may be sooner or later than the estimate. The line still runs from today's
+ * value to the goal's target, but over the span the user picked, and the stored
+ * slope is re-derived to match that span so the snapshot stays self-consistent.
+ *
+ * Returns null when there's nothing to freeze (no data) or the chosen date isn't
+ * in the future — a line that ends today or earlier can't be tracked against.
  */
-export function maybeLock(
-  existing: LockedProjection | undefined,
+export function lockProjectionByDate(
   goalId: string,
   proj: Projection,
+  etaDate: string,
   today: Date = new Date(),
-): LockedProjection | undefined {
-  if (existing) return existing
-  if (!withinHorizon(proj, today)) return undefined
-  return lockProjection(goalId, proj, today) ?? undefined
+): LockedProjection | null {
+  if (!Number.isFinite(proj.current) || proj.current === proj.target) return null
+  const lockedAt = toISODate(today)
+  const days = daysBetween(lockedAt, etaDate)
+  if (days <= 0) return null
+  const weeks = days / 7
+  return {
+    goalId,
+    lockedAt,
+    startValue: round1(proj.current),
+    target: proj.target,
+    etaDate,
+    slopePerWeek: round1((proj.target - proj.current) / weeks),
+    decayPerWeek: proj.decayPerWeek,
+  }
 }
 
 /**

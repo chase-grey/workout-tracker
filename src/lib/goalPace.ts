@@ -57,7 +57,10 @@ export function goalPaceNotes(
     const afterDate = goal.points[goal.points.length - 1].date
     const before = latest(exerciseSeries(prev, goal.exerciseKey, '1rm'))
 
-    const { slopePerWeek } = project(goal.points, lock.target, today, undefined, goal.decayPerWeek)
+    const { slopePerWeek } = project(goal.points, lock.target, today, {
+      decayPerWeek: goal.decayPerWeek,
+      capPerWeek: goal.capPerWeek,
+    })
     const pace = paceAgainstLock(lock, after, afterDate, slopePerWeek, today)
     // Toward the target is positive whichever way the metric moves.
     const toward = Math.sign(lock.target - lock.startValue) || 1

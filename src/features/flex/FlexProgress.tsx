@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import { MdCelebration } from 'react-icons/md'
 import {
   CartesianGrid,
   Legend,
@@ -13,7 +12,6 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { flexStats, splitSeries, tailorsSeries } from '../../lib/flex'
-import { flexGoalPredictions, type FlexGoal } from '../../lib/flexPredict'
 import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { AxisBreak } from '../../components/AxisBreak'
 
@@ -23,35 +21,6 @@ const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRa
  *  against the warm lines' greens. */
 const COLD_A = '#38bdf8'
 const COLD_B = '#a78bfa'
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—'
-  const [y, m, d] = iso.split('-')
-  return `${m}/${d}/${y.slice(2)}`
-}
-
-function Projections({ goals }: { goals: FlexGoal[] }) {
-  if (goals.length === 0) return null
-  return (
-    <div className="flex flex-col gap-2">
-      {goals.map((g) => (
-        <div key={g.label} className="flex items-center justify-between rounded-xl bg-surface px-3 py-2 text-sm">
-          <span className="font-medium">{g.label}</span>
-          {g.reached ? (
-            <span className="font-medium text-accent-2">
-              <MdCelebration className="mr-1 inline align-text-bottom" aria-hidden />
-              done
-            </span>
-          ) : (
-            <span className="text-neutral-400">
-              {g.proj.onTrack ? `eta ${fmtDate(g.proj.etaDate)}` : 'need more data / not trending'}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
@@ -66,9 +35,6 @@ export function FlexProgress() {
   const { flexEntries } = useData()
 
   const stats = useMemo(() => flexStats(flexEntries), [flexEntries])
-  const predictions = useMemo(() => flexGoalPredictions(flexEntries), [flexEntries])
-  const splitGoals = predictions.filter((g) => g.kind === 'split')
-  const tailorsGoals = predictions.filter((g) => g.kind === 'tailors')
   const split = useMemo(() => splitSeries(flexEntries), [flexEntries])
   const tailors = useMemo(() => tailorsSeries(flexEntries), [flexEntries])
 
@@ -122,7 +88,6 @@ export function FlexProgress() {
           log split measurements to see progression
         </div>
       )}
-      <Projections goals={splitGoals} />
 
       <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">tailor's pose</h3>
       <div className="flex gap-2">
@@ -158,7 +123,6 @@ export function FlexProgress() {
           log tailor's-pose measurements to see progression
         </div>
       )}
-      <Projections goals={tailorsGoals} />
     </div>
   )
 }

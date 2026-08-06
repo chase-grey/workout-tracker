@@ -5,7 +5,11 @@ import { toISODate, parseISODate } from './dates'
 const MS_PER_DAY = 86_400_000
 
 export type Projection = {
-  slopePerWeek: number // least-squares slope of value vs weeks, over the trend window
+  slopePerWeek: number // the pace the ETA is projected from — the fitted slope, held to capPerWeek
+  /** The least-squares slope actually measured, before the cap. */
+  observedSlopePerWeek: number
+  /** Ceiling the projected pace was held to (see capSlope), or null when unbounded. */
+  capPerWeek: number | null
   current: number // fitted/estimated current value (latest actual if available)
   target: number
   etaWeeks: number | null // weeks from today to reach target; null if not trending toward it
@@ -90,6 +94,31 @@ export function trendPoints<T extends { date: string }>(
   return recent.length >= window.minPoints ? recent : sorted.slice(-window.minPoints)
 }
 
+/**
+ * A pace held to a magnitude of `cap`, keeping its direction.
+ *
+ * A fitted slope answers "how fast has this moved lately?", which is not the same
+ * question as "how fast can this keep moving?" Two weeks of weigh-ins will happily
+ * fit +3 lbs/week — a stomach bug behind you, a heavy weekend in front — and a
+ * line drawn off that promises 190 by spring. Physiology says otherwise: lean gain
+ * runs about half a pound to a pound a week however well you eat, and the rest of
+ * a hot fortnight is food weight and water that comes back off.
+ *
+ * So the fit still decides the *direction* and the honest reading of the pace
+ * (kept as `observedSlopePerWeek`), but the ETA is projected off the capped pace.
+ * A goal that's genuinely close still arrives soon; one that's far off stops
+ * borrowing a good fortnight to claim it isn't.
+ */
+function capSlope(slope: number, cap: number | null): number {
+  if (cap == null || Math.abs(slope) <= cap) return slope
+  return Math.sign(slope) * cap
+}
+
+/** Whether the cap — rather than the data — is what's holding a pace down. */
+export function isPaceCapped(proj: Projection): boolean {
+  return proj.capPerWeek != null && Math.abs(proj.observedSlopePerWeek) > proj.capPerWeek
+}
+
 /** Least-squares slope of value against weeks. Zero when the dates don't vary. */
 function fitSlopePerWeek(points: { date: string; value: number }[]): number {
   const t0 = parseISODate(points[0].date).getTime()
@@ -136,17 +165,26 @@ export function weeksToClose(gap: number, slopePerWeek: number, decayPerWeek = 1
   return Math.log(ratio) / Math.log(decayPerWeek)
 }
 
+export type ProjectOptions = {
+  /** How much history the pace is read from (see TREND_WINDOW). */
+  window?: TrendWindow
+  /** Weekly decay of the gain rate for the ETA (see weeksToClose). 1 = straight line. */
+  decayPerWeek?: number
+  /** Ceiling on the pace the ETA is projected from (see capSlope). null = unbounded. */
+  capPerWeek?: number | null
+}
+
 export function project(
   points: { date: string; value: number }[],
   target: number,
   today: Date = new Date(),
-  window: TrendWindow = TREND_WINDOW,
-  /** Weekly decay of the gain rate for the ETA (see weeksToClose). 1 = straight line. */
-  decayPerWeek = 1,
+  { window = TREND_WINDOW, decayPerWeek = 1, capPerWeek = null }: ProjectOptions = {},
 ): Projection {
   if (points.length === 0) {
     return {
       slopePerWeek: 0,
+      observedSlopePerWeek: 0,
+      capPerWeek,
       current: NaN,
       target,
       etaWeeks: null,
@@ -167,7 +205,8 @@ export function project(
     spanDays,
     thin: fitted.length < window.minPoints || spanDays < window.minSpanDays,
   }
-  const slopePerWeek = basis.thin ? 0 : fitSlopePerWeek(fitted)
+  const observedSlopePerWeek = basis.thin ? 0 : fitSlopePerWeek(fitted)
+  const slopePerWeek = capSlope(observedSlopePerWeek, capPerWeek)
 
   const diff = target - current
   const eps = 1e-9
@@ -177,6 +216,8 @@ export function project(
   if (Math.abs(diff) < eps) {
     return {
       slopePerWeek,
+      observedSlopePerWeek,
+      capPerWeek,
       current,
       target,
       etaWeeks: 0,
@@ -194,6 +235,8 @@ export function project(
   if (etaWeeks != null) {
     return {
       slopePerWeek,
+      observedSlopePerWeek,
+      capPerWeek,
       current,
       target,
       etaWeeks,
@@ -207,6 +250,8 @@ export function project(
   // Too little recent data to read, flat, moving away, or short of the ceiling.
   return {
     slopePerWeek,
+    observedSlopePerWeek,
+    capPerWeek,
     current,
     target,
     etaWeeks: null,

@@ -4,7 +4,7 @@ import {
   adoptDecay,
   expectedAt,
   lockProjection,
-  maybeLock,
+  lockProjectionByDate,
   paceAgainstLock,
   projectedSeries,
   withinHorizon,
@@ -77,15 +77,32 @@ describe('lockProjection', () => {
   })
 })
 
-describe('maybeLock', () => {
-  it('keeps an existing lock even once the eta drifts back out', () => {
-    const drifted = project(STALLED, 500, TODAY)
-    expect(maybeLock(CLIMB, 'squat', drifted, TODAY)).toBe(CLIMB)
+describe('lockProjectionByDate', () => {
+  it('freezes the current value and target but commits to the chosen date', () => {
+    const proj = project(CLIMBING, 140, TODAY)
+    const lock = lockProjectionByDate('squat', proj, '2026-07-01', TODAY)
+    expect(lock).toMatchObject({ goalId: 'squat', lockedAt: '2026-01-01', startValue: 120, target: 140 })
+    expect(lock?.etaDate).toBe('2026-07-01')
   })
 
-  it('leaves a far-off goal unlocked', () => {
-    const far = project(STALLED, 500, TODAY)
-    expect(maybeLock(undefined, 'squat', far, TODAY)).toBeUndefined()
+  it('re-derives the slope to span start → target over the chosen date', () => {
+    // 20 to gain over ~26 weeks is well under a pound a week, whatever pace the
+    // projection was actually read at.
+    const proj = project(CLIMBING, 140, TODAY)
+    const lock = lockProjectionByDate('squat', proj, '2026-07-01', TODAY)!
+    expect(lock.slopePerWeek).toBeGreaterThan(0)
+    expect(lock.slopePerWeek).toBeLessThan(proj.slopePerWeek)
+    expect(expectedAt(lock, '2026-07-01')).toBe(140)
+  })
+
+  it('refuses a date that isn\'t in the future', () => {
+    const proj = project(CLIMBING, 140, TODAY)
+    expect(lockProjectionByDate('squat', proj, '2026-01-01', TODAY)).toBeNull()
+    expect(lockProjectionByDate('squat', proj, '2025-12-01', TODAY)).toBeNull()
+  })
+
+  it('refuses when there is nothing to project from', () => {
+    expect(lockProjectionByDate('squat', project([], 200), '2026-07-01', TODAY)).toBeNull()
   })
 })
 
@@ -203,7 +220,8 @@ describe('degenerate locks', () => {
     expect(atTarget.etaWeeks).toBe(0)
     expect(withinHorizon(atTarget, TODAY)).toBe(false)
     expect(lockProjection('bw', atTarget, TODAY)).toBeNull()
-    expect(maybeLock(undefined, 'bw', atTarget, TODAY)).toBeUndefined()
+    // A goal already on target can't be committed to a future line either.
+    expect(lockProjectionByDate('bw', atTarget, '2026-07-01', TODAY)).toBeNull()
   })
 
   it('caps an absurd revised eta rather than reporting a date decades out', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { project, trendPoints, weeklyTarget, weeksToClose, TREND_WINDOW } from './predictions'
+import { isPaceCapped, project, trendPoints, weeklyTarget, weeksToClose, TREND_WINDOW } from './predictions'
 
 describe('project', () => {
   it('increasing bodyweight trending toward a higher target is on track', () => {
@@ -222,7 +222,7 @@ describe('project with a decaying gain rate', () => {
 
   it('projects a later eta than a straight line off the same pace', () => {
     const straight = project(gaining, 140, today)
-    const decayed = project(gaining, 140, today, undefined, 0.9)
+    const decayed = project(gaining, 140, today, { decayPerWeek: 0.9 })
     expect(straight.onTrack).toBe(true)
     expect(decayed.onTrack).toBe(true)
     expect(decayed.decayPerWeek).toBe(0.9)
@@ -233,10 +233,95 @@ describe('project with a decaying gain rate', () => {
   it('reports a goal beyond the decaying ceiling as not on track', () => {
     // A straight line always reaches it; a decaying pace tops out first.
     const straight = project(gaining, 400, today)
-    const decayed = project(gaining, 400, today, undefined, 0.9)
+    const decayed = project(gaining, 400, today, { decayPerWeek: 0.9 })
     expect(straight.onTrack).toBe(true)
     expect(decayed.onTrack).toBe(false)
     expect(decayed.etaWeeks).toBeNull()
+  })
+})
+
+describe('project with a capped pace', () => {
+  /** +3 lbs/week over a fortnight — a real fit, but not a rate anyone holds. */
+  const hotFortnight = [
+    { date: '2026-01-31', value: 164 },
+    { date: '2026-02-07', value: 167 },
+    { date: '2026-02-14', value: 170 },
+  ]
+  const today = new Date(2026, 1, 14)
+
+  it('projects off the cap, while still reporting the pace measured', () => {
+    const p = project(hotFortnight, 180, today, { capPerWeek: 1 })
+
+    expect(p.observedSlopePerWeek).toBe(3)
+    expect(p.slopePerWeek).toBe(1)
+    expect(isPaceCapped(p)).toBe(true)
+    // 10 lbs to go at a pound a week, not at three.
+    expect(p.etaWeeks).toBe(10)
+    expect(p.etaDate).toBe('2026-04-25')
+  })
+
+  it('pushes the eta out well past the uncapped one', () => {
+    const uncapped = project(hotFortnight, 180, today)
+    const capped = project(hotFortnight, 180, today, { capPerWeek: 1 })
+
+    expect(uncapped.etaWeeks).toBeLessThan(4)
+    expect((capped.etaWeeks as number) > (uncapped.etaWeeks as number)).toBe(true)
+    expect(isPaceCapped(uncapped)).toBe(false)
+  })
+
+  it('leaves a pace already inside the cap alone', () => {
+    const steady = [
+      { date: '2026-01-31', value: 168.4 },
+      { date: '2026-02-07', value: 169 },
+      { date: '2026-02-14', value: 169.6 },
+    ]
+    const p = project(steady, 180, today, { capPerWeek: 1 })
+
+    expect(p.slopePerWeek).toBe(p.observedSlopePerWeek)
+    expect(p.slopePerWeek).toBeCloseTo(0.6, 5)
+    expect(isPaceCapped(p)).toBe(false)
+  })
+
+  it('caps a fall as hard as a climb, keeping its direction', () => {
+    const crashing = [
+      { date: '2026-01-31', value: 176 },
+      { date: '2026-02-07', value: 173 },
+      { date: '2026-02-14', value: 170 },
+    ]
+    const p = project(crashing, 160, today, { capPerWeek: 1 })
+
+    expect(p.observedSlopePerWeek).toBe(-3)
+    expect(p.slopePerWeek).toBe(-1)
+    expect(p.etaWeeks).toBe(10)
+  })
+
+  it('holds the cap against a target the raw pace would claim to reach', () => {
+    // A decaying +3/wk tops out 30 lbs up; capped at +1 it only ever adds 10.
+    const near = project(hotFortnight, 195, today, { decayPerWeek: 0.9 })
+    const capped = project(hotFortnight, 195, today, { decayPerWeek: 0.9, capPerWeek: 1 })
+
+    expect(near.onTrack).toBe(true)
+    expect(capped.onTrack).toBe(false)
+    expect(capped.etaDate).toBeNull()
+  })
+
+  it('reports no pace at all when the window is too thin to read', () => {
+    const p = project(
+      [
+        { date: '2026-02-12', value: 167 },
+        { date: '2026-02-13', value: 169 },
+        { date: '2026-02-14', value: 170 },
+      ],
+      180,
+      today,
+      { capPerWeek: 1 },
+    )
+
+    // The cap is a ceiling on a pace, not a substitute for having one.
+    expect(p.observedSlopePerWeek).toBe(0)
+    expect(p.slopePerWeek).toBe(0)
+    expect(isPaceCapped(p)).toBe(false)
+    expect(p.onTrack).toBe(false)
   })
 })
 

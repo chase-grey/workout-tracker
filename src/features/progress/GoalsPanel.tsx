@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { useData } from '../../store/DataContext'
-import { project, type Projection } from '../../lib/predictions'
+import { isPaceCapped, project, type Projection } from '../../lib/predictions'
 import { filterRange, type Point } from '../../lib/progress'
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
 import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
@@ -19,17 +19,27 @@ import type { SixPackStatus } from '../../services/storage'
 import {
   adoptDecay,
   lockProjection,
-  maybeLock,
+  lockProjectionByDate,
   paceAgainstLock,
   projectedSeries,
+  withinHorizon,
   type LockedProjection,
   type LockedProjections,
 } from '../../lib/goalLock'
-import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
-import { parseISODate } from '../../lib/dates'
+import {
+  fmtDateLabel,
+  LINE_GOAL,
+  LINE_GOAL_LABEL,
+  LINE_PRIMARY,
+  LINE_SECONDARY,
+  niceScale,
+  timeXAxis,
+  withTime,
+} from '../../lib/chart'
+import { parseISODate, toISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
 import { MetricChart } from './MetricChart'
-import { MdCelebration, MdRefresh } from 'react-icons/md'
+import { MdBolt, MdCelebration, MdLockOutline, MdRefresh } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -132,39 +142,39 @@ function LockChart({
               it's being measured against to the right. */}
           <ReferenceLine
             x={parseISODate(lock.lockedAt).getTime()}
-            stroke="#facc15"
+            stroke={LINE_GOAL}
             strokeDasharray="3 3"
-            label={{ value: 'locked', fill: '#facc15', fontSize: 9, position: lockLabelPos }}
+            label={{ value: 'locked', fill: LINE_GOAL_LABEL, fontSize: 9, position: lockLabelPos }}
           />
           {/* The target the line is climbing toward, so the goal reads off the
               chart without doing the mental math from the projected curve's end. */}
           <ReferenceLine
             y={lock.target}
-            stroke="#facc15"
+            stroke={LINE_GOAL}
             strokeDasharray="5 4"
-            label={{ value: `goal ${lock.target}`, fill: '#facc15', fontSize: 9, position: goalLabelPos }}
+            label={{ value: `goal ${lock.target}`, fill: LINE_GOAL_LABEL, fontSize: 9, position: goalLabelPos }}
           />
           {/* The commitment: where the locked curve meets the goal. */}
           <ReferenceDot
             x={etaMs}
             y={lock.target}
             r={4}
-            fill="#facc15"
+            fill={LINE_GOAL}
             stroke="#0a0a0a"
-            label={{ value: fmtDate(lock.etaDate), fill: '#facc15', fontSize: 9, position: etaLabelPos }}
+            label={{ value: fmtDate(lock.etaDate), fill: LINE_GOAL_LABEL, fontSize: 9, position: etaLabelPos }}
           />
-          {/* Where the pace being held now would land instead — amber when that's
-              later than the commitment, green when it beats it. */}
+          {/* Where the pace being held now would land instead — dark green when
+              that's later than the commitment, bright when it beats it. */}
           {revisedMs != null && (
             <ReferenceDot
               x={revisedMs}
               y={lock.target}
               r={4}
-              fill={behind ? '#fbbf24' : LINE_PRIMARY}
+              fill={behind ? LINE_SECONDARY : LINE_PRIMARY}
               stroke="#0a0a0a"
               label={{
                 value: fmtDate(revisedEta!),
-                fill: behind ? '#fbbf24' : LINE_PRIMARY,
+                fill: behind ? LINE_SECONDARY : LINE_PRIMARY,
                 fontSize: 9,
                 position: etaLabelPos,
                 dy: revisedLabelDy,
@@ -228,9 +238,9 @@ function DataChart({ points, target, targetLabel }: { points: Point[]; target: n
           />
           <ReferenceLine
             y={target}
-            stroke="#facc15"
+            stroke={LINE_GOAL}
             strokeDasharray="5 4"
-            label={{ value: targetLabel, fill: '#facc15', fontSize: 10, position: 'insideTopLeft' }}
+            label={{ value: targetLabel, fill: LINE_GOAL_LABEL, fontSize: 10, position: 'insideTopLeft' }}
           />
           <Line
             type="monotone"
@@ -248,16 +258,78 @@ function DataChart({ points, target, targetLabel }: { points: Point[]; target: n
 }
 
 /**
+ * The pace a projection is drawing its ETA from. Marked "max" when that's the
+ * goal's cap rather than the measured pace (see predictions.capSlope), so a
+ * fortnight of water weight reading +3 lbs/wk doesn't look like the app lost the
+ * plot when it projects a pound.
+ */
+function paceLabel(proj: Projection, unit: string): string {
+  const sign = proj.slopePerWeek > 0 ? '+' : ''
+  return `${sign}${proj.slopePerWeek} ${unit}/wk${isPaceCapped(proj) ? ' max' : ''}`
+}
+
+/**
+ * The lit-up state a goal reaches once its projected ETA lands within
+ * {@link LOCK_HORIZON_MONTHS}: the projection isn't frozen on its own anymore, so
+ * the row offers the commitment instead. The projected date is the default, and
+ * the user can pull it sooner or push it later before locking it in.
+ */
+function LockInPrompt({
+  proj,
+  unit,
+  onLock,
+}: {
+  proj: Projection
+  unit: string
+  onLock: (etaDate: string) => void
+}) {
+  const [date, setDate] = useState(proj.etaDate ?? '')
+  const todayIso = toISODate(new Date())
+  const valid = date > todayIso
+
+  return (
+    <div className="mt-2 rounded-xl bg-accent-2/10 p-3">
+      <p className="text-sm font-medium text-accent-2">
+        <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
+        in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, unit)})
+      </p>
+      <div className="mt-3 flex items-center gap-2">
+        <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
+          hit it by
+          <input
+            type="date"
+            value={date}
+            min={todayIso}
+            onChange={(e) => setDate(e.target.value)}
+            className="min-h-[36px] flex-1 rounded-lg bg-surface-2 px-2 text-sm text-neutral-200 [color-scheme:dark]"
+          />
+        </label>
+        <button
+          onClick={() => valid && onLock(date)}
+          disabled={!valid}
+          className="min-h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-black active:opacity-70 disabled:opacity-40"
+        >
+          <MdLockOutline className="inline align-text-bottom mr-1" aria-hidden />
+          lock in
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
  * One goal. Until its ETA comes within {@link LOCK_HORIZON_MONTHS} it shows the
- * live projection; from then on the projection is locked and the row shows how
- * the real numbers are tracking against it, with a chart of actual vs projected
- * and a button to re-lock from today's data.
+ * live projection; once inside that horizon the row lights up and offers a
+ * lock-in ({@link LockInPrompt}). Once locked, the row shows how the real numbers
+ * track against the committed line, with a chart of actual vs projected and a
+ * button to re-lock from today's data.
  */
 function GoalRow({
   goal,
   proj,
   lock,
   onRecalculate,
+  onLock,
   showData,
   children,
 }: {
@@ -265,12 +337,17 @@ function GoalRow({
   proj: Projection
   lock?: LockedProjection
   onRecalculate: () => void
+  /** Commit the goal to a target date once it's within reach. */
+  onLock: (etaDate: string) => void
   /** Plot the goal's own series (with its target line) while it's unlocked. */
   showData?: boolean
   children?: React.ReactNode
 }) {
   const has = Number.isFinite(proj.current)
   const reached = isReached(goal)
+  // Within reach but not yet committed: the row lights up and offers a lock-in,
+  // rather than freezing the projection on its own.
+  const lockable = !lock && !reached && withinHorizon(proj)
   // A lock froze the target it committed to. Bench/squat targets track bodyweight,
   // so the live one can drift away from it — show the number the pace reading is
   // actually measured against, or the two would contradict each other.
@@ -293,7 +370,7 @@ function GoalRow({
     Math.sign(goal.target - proj.current) === Math.sign(proj.slopePerWeek)
 
   return (
-    <div className="rounded-2xl bg-surface p-4">
+    <div className={`rounded-2xl bg-surface p-4 ${lockable ? 'ring-1 ring-accent-2/60' : ''}`}>
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="font-semibold">{goal.title}</h4>
         <span className="text-sm text-neutral-400 tabular-nums">
@@ -314,7 +391,7 @@ function GoalRow({
             {pace && (
               <p
                 className={`text-sm font-medium ${
-                  pace.status === 'behind' ? 'text-amber-400' : 'text-accent-2'
+                  pace.status === 'behind' ? 'text-accent-deep' : 'text-accent-2'
                 }`}
               >
                 {pace.status === 'on'
@@ -339,10 +416,11 @@ function GoalRow({
             behind={pace?.status === 'behind'}
           />
         </>
+      ) : lockable ? (
+        <LockInPrompt proj={proj} unit={goal.unit} onLock={onLock} />
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
-          on track · eta {fmtDate(proj.etaDate)} ({proj.slopePerWeek > 0 ? '+' : ''}
-          {proj.slopePerWeek} {goal.unit}/wk)
+          on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
         </p>
       ) : (
         <p className="mt-1 text-sm text-neutral-500">
@@ -412,47 +490,43 @@ function SixPackRow({
 }
 
 export function GoalsPanel({ months }: { months: number | null }) {
-  const { workouts, bodyWeights, measurements, settings, calorieEntries, updateSettings } = useData()
+  const { workouts, bodyWeights, measurements, flexEntries, settings, calorieEntries, updateSettings } = useData()
   const heightIn = settings.heightIn ?? 0
 
   const goals = useMemo(
-    () => buildGoals({ workouts, bodyWeights, measurements, heightIn }),
-    [workouts, bodyWeights, measurements, heightIn],
+    () => buildGoals({ workouts, bodyWeights, measurements, heightIn, flexEntries }),
+    [workouts, bodyWeights, measurements, heightIn, flexEntries],
   )
 
   const projections = useMemo(
-    () => new Map(goals.map((g) => [g.id, project(g.points, g.target, undefined, undefined, g.decayPerWeek)])),
+    () =>
+      new Map(
+        goals.map((g) => [
+          g.id,
+          project(g.points, g.target, undefined, { decayPerWeek: g.decayPerWeek, capPerWeek: g.capPerWeek }),
+        ]),
+      ),
     [goals],
   )
 
   const locked = useMemo(() => settings.lockedGoals ?? {}, [settings.lockedGoals])
 
-  // Lock any goal that has just come inside the horizon. Done as an effect rather
-  // than during render because it writes settings — and only when something
-  // actually changed, so it can't loop.
+  // Keep existing locks drawn against the goal's current curve shape. Locking
+  // itself is a deliberate act now (see lockIn) — a goal within reach lights up
+  // and waits to be committed rather than snapshotting itself. This effect only
+  // bends locks the user already made: a lock frozen before strength projections
+  // tapered carries no decay and would draw dead straight, so it adopts the
+  // goal's decay without touching the ETA it committed to. Done as an effect
+  // because it writes settings, and only when something changed so it can't loop.
   useEffect(() => {
     const next: LockedProjections = { ...locked }
     let changed = false
     for (const g of goals) {
-      // The six-pack goal is answered by eye, not projected — nothing to lock.
-      if (g.id === GOAL_IDS.sixPack) continue
-      const proj = projections.get(g.id)
-      if (!proj) continue
       const existing = next[g.id]
-      // A lock frozen before strength projections tapered carries no decay, so it
-      // draws dead straight against a goal that no longer projects that way. Take
-      // the goal's decay without touching the ETA it committed to.
-      if (existing) {
-        const bent = adoptDecay(existing, g.decayPerWeek)
-        if (bent !== existing) {
-          next[g.id] = bent
-          changed = true
-        }
-        continue
-      }
-      const lock = maybeLock(existing, g.id, proj)
-      if (lock) {
-        next[g.id] = lock
+      if (!existing) continue
+      const bent = adoptDecay(existing, g.decayPerWeek)
+      if (bent !== existing) {
+        next[g.id] = bent
         changed = true
       }
     }
@@ -468,6 +542,17 @@ export function GoalsPanel({ months }: { months: number | null }) {
     if (fresh) next[goal.id] = fresh
     else delete next[goal.id]
     updateSettings({ ...settings, lockedGoals: next })
+  }
+
+  // Commit a goal that's within reach to a target date — the one it projects, or
+  // one the user nudged sooner or later. This is the deliberate lock the lit-up
+  // row offers in place of the old automatic snapshot.
+  const lockIn = (goal: GoalSpec, etaDate: string) => {
+    const proj = projections.get(goal.id)
+    if (!proj) return
+    const fresh = lockProjectionByDate(goal.id, proj, etaDate)
+    if (!fresh) return
+    updateSettings({ ...settings, lockedGoals: { ...locked, [goal.id]: fresh } })
   }
 
   // The weigh-ins the two bodyweight goals are projected from — shown alongside
@@ -530,14 +615,15 @@ export function GoalsPanel({ months }: { months: number | null }) {
                 onChange={(s) => updateSettings({ ...settings, sixPackStatus: s })}
               />
             ) : (
-              /* Lift goals plot their own series; body-composition ones are already
-                 charted by the blocks above them. */
+              /* Lift and flexibility goals plot their own series; body-composition
+                 ones are already charted by the blocks above them. */
               <GoalRow
                 goal={g}
                 proj={proj}
                 lock={locked[g.id]}
                 onRecalculate={() => recalculate(g)}
-                showData={g.exerciseKey != null}
+                onLock={(etaDate) => lockIn(g, etaDate)}
+                showData={g.exerciseKey != null || g.milestone}
               />
             )}
           </Fragment>
