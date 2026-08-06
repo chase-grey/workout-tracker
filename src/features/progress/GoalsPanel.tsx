@@ -13,7 +13,7 @@ import {
 import { useData } from '../../store/DataContext'
 import { isPaceCapped, project, type Projection } from '../../lib/predictions'
 import { filterRange, type Point } from '../../lib/progress'
-import { weeklyCalorieSurplusSeries } from '../../lib/calories'
+import { calorieHitsByWeek } from '../../lib/calories'
 import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, type GoalSpec } from '../../lib/goals'
 import type { SixPackStatus } from '../../services/storage'
 import {
@@ -331,7 +331,7 @@ function GoalRow({
   onRecalculate,
   onLock,
   showData,
-  inlineChart = true,
+  chartedAbove = false,
   children,
 }: {
   goal: GoalSpec
@@ -343,10 +343,12 @@ function GoalRow({
   /** Plot the goal's own series (with its target line) while it's unlocked. */
   showData?: boolean
   /**
-   * Draw the locked actual-vs-projected chart inside the row. Off for the
-   * bodyweight goals, whose lines already share the chart above them.
+   * This goal's line is already drawn on a shared chart above the row (the
+   * bodyweight pair). No chart inside the row, and the dates that would have
+   * been dots on it are written out here instead, where the row names which
+   * goal they belong to.
    */
-  inlineChart?: boolean
+  chartedAbove?: boolean
   children?: React.ReactNode
 }) {
   const has = Number.isFinite(proj.current)
@@ -379,9 +381,21 @@ function GoalRow({
     <div className={`rounded-2xl bg-surface p-4 ${lockable ? 'ring-1 ring-accent-2/60' : ''}`}>
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="font-semibold">{goal.title}</h4>
-        <span className="text-sm text-neutral-400 tabular-nums">
-          {has ? `${proj.current}` : '—'} → {shownTarget} {goal.unit}
-        </span>
+        {/* A goal charted above already shows how far along it is, so the row
+            spends its corner on the thing the chart no longer says: the date it
+            lands on — committed if it's locked, projected if it isn't. */}
+        {chartedAbove ? (
+          !reached && (
+            <span className="shrink-0 text-sm text-neutral-400 tabular-nums">
+              {lock && <MdLockOutline className="mr-1 inline align-text-bottom" aria-hidden />}
+              {fmtDate(lock ? lock.etaDate : proj.etaDate)}
+            </span>
+          )
+        ) : (
+          <span className="text-sm text-neutral-400 tabular-nums">
+            {has ? `${proj.current}` : '—'} → {shownTarget} {goal.unit}
+          </span>
+        )}
       </div>
 
       {reached ? (
@@ -391,9 +405,9 @@ function GoalRow({
         </p>
       ) : lock ? (
         <>
-          {/* Both ETAs live on the chart — the row's own when it has one, the
-              shared one above it otherwise; this row is the ahead/behind reading
-              and the re-lock control. */}
+          {/* The row with its own chart puts both ETAs on it; a row charted above
+              carries them as text, since the shared chart can't say which of two
+              goals a date belongs to. */}
           <div className="mt-1 flex items-baseline gap-2">
             {pace && (
               <p
@@ -408,6 +422,11 @@ function GoalRow({
                     : `${Math.abs(pace.aheadBy)} ${goal.unit} behind the line`}
               </p>
             )}
+            {chartedAbove && pace?.revisedEta && pace.revisedEta !== lock.etaDate && (
+              <p className="text-sm text-neutral-500 tabular-nums">
+                on pace for {fmtDate(pace.revisedEta)}
+              </p>
+            )}
             <button
               onClick={onRecalculate}
               aria-label="recalculate time left"
@@ -416,7 +435,7 @@ function GoalRow({
               <MdRefresh aria-hidden />
             </button>
           </div>
-          {inlineChart && (
+          {!chartedAbove && (
             <LockChart
               lock={lock}
               actual={goal.points}
@@ -572,12 +591,9 @@ export function GoalsPanel({ months }: { months: number | null }) {
   const weightSeries = useMemo(() => filterRange(weightPoints, months), [weightPoints, months])
   const latestWeight = weightPoints.length ? weightPoints[weightPoints.length - 1].value : null
 
-  // Weekly rather than daily, complete days only, unlogged days assumed —
-  // see weeklyCalorieSurplusSeries.
-  const calorieSurplus = useMemo(
-    () => filterRange(weeklyCalorieSurplusSeries(calorieEntries), months),
-    [calorieEntries, months],
-  )
+  // The eating behind the curve, one number per week: how many days hit the
+  // calorie goal. It lights up the Mondays on the weigh-in chart's axis.
+  const calorieWeeks = useMemo(() => calorieHitsByWeek(calorieEntries), [calorieEntries])
 
   // The two bodyweight goals, which share one chart instead of drawing the same
   // weigh-in history over again apiece.
@@ -587,33 +603,25 @@ export function GoalsPanel({ months }: { months: number | null }) {
   )
 
   // What the shared chart draws per goal: the target line always, and the
-  // committed curve with its two dates once the goal is locked and still open. A
-  // lock froze the target it committed to, so the line comes off the lock rather
-  // than the live goal — or the chart and the row below would disagree.
+  // committed curve once the goal is locked and still open. A lock froze the
+  // target it committed to, so the line comes off the lock rather than the live
+  // goal — or the chart and the row below would disagree.
   const weightGoalLines = useMemo(
     () =>
       weightGoals.map((g) => {
         const lock = isReached(g) ? undefined : locked[g.id]
-        const proj = projections.get(g.id)
-        const lastReadingDate = g.points.length ? g.points[g.points.length - 1].date : null
-        const pace =
-          lock && proj && Number.isFinite(proj.current) && lastReadingDate
-            ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek)
-            : null
         return {
           label: g.title.replace('bodyweight → ', 'goal '),
           target: lock ? lock.target : g.target,
           lock,
-          revisedEta: pace?.revisedEta ?? null,
-          behind: pace?.status === 'behind',
         }
       }),
-    [weightGoals, locked, projections],
+    [weightGoals, locked],
   )
 
   /* Lift and flexibility goals plot their own series; body-composition ones are
      already charted by the block above them. */
-  const goalRow = (g: GoalSpec, inlineChart = true) => (
+  const goalRow = (g: GoalSpec, chartedAbove = false) => (
     <GoalRow
       key={g.id}
       goal={g}
@@ -622,7 +630,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
       onRecalculate={() => recalculate(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       showData={g.exerciseKey != null || g.milestone}
-      inlineChart={inlineChart}
+      chartedAbove={chartedAbove}
     />
   )
 
@@ -636,34 +644,78 @@ export function GoalsPanel({ months }: { months: number | null }) {
       </h4>
       <BodyWeightChart
         points={weightSeries}
-        calories={calorieSurplus}
+        calorieWeeks={calorieWeeks}
         goals={weightGoalLines}
         empty="log my weight to project these goals"
       />
-      {weightGoals.map((g) => goalRow(g, false))}
+      {weightGoals.map((g) => goalRow(g, true))}
     </div>
   )
 
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
-      {goals.map((g) => {
-        // Both bodyweight goals live in the block under their shared chart, which
-        // takes the place of the first of them.
-        if (g.id === GOAL_IDS.weight190) return null
-        if (g.id === GOAL_IDS.weight180) return <Fragment key={g.id}>{bodyWeightBlock}</Fragment>
-        if (g.id === GOAL_IDS.sixPack) {
-          return (
+  // The date a goal has committed to, or null if it isn't a locked, still-open
+  // commitment — reached goals and unlocked ones don't count as commitments.
+  const committedEta = (g: GoalSpec): string | null => {
+    const lock = locked[g.id]
+    return lock && !isReached(g) ? lock.etaDate : null
+  }
+
+  // Each thing the panel draws as its own block, in the default (buildGoals)
+  // order. The two bodyweight goals collapse into one shared-chart block, so it
+  // moves as a unit and carries whichever of its two commitments comes first.
+  const units = useMemo(() => {
+    const out: { eta: string | null; node: React.ReactNode }[] = []
+    for (const g of goals) {
+      if (g.id === GOAL_IDS.weight190) continue
+      if (g.id === GOAL_IDS.weight180) {
+        const etas = weightGoals.map(committedEta).filter((e): e is string => e != null)
+        out.push({
+          eta: etas.length ? etas.sort()[0] : null,
+          node: <Fragment key={g.id}>{bodyWeightBlock}</Fragment>,
+        })
+        continue
+      }
+      if (g.id === GOAL_IDS.sixPack) {
+        out.push({
+          eta: null,
+          node: (
             <SixPackRow
               key={g.id}
               title={g.title}
               status={settings.sixPackStatus ?? 'none'}
               onChange={(s) => updateSettings({ ...settings, sixPackStatus: s })}
             />
-          )
-        }
-        return goalRow(g)
-      })}
+          ),
+        })
+        continue
+      }
+      out.push({ eta: committedEta(g), node: goalRow(g) })
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals, locked, projections, settings])
+
+  // Committed goals rise to the top, soonest commitment first; everything else
+  // keeps its default order underneath. A stable sort holds the rest in place.
+  const ordered = useMemo(
+    () =>
+      units
+        .map((u, i) => ({ u, i }))
+        .sort((a, b) => {
+          const ae = a.u.eta
+          const be = b.u.eta
+          if (ae && be) return ae < be ? -1 : ae > be ? 1 : a.i - b.i
+          if (ae) return -1
+          if (be) return 1
+          return a.i - b.i
+        })
+        .map(({ u }) => u.node),
+    [units],
+  )
+
+  return (
+    <div className="flex flex-col gap-3">
+      <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
+      {ordered}
     </div>
   )
 }
