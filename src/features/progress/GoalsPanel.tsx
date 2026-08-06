@@ -502,6 +502,19 @@ function GoalRow({
   )
 }
 
+/**
+ * The family a goal belongs to, so related committed goals cluster together in
+ * the panel rather than being split apart by an unrelated goal that happens to
+ * land between their dates. The two squat targets share a family, each
+ * flexibility ladder is its own, and the bodyweight pair (already one block) is
+ * another — everything else stands alone.
+ */
+function goalFamily(g: GoalSpec): string {
+  if (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) return 'bodyweight'
+  if (g.exerciseKey) return `lift:${g.exerciseKey}`
+  return `flex:${g.id.split('_')[0]}`
+}
+
 const SIX_PACK_OPTIONS: { value: SixPackStatus; label: string }[] = [
   { value: 'none', label: 'not yet' },
   { value: 'close', label: 'close' },
@@ -701,13 +714,21 @@ export function GoalsPanel({ months }: { months: number | null }) {
   // order. The two bodyweight goals collapse into one shared-chart block, so it
   // moves as a unit and carries whichever of its two dates comes first.
   const units = useMemo(() => {
-    const out: { eta: string | null; projEta: string | null; last?: boolean; node: React.ReactNode }[] = []
+    const out: {
+      eta: string | null
+      projEta: string | null
+      /** The family this block clusters with when committed (see goalFamily). */
+      family: string
+      last?: boolean
+      node: React.ReactNode
+    }[] = []
     for (const g of goals) {
       if (g.id === GOAL_IDS.weight190) continue
       if (g.id === GOAL_IDS.weight180) {
         out.push({
           eta: soonest(weightGoals.map(committedEta)),
           projEta: soonest(weightGoals.map(projectedEta)),
+          family: goalFamily(g),
           node: <Fragment key={g.id}>{bodyWeightBlock}</Fragment>,
         })
         continue
@@ -718,6 +739,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
         out.push({
           eta: null,
           projEta: null,
+          family: goalFamily(g),
           last: true,
           node: (
             <SixPackRow
@@ -730,26 +752,55 @@ export function GoalsPanel({ months }: { months: number | null }) {
         })
         continue
       }
-      out.push({ eta: committedEta(g), projEta: projectedEta(g), node: goalRow(g) })
+      out.push({ eta: committedEta(g), projEta: projectedEta(g), family: goalFamily(g), node: goalRow(g) })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, locked, projections, settings])
 
-  // Three bands: committed goals first by soonest commitment, then the rest by
-  // how far off their projection is, then the six-pack. Goals with no date to
-  // project sit at the back of their band in the default order — a stable sort
-  // holds them in place.
+  // Three bands: committed goals first, then the rest by how far off their
+  // projection is, then the six-pack. Within the committed band, related goals
+  // (the two squat targets, a flexibility ladder) cluster into families rather
+  // than interleaving by date — each family is placed by its soonest commitment,
+  // and its members sit in date order under it. Goals with no date to project
+  // sit at the back of their band in the default order — a stable sort holds
+  // them in place.
   const ordered = useMemo(() => {
     const band = (u: (typeof units)[number]) => (u.eta ? 0 : u.last ? 2 : 1)
-    return units
-      .map((u, i) => ({ u, i }))
+    const rows = units.map((u, i) => ({ u, i }))
+
+    // The soonest commitment in each committed family, and where the family
+    // first appears — so families sort by their nearest date, and ties between
+    // families fall back to the panel's default order.
+    const familySoonest = new Map<string, string>()
+    const familyFirst = new Map<string, number>()
+    for (const { u, i } of rows) {
+      if (band(u) !== 0) continue
+      const cur = familySoonest.get(u.family)
+      if (cur == null || u.eta! < cur) familySoonest.set(u.family, u.eta!)
+      if (!familyFirst.has(u.family)) familyFirst.set(u.family, i)
+    }
+
+    return rows
       .sort((a, b) => {
         const ba = band(a.u)
         const bb = band(b.u)
         if (ba !== bb) return ba - bb
-        const ad = ba === 0 ? a.u.eta : a.u.projEta
-        const bd = bb === 0 ? b.u.eta : b.u.projEta
+        if (ba === 0) {
+          // Committed: order families by their soonest commitment, then keep a
+          // family's members together in date order.
+          if (a.u.family !== b.u.family) {
+            const sa = familySoonest.get(a.u.family)!
+            const sb = familySoonest.get(b.u.family)!
+            if (sa !== sb) return sa < sb ? -1 : 1
+            return familyFirst.get(a.u.family)! - familyFirst.get(b.u.family)!
+          }
+          if (a.u.eta !== b.u.eta) return a.u.eta! < b.u.eta! ? -1 : 1
+          return a.i - b.i
+        }
+        // Uncommitted / six-pack: by how far off the projection is.
+        const ad = a.u.projEta
+        const bd = b.u.projEta
         if (ad && bd && ad !== bd) return ad < bd ? -1 : 1
         if (ad !== null && bd === null) return -1
         if (ad === null && bd !== null) return 1
