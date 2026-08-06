@@ -671,24 +671,39 @@ export function GoalsPanel({ months }: { months: number | null }) {
     return lock && !isReached(g) ? lock.etaDate : null
   }
 
+  // Where an uncommitted goal is currently headed, which is how far away it
+  // reads as. A goal already reached, or one with no pace to project from,
+  // isn't headed anywhere.
+  const projectedEta = (g: GoalSpec): string | null =>
+    isReached(g) ? null : (projections.get(g.id)?.etaDate ?? null)
+
+  const soonest = (dates: (string | null)[]): string | null => {
+    const set = dates.filter((d): d is string => d != null).sort()
+    return set.length ? set[0] : null
+  }
+
   // Each thing the panel draws as its own block, in the default (buildGoals)
   // order. The two bodyweight goals collapse into one shared-chart block, so it
-  // moves as a unit and carries whichever of its two commitments comes first.
+  // moves as a unit and carries whichever of its two dates comes first.
   const units = useMemo(() => {
-    const out: { eta: string | null; node: React.ReactNode }[] = []
+    const out: { eta: string | null; projEta: string | null; last?: boolean; node: React.ReactNode }[] = []
     for (const g of goals) {
       if (g.id === GOAL_IDS.weight190) continue
       if (g.id === GOAL_IDS.weight180) {
-        const etas = weightGoals.map(committedEta).filter((e): e is string => e != null)
         out.push({
-          eta: etas.length ? etas.sort()[0] : null,
+          eta: soonest(weightGoals.map(committedEta)),
+          projEta: soonest(weightGoals.map(projectedEta)),
           node: <Fragment key={g.id}>{bodyWeightBlock}</Fragment>,
         })
         continue
       }
       if (g.id === GOAL_IDS.sixPack) {
+        // Answered by eye rather than projected, so it has no date to sort by —
+        // it sits at the bottom of the panel regardless.
         out.push({
           eta: null,
+          projEta: null,
+          last: true,
           node: (
             <SixPackRow
               key={g.id}
@@ -700,29 +715,33 @@ export function GoalsPanel({ months }: { months: number | null }) {
         })
         continue
       }
-      out.push({ eta: committedEta(g), node: goalRow(g) })
+      out.push({ eta: committedEta(g), projEta: projectedEta(g), node: goalRow(g) })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, locked, projections, settings])
 
-  // Committed goals rise to the top, soonest commitment first; everything else
-  // keeps its default order underneath. A stable sort holds the rest in place.
-  const ordered = useMemo(
-    () =>
-      units
-        .map((u, i) => ({ u, i }))
-        .sort((a, b) => {
-          const ae = a.u.eta
-          const be = b.u.eta
-          if (ae && be) return ae < be ? -1 : ae > be ? 1 : a.i - b.i
-          if (ae) return -1
-          if (be) return 1
-          return a.i - b.i
-        })
-        .map(({ u }) => u.node),
-    [units],
-  )
+  // Three bands: committed goals first by soonest commitment, then the rest by
+  // how far off their projection is, then the six-pack. Goals with no date to
+  // project sit at the back of their band in the default order — a stable sort
+  // holds them in place.
+  const ordered = useMemo(() => {
+    const band = (u: (typeof units)[number]) => (u.eta ? 0 : u.last ? 2 : 1)
+    return units
+      .map((u, i) => ({ u, i }))
+      .sort((a, b) => {
+        const ba = band(a.u)
+        const bb = band(b.u)
+        if (ba !== bb) return ba - bb
+        const ad = ba === 0 ? a.u.eta : a.u.projEta
+        const bd = bb === 0 ? b.u.eta : b.u.projEta
+        if (ad && bd && ad !== bd) return ad < bd ? -1 : 1
+        if (ad !== null && bd === null) return -1
+        if (ad === null && bd !== null) return 1
+        return a.i - b.i
+      })
+      .map(({ u }) => u.node)
+  }, [units])
 
   return (
     <div className="flex flex-col gap-3">
