@@ -330,6 +330,19 @@ function LockInPrompt({
 }
 
 /**
+ * The box a goal wears: a light green ring once it's committed, so the set of
+ * things being tracked against a promise reads as a group; the darker accent,
+ * drawn a step heavier, on the one being asked to commit — the darker green
+ * gives up some of the contrast the lighter one has against the surface.
+ *
+ * Shared with the bodyweight block, which draws the box once around its whole
+ * group rather than once per row.
+ */
+function goalRing(lockable: boolean, committed: boolean): string {
+  return lockable ? 'ring-2 ring-accent' : committed ? 'ring-1 ring-accent-2/60' : ''
+}
+
+/**
  * One goal. Until its ETA comes within {@link LOCK_HORIZON_MONTHS} it shows the
  * live projection; once inside that horizon the row lights up and offers a
  * lock-in ({@link LockInPrompt}). Once locked, the row shows how the real numbers
@@ -344,6 +357,7 @@ function GoalRow({
   onLock,
   showData,
   chartedAbove = false,
+  grouped = false,
   children,
 }: {
   goal: GoalSpec
@@ -356,11 +370,16 @@ function GoalRow({
   showData?: boolean
   /**
    * This goal's line is already drawn on a shared chart above the row (the
-   * bodyweight pair). No chart inside the row, and the dates that would have
-   * been dots on it are written out here instead, where the row names which
-   * goal they belong to.
+   * bodyweight pair, a flexibility ladder). No chart inside the row, and the
+   * dates that would have been dots on it are written out here instead, where
+   * the row names which goal they belong to.
    */
   chartedAbove?: boolean
+  /**
+   * This row sits inside a block that draws one box around the whole group, so
+   * it doesn't draw its own — see {@link goalRing}.
+   */
+  grouped?: boolean
   children?: React.ReactNode
 }) {
   const has = Number.isFinite(proj.current)
@@ -389,15 +408,7 @@ function GoalRow({
     proj.slopePerWeek !== 0 &&
     Math.sign(goal.target - proj.current) === Math.sign(proj.slopePerWeek)
 
-  // A committed goal wears a light green box, so the set of things being tracked
-  // against a promise reads as a group. The one being asked to commit wears the
-  // same box in the darker accent — drawn a step heavier, since the darker green
-  // gives up some of the contrast the lighter one has against the surface.
-  const ring = lockable
-    ? 'ring-2 ring-accent'
-    : lock && !reached
-      ? 'ring-1 ring-accent-2/60'
-      : ''
+  const ring = grouped ? '' : goalRing(lockable, !!lock && !reached)
 
   return (
     <div className={`rounded-2xl bg-surface p-4 ${ring}`}>
@@ -488,8 +499,9 @@ function GoalRow({
           LockChart and a lockable one its CommitChart, both of which run the
           projection on as an extension of the same history this would re-plot —
           so a separate raw-history chart below them is a redundant second graph.
-          The bare data chart is for the states with no projection to show. */}
-      {showData && !reached && !lock && !lockable && goal.points.length > 0 && (
+          A row charted above has that history on the shared chart already. The
+          bare data chart is for the states with no projection to show. */}
+      {showData && !chartedAbove && !reached && !lock && !lockable && goal.points.length > 0 && (
         <DataChart
           points={goal.points}
           target={shownTarget}
@@ -660,8 +672,9 @@ export function GoalsPanel({ months }: { months: number | null }) {
   )
 
   /* Lift and flexibility goals plot their own series; body-composition ones are
-     already charted by the block above them. */
-  const goalRow = (g: GoalSpec, chartedAbove = false) => (
+     already charted by the block above them, and sit inside the box that block
+     draws around itself. */
+  const goalRow = (g: GoalSpec, inBlock = false) => (
     <GoalRow
       key={g.id}
       goal={g}
@@ -670,8 +683,31 @@ export function GoalsPanel({ months }: { months: number | null }) {
       onRecalculate={() => recalculate(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       showData={g.exerciseKey != null || g.milestone}
-      chartedAbove={chartedAbove}
+      chartedAbove={inBlock}
+      grouped={inBlock}
     />
+  )
+
+  // A block wears one box around its whole group — the chart and every row —
+  // rather than a box per row with the chart they read off left outside it. It
+  // takes the strongest state any of its goals is in: the bright ask if one is
+  // within reach, otherwise the committed green.
+  const blockRing = (block: GoalSpec[]): string => {
+    let lockable = false
+    let committed = false
+    for (const g of block) {
+      if (isReached(g)) continue
+      const proj = projections.get(g.id)
+      if (locked[g.id]) committed = true
+      else if (proj && withinHorizon(proj)) lockable = true
+    }
+    return goalRing(lockable, committed)
+  }
+
+  const weightRing = useMemo(
+    () => blockRing(weightGoals),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weightGoals, locked, projections],
   )
 
   // One chart carrying the weigh-ins, both targets and both commitments, with the
@@ -682,13 +718,15 @@ export function GoalsPanel({ months }: { months: number | null }) {
       <h4 className="text-sm font-semibold tracking-wider text-neutral-500">
         body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
       </h4>
-      <BodyWeightChart
-        points={weightSeries}
-        calorieWeeks={calorieWeeks}
-        goals={weightGoalLines}
-        empty="log my weight to project these goals"
-      />
-      {weightGoals.map((g) => goalRow(g, true))}
+      <div className={`flex flex-col gap-3 ${weightRing ? `rounded-2xl p-2 ${weightRing}` : ''}`}>
+        <BodyWeightChart
+          points={weightSeries}
+          calorieWeeks={calorieWeeks}
+          goals={weightGoalLines}
+          empty="log my weight to project these goals"
+        />
+        {weightGoals.map((g) => goalRow(g, true))}
+      </div>
     </div>
   )
 
@@ -715,6 +753,8 @@ export function GoalsPanel({ months }: { months: number | null }) {
   // moves as a unit and carries whichever of its two dates comes first.
   const units = useMemo(() => {
     const out: {
+      /** Already achieved — the band that sits above everything else. */
+      done: boolean
       eta: string | null
       projEta: string | null
       /** The family this block clusters with when committed (see goalFamily). */
@@ -726,6 +766,10 @@ export function GoalsPanel({ months }: { months: number | null }) {
       if (g.id === GOAL_IDS.weight190) continue
       if (g.id === GOAL_IDS.weight180) {
         out.push({
+          // The pair shares one block, so it only counts as done once both
+          // weigh-in targets are met — otherwise the block would go up top
+          // carrying a goal that's still open.
+          done: weightGoals.every(isReached),
           eta: soonest(weightGoals.map(committedEta)),
           projEta: soonest(weightGoals.map(projectedEta)),
           family: goalFamily(g),
@@ -735,8 +779,9 @@ export function GoalsPanel({ months }: { months: number | null }) {
       }
       if (g.id === GOAL_IDS.sixPack) {
         // Answered by eye rather than projected, so it has no date to sort by —
-        // it sits at the bottom of the panel regardless.
+        // it sits at the bottom of the panel until it's called done.
         out.push({
+          done: (settings.sixPackStatus ?? 'none') === 'have',
           eta: null,
           projEta: null,
           family: goalFamily(g),
@@ -752,33 +797,51 @@ export function GoalsPanel({ months }: { months: number | null }) {
         })
         continue
       }
-      out.push({ eta: committedEta(g), projEta: projectedEta(g), family: goalFamily(g), node: goalRow(g) })
+      out.push({
+        done: isReached(g),
+        eta: committedEta(g),
+        projEta: projectedEta(g),
+        family: goalFamily(g),
+        node: goalRow(g),
+      })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, locked, projections, settings])
 
-  // Three bands: committed goals first, then the rest by how far off their
-  // projection is, then the six-pack. Within the committed band, related goals
-  // (the two squat targets, a flexibility ladder) cluster into families rather
-  // than interleaving by date — each family is placed by its soonest commitment,
-  // and its members sit in date order under it. Goals with no date to project
-  // sit at the back of their band in the default order — a stable sort holds
-  // them in place.
+  // Four bands: goals already reached first, then committed ones, then the rest
+  // by how far off their projection is, then the six-pack. Reached goals have no
+  // date left to sort by, so they hold the panel's default order among
+  // themselves. In both dated bands related goals (the two
+  // squat targets, a flexibility ladder) cluster into families rather than
+  // interleaving by date — each family is placed by its soonest date within that
+  // band (its nearest commitment when committed, its nearest projection when
+  // not), and its members sit in date order under it. A band uses commitment
+  // dates for committed goals and projection dates for the rest, so the two
+  // never mix within one family's soonest. Goals with no date to project sit at
+  // the back of their band in the default order — a stable sort holds them.
   const ordered = useMemo(() => {
-    const band = (u: (typeof units)[number]) => (u.eta ? 0 : u.last ? 2 : 1)
+    const band = (u: (typeof units)[number]) => (u.done ? 0 : u.eta ? 1 : u.last ? 3 : 2)
+    // The date a block reads as within its band: its commitment once committed,
+    // otherwise where its projection is currently headed.
+    const dateOf = (u: (typeof units)[number]) => (u.eta ? u.eta : u.projEta)
     const rows = units.map((u, i) => ({ u, i }))
 
-    // The soonest commitment in each committed family, and where the family
-    // first appears — so families sort by their nearest date, and ties between
-    // families fall back to the panel's default order.
+    // Per band, the soonest date in each family and where the family first
+    // appears — so families sort by their nearest date and ties fall back to the
+    // panel's default order. Keyed by band too, so a family split across bands
+    // (one target committed, a harder one still projected) clusters within each.
+    const key = (u: (typeof units)[number]) => `${band(u)}:${u.family}`
     const familySoonest = new Map<string, string>()
     const familyFirst = new Map<string, number>()
     for (const { u, i } of rows) {
-      if (band(u) !== 0) continue
-      const cur = familySoonest.get(u.family)
-      if (cur == null || u.eta! < cur) familySoonest.set(u.family, u.eta!)
-      if (!familyFirst.has(u.family)) familyFirst.set(u.family, i)
+      const k = key(u)
+      const d = dateOf(u)
+      if (d != null) {
+        const cur = familySoonest.get(k)
+        if (cur == null || d < cur) familySoonest.set(k, d)
+      }
+      if (!familyFirst.has(k)) familyFirst.set(k, i)
     }
 
     return rows
@@ -786,24 +849,21 @@ export function GoalsPanel({ months }: { months: number | null }) {
         const ba = band(a.u)
         const bb = band(b.u)
         if (ba !== bb) return ba - bb
-        if (ba === 0) {
-          // Committed: order families by their soonest commitment, then keep a
-          // family's members together in date order.
-          if (a.u.family !== b.u.family) {
-            const sa = familySoonest.get(a.u.family)!
-            const sb = familySoonest.get(b.u.family)!
-            if (sa !== sb) return sa < sb ? -1 : 1
-            return familyFirst.get(a.u.family)! - familyFirst.get(b.u.family)!
-          }
-          if (a.u.eta !== b.u.eta) return a.u.eta! < b.u.eta! ? -1 : 1
-          return a.i - b.i
+        // Within a band, order families by their soonest date (dated families
+        // ahead of dateless ones), then keep a family's members in date order.
+        if (a.u.family !== b.u.family) {
+          const sa = familySoonest.get(key(a.u))
+          const sb = familySoonest.get(key(b.u))
+          if (sa && sb && sa !== sb) return sa < sb ? -1 : 1
+          if (sa && !sb) return -1
+          if (!sa && sb) return 1
+          return familyFirst.get(key(a.u))! - familyFirst.get(key(b.u))!
         }
-        // Uncommitted / six-pack: by how far off the projection is.
-        const ad = a.u.projEta
-        const bd = b.u.projEta
+        const ad = dateOf(a.u)
+        const bd = dateOf(b.u)
         if (ad && bd && ad !== bd) return ad < bd ? -1 : 1
-        if (ad !== null && bd === null) return -1
-        if (ad === null && bd !== null) return 1
+        if (ad && !bd) return -1
+        if (!ad && bd) return 1
         return a.i - b.i
       })
       .map(({ u }) => u.node)
