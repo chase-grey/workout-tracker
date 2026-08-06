@@ -474,7 +474,12 @@ function GoalRow({
         </p>
       )}
 
-      {showData && !reached && !lock && goal.points.length > 0 && (
+      {/* Only when no projection chart is already drawn: a locked goal has its
+          LockChart and a lockable one its CommitChart, both of which run the
+          projection on as an extension of the same history this would re-plot —
+          so a separate raw-history chart below them is a redundant second graph.
+          The bare data chart is for the states with no projection to show. */}
+      {showData && !reached && !lock && !lockable && goal.points.length > 0 && (
         <DataChart
           points={goal.points}
           target={shownTarget}
