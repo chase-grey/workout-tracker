@@ -29,6 +29,21 @@ export function isConfigured(): boolean {
   return baseUrl().length > 0
 }
 
+/**
+ * The backend's own failures, which don't come with a failing status code.
+ *
+ * Apps Script serves every `ContentService` response as 200 — it has no way to
+ * set one — so the backend reports a bad route or a thrown error as `{ error }`
+ * in the body of an otherwise perfectly successful response. Taken at face
+ * value that reads as a save that worked: a route the deployed backend doesn't
+ * have yet silently swallows every write to it, and nothing ever retries.
+ */
+function assertOk<T>(route: string, payload: T): T {
+  const err = (payload as { error?: unknown } | null)?.error
+  if (typeof err === 'string') throw new Error(`${route} failed: ${err}`)
+  return payload
+}
+
 async function get<T>(route: string, params: Record<string, string> = {}): Promise<T> {
   const base = baseUrl()
   if (!base) throw new Error('api not configured')
@@ -37,7 +52,7 @@ async function get<T>(route: string, params: Record<string, string> = {}): Promi
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
   const res = await fetch(url.toString())
   if (!res.ok) throw new Error(`GET ${route} failed: ${res.status}`)
-  return res.json() as Promise<T>
+  return assertOk(`GET ${route}`, (await res.json()) as T)
 }
 
 async function post<T>(route: string, body: unknown): Promise<T> {
@@ -51,7 +66,7 @@ async function post<T>(route: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`POST ${route} failed: ${res.status}`)
-  return res.json() as Promise<T>
+  return assertOk(`POST ${route}`, (await res.json()) as T)
 }
 
 export const api = {
