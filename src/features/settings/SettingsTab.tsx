@@ -6,7 +6,6 @@ import { ImportScreen } from './ImportScreen'
 import { PlanEditor } from './PlanEditor'
 import { FlexRoutineEditor } from './FlexRoutineEditor'
 import { PhoneLink } from './PhoneLink'
-import { ViewportDebug } from './ViewportDebug'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { DAY_TYPES, DEFAULT_PLAN } from '../../config/plan'
@@ -91,9 +90,6 @@ export function SettingsTab() {
         >
           check for updates &amp; reload
         </button>
-        {/* TEMPORARY — remove with ViewportDebug once the installed app stops
-            cropping the bottom of the screen. */}
-        <ViewportDebug />
       </section>
 
       <section className="flex flex-col gap-2">
