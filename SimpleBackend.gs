@@ -37,6 +37,8 @@
  *   POST ?route=settings      body: { settings: {…} }  (whole; declines a stale copy)
  *   GET  ?route=chat_endpoint&secret=…  -> { url, updatedAt } (see getChatEndpoint)
  *   POST ?route=chat_endpoint    body: { url, secret }
+ *   GET  ?route=issues&secret=…  -> [{ number, title, url, state, area, createdAt, closedAt }]
+ *                 (the app-filed GitHub issues + their open/closed state; see listIssues)
  *   POST ?route=report_issue    body: { secret, title, body, area, context }
  *                 -> { number, url }  (files a GitHub issue; see createIssue)
  *   POST ?route=session       body: { rows: WorkoutRow[] }
@@ -116,6 +118,8 @@ function doGet(e) {
         return json(getSettings())
       case 'chat_endpoint':
         return json(getChatEndpoint(e.parameter.secret))
+      case 'issues':
+        return json(listIssues(e.parameter.secret))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -895,6 +899,63 @@ function createIssue(body) {
   }
   const data = JSON.parse(res.getContentText())
   return { number: data.number, url: data.html_url }
+}
+
+/**
+ * List the issues this app has filed, newest first, with their current state.
+ *
+ * Every issue reported from the app carries the `from-app` label (see
+ * createIssue), and this is a single-user tracker, so that label is exactly "the
+ * issues I submitted through the coach." Gated by the same shared secret as the
+ * other issue routes — a private repo's issues need the token to read, and the
+ * /exec URL is public in the bundle.
+ *
+ * `state=all` so a closed (fixed) issue still shows its progress. GitHub folds
+ * pull requests into the issues list, so anything carrying a `pull_request` key
+ * is dropped. `area` is lifted back out of the `area:<x>` label createIssue set.
+ */
+function listIssues(secret) {
+  if (secret !== chatSecret()) throw new Error('Bad chat secret')
+  const res = UrlFetchApp.fetch(
+    'https://api.github.com/repos/' +
+      ISSUE_REPO +
+      '/issues?labels=from-app&state=all&per_page=100&sort=created&direction=desc',
+    {
+      method: 'get',
+      muteHttpExceptions: true,
+      headers: {
+        Authorization: 'Bearer ' + githubToken(),
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  const code = res.getResponseCode()
+  if (code < 200 || code >= 300) {
+    throw new Error('GitHub issue list failed (' + code + '): ' + res.getContentText())
+  }
+  const data = JSON.parse(res.getContentText())
+  const out = []
+  for (let i = 0; i < data.length; i++) {
+    const it = data[i]
+    if (it.pull_request) continue // the list endpoint mixes PRs in with issues
+    let area = ''
+    const labels = it.labels || []
+    for (let j = 0; j < labels.length; j++) {
+      const name = String(labels[j].name || '')
+      if (name.indexOf('area:') === 0) area = name.slice('area:'.length)
+    }
+    out.push({
+      number: it.number,
+      title: String(it.title || ''),
+      url: it.html_url,
+      state: it.state, // 'open' | 'closed'
+      area: area,
+      createdAt: it.created_at,
+      closedAt: it.closed_at || '',
+    })
+  }
+  return out
 }
 
 /* ---------------------------------------------------------------- helpers */

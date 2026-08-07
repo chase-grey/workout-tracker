@@ -5,6 +5,7 @@ import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { ExerciseAverages, SessionDuration, SessionTimeSamples } from '../lib/estimate'
 import type { SyncedSettings } from '../lib/settingsSync'
+import type { TrackedIssue } from './issues'
 import { storage } from './storage'
 import { DEFAULT_API_URL } from '../config/backend'
 
@@ -101,4 +102,5 @@ export const api = {
     area: string
     context: string
   }) => post<{ number: number; url: string }>('report_issue', body),
+  listIssues: (secret: string) => get<TrackedIssue[]>('issues', { secret }),
 }

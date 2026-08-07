@@ -23,6 +23,18 @@ export type ReportIssueInput = {
 
 export type ReportedIssue = { number: number; url: string }
 
+/** An app-filed GitHub issue and its current progress, as read back for Settings. */
+export type TrackedIssue = {
+  number: number
+  title: string
+  url: string
+  state: 'open' | 'closed'
+  area?: string
+  createdAt: string
+  /** ISO close time, or '' while still open. */
+  closedAt?: string
+}
+
 /** A short, non-sensitive snapshot of the runtime, so an issue is actionable. */
 function collectContext(chatTail?: string): string {
   const lines = [
@@ -54,4 +66,17 @@ export async function reportIssue(
     area: input.area ?? '',
     context: collectContext(chatTail),
   })
+}
+
+/**
+ * The issues filed from the app, newest first, with their open/closed state.
+ * Gated by the coach token like reportIssue — the backend holds the GitHub token
+ * and the repo's issues can't be read from the public bundle without it.
+ */
+export async function listIssues(): Promise<TrackedIssue[]> {
+  const secret = chatToken()
+  if (!secret) {
+    throw new Error('add your coach token in Settings to see filed issues.')
+  }
+  return api.listIssues(secret)
 }
