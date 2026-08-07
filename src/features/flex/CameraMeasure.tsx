@@ -240,19 +240,35 @@ export function CameraMeasure({
   /** The captured frame, kept so a failed detection can be retried on it. */
   const sourceRef = useRef<HTMLCanvasElement | null>(null)
 
+  /**
+   * Bumped on every stop, so a `getUserMedia` that resolves after we've moved on
+   * knows its stream is stale and switches it off itself. Without this, closing
+   * the screen while the permission prompt or camera warm-up is still pending
+   * leaves the camera live with nothing left holding a reference to stop it —
+   * and Android keeps a notification up under the app's name (`short_name`, so
+   * "Lift") for exactly as long as a page holds the camera.
+   */
+  const streamGenRef = useRef(0)
+
   const stopStream = useCallback(() => {
+    streamGenRef.current++
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
   }, [])
 
   const startStream = useCallback(async () => {
     stopStream()
+    const gen = streamGenRef.current
     setError(null)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: facing },
         audio: false,
       })
+      if (gen !== streamGenRef.current) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -267,6 +283,23 @@ export function CameraMeasure({
   useEffect(() => {
     if (phase === 'setup' || phase === 'countdown') void startStream()
     return stopStream
+  }, [phase, startStream, stopStream])
+
+  /**
+   * Drop the camera while the app is backgrounded, and pick it up again on
+   * return. A preview nobody can see is worth nothing, and leaving it running is
+   * what turns "I got distracted and swiped home while framing a shot" into a
+   * notification that sits there until the tab is closed. Only while framing:
+   * the countdown stops the stream itself within seconds, at capture.
+   */
+  useEffect(() => {
+    if (phase !== 'setup') return
+    const onVisibilityChange = () => {
+      if (document.hidden) stopStream()
+      else void startStream()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [phase, startStream, stopStream])
 
   /**
