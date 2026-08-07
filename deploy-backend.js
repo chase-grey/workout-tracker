@@ -45,6 +45,28 @@ function ensureProject() {
   run('clasp create --title "Workout Tracker Backend" --type webapp --rootDir .')
 }
 
+/**
+ * Set one key in .env, leaving every other line alone.
+ *
+ * This used to overwrite the whole file with just VITE_API_URL, which silently
+ * destroyed the other secrets living there — GITHUB_ISSUE_TOKEN (the auto-fixer
+ * stops running without it), CHAT_SHARED_SECRET, and the OpenAI keys.
+ */
+function writeEnvVar(key, value) {
+  const envPath = path.join(__dirname, '.env')
+  const line = `${key}="${value}"`
+  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
+  const lines = existing.split(/\r?\n/)
+  const at = lines.findIndex((l) => l.trim().startsWith(`${key}=`))
+  if (at === -1) {
+    const body = existing.trimEnd()
+    fs.writeFileSync(envPath, body ? `${body}\n${line}\n` : `${line}\n`)
+  } else {
+    lines[at] = line
+    fs.writeFileSync(envPath, lines.join('\n'))
+  }
+}
+
 function main() {
   ensureClasp()
   ensureProject()
@@ -55,8 +77,8 @@ function main() {
   process.stdout.write(out)
   const url = out.match(/https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/)
   if (url) {
-    fs.writeFileSync(path.join(__dirname, '.env'), `VITE_API_URL="${url[0]}"\n`)
-    console.log(`\nWrote .env with VITE_API_URL=${url[0]}`)
+    writeEnvVar('VITE_API_URL', url[0])
+    console.log(`\nUpdated .env with VITE_API_URL=${url[0]}`)
   } else {
     console.log('\nDeployed. Grab the /exec URL from the Apps Script UI and put it in .env or Settings.')
   }
