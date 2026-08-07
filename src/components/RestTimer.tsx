@@ -244,8 +244,6 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
       // rides its top downward, shedding embers, and gutters out at the base.
       return (
         <div className="absolute bottom-[12%] left-1/2 h-[74%] w-[24%] -translate-x-1/2">
-          {/* Faint full-height guide so the shrinking wax reads against a whole. */}
-          <div className="absolute inset-0 rounded-t-[16%] rounded-b-[8%] bg-accent-deep/12" />
           <div
             className="absolute inset-x-0 bottom-0 rounded-t-[16%] rounded-b-[8%] bg-accent-deep/70"
             style={{ height: level, ...drain }}
