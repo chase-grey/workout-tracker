@@ -25,6 +25,27 @@ npm run build      # typecheck + production build
 Create `.env` from `.env.example` and set `VITE_API_URL` to your Apps Script
 `/exec` URL — or just enter it in the app's **Settings** at runtime.
 
+## Install on your phone
+
+The deployed site is a PWA, so it installs from the browser — no store, no packaging step.
+
+- **Android:** open the Pages URL in **Chrome** → menu → **Install app**. Chrome mints a WebAPK,
+  so it lands in the launcher and the app drawer as a real app: own icon, own task, no browser
+  UI. Firefox's *Add to home screen* works too, but it only ever makes a Firefox-hosted
+  shortcut with a Firefox-generated icon — install from Chrome to get the real thing.
+- **iOS:** open it in **Safari** — the only browser iOS lets install — then Share → **Add to
+  Home Screen**.
+
+Already installed, and the icon looks stale? Android caches the WebAPK icon and only refreshes
+it on its own schedule; uninstall and reinstall to pick up a new one immediately.
+
+### The icon
+
+`public/` holds three SVGs and five PNGs of the same barbell, all generated: edit the geometry
+in [`scripts/make-icons.mjs`](./scripts/make-icons.mjs) and run `npm run icons` to rewrite them
+together. The manifest lists the PNGs first on purpose — Chrome builds the installed app's icon
+from a raster, and iOS reads nothing but `icon-180.png`.
+
 ## AI chat assistant
 
 The chat can answer questions about your data and edit your plans. Two ways to power it:

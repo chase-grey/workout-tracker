@@ -488,7 +488,16 @@ export default defineConfig(({ mode }) => {
       }),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'icon.svg', 'icon-maskable.svg'],
+        includeAssets: [
+          'favicon.svg',
+          'icon.svg',
+          'icon-maskable.svg',
+          'icon-180.png',
+          'icon-192.png',
+          'icon-512.png',
+          'icon-maskable-192.png',
+          'icon-maskable-512.png',
+        ],
         workbox: {
           // The pose runtime and model are tens of megabytes — far too big to
           // precache on install. Cache them the first time a measurement runs
@@ -516,10 +525,31 @@ export default defineConfig(({ mode }) => {
           orientation: 'portrait',
           start_url: `/${REPO}/`,
           scope: `/${REPO}/`,
+          // PNGs first, and PNGs at all, because that's what makes this install
+          // as a real app rather than a browser shortcut: Chrome/Android mints a
+          // WebAPK from raster manifest icons, so an SVG-only manifest gets you
+          // the browser's own generated launcher icon instead of this one.
+          // Relative srcs resolve against the manifest, i.e. under `scope`.
+          // Regenerate all of these with `npm run icons`.
           icons: [
-            { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-            // Full-bleed variant — see public/icon-maskable.svg for why the
+            { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            // Full-bleed variants — see public/icon-maskable.svg for why the
             // rounded-corner one can't serve both roles.
+            {
+              src: 'icon-maskable-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+            {
+              src: 'icon-maskable-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+            // Vector last, for anything that would rather scale than resample.
+            { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
           ],
         },

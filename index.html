@@ -11,9 +11,12 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#0a0a0a" />
+    <!-- iOS Safari ignores the manifest's icons and display mode both, so it
+         needs its own. Add to Home Screen, then launch from that icon. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="lift" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
     <title>workout tracker</title>
   </head>
   <body>
