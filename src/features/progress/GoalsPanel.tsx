@@ -783,6 +783,14 @@ export function GoalsPanel({ months }: { months: number | null }) {
     return lock && !isReached(g) ? lock.etaDate : null
   }
 
+  // Within reach and waiting on a commitment — the lit-up ask the row offers
+  // (see LockInPrompt). Same test the bright ring uses.
+  const isLockable = (g: GoalSpec): boolean => {
+    if (locked[g.id] || isReached(g)) return false
+    const proj = projections.get(g.id)
+    return proj != null && withinHorizon(proj)
+  }
+
   // Where an uncommitted goal is currently headed, which is how far away it
   // reads as. A goal already reached, or one with no pace to project from,
   // isn't headed anywhere.
@@ -813,6 +821,8 @@ export function GoalsPanel({ months }: { months: number | null }) {
       doneDate: string | null
       eta: string | null
       projEta: string | null
+      /** Being asked to commit — the band just under the committed ones. */
+      lockable: boolean
       /** The family this block clusters with when committed (see goalFamily). */
       family: string
       last?: boolean
@@ -829,6 +839,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           doneDate: latest(weightGoals.map(reachedDate)),
           eta: soonest(weightGoals.map(committedEta)),
           projEta: soonest(weightGoals.map(projectedEta)),
+          lockable: weightGoals.some(isLockable),
           family: goalFamily(g),
           node: <Fragment key={g.id}>{bodyWeightBlock}</Fragment>,
         })
@@ -843,6 +854,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           doneDate: null,
           eta: null,
           projEta: null,
+          lockable: false,
           family: goalFamily(g),
           last: true,
           node: (
@@ -868,6 +880,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           doneDate: latest(ladder.rungs.map(reachedDate)),
           eta: soonest(ladder.rungs.map(committedEta)),
           projEta: soonest(ladder.rungs.map(projectedEta)),
+          lockable: ladder.rungs.some(isLockable),
           family: goalFamily(g),
           node: ladder.node,
         })
@@ -878,6 +891,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
         doneDate: reachedDate(g),
         eta: committedEta(g),
         projEta: projectedEta(g),
+        lockable: isLockable(g),
         family: goalFamily(g),
         node: goalRow(g),
       })
@@ -886,20 +900,22 @@ export function GoalsPanel({ months }: { months: number | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, locked, projections, settings, months, ladders])
 
-  // Four bands: goals already reached first, then committed ones, then the rest
-  // by how far off their projection is, then the six-pack. The reached band runs
-  // newest first — the thing just cleared is the thing worth seeing, and the
-  // early wins settle toward the bottom as more land on top of them. In both
-  // dated bands related goals (the two
-  // squat targets, a flexibility ladder) cluster into families rather than
-  // interleaving by date — each family is placed by its soonest date within that
-  // band (its nearest commitment when committed, its nearest projection when
-  // not), and its members sit in date order under it. A band uses commitment
-  // dates for committed goals and projection dates for the rest, so the two
-  // never mix within one family's soonest. Goals with no date to project sit at
-  // the back of their band in the default order — a stable sort holds them.
+  // Which band a goal is in is the first-order rank, and it's about standing, not
+  // dates: reached first, then committed, then the ones being asked to commit,
+  // then everything else, with the six-pack last. Only inside a band do dates and
+  // families get a say. The reached band runs newest first — the thing just
+  // cleared is the thing worth seeing, and the early wins settle toward the bottom
+  // as more land on top of them. In every dated band related goals (the two squat
+  // targets, a flexibility ladder) cluster into families rather than interleaving
+  // by date — each family is placed by its soonest date within that band (its
+  // nearest commitment when committed, its nearest projection when not), and its
+  // members sit in date order under it. A band uses commitment dates for committed
+  // goals and projection dates for the rest, so the two never mix within one
+  // family's soonest. Goals with no date to project sit at the back of their band
+  // in the default order — a stable sort holds them.
   const ordered = useMemo(() => {
-    const band = (u: (typeof units)[number]) => (u.done ? 0 : u.eta ? 1 : u.last ? 3 : 2)
+    const band = (u: (typeof units)[number]) =>
+      u.done ? 0 : u.eta ? 1 : u.lockable ? 2 : u.last ? 4 : 3
     // The date a block reads as within its band: its commitment once committed,
     // otherwise where its projection is currently headed.
     const dateOf = (u: (typeof units)[number]) => (u.eta ? u.eta : u.projEta)
