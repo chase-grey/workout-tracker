@@ -156,16 +156,6 @@ export function reachedDate(goal: GoalSpec): string | null {
   return reachedPoint(goal)?.date ?? null
 }
 
-/**
- * The reading that met the target, or null if none ever did — the number behind
- * {@link reachedDate}. A milestone that slid back afterwards still reports the
- * reading that earned it, so a finished goal can't show a current value sitting
- * short of the target it says it met.
- */
-export function reachedValue(goal: GoalSpec): number | null {
-  return reachedPoint(goal)?.value ?? null
-}
-
 function reachedPoint(goal: GoalSpec): Point | undefined {
   return goal.points.find((p) => (goal.direction === 'up' ? p.value >= goal.target : p.value <= goal.target))
 }

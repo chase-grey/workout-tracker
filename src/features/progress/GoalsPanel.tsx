@@ -20,7 +20,6 @@ import {
   GOAL_IDS,
   isReached,
   reachedDate,
-  reachedValue,
   type GoalSpec,
 } from '../../lib/goals'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
@@ -421,11 +420,6 @@ function GoalRow({
   // goal shows the live target instead, since that's the one it was judged met
   // against (see isReached).
   const shownTarget = lock && !reached ? lock.target : goal.target
-  // What a finished goal shows in place of the current reading: the value on the
-  // day it was met. A milestone stays reached after sliding back (see
-  // GoalSpec.milestone), so the latest reading can sit under the target — "87 →
-  // 90°" beside "goal reached!" reads as a contradiction.
-  const doneValue = reached ? reachedValue(goal) : null
   // The date of the latest reading: the pace is measured against the line on that
   // date, not against today, so a goal sits where the last session left it rather
   // than drifting behind as rest days pass (see paceAgainstLock).
@@ -451,9 +445,14 @@ function GoalRow({
             </span>
           )
         ) : (
-          <span className="text-sm text-neutral-400 tabular-nums">
-            {doneValue ?? (has ? `${proj.current}` : '—')} → {shownTarget} {goal.unit}
-          </span>
+          // A reached goal drops the reading entirely: "goal reached!" below is
+          // the whole story, and a milestone that slid back after being met (see
+          // GoalSpec.milestone) would otherwise sit under its own target.
+          !reached && (
+            <span className="text-sm text-neutral-400 tabular-nums">
+              {has ? `${proj.current}` : '—'} → {shownTarget} {goal.unit}
+            </span>
+          )
         )}
       </div>
 
