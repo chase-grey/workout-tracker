@@ -8,36 +8,42 @@
 // Only the phone media query in index.css reads them; on a desktop they just track
 // the window and nothing changes.
 //
-// This is an iOS-ONLY fallback. Chrome/Android honours `interactive-widget=
-// resizes-content` (see index.html) and shrinks the LAYOUT viewport in lockstep
-// with the keyboard animation, which `100dvh` picks up natively with zero lag.
-// The `visualViewport.resize` event, by contrast, only fires on Android AFTER the
-// keyboard has finished sliding in (~0.5s) — so mirroring --vvh there would
-// override the instant native resize with a stale, laggy px height. Safari ignores
-// interactive-widget entirely and never resizes any viewport for the keyboard, so
-// there JS is the only option. Gate on that: run only where it's actually needed.
-function keyboardResizesLayoutViewport(): boolean {
-  // True when the browser shrinks the layout viewport for the keyboard on its own
-  // (Chrome/Android + interactive-widget). iOS/iPadOS WebKit does not — it needs
-  // the JS mirror below.
-  if (typeof navigator === 'undefined') return true
-  const ua = navigator.userAgent || ''
-  const iOS =
-    /iP(hone|od|ad)/.test(ua) ||
-    (/Macintosh/.test(ua) && typeof document !== 'undefined' && 'ontouchend' in document)
-  return !iOS
-}
+// This is a FALLBACK for browsers that don't shrink the layout viewport themselves.
+// Chrome/Android honours `interactive-widget=resizes-content` (see index.html) and
+// shrinks the LAYOUT viewport in lockstep with the keyboard animation, which
+// `100dvh` picks up natively with zero lag. The `visualViewport.resize` event, by
+// contrast, only fires AFTER the keyboard has finished sliding in (~0.5s) — so
+// mirroring --vvh there would override the instant native resize with a stale,
+// laggy px height. Safari ignores interactive-widget entirely and never resizes any
+// viewport for the keyboard, so there JS is the only option.
+//
+// Rather than sniff the UA for that split, measure it: `innerHeight` is the layout
+// viewport, `visualViewport.height` is what's actually on screen, so a gap between
+// them IS the keyboard covering content the layout doesn't know about. Only then is
+// the mirror needed. That keeps the native fast path untouched wherever it works
+// (the two stay equal, so --vvh is cleared and the dvh fallback wins) and still
+// covers any browser where it doesn't — iOS, or an Android too old for
+// interactive-widget. It can't reintroduce the lag either: on a lagging resize
+// event we simply haven't run yet, so there's no stale height to override with.
+const COVERED_SLOP_PX = 8
 
 export function trackVisualViewport(): void {
   const vv = window.visualViewport
   if (!vv) return
-  // On everything but iOS, let the native layout-viewport resize + `100dvh` drive
-  // the shell — mirroring --vvh here would only add the Android resize-event lag.
-  if (keyboardResizesLayoutViewport()) return
   const root = document.documentElement
   const apply = () => {
-    root.style.setProperty('--vvh', `${Math.round(vv.height)}px`)
-    root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`)
+    // Scale confuses the comparison (a pinch-zoomed vv is smaller for reasons that
+    // have nothing to do with a keyboard), so measure at the layout's own scale.
+    const visible = vv.height * vv.scale
+    if (window.innerHeight - visible > COVERED_SLOP_PX) {
+      root.style.setProperty('--vvh', `${Math.round(visible)}px`)
+      root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`)
+    } else {
+      // The layout viewport is tracking the keyboard on its own — hand the shell
+      // back to `100dvh`, which follows it with no event-loop delay.
+      root.style.removeProperty('--vvh')
+      root.style.removeProperty('--vv-top')
+    }
   }
   apply()
   vv.addEventListener('resize', apply)
