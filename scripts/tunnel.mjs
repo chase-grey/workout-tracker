@@ -11,7 +11,7 @@
  *
  * Both children die with this process, so Ctrl+C tears the whole thing down.
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -38,12 +38,28 @@ function run(command, args, opts = {}) {
 }
 
 function shutdown() {
-  for (const c of children) c.kill()
+  for (const c of children) {
+    if (c.exitCode !== null || c.signalCode !== null) continue
+    // Windows doesn't propagate a kill down the process tree, and killing the
+    // node shim doesn't stop the vite server it started — so a plain c.kill()
+    // leaves an orphan holding the port. taskkill /T takes the whole subtree.
+    if (process.platform === 'win32') {
+      try {
+        spawnSync('taskkill', ['/pid', String(c.pid), '/T', '/F'], { stdio: 'ignore' })
+        continue
+      } catch {
+        /* fall through to the portable kill */
+      }
+    }
+    c.kill()
+  }
 }
-process.on('SIGINT', () => {
-  shutdown()
-  process.exit(0)
-})
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP']) {
+  process.on(sig, () => {
+    shutdown()
+    process.exit(0)
+  })
+}
 process.on('exit', shutdown)
 
 // --- the dev server -------------------------------------------------------
@@ -58,8 +74,20 @@ const viteBin = path.join(
 )
 const vite = run(process.execPath, [viteBin, '--host', '--port', String(PORT), '--strictPort'])
 vite.stdout.on('data', (d) => process.stdout.write(d))
-vite.stderr.on('data', (d) => process.stderr.write(d))
+// --strictPort on purpose: a bumped port would leave the tunnel pointed at
+// whatever is on 5173, which is a confusing way to fail. Name the real problem.
+let portTaken = false
+vite.stderr.on('data', (d) => {
+  process.stderr.write(d)
+  if (/already in use/i.test(String(d))) portTaken = true
+})
 vite.on('exit', (code) => {
+  if (portTaken) {
+    console.error(
+      `\n  Something is already serving port ${PORT} — often a dev server from an earlier` +
+        `\n  run that outlived its terminal. Stop it, or run with PORT=<other> set.\n`,
+    )
+  }
   shutdown()
   process.exit(code ?? 0)
 })
