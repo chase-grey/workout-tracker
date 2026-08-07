@@ -10,7 +10,11 @@ export type Projection = {
   observedSlopePerWeek: number
   /** Ceiling the projected pace was held to (see capSlope), or null when unbounded. */
   capPerWeek: number | null
-  current: number // fitted/estimated current value (latest actual if available)
+  /**
+   * Where the remaining gap is measured from: the newest reading, or the best one
+   * in the fitted window when the caller asked for that (see ProjectOptions.bestOf).
+   */
+  current: number
   target: number
   etaWeeks: number | null // weeks from today to reach target; null if not trending toward it
   etaDate: string | null // ISO YYYY-MM-DD; null if etaWeeks null
@@ -92,6 +96,31 @@ export function trendPoints<T extends { date: string }>(
   const newest = sorted[sorted.length - 1].date
   const recent = sorted.filter((p) => daysApart(p.date, newest) <= window.windowDays)
   return recent.length >= window.minPoints ? recent : sorted.slice(-window.minPoints)
+}
+
+/**
+ * The reading a projection measures its remaining gap from.
+ *
+ * Normally the newest one: a bodyweight of 172 today is where you are, whatever
+ * the scale said last week. But some metrics are read off a single best effort
+ * rather than a standing state, and for those the newest number is the effort
+ * that happened to be measured last, not the range you have. A warm side split
+ * comes in a few degrees under its own best whenever the warm-up ran short or
+ * the room was cold, and projecting off that day says the next rung is months
+ * further off than it was before a tight session — while the rung already
+ * cleared stays cleared, because that one is judged on the best (see
+ * goals.isReached). Anchoring those on the best reading in the same window the
+ * pace is read from keeps the two answers on the same number: what you can
+ * currently get into, rather than the last time you tried.
+ *
+ * `'max'` when higher is better, `'min'` when lower is. The window always ends on
+ * the newest reading (see {@link trendPoints}), so this can only ever be the
+ * newest value or something better than it.
+ */
+function anchorValue(fitted: { value: number }[], bestOf: 'max' | 'min' | undefined): number {
+  const values = fitted.map((p) => p.value)
+  if (bestOf == null) return values[values.length - 1]
+  return bestOf === 'max' ? Math.max(...values) : Math.min(...values)
 }
 
 /**
@@ -215,13 +244,20 @@ export type ProjectOptions = {
   decayPerWeek?: number
   /** Ceiling on the pace the ETA is projected from (see capSlope). null = unbounded. */
   capPerWeek?: number | null
+  /**
+   * Measure the gap from the best reading in the fitted window rather than the
+   * newest one — `'max'` where higher is better, `'min'` where lower is (see
+   * {@link anchorValue}). Omitted for the metrics whose newest reading is simply
+   * where they stand.
+   */
+  bestOf?: 'max' | 'min'
 }
 
 export function project(
   points: { date: string; value: number }[],
   target: number,
   today: Date = new Date(),
-  { window = TREND_WINDOW, decayPerWeek = 1, capPerWeek = null }: ProjectOptions = {},
+  { window = TREND_WINDOW, decayPerWeek = 1, capPerWeek = null, bestOf }: ProjectOptions = {},
 ): Projection {
   if (points.length === 0) {
     return {
@@ -239,7 +275,6 @@ export function project(
   }
 
   const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date))
-  const current = round1(sorted[sorted.length - 1].value)
 
   const fitted = trendPoints(sorted, window)
   const spanDays = daysApart(fitted[0].date, fitted[fitted.length - 1].date)
@@ -248,6 +283,7 @@ export function project(
     spanDays,
     thin: fitted.length < window.minPoints || spanDays < window.minSpanDays,
   }
+  const current = round1(anchorValue(fitted, bestOf))
   const observedSlopePerWeek = basis.thin ? 0 : fitSlopePerWeek(fitted)
   const slopePerWeek = capSlope(observedSlopePerWeek, capPerWeek)
 

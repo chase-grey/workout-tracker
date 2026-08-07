@@ -14,6 +14,7 @@ import { exerciseSeries, type Point } from './progress'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
+import { project, type Projection } from './predictions'
 
 /**
  * Weekly decay of the gain rate strength projections assume (see
@@ -158,6 +159,32 @@ export function reachedDate(goal: GoalSpec): string | null {
 
 function reachedPoint(goal: GoalSpec): Point | undefined {
   return goal.points.find((p) => (goal.direction === 'up' ? p.value >= goal.target : p.value <= goal.target))
+}
+
+/**
+ * A goal's live projection, run through the model the goal itself declares.
+ *
+ * The model is three things the spec declares — the taper, the pace ceiling, and
+ * which reading the gap is measured from — and a caller that assembles them by
+ * hand can quietly leave one out. So the assembly lives here, next to the spec
+ * it's assembled from.
+ *
+ * A milestone measures its gap from the best reading in the recent window rather
+ * than the last one (see predictions.bestOf). It's the same rule {@link isReached}
+ * already applies: a milestone is earned at your best, so the distance to the next
+ * one is owed from your best too. The ladders need it most — a warm split lands a
+ * few degrees under its own best whenever the warm-up was short, and reading the
+ * gap off that one session had the next rung projecting months further out than
+ * the session before it, while the rung that same log had already cleared stayed
+ * cleared. Strength and bodyweight goals keep the newest reading: you are not
+ * squatting 300 because you did once.
+ */
+export function projectGoal(goal: GoalSpec, today?: Date): Projection {
+  return project(goal.points, goal.target, today, {
+    decayPerWeek: goal.decayPerWeek,
+    capPerWeek: goal.capPerWeek,
+    bestOf: goal.milestone ? (goal.direction === 'up' ? 'max' : 'min') : undefined,
+  })
 }
 
 export type GoalInputs = {

@@ -6,8 +6,10 @@ import {
   FLEX_GAIN_DECAY,
   GOAL_IDS,
   isReached,
+  projectGoal,
   reachedDate,
   SQUAT_GAIN_CAP,
+  STRENGTH_GAIN_DECAY,
 } from './goals'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import type { FlexEntry } from './flex'
@@ -225,6 +227,84 @@ describe('isReached judges milestones on the best reading, others on the latest'
       ]),
     )
     expect(isReached(slid.find((g) => g.id === GOAL_IDS.weight180)!)).toBe(false)
+  })
+})
+
+describe('projectGoal runs a goal through the model its spec declares', () => {
+  /**
+   * A fortnight of warm splits climbing about a degree a week, ending on a tight
+   * session: 127° on the 11th, then 123° on the 14th.
+   */
+  const tightLastSession: FlexEntry[] = [
+    { date: '2026-02-01', splitDeg: 118, tailorsLeftDeg: null, tailorsRightDeg: null },
+    { date: '2026-02-04', splitDeg: 124, tailorsLeftDeg: null, tailorsRightDeg: null },
+    { date: '2026-02-08', splitDeg: 121, tailorsLeftDeg: null, tailorsRightDeg: null },
+    { date: '2026-02-11', splitDeg: 127, tailorsLeftDeg: null, tailorsRightDeg: null },
+    { date: '2026-02-14', splitDeg: 123, tailorsLeftDeg: null, tailorsRightDeg: null },
+  ]
+  const today = new Date(2026, 1, 14)
+  const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: tightLastSession })
+  const at = (id: string) => projectGoal(goals.find((g) => g.id === id)!, today)
+
+  it('owes the next rung from the best of the window, matching isReached', () => {
+    // The log has cleared 120° on its best (127°), so the rung still open reads
+    // its gap from that same 127° rather than from the tight 123°.
+    expect(isReached(goals.find((g) => g.id === 'split_120')!)).toBe(true)
+    expect(at('split_135').current).toBe(127)
+  })
+
+  it('does not push a rung further out than the session before did', () => {
+    const before = buildGoals({
+      ...inputs(HOT_FORTNIGHT),
+      flexEntries: tightLastSession.slice(0, -1),
+    })
+    const wasProjected = projectGoal(
+      before.find((g) => g.id === 'split_135')!,
+      new Date(2026, 1, 11),
+    )
+    expect(at('split_135').etaWeeks!).toBeLessThanOrEqual(wasProjected.etaWeeks!)
+  })
+
+  it('still tapers and still reaches the far rungs', () => {
+    expect(at('split_180').decayPerWeek).toBe(FLEX_GAIN_DECAY)
+    expect(at('split_180').onTrack).toBe(true)
+    expect(at('split_180').etaWeeks!).toBeGreaterThan(at('split_150').etaWeeks!)
+  })
+
+  it('leaves a bodyweight goal reading off the latest weigh-in', () => {
+    const slid = buildGoals(
+      inputs([
+        { date: '2026-01-31', weightLbs: 172 },
+        { date: '2026-02-07', weightLbs: 176 },
+        { date: '2026-02-14', weightLbs: 174 },
+      ]),
+    )
+    const p = projectGoal(slid.find((g) => g.id === GOAL_IDS.weight180)!, today)
+    expect(p.current).toBe(174)
+    expect(p.capPerWeek).toBe(BODYWEIGHT_GAIN_CAP)
+  })
+
+  it('carries both the taper and the pace ceiling a lift goal declares', () => {
+    const squats: WorkoutRow[] = ['2026-02-01', '2026-02-08', '2026-02-14'].map((date, i) => ({
+      session_id: date,
+      date,
+      day_type: 'fullbody',
+      exercise: 'barbell_squat',
+      set_number: 1,
+      weight_lbs: 155 + i * 20,
+      reps: 5,
+      notes: '',
+      is_historical: false,
+    }))
+    const p = projectGoal(
+      buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: squats }).find(
+        (g) => g.id === GOAL_IDS.squatOneAndAHalf,
+      )!,
+      today,
+    )
+    expect(p.capPerWeek).toBe(SQUAT_GAIN_CAP)
+    expect(p.decayPerWeek).toBe(STRENGTH_GAIN_DECAY)
+    expect(p.slopePerWeek).toBe(SQUAT_GAIN_CAP)
   })
 })
 

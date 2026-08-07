@@ -344,6 +344,68 @@ describe('project with a capped pace', () => {
   })
 })
 
+describe('project anchored on the best of the window', () => {
+  const today = new Date(2026, 1, 14)
+  /**
+   * A fortnight of warm side splits climbing about a degree a week, with the last
+   * session coming in tight — 127° was reached three days before the 123° that
+   * happens to be the newest reading.
+   */
+  const tightLastSession = [
+    { date: '2026-02-01', value: 118 },
+    { date: '2026-02-04', value: 124 },
+    { date: '2026-02-08', value: 121 },
+    { date: '2026-02-11', value: 127 },
+    { date: '2026-02-14', value: 123 },
+  ]
+
+  it('measures the gap from the best reading, not the newest one', () => {
+    const latest = project(tightLastSession, 135, today)
+    const best = project(tightLastSession, 135, today, { bestOf: 'max' })
+
+    expect(latest.current).toBe(123)
+    expect(best.current).toBe(127)
+    // Same fitted pace either way — only where the gap is measured from changes.
+    expect(best.slopePerWeek).toBe(latest.slopePerWeek)
+    expect(best.etaWeeks!).toBeLessThan(latest.etaWeeks!)
+  })
+
+  it('does not let one tight session push the next rung months out', () => {
+    // Dropping the 123° tight session leaves 127° as the newest reading, which is
+    // what an unanchored projection would have quoted the session before. The
+    // anchored projection agrees with it rather than retreating.
+    const before = project(tightLastSession.slice(0, -1), 135, new Date(2026, 1, 11))
+    const after = project(tightLastSession, 135, today, { bestOf: 'max' })
+
+    expect(before.current).toBe(127)
+    expect(after.etaWeeks!).toBeLessThanOrEqual(before.etaWeeks!)
+  })
+
+  it('takes the lowest reading for a metric that has to come down', () => {
+    const bodyFat = [
+      { date: '2026-02-01', value: 19 },
+      { date: '2026-02-08', value: 17.5 },
+      { date: '2026-02-14', value: 18.2 },
+    ]
+    expect(project(bodyFat, 12, today, { bestOf: 'min' }).current).toBe(17.5)
+    expect(project(bodyFat, 12, today, { bestOf: 'max' }).current).toBe(19)
+  })
+
+  it('reads the best off the fitted window, so an old peak cannot resurrect it', () => {
+    const fadedPeak = [
+      { date: '2025-06-01', value: 150 },
+      { date: '2026-02-01', value: 118 },
+      { date: '2026-02-08', value: 121 },
+      { date: '2026-02-14', value: 120 },
+    ]
+    expect(project(fadedPeak, 135, today, { bestOf: 'max' }).current).toBe(121)
+  })
+
+  it('leaves the newest reading as the anchor when no best is asked for', () => {
+    expect(project(tightLastSession, 135, today).current).toBe(123)
+  })
+})
+
 describe('weeklyTarget', () => {
   it('returns the one-week required step toward the target', () => {
     expect(weeklyTarget(170, 180, 10)).toBe(171)

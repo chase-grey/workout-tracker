@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { useData } from '../../store/DataContext'
-import { isPaceCapped, project, type Projection } from '../../lib/predictions'
+import { isPaceCapped, type Projection } from '../../lib/predictions'
 import { filterRange, type Point } from '../../lib/progress'
 import { calorieHitsByWeek } from '../../lib/calories'
 import {
@@ -19,6 +19,7 @@ import {
   buildGoals,
   GOAL_IDS,
   isReached,
+  projectGoal,
   reachedDate,
   type GoalSpec,
 } from '../../lib/goals'
@@ -348,10 +349,17 @@ function LockInPrompt({
  * drawn a step heavier, on the one being asked to commit — the darker green
  * gives up some of the contrast the lighter one has against the surface.
  *
+ * A goal already met gets the brightest green there is, at full strength and with
+ * a glow behind it, so the finished ones are the first thing the eye lands on.
+ * Nothing else in the panel wears that green, so a cleared goal can't be mistaken
+ * for one still being chased.
+ *
  * Shared with the bodyweight block, which draws the box once around its whole
- * group rather than once per row.
+ * group rather than once per row — reached goals leave their block for the band
+ * at the top of the panel, so a block never wears the reached ring.
  */
-function goalRing(lockable: boolean, committed: boolean): string {
+function goalRing(lockable: boolean, committed: boolean, reached = false): string {
+  if (reached) return 'ring-2 ring-accent-bright shadow-[0_0_16px_-4px_var(--color-accent-bright)]'
   return lockable ? 'ring-2 ring-accent' : committed ? 'ring-1 ring-accent-2/60' : ''
 }
 
@@ -428,7 +436,7 @@ function GoalRow({
     lock && has && !reached && lastReadingDate
       ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek)
       : null
-  const ring = grouped ? '' : goalRing(lockable, !!lock && !reached)
+  const ring = grouped ? '' : goalRing(lockable, !!lock && !reached, reached)
 
   return (
     <div className={`rounded-2xl bg-surface p-4 ${ring}`}>
@@ -572,8 +580,11 @@ function SixPackRow({
   status: SixPackStatus
   onChange: (s: SixPackStatus) => void
 }) {
+  // Called "got it" is this goal's version of reached, so it wears the same ring
+  // the projected goals get when they land — it sits in the reached band with
+  // them, and one of the group missing the outline would read as unfinished.
   return (
-    <div className="rounded-2xl bg-surface p-4">
+    <div className={`rounded-2xl bg-surface p-4 ${goalRing(false, false, status === 'have')}`}>
       <h4 className="font-semibold">{title}</h4>
       <div role="radiogroup" aria-label={title} className="mt-3 flex gap-1 rounded-xl bg-surface-2 p-1">
         {SIX_PACK_OPTIONS.map((o) => (
@@ -605,12 +616,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
 
   const projections = useMemo(
     () =>
-      new Map(
-        goals.map((g) => [
-          g.id,
-          project(g.points, g.target, undefined, { decayPerWeek: g.decayPerWeek, capPerWeek: g.capPerWeek }),
-        ]),
-      ),
+      new Map(goals.map((g) => [g.id, projectGoal(g)])),
     [goals],
   )
 
