@@ -138,12 +138,13 @@ function AppShell() {
   // unless they've been set aside.
   const immersive = (sessionActive && !minimized) || finishSummary != null
 
-  // The keyboard shrinks the shell, and everything in it rides up — including the
-  // nav, which then sits between the composer and the keys taking a row out of an
-  // already short screen. Nothing there is reachable mid-message anyway, so while
-  // the coach's keyboard is up the nav stands down and only the composer follows
-  // it. It comes back when the keyboard goes, measured rather than guessed from
-  // focus (see useKeyboardOpen).
+  // The keyboard shrinks the shell, and everything in it rides up — the nav and
+  // the back-to-your-workout banner both, which then stack between the composer
+  // and the keys taking two rows out of an already short screen. Neither is
+  // reachable mid-message anyway, so while the coach's keyboard is up they stand
+  // down and only the composer follows it: as far as the eye can tell they've
+  // stayed put and the keyboard slid over them. They come back when it goes,
+  // measured rather than guessed from focus (see useKeyboardOpen).
   const typingToCoach = tab === 'coach' && keyboardOpen
 
   const dismissFinish = () => {
@@ -221,7 +222,7 @@ function AppShell() {
           </>
         )}
       </main>
-      {minimized && sessionActive && (
+      {minimized && sessionActive && !typingToCoach && (
         <button
           onClick={() => setMinimized(false)}
           className="flex min-h-[52px] items-center justify-center gap-2 border-t border-border bg-accent text-base font-bold text-black active:opacity-80"
