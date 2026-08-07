@@ -4,6 +4,7 @@ import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { ExerciseAverages, SessionDuration, SessionTimeSamples } from '../lib/estimate'
+import type { SyncedSettings } from '../lib/settingsSync'
 import { storage } from './storage'
 import { DEFAULT_API_URL } from '../config/backend'
 
@@ -80,6 +81,9 @@ export const api = {
   postFlex: (entry: FlexEntry) => post<{ saved: number }>('flexibility', entry),
   fetchPlan: () => get<Plan | null>('plan'),
   postPlan: (plan: Plan) => post<{ saved: number }>('plan', { plan }),
+  fetchSettings: () => get<SyncedSettings | null>('settings'),
+  postSettings: (settings: SyncedSettings) =>
+    post<{ saved: number; stale?: boolean }>('settings', { settings }),
   fetchCalories: (since?: string) => get<CalorieEntry[]>('calories', since ? { since } : {}),
   postCalorie: (entry: CalorieEntry) => post<{ saved: number }>('calories', entry),
   fetchMeasurements: (since?: string) =>

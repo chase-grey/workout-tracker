@@ -97,10 +97,18 @@ export type Settings = {
   lastReviewedYear?: string
   /**
    * Goal projections frozen once their ETA came within six months, keyed by goal
-   * id (see lib/goalLock). Kept on-device: it's a commitment made from this
-   * device's view of the data, and recalculating is a deliberate user action.
+   * id (see lib/goalLock). Synced to the backend with the rest of these, and
+   * merged per goal on the way back — see lib/settingsSync for why a commitment
+   * can't be left on-device and can't be last-write-wins either.
    */
   lockedGoals?: LockedProjections
+  /**
+   * When these settings were last written on some device, ISO. The stamp the
+   * merge orders the two copies by (see lib/settingsSync.mergeSettings); absent
+   * means this device has never synced settings, which is what tells a fresh
+   * install to take the account's committed goals wholesale.
+   */
+  updatedAt?: string
   /**
    * Whether the abs are visible yet, as judged in the mirror rather than
    * projected off a body-fat estimate. Drives the six-pack goal row and the

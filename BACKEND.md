@@ -51,8 +51,25 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=session` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=import` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
+| GET | `?route=settings` | — | settings blob, or `null` |
+| POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
 | GET | `?route=chat_endpoint&secret=…` | — | `{ url, updatedAt }` |
 | POST | `?route=chat_endpoint` | `{ url, secret }` | `{ saved }` |
+
+### Settings
+
+A `config` row holding the app's settings, above all the goals the user has **committed** to (see
+`src/lib/goalLock.ts`). Everything else the app shows can be recomputed from the logged rows; a
+commitment can't, so leaving it in a phone's `localStorage` meant a reinstall destroyed it.
+
+Each device keeps a full copy and merges on fetch rather than replacing — `src/lib/settingsSync.ts`
+has the rules. Commitments merge *per goal*, newest lock winning, because whole-copy last-write-wins
+lets a device that hasn't synced in a while erase a goal committed on the other one. For the same
+reason a POST carrying an older `updatedAt` than the stored copy is declined with `{saved: 0, stale:
+true}` — the one route here that deliberately stores nothing rather than throwing.
+
+The API URL and the OpenAI/chat keys are **not** synced. This route is unauthenticated and the
+`/exec` URL is public (see below), so a key stored here would be a key published.
 
 ### Chat endpoint
 

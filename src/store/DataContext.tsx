@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid'
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow, WorkoutSession } from '../types'
 import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
+import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
 import { sessionToRows, trainingSessions } from '../lib/session'
 import { DEAD_BUG } from '../config/plan'
@@ -233,6 +234,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         else if (w.type === 'duration') await api.postDuration(w.entry)
         else if (w.type === 'exerciseTimes') await api.postExerciseTimes(w.samples)
         else if (w.type === 'plan') await api.postPlan(w.plan)
+        else if (w.type === 'settings') await api.postSettings(w.settings)
       } catch {
         continue
       }
@@ -263,6 +265,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return !storage.loadQueue().some((x) => x.id === w.id)
     },
     [flush],
+  )
+
+  /**
+   * Save settings locally and queue them for the backend, stamped with the
+   * moment they were written — the stamp the merge orders two devices' copies by
+   * (see lib/settingsSync). Queued rather than posted directly so a commitment
+   * made offline still reaches the sheet, and silent because most settings
+   * writes aren't a deliberate save the user is waiting on (a progress photo, a
+   * lock adopting the goal's current curve).
+   */
+  const persistSettings = useCallback(
+    (s: Settings) => {
+      const next: Settings = { ...s, updatedAt: new Date().toISOString() }
+      setSettings(next)
+      storage.saveSettings(next)
+      enqueue({ type: 'settings', settings: syncablePart(next) })
+      void flush()
+    },
+    [enqueue, flush],
   )
 
   const refresh = useCallback(async () => {
@@ -338,6 +359,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore — an older backend won't have this route */
     }
     try {
+      // Merge rather than replace, and in both directions: the account's copy
+      // restores what this device lost (a reinstall's committed goals), while
+      // anything only this device holds gets pushed up rather than dropped.
+      //
+      // `null` means the route works but nothing has been stored — a backend
+      // without the route throws and lands in the catch. That distinction
+      // matters: on the first sync after this shipped there is nothing up there
+      // and the locks the user already committed have never queued a write of
+      // their own, so this is the moment to seed the account with them rather
+      // than wait for the next time a setting happens to change.
+      const stored = await api.fetchSettings()
+      const remote = stored && typeof stored === 'object' ? stored : null
+      const local = storage.loadSettings()
+      const merged = mergeSettings(local, remote)
+      if (!sameSyncedSettings(syncablePart(merged), remote)) {
+        persistSettings(merged)
+      } else if (!sameSyncedSettings(syncablePart(local), syncablePart(merged))) {
+        // The account only told this device things it didn't know; save them, but
+        // don't push a copy identical to the one already up there.
+        setSettings(merged)
+        storage.saveSettings(merged)
+      }
+    } catch {
+      /* ignore — an older backend won't have this route */
+    }
+    try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
         // The sheet stores the plan without a revision marker, so reconcile the
@@ -350,7 +397,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations, persistExerciseAverages])
+  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations, persistExerciseAverages, persistSettings])
 
   // Initial sync, then push the outbox whenever there's a fresh chance to: back
   // online, or back in the foreground. A phone that logged something and got
@@ -688,15 +735,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const logProgressPhoto = useCallback(() => {
-    const next = { ...storage.loadSettings(), lastProgressPhoto: toISODate(new Date()) }
-    setSettings(next)
-    storage.saveSettings(next)
-  }, [])
+    persistSettings({ ...storage.loadSettings(), lastProgressPhoto: toISODate(new Date()) })
+  }, [persistSettings])
 
-  const updateSettings = useCallback((s: Settings) => {
-    setSettings(s)
-    storage.saveSettings(s)
-  }, [])
+  const updateSettings = useCallback((s: Settings) => persistSettings(s), [persistSettings])
 
   const updatePlan = useCallback(
     (p: Plan) => {

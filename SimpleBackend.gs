@@ -24,6 +24,8 @@
  *                 row holds the pooled observed÷prescribed rest ratio, and the
  *                 legacy "__rest__" row holds pooled rest seconds — still written
  *                 for older clients, no longer served)
+ *   config:       key, value  (one JSON blob per key: "plan", "settings",
+ *                 "chat_endpoint")
  *
  * Routes:
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
@@ -31,6 +33,8 @@
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
  *   GET  ?route=durations[&since=YYYY-MM-DD]
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
+ *   GET  ?route=settings         -> the account's settings blob, or null (see getSettings)
+ *   POST ?route=settings      body: { settings: {…} }  (whole; declines a stale copy)
  *   GET  ?route=chat_endpoint&secret=…  -> { url, updatedAt } (see getChatEndpoint)
  *   POST ?route=chat_endpoint    body: { url, secret }
  *   POST ?route=report_issue    body: { secret, title, body, area, context }
@@ -108,6 +112,8 @@ function doGet(e) {
         return json(getExerciseTimes())
       case 'plan':
         return json(getPlan())
+      case 'settings':
+        return json(getSettings())
       case 'chat_endpoint':
         return json(getChatEndpoint(e.parameter.secret))
       default:
@@ -162,6 +168,8 @@ function doPost(e) {
         return json(withLock(function () { return foldExerciseTimes(body) }))
       case 'plan':
         return json(withLock(function () { return savePlan(body.plan) }))
+      case 'settings':
+        return json(withLock(function () { return saveSettings(body.settings) }))
       case 'chat_endpoint':
         return json(withLock(function () { return saveChatEndpoint(body) }))
       case 'report_issue':
@@ -703,6 +711,68 @@ function savePlan(plan) {
     }
   }
   sh.appendRow(['plan', value])
+  return { saved: 1 }
+}
+
+/* ------------------------------------------------------------------ settings */
+
+/**
+ * The account's settings: the app's preferences plus, crucially, the goals the
+ * user has committed to (see the client's lib/goalLock). Everything else here is
+ * re-derivable from the logged rows; a commitment is not, so it can't live only
+ * in a phone's localStorage that a reinstall wipes.
+ *
+ * Stored as one JSON blob under a `config` key, like the plan. The client holds a
+ * full copy and merges on fetch rather than replacing (see lib/settingsSync), so
+ * this end stays a dumb store — with the one exception in saveSettings.
+ *
+ * Note what deliberately ISN'T here: the API URL and the OpenAI/chat
+ * credentials. This route is unauthenticated and the /exec URL ships in the
+ * public web bundle, so a key stored here would be a key published.
+ */
+function getSettings() {
+  const sh = sheet('config', CONFIG_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'settings') {
+      try {
+        return JSON.parse(rows[i][1])
+      } catch (e) {
+        return null
+      }
+    }
+  }
+  return null // nothing synced yet
+}
+
+function saveSettings(settings) {
+  if (!settings || typeof settings !== 'object') throw new Error('No settings provided')
+  const sh = sheet('config', CONFIG_HEADERS)
+  const value = JSON.stringify(settings)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'settings') {
+      let stored = null
+      try {
+        stored = JSON.parse(rows[i][1])
+      } catch (e) {
+        stored = null
+      }
+      // The one place a write is declined rather than stored. Settings are sent
+      // whole, so a device that hasn't synced since the other one committed a
+      // goal would push its stale copy over the top and erase the commitment —
+      // exactly the loss this route was added to prevent. `saved: 0` here means
+      // "already superseded", not "failed" (contrast the rule at the top of this
+      // file): the client should drop the write, not retry it, because its copy
+      // is the obsolete one and its next fetch will merge the newer one in.
+      if (stored && String(stored.updatedAt || '') > String(settings.updatedAt || '')) {
+        return { saved: 0, stale: true }
+      }
+      sh.getRange(i + 1, 2).setValue(value)
+      return { saved: 1 }
+    }
+  }
+  sh.appendRow(['settings', value])
   return { saved: 1 }
 }
 

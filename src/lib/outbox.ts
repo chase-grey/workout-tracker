@@ -4,6 +4,7 @@ import type { FlexEntry } from './flex'
 import type { CalorieEntry } from './calories'
 import type { MeasurementEntry } from './bodyComp'
 import type { SessionDuration, SessionTimeSamples } from './estimate'
+import type { SyncedSettings } from './settingsSync'
 
 /**
  * The durable outbox: writes recorded on disk *before* the network is touched,
@@ -26,6 +27,7 @@ export type WritePayload =
   | { type: 'duration'; entry: SessionDuration }
   | { type: 'exerciseTimes'; samples: SessionTimeSamples }
   | { type: 'plan'; plan: Plan }
+  | { type: 'settings'; settings: SyncedSettings }
 
 /**
  * A queued write. The id is what lets a delivery remove *its own* entry from
@@ -44,12 +46,14 @@ export function newWrite(payload: WritePayload, id: string): QueuedWrite {
  *
  * A calorie entry carries a date's whole running total, so an older pending
  * total for that date is not just redundant, it's actively wrong: delivering it
- * after the newer one would roll the sheet back. Same for the plan, which is
- * always sent whole. Everything else appends a row and has to be kept.
+ * after the newer one would roll the sheet back. Same for the plan and the
+ * settings, both always sent whole. Everything else appends a row and has to be
+ * kept.
  */
 export function supersedes(w: WritePayload): string | null {
   if (w.type === 'calorie') return `calorie:${w.entry.date}`
   if (w.type === 'plan') return 'plan'
+  if (w.type === 'settings') return 'settings'
   return null
 }
 
