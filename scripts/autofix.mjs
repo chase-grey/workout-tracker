@@ -34,6 +34,10 @@ const PERMISSION = process.env.AUTOFIX_PERMISSION || 'acceptEdits' // 'acceptEdi
 const RUNNING_LABEL = 'autofix-running'
 const FAILED_LABEL = 'autofix-failed'
 const WORKTREE = path.join(process.cwd(), '.autofix', 'worktree')
+// The worktree gets its OWN branch: git refuses to check out `main` while your
+// primary checkout has it, so borrowing the name left the worktree detached and
+// turned the push into a no-op that still reported success.
+const WORK_BRANCH = 'autofix-work'
 
 if (!TOKEN) {
   console.error(
@@ -83,16 +87,23 @@ function prepareWorktree() {
   mkdirSync(path.dirname(WORKTREE), { recursive: true })
   const git = (args, opts = {}) =>
     spawnSync('git', args, { encoding: 'utf8', stdio: 'pipe', ...opts })
-  git(['fetch', 'origin', 'main'])
+  // Every step here has to be checked: a swallowed failure leaves the worktree
+  // pointing somewhere stale and the fix gets built on the wrong base.
+  const mustGit = (args, opts) => {
+    const r = git(args, opts)
+    if (r.status !== 0)
+      throw new Error(`git ${args.join(' ')} failed: ${(r.stderr || r.stdout || '').trim()}`)
+    return r
+  }
+  mustGit(['fetch', 'origin', 'main'])
   if (!existsSync(WORKTREE)) {
-    const r = git(['worktree', 'add', '--force', WORKTREE, 'origin/main'])
-    if (r.status !== 0) throw new Error(`git worktree add failed: ${r.stderr}`)
+    mustGit(['worktree', 'add', '--force', '-B', WORK_BRANCH, WORKTREE, 'origin/main'])
   }
   // Hard-reset the worktree to the current remote main so each fix starts fresh.
   const opts = { cwd: WORKTREE }
-  git(['checkout', '-B', 'main', 'origin/main'], opts)
-  git(['reset', '--hard', 'origin/main'], opts)
-  git(['clean', '-fd'], opts)
+  mustGit(['checkout', '-B', WORK_BRANCH, 'origin/main'], opts)
+  mustGit(['reset', '--hard', 'origin/main'], opts)
+  mustGit(['clean', '-fd'], opts)
 }
 
 function worktreeGit(args) {
@@ -163,9 +174,18 @@ async function processIssue(issue) {
     const msg = `Auto-fix issue #${n}: ${issue.title}\n\nFixes #${n}`
     const commit = worktreeGit(['commit', '-m', msg])
     if (commit.status !== 0) throw new Error(`git commit failed: ${commit.stderr}`)
-    const push = worktreeGit(['push', 'origin', 'main'])
-    if (push.status !== 0) throw new Error(`git push failed: ${push.stderr}`)
     const sha = (worktreeGit(['rev-parse', 'HEAD']).stdout || '').trim()
+    // Push HEAD explicitly, not the branch NAME `main` — naming a local ref that
+    // isn't the commit we just built is how a fix got reported as shipped while
+    // `git push` sat there saying "Everything up-to-date".
+    const push = worktreeGit(['push', 'origin', `${sha}:refs/heads/main`])
+    if (push.status !== 0) throw new Error(`git push failed: ${push.stderr}`)
+    // Trust the remote, not the exit code: confirm main really is our commit.
+    const remoteHead = ((worktreeGit(['ls-remote', 'origin', 'refs/heads/main']).stdout || '')
+      .trim()
+      .split(/\s+/)[0] || '')
+    if (remoteHead !== sha)
+      throw new Error(`push reported success but origin/main is ${remoteHead || '(unknown)'}, not ${sha}`)
     await comment(n, `Fixed on \`main\` in ${sha.slice(0, 8)}. It will deploy once CI passes.`)
     await removeLabel(n, RUNNING_LABEL)
     await closeIssue(n)
