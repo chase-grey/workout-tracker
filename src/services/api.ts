@@ -90,4 +90,11 @@ export const api = {
   fetchExerciseTimes: () => get<ExerciseAverages>('exercise_times'),
   postExerciseTimes: (samples: SessionTimeSamples) =>
     post<{ saved: number }>('exercise_times', samples),
+  reportIssue: (body: {
+    secret: string
+    title: string
+    body: string
+    area: string
+    context: string
+  }) => post<{ number: number; url: string }>('report_issue', body),
 }

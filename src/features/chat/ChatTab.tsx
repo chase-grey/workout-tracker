@@ -4,6 +4,7 @@ import { buildSystemPrompt } from '../../lib/chatPrompt'
 import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/openai'
 import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
 import { applyFlexEdits, type FlexEdit } from '../../lib/flexTools'
+import { reportIssue, type IssueArea } from '../../services/issues'
 import { repRangeLabel, type Plan } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
@@ -84,6 +85,34 @@ const UPDATE_FLEX_TOOL: Tool = {
         },
       },
       required: ['edits'],
+    },
+  },
+}
+
+const REPORT_ISSUE_TOOL: Tool = {
+  type: 'function',
+  function: {
+    name: 'report_issue',
+    description:
+      'File a bug or feature request about the workout app itself as a GitHub issue. ' +
+      'Call only when the user asks to report a problem, says something is broken, or ' +
+      'wants a change filed — not for questions about their training. Confirm the ' +
+      'created issue number/link back to the user.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Short one-line summary of the issue.' },
+        body: {
+          type: 'string',
+          description: 'Details: what happens, steps to reproduce, and what was expected.',
+        },
+        area: {
+          type: 'string',
+          enum: ['plan', 'chat', 'timer', 'history', 'other'],
+          description: 'Which part of the app the issue is about.',
+        },
+      },
+      required: ['title'],
     },
   },
 }
@@ -177,7 +206,7 @@ export function ChatTab() {
       // Tool loop: let the model call a tool, apply it, feed results back.
       for (let i = 0; i < 4; i++) {
         const turn = await chatCompleteRaw(settings.openAiKey, messages, {
-          tools: [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL],
+          tools: [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL, REPORT_ISSUE_TOOL],
           model: settings.openAiModel,
           onText: setPending,
         })
@@ -208,6 +237,21 @@ export function ChatTab() {
               updateFlexPlan(res.routine)
               if (res.applied.length) newTurns.push({ role: 'system', content: res.applied.join('; ') })
               resultMsg = JSON.stringify({ applied: res.applied, errors: res.errors })
+            } else if (call.name === 'report_issue') {
+              const parsed = JSON.parse(call.arguments) as {
+                title: string
+                body?: string
+                area?: IssueArea
+              }
+              // Attach the recent conversation so the issue carries its own context.
+              const chatTail = base
+                .filter((t) => t.role !== 'system')
+                .slice(-6)
+                .map((t) => `${t.role}: ${t.content}`)
+                .join('\n')
+              const issue = await reportIssue(parsed, chatTail)
+              newTurns.push({ role: 'system', content: `filed #${issue.number} — ${parsed.title}` })
+              resultMsg = JSON.stringify({ filed: true, number: issue.number, url: issue.url })
             } else {
               resultMsg = JSON.stringify({ error: `unknown tool ${call.name}` })
             }

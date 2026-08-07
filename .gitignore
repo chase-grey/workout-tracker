@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Auto-fixer's dedicated git worktree (scripts/autofix.mjs)
+.autofix
+
 # Secrets & Apps Script deploy state
 .env
 .env.*

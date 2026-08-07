@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:host": "vite --host",
     "dev:tunnel": "node scripts/tunnel.mjs",
+    "autofix": "node scripts/autofix.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",

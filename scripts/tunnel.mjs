@@ -152,6 +152,16 @@ cf.on('error', (err) => {
   )
 })
 
+// --- the auto-fixer (opt-in) ---------------------------------------------
+// AUTOFIX=1 rides the fixer along with the tunnel: the laptop is already awake
+// serving the phone coach, so it's a natural time to drain `auto-fix` issues.
+// Off by default so the coach tunnel can run without it.
+if (process.env.AUTOFIX === '1') {
+  const autofix = run(process.execPath, [path.join(process.cwd(), 'scripts', 'autofix.mjs')])
+  autofix.stdout.on('data', (d) => process.stdout.write(d))
+  autofix.stderr.on('data', (d) => process.stderr.write(d))
+}
+
 // cloudflared prints the assigned hostname to stderr inside a banner. Pull it out
 // and restate it plainly — it's the one line that matters here.
 let announced = false

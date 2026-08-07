@@ -33,6 +33,8 @@
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
  *   GET  ?route=chat_endpoint&secret=…  -> { url, updatedAt } (see getChatEndpoint)
  *   POST ?route=chat_endpoint    body: { url, secret }
+ *   POST ?route=report_issue    body: { secret, title, body, area, context }
+ *                 -> { number, url }  (files a GitHub issue; see createIssue)
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
@@ -162,6 +164,10 @@ function doPost(e) {
         return json(withLock(function () { return savePlan(body.plan) }))
       case 'chat_endpoint':
         return json(withLock(function () { return saveChatEndpoint(body) }))
+      case 'report_issue':
+        // Not under withLock: GitHub is the store of record, not a sheet, and two
+        // reports racing just make two issues — no row to clobber.
+        return json(createIssue(body))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -761,6 +767,64 @@ function saveChatEndpoint(body) {
   }
   sh.appendRow(['chat_endpoint', value])
   return { saved: 1 }
+}
+
+/* --------------------------------------------------------- issue reporting */
+
+const ISSUE_REPO = 'chase-grey/workout-tracker'
+
+/**
+ * The GitHub token that files issues, held as a Script Property so it never
+ * ships in the public web bundle. Use a fine-grained PAT scoped to Issues:
+ * Read/Write on this one repo. Unset, this refuses rather than failing open.
+ */
+function githubToken() {
+  const token = PropertiesService.getScriptProperties().getProperty('GITHUB_ISSUE_TOKEN')
+  if (!token) {
+    throw new Error('GITHUB_ISSUE_TOKEN script property is not set on the backend')
+  }
+  return token
+}
+
+/**
+ * File a bug/feature report from the app as a GitHub issue.
+ *
+ * Gated by the same shared secret as the chat routes: the /exec URL is public in
+ * the bundle, so without it anyone could spam the repo with issues on the token
+ * held here. `context` is whatever the client attached (userAgent, url, a chat
+ * tail) and is appended verbatim under a fenced block.
+ */
+function createIssue(body) {
+  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
+  const title = String(body.title || '').trim()
+  if (!title) throw new Error('Issue title is required')
+
+  const area = String(body.area || '').trim()
+  const parts = [String(body.body || '').trim() || '_(no description provided)_']
+  if (body.context) {
+    parts.push('', '---', '```', String(body.context), '```')
+  }
+  const labels = ['from-app']
+  if (area) labels.push('area:' + area)
+
+  const res = UrlFetchApp.fetch('https://api.github.com/repos/' + ISSUE_REPO + '/issues', {
+    method: 'post',
+    contentType: 'application/json',
+    muteHttpExceptions: true,
+    headers: {
+      Authorization: 'Bearer ' + githubToken(),
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    payload: JSON.stringify({ title: title, body: parts.join('\n'), labels: labels }),
+  })
+
+  const code = res.getResponseCode()
+  if (code < 200 || code >= 300) {
+    throw new Error('GitHub issue create failed (' + code + '): ' + res.getContentText())
+  }
+  const data = JSON.parse(res.getContentText())
+  return { number: data.number, url: data.html_url }
 }
 
 /* ---------------------------------------------------------------- helpers */
