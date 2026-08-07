@@ -112,7 +112,8 @@ export function FlexLadderBlock({
 
   return (
     <div className="flex flex-col gap-3">
-      <h4 className="text-sm font-semibold tracking-wider text-neutral-500">
+      {/* Same weight as the rung titles below it — see the body weight block. */}
+      <h4 className="font-semibold">
         {title}
         {latest ? ` · ${latest}` : ''}
       </h4>
