@@ -96,8 +96,7 @@ export function FlexLadderBlock({
   // Which rungs the chart draws a line for: the one being worked on, plus any
   // rung already committed to. All of them would frame the axis on 180° and
   // squash a 110° history flat along the bottom of the plot — and the rungs
-  // beyond the next one aren't being measured against yet anyway. Every rung
-  // still gets its row underneath.
+  // beyond the next one aren't being measured against yet anyway.
   const goalLines = useMemo(() => {
     const open = rungs.filter((g) => !isReached(g))
     return open
@@ -118,7 +117,10 @@ export function FlexLadderBlock({
         {latest ? ` · ${latest}` : ''}
       </h4>
       <AngleChart readings={readings} series={series} goals={goalLines} empty={empty} />
-      {rungs.map((g) => renderRow(g))}
+      {/* Only the rungs still being climbed. A cleared one has left for the
+          reached band at the top of the panel, where it sits by the date it was
+          cleared rather than buried under the rungs still open. */}
+      {rungs.filter((g) => !isReached(g)).map((g) => renderRow(g))}
     </div>
   )
 }

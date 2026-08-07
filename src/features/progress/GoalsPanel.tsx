@@ -14,7 +14,16 @@ import { useData } from '../../store/DataContext'
 import { isPaceCapped, project, type Projection } from '../../lib/predictions'
 import { filterRange, type Point } from '../../lib/progress'
 import { calorieHitsByWeek } from '../../lib/calories'
-import { bodyWeightPoints, buildGoals, GOAL_IDS, isReached, reachedDate, type GoalSpec } from '../../lib/goals'
+import {
+  bodyWeightPoints,
+  buildGoals,
+  GOAL_IDS,
+  isReached,
+  reachedDate,
+  reachedValue,
+  type GoalSpec,
+} from '../../lib/goals'
+import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptDecay,
@@ -408,8 +417,15 @@ function GoalRow({
   const lockable = !lock && !reached && withinHorizon(proj)
   // A lock froze the target it committed to. Bench/squat targets track bodyweight,
   // so the live one can drift away from it — show the number the pace reading is
-  // actually measured against, or the two would contradict each other.
-  const shownTarget = lock ? lock.target : goal.target
+  // actually measured against, or the two would contradict each other. A reached
+  // goal shows the live target instead, since that's the one it was judged met
+  // against (see isReached).
+  const shownTarget = lock && !reached ? lock.target : goal.target
+  // What a finished goal shows in place of the current reading: the value on the
+  // day it was met. A milestone stays reached after sliding back (see
+  // GoalSpec.milestone), so the latest reading can sit under the target — "87 →
+  // 90°" beside "goal reached!" reads as a contradiction.
+  const doneValue = reached ? reachedValue(goal) : null
   // The date of the latest reading: the pace is measured against the line on that
   // date, not against today, so a goal sits where the last session left it rather
   // than drifting behind as rest days pass (see paceAgainstLock).
@@ -445,7 +461,7 @@ function GoalRow({
           )
         ) : (
           <span className="text-sm text-neutral-400 tabular-nums">
-            {has ? `${proj.current}` : '—'} → {shownTarget} {goal.unit}
+            {doneValue ?? (has ? `${proj.current}` : '—')} → {shownTarget} {goal.unit}
           </span>
         )}
       </div>
@@ -748,7 +764,9 @@ export function GoalsPanel({ months }: { months: number | null }) {
         goals={weightGoalLines}
         empty="log my weight to project these goals"
       />
-      {weightGoals.map((g) => goalRow(g, true))}
+      {/* Only the targets still being chased. A weigh-in target already met has
+          left for the reached band, where it sits by the date it was met. */}
+      {weightGoals.filter((g) => !isReached(g)).map((g) => goalRow(g, true))}
     </div>
   )
 
@@ -808,49 +826,31 @@ export function GoalsPanel({ months }: { months: number | null }) {
     return set.length ? set[0] : null
   }
 
-  // When a finished block finished: the last of its goals to fall, since that's
-  // the day the block as a whole was done. A block still carrying an open goal
-  // isn't in the reached band, so nothing reads this until every date is in.
-  const latest = (dates: (string | null)[]): string | null => {
-    const set = dates.filter((d): d is string => d != null).sort()
-    return set.length ? set[set.length - 1] : null
+  // The shared-chart blocks, by the goals that read off them. A goal in one of
+  // these doesn't draw its own row where the panel would otherwise put it — the
+  // block carries it, and the block moves as a unit.
+  const blockOf = (g: GoalSpec): { key: string; goals: GoalSpec[]; node: React.ReactNode } | null => {
+    if (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) {
+      return { key: 'bodyweight', goals: weightGoals, node: <Fragment key="bodyweight">{bodyWeightBlock}</Fragment> }
+    }
+    const ladder = ladders.find((l) => l.rungs.some((r) => r.id === g.id))
+    return ladder ? { key: `flex:${ladder.ladder}`, goals: ladder.rungs, node: ladder.node } : null
   }
 
   // Each thing the panel draws as its own block, in the default (buildGoals)
-  // order. The two bodyweight goals collapse into one shared-chart block, so it
-  // moves as a unit and carries whichever of its two dates comes first.
+  // order.
+  //
+  // A reached goal leaves its block and stands on its own, so every finished
+  // goal can float to the top on the day it was finished. A block used to keep
+  // its cleared goals — a ladder is a progression, so the argument was that a
+  // rung already hit belongs under the chart that shows it being hit — but that
+  // buried them: a cleared rung sat mid-panel inside a block ranked by the rungs
+  // still open, which is exactly where a finished goal shouldn't be. The block
+  // keeps the chart and the rungs still being chased; the cleared ones go up top.
   const units = useMemo(() => {
-    const out: {
-      /** Already achieved — the band that sits above everything else. */
-      done: boolean
-      /** The day it was achieved, which is how the reached band orders itself. */
-      doneDate: string | null
-      eta: string | null
-      projEta: string | null
-      /** Being asked to commit — the band just under the committed ones. */
-      lockable: boolean
-      /** The family this block clusters with when committed (see goalFamily). */
-      family: string
-      last?: boolean
-      node: React.ReactNode
-    }[] = []
+    const out: (GoalUnit & { node: React.ReactNode })[] = []
+    const drawn = new Set<string>()
     for (const g of goals) {
-      if (g.id === GOAL_IDS.weight190) continue
-      if (g.id === GOAL_IDS.weight180) {
-        out.push({
-          // The pair shares one block, so it only counts as done once both
-          // weigh-in targets are met — otherwise the block would go up top
-          // carrying a goal that's still open.
-          done: weightGoals.every(isReached),
-          doneDate: latest(weightGoals.map(reachedDate)),
-          eta: soonest(weightGoals.map(committedEta)),
-          projEta: soonest(weightGoals.map(projectedEta)),
-          lockable: weightGoals.some(isLockable),
-          family: goalFamily(g),
-          node: <Fragment key={g.id}>{bodyWeightBlock}</Fragment>,
-        })
-        continue
-      }
       if (g.id === GOAL_IDS.sixPack) {
         // Answered by eye rather than projected, so it has no date to sort by —
         // it sits at the bottom of the panel until it's called done, and at the
@@ -874,113 +874,53 @@ export function GoalsPanel({ months }: { months: number | null }) {
         })
         continue
       }
-      const ladder = ladders.find((l) => l.rungs.some((r) => r.id === g.id))
-      if (ladder) {
-        // One block per ladder, standing in for its first rung. Its rungs stay
-        // together, cleared ones included: a ladder is a progression, so a rung
-        // already hit belongs under the chart that shows it being hit rather than
-        // off in the reached band on its own.
-        if (ladder.rungs[0].id !== g.id) continue
+
+      // The block goes in at its first goal, whether or not that one's cleared,
+      // and is ranked by the goals it still carries. It stays even once they're
+      // all cleared: the chart under it is the log itself, and there's nowhere
+      // else in the tab that draws it.
+      const block = blockOf(g)
+      if (block && !drawn.has(block.key)) {
+        drawn.add(block.key)
+        const open = block.goals.filter((b) => !isReached(b))
         out.push({
-          done: ladder.rungs.every(isReached),
-          doneDate: latest(ladder.rungs.map(reachedDate)),
-          eta: soonest(ladder.rungs.map(committedEta)),
-          projEta: soonest(ladder.rungs.map(projectedEta)),
-          lockable: ladder.rungs.some(isLockable),
+          done: false,
+          doneDate: null,
+          eta: soonest(open.map(committedEta)),
+          projEta: soonest(open.map(projectedEta)),
+          lockable: open.some(isLockable),
           family: goalFamily(g),
-          node: ladder.node,
+          node: block.node,
         })
-        continue
       }
-      out.push({
-        done: isReached(g),
-        doneDate: reachedDate(g),
-        eta: committedEta(g),
-        projEta: projectedEta(g),
-        lockable: isLockable(g),
-        family: goalFamily(g),
-        node: goalRow(g),
-      })
+
+      if (isReached(g)) {
+        out.push({
+          done: true,
+          doneDate: reachedDate(g),
+          eta: null,
+          projEta: null,
+          lockable: false,
+          family: goalFamily(g),
+          node: goalRow(g),
+        })
+      } else if (!block) {
+        out.push({
+          done: false,
+          doneDate: null,
+          eta: committedEta(g),
+          projEta: projectedEta(g),
+          lockable: isLockable(g),
+          family: goalFamily(g),
+          node: goalRow(g),
+        })
+      }
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, locked, projections, settings, months, ladders])
 
-  // Which band a goal is in is the first-order rank, and it's about standing, not
-  // dates: reached first, then committed, then the ones being asked to commit,
-  // then everything else, with the six-pack last. Only inside a band do dates and
-  // families get a say. The reached band runs newest first — the thing just
-  // cleared is the thing worth seeing, and the early wins settle toward the bottom
-  // as more land on top of them. In every dated band related goals (the two squat
-  // targets, a flexibility ladder) cluster into families rather than interleaving
-  // by date — each family is placed by its soonest date within that band (its
-  // nearest commitment when committed, its nearest projection when not), and its
-  // members sit in date order under it. A band uses commitment dates for committed
-  // goals and projection dates for the rest, so the two never mix within one
-  // family's soonest. Goals with no date to project sit at the back of their band
-  // in the default order — a stable sort holds them.
-  const ordered = useMemo(() => {
-    const band = (u: (typeof units)[number]) =>
-      u.done ? 0 : u.eta ? 1 : u.lockable ? 2 : u.last ? 4 : 3
-    // The date a block reads as within its band: its commitment once committed,
-    // otherwise where its projection is currently headed.
-    const dateOf = (u: (typeof units)[number]) => (u.eta ? u.eta : u.projEta)
-    const rows = units.map((u, i) => ({ u, i }))
-
-    // Per band, the soonest date in each family and where the family first
-    // appears — so families sort by their nearest date and ties fall back to the
-    // panel's default order. Keyed by band too, so a family split across bands
-    // (one target committed, a harder one still projected) clusters within each.
-    const key = (u: (typeof units)[number]) => `${band(u)}:${u.family}`
-    const familySoonest = new Map<string, string>()
-    const familyFirst = new Map<string, number>()
-    for (const { u, i } of rows) {
-      const k = key(u)
-      const d = dateOf(u)
-      if (d != null) {
-        const cur = familySoonest.get(k)
-        if (cur == null || d < cur) familySoonest.set(k, d)
-      }
-      if (!familyFirst.has(k)) familyFirst.set(k, i)
-    }
-
-    return rows
-      .sort((a, b) => {
-        const ba = band(a.u)
-        const bb = band(b.u)
-        if (ba !== bb) return ba - bb
-        if (ba === 0) {
-          // Reached: straight reverse chronological, no family clustering — a
-          // finished goal's date is the only thing left to say about it, so the
-          // band reads as the log of what's been done, newest at the top. The
-          // six-pack, called by eye with no date behind it, falls to the back.
-          const ad = a.u.doneDate
-          const bd = b.u.doneDate
-          if (ad && bd && ad !== bd) return ad > bd ? -1 : 1
-          if (ad && !bd) return -1
-          if (!ad && bd) return 1
-          return a.i - b.i
-        }
-        // Within a dated band, order families by their soonest date (dated
-        // families ahead of dateless ones), then keep a family's members in date
-        // order.
-        if (a.u.family !== b.u.family) {
-          const sa = familySoonest.get(key(a.u))
-          const sb = familySoonest.get(key(b.u))
-          if (sa && sb && sa !== sb) return sa < sb ? -1 : 1
-          if (sa && !sb) return -1
-          if (!sa && sb) return 1
-          return familyFirst.get(key(a.u))! - familyFirst.get(key(b.u))!
-        }
-        const ad = dateOf(a.u)
-        const bd = dateOf(b.u)
-        if (ad && bd && ad !== bd) return ad < bd ? -1 : 1
-        if (ad && !bd) return -1
-        if (!ad && bd) return 1
-        return a.i - b.i
-      })
-      .map(({ u }) => u.node)
-  }, [units])
+  const ordered = useMemo(() => orderGoalUnits(units).map((u) => u.node), [units])
 
   return (
     <div className="flex flex-col gap-3">
