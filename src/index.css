@@ -28,6 +28,14 @@ body,
    overrides it on iOS. */
 .app-shell {
   height: 100dvh;
+  /* A ceiling as well as a height. `height` here is one declaration deep in a
+     var() and a viewport unit, and if either fails to resolve the property falls
+     all the way back to `auto` — at which point the shell is as tall as its own
+     contents, the scroller inside it never has to shrink, and the nav sticks up
+     over the last screenful of every tab where no scrolling can reach it. That's
+     the bug this cap exists to make impossible: whatever `height` does, the shell
+     cannot end up taller than the screen. */
+  max-height: 100dvh;
 }
 @media (max-width: 700px) {
   .app-shell {
@@ -41,6 +49,9 @@ body,
     height: 100%;
     height: 100dvh;
     height: var(--vvh, 100dvh);
+    /* Fixed, so a percentage is the layout viewport — the same box `height: 100%`
+       above is after, and no viewport unit or custom property in the way. */
+    max-height: 100%;
   }
 }
 

@@ -40,6 +40,15 @@ function rect(selector: string): string {
   return `${Math.round(r.top)}→${Math.round(r.bottom)}`
 }
 
+/** What the browser resolved a property to, which is the only account of the
+ *  cascade that can't be argued with. */
+function computed(selector: string, ...props: string[]): string {
+  const el = document.querySelector(selector)
+  if (!el) return '—'
+  const cs = getComputedStyle(el)
+  return props.map((p) => cs.getPropertyValue(p).replace(/px$/, '')).join('/')
+}
+
 export function ViewportDebug() {
   const [, bump] = useState(0)
   useEffect(() => {
@@ -74,6 +83,12 @@ export function ViewportDebug() {
       {root.style.getPropertyValue('--vvh') || 'unset'}
       <br />
       shell {rect('.app-shell')} · main {rect('main')} · nav {rect('nav')}
+      <br />
+      iw {window.innerWidth} · mq {window.matchMedia('(max-width: 700px)').matches ? 'y' : 'n'} ·
+      shell {computed('.app-shell', 'height', 'max-height', 'position')}
+      <br />
+      main {computed('main', 'height', 'min-height', 'overflow-y')} · nav{' '}
+      {computed('nav', 'position', 'height')}
     </p>
   )
 }

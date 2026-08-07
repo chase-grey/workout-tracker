@@ -168,9 +168,12 @@ function AppShell() {
 
   return (
     <div className="app-shell mx-auto flex max-w-md flex-col">
+      {/* min-h-0: a flex item's automatic minimum is its own content, which would
+          let a tall tab push the nav off the bottom of the shell rather than
+          scroll inside it. */}
       <main
         ref={mainRef}
-        className="flex-1 overflow-y-auto px-4 pb-4"
+        className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
         style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top))' }}
       >
         {/* A set-aside session stays mounted, only hidden — its timers, rep pace
