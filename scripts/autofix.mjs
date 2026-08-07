@@ -14,6 +14,8 @@
  *     live checkout, so it can't commit your unrelated WIP or fight your edits.
  *   - Each issue is claimed with an `autofix-running` label before work starts,
  *     so a restart or a second tick never double-fixes one.
+ *   - One watcher per checkout, held by a pid lockfile: two of them racing over
+ *     the single worktree is worse than either alone (see claimWatcherLock).
  *   - `main` auto-deploys, but the deploy workflow runs `npm test` first, so a
  *     change that breaks tests fails the deploy instead of shipping.
  *
@@ -26,7 +28,7 @@
  * is resumed from a stored session, so a fixer restart loses none of it.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { ASK_MARKER, parseAsk } from './parseAsk.mjs'
 
@@ -50,6 +52,7 @@ const WORKTREE = path.join(process.cwd(), '.autofix', 'worktree')
 // primary checkout has it, so borrowing the name left the worktree detached and
 // turned the push into a no-op that still reported success.
 const WORK_BRANCH = 'autofix-work'
+const LOCK = path.join(process.cwd(), '.autofix', 'watcher.lock')
 
 if (!TOKEN) {
   console.error(
@@ -93,6 +96,61 @@ const comment = (n, text) => gh('POST', `/repos/${REPO}/issues/${n}/comments`, {
 const closeIssue = (n) => gh('PATCH', `/repos/${REPO}/issues/${n}`, { state: 'closed' })
 const listComments = (n) =>
   gh('GET', `/repos/${REPO}/issues/${n}/comments?per_page=100`).catch(() => [])
+
+/* ------------------------------------------------------------------- lock */
+
+/** True if `pid` is a process we could signal — EPERM means alive but not ours. */
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return err.code === 'EPERM'
+  }
+}
+
+/**
+ * Claim this checkout for exactly one watcher, or refuse to start.
+ *
+ * Two watchers don't merely duplicate work. Every run hard-resets the single
+ * shared worktree (prepareWorktree), so the second one's reset orphans the
+ * commit the first is mid-push on — which is how issue #6 got a "fixed in
+ * e5baa1e0" comment naming a sha that four seconds later existed on no branch
+ * at all. The `autofix-running` label can't prevent it: a watcher that read the
+ * issue list before the label was added is already past that gate.
+ *
+ * The claim is a file created exclusively, holding our pid. A crash or a hard
+ * kill leaves it behind, so a lock naming a pid that's gone is stale and gets
+ * taken over. A recycled pid can read as live and keep a watcher out, which
+ * costs a refusal you can see and clear — not a silent race.
+ */
+function claimWatcherLock() {
+  mkdirSync(path.dirname(LOCK), { recursive: true })
+  // Two passes at most: create, and if a stale lock was cleared, create again.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      writeFileSync(LOCK, `${process.pid}\n`, { flag: 'wx' })
+      break
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err
+      const holder = Number((readFileSync(LOCK, 'utf8') || '').trim())
+      if (holder && holder !== process.pid && pidAlive(holder)) {
+        console.error(
+          `autofix: already watching this checkout as pid ${holder} — not starting a second one.\n` +
+            `         Stop that process, or delete ${LOCK} if it's already gone.`,
+        )
+        process.exit(1)
+      }
+      rmSync(LOCK, { force: true })
+      if (attempt === 2) throw new Error(`autofix: could not claim ${LOCK}`)
+    }
+  }
+  process.on('exit', () => rmSync(LOCK, { force: true }))
+  // A bare signal skips the exit handler, so route the ones we can catch
+  // through process.exit and let it run the cleanup above.
+  const signals = ['SIGINT', 'SIGTERM', ...(process.platform === 'win32' ? ['SIGBREAK'] : ['SIGHUP'])]
+  for (const sig of signals) process.on(sig, () => process.exit(1))
+}
 
 /* --------------------------------------------------------------- worktree */
 
@@ -323,6 +381,7 @@ async function tick() {
   }
 }
 
+claimWatcherLock()
 console.log(`autofix: watching ${REPO} for "${LABEL}" issues every ${INTERVAL_MS / 1000}s.`)
 await tick()
 setInterval(() => void tick(), INTERVAL_MS)
