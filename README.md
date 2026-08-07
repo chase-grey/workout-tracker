@@ -163,6 +163,31 @@ lets `claude` edit files while the script handles git; `skip` passes
 `--dangerously-skip-permissions` so it can run `npm test` itself before the commit
 (more autonomous, riskier).
 
+### When a fix loses a race with `main`
+
+Writing a fix takes minutes, and `main` moves the whole time — you push, or the
+previous fix lands. Usually the fixer just rebases onto whatever arrived, but that
+rebase can conflict, and then the fix is *stale rather than wrong*: issue #7 died on
+nothing more than two commits adding an import to the same line.
+
+So a conflict is no longer the end. The fixer starts over on the `main` that now
+exists and lets `claude` write against the code that's really there, which beats
+resolving a conflict it can't see. It spends at most `FIX_ATTEMPTS` (2) tries — an
+issue that can't win twice wants a human, not a third round.
+
+Either way the losing commit is kept, because it was only ever held by
+`autofix-work` and the next run resets that branch to `origin/main` — which is how
+issue #7's fix, five files and a passing suite, survived only until the next issue
+arrived. Now it's parked under a ref of its own first:
+
+```sh
+git for-each-ref refs/autofix          # what's waiting
+git cherry-pick refs/autofix/issue-7   # replay it onto main, resolve, test, push
+git update-ref -d refs/autofix/issue-7 # done with it
+```
+
+The failure comment on the issue names the ref, so you don't have to go looking.
+
 ### When the fixer needs to ask you something
 
 A vague report used to be a dead end — `claude -p` has no way to ask a question, so

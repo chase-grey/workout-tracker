@@ -18,6 +18,10 @@
  *     the single worktree is worse than either alone (see claimWatcherLock).
  *   - `main` auto-deploys, but the deploy workflow runs `npm test` first, so a
  *     change that breaks tests fails the deploy instead of shipping.
+ *   - A fix that loses a race with `main` gets rewritten against the new main
+ *     rather than thrown away, and the commit that lost is kept under
+ *     `refs/autofix/issue-<n>` so no run leaves good work in a branch it is
+ *     about to reset (see processIssue and keepFix).
  *
  * Asking questions: a vague issue used to be dead — `claude -p` has no way to ask
  * anything and the run just ended. Now it can answer with a NEEDS-INPUT block,
@@ -42,6 +46,10 @@ const TOKEN = process.env.GITHUB_ISSUE_TOKEN || ''
 const LABEL = process.env.AUTOFIX_LABEL || 'auto-fix'
 const INTERVAL_MS = Number(process.env.AUTOFIX_INTERVAL_SEC || 60) * 1000
 const PERMISSION = process.env.AUTOFIX_PERMISSION || 'acceptEdits' // 'acceptEdits' | 'skip'
+// How many times to write a fix for one issue. Only a lost race with `main` spends
+// a second attempt (see processIssue), and each one is a full `claude` run, so this
+// stays small: an issue that can't win twice wants a human, not a third try.
+const FIX_ATTEMPTS = 2
 const RUNNING_LABEL = 'autofix-running'
 const FAILED_LABEL = 'autofix-failed'
 // Parks an issue while the reporter answers. `auto-fix` comes off at the same
@@ -182,6 +190,36 @@ function worktreeGit(args) {
   return spawnSync('git', args, { cwd: WORKTREE, encoding: 'utf8' })
 }
 
+/**
+ * A fix that was written against a `main` that has since moved.
+ *
+ * Worth separating from every other failure because the fix itself isn't in
+ * question — it just no longer applies, which a rewrite on the new base fixes and
+ * a retry of the push never would. Carries the sha so the work can be kept.
+ */
+class StaleBaseError extends Error {
+  constructor(detail, sha) {
+    super(`the fix conflicts with newer work on main:\n${detail}`)
+    this.name = 'StaleBaseError'
+    this.sha = sha
+  }
+}
+
+/**
+ * Park `sha` under a ref of its own, and return the ref.
+ *
+ * `autofix-work` is the only thing pointing at a fix that failed to land, and the
+ * next run's prepareWorktree resets that branch to origin/main — so the commit
+ * becomes unreachable and gc eventually takes it. That's how issue #7's fix, five
+ * files and a passing test suite, survived only until the next issue arrived.
+ * A ref under refs/autofix/ is outside everything this script resets, so the work
+ * waits there for a rebase by hand however long that takes.
+ */
+function keepFix(n, sha) {
+  const ref = `refs/autofix/issue-${n}`
+  return worktreeGit(['update-ref', ref, sha]).status === 0 ? ref : sha
+}
+
 /** True if `claude` left committable changes in the worktree. */
 function hasChanges() {
   return (worktreeGit(['status', '--porcelain']).stdout || '').trim().length > 0
@@ -230,7 +268,9 @@ function pushToMain(attempts = 3) {
       // after this one, and the next fix starts from a hard reset anyway.
       worktreeGit(['rebase', '--abort'])
       const detail = (rebase.stdout || rebase.stderr || '').trim().slice(0, 800)
-      throw new Error(`the fix conflicts with newer work on main:\n${detail}`)
+      // The abort puts HEAD back on `sha`, so it's still there for the caller to
+      // keep — but only until the next prepareWorktree.
+      throw new StaleBaseError(detail, sha)
     }
   }
 }
@@ -317,41 +357,63 @@ async function processIssue(issue) {
   console.log(`\nautofix: working #${n} — ${issue.title}`)
   await addLabels(n, [RUNNING_LABEL])
   try {
-    prepareWorktree()
-    const comments = await listComments(n)
-    const res = await runClaude(issue, comments)
-    if (!res.ok) throw new Error(res.detail)
-    if (!hasChanges()) {
-      // A question is only a question if nothing was changed — a run that both
-      // edited files and mused about what it was unsure of is a fix, and the
-      // musing belongs in the commit, not on the reporter's phone.
-      const ask = parseAsk(res.out)
-      if (ask) {
-        await comment(n, `**Auto-fix needs a bit more to go on:**\n\n${ask}`)
+    // Writing a fix takes minutes and `main` moves the whole time — a push from
+    // this machine, or the previous fix landing. pushToMain already rebases past
+    // that, but a rebase can conflict, and when it does the fix is stale rather
+    // than wrong: issue #7 died on two commits adding an import to the same line.
+    // So start over on the main that now exists and let claude write against the
+    // code that's really there, which beats resolving a conflict it can't see.
+    for (let attempt = 1; ; attempt++) {
+      prepareWorktree()
+      const comments = await listComments(n)
+      const res = await runClaude(issue, comments)
+      if (!res.ok) throw new Error(res.detail)
+      if (!hasChanges()) {
+        // A question is only a question if nothing was changed — a run that both
+        // edited files and mused about what it was unsure of is a fix, and the
+        // musing belongs in the commit, not on the reporter's phone.
+        const ask = parseAsk(res.out)
+        if (ask) {
+          await comment(n, `**Auto-fix needs a bit more to go on:**\n\n${ask}`)
+          await removeLabel(n, RUNNING_LABEL)
+          // Drop `auto-fix` as well: with it on, the next tick would pick the issue
+          // straight back up and ask the same question into the void.
+          await removeLabel(n, LABEL)
+          await addLabels(n, [ASK_LABEL])
+          // Forget it, so the answer can bring it back around this same run.
+          seen.delete(n)
+          console.log(`autofix: #${n} is waiting on an answer.`)
+          return
+        }
+        await comment(n, `Auto-fix ran but made no changes (${res.detail}). Leaving open for a human.`)
         await removeLabel(n, RUNNING_LABEL)
-        // Drop `auto-fix` as well: with it on, the next tick would pick the issue
-        // straight back up and ask the same question into the void.
-        await removeLabel(n, LABEL)
-        await addLabels(n, [ASK_LABEL])
-        // Forget it, so the answer can bring it back around this same run.
-        seen.delete(n)
-        console.log(`autofix: #${n} is waiting on an answer.`)
+        await addLabels(n, [FAILED_LABEL])
         return
       }
-      await comment(n, `Auto-fix ran but made no changes (${res.detail}). Leaving open for a human.`)
+      worktreeGit(['add', '-A'])
+      const msg = `Auto-fix issue #${n}: ${issue.title}\n\nFixes #${n}`
+      const commit = worktreeGit(['commit', '-m', msg])
+      if (commit.status !== 0) throw new Error(`git commit failed: ${commit.stderr}`)
+      let sha
+      try {
+        sha = pushToMain()
+      } catch (err) {
+        if (!(err instanceof StaleBaseError)) throw err
+        // Keep the commit before anything else: from here on the only branch
+        // holding it is one prepareWorktree is about to reset.
+        const kept = keepFix(n, err.sha)
+        if (attempt >= FIX_ATTEMPTS) {
+          throw new Error(`${err.message}\n\nThe fix is kept at ${kept} — rebase it onto main by hand.`)
+        }
+        console.log(`autofix: #${n} lost a race with main, rewriting on the new main (kept ${kept}).`)
+        continue
+      }
+      await comment(n, `Fixed on \`main\` in ${sha.slice(0, 8)}. It will deploy once CI passes.`)
       await removeLabel(n, RUNNING_LABEL)
-      await addLabels(n, [FAILED_LABEL])
+      await closeIssue(n)
+      console.log(`autofix: #${n} fixed and pushed (${sha.slice(0, 8)}).`)
       return
     }
-    worktreeGit(['add', '-A'])
-    const msg = `Auto-fix issue #${n}: ${issue.title}\n\nFixes #${n}`
-    const commit = worktreeGit(['commit', '-m', msg])
-    if (commit.status !== 0) throw new Error(`git commit failed: ${commit.stderr}`)
-    const sha = pushToMain()
-    await comment(n, `Fixed on \`main\` in ${sha.slice(0, 8)}. It will deploy once CI passes.`)
-    await removeLabel(n, RUNNING_LABEL)
-    await closeIssue(n)
-    console.log(`autofix: #${n} fixed and pushed (${sha.slice(0, 8)}).`)
   } catch (err) {
     console.error(`autofix: #${n} failed — ${err}`)
     await comment(n, `Auto-fix failed:\n\n\`\`\`\n${String(err).slice(0, 1500)}\n\`\`\``).catch(() => {})
