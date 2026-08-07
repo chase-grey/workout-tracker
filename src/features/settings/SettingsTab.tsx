@@ -45,6 +45,7 @@ export function SettingsTab({
   const [keySaved, setKeySaved] = useState(false)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
   // Whether a laptop has published a coach address the token can actually reach.
   const [coach, setCoach] = useState<'checking' | 'live' | 'none' | 'untried'>('untried')
 
@@ -95,11 +96,17 @@ export function SettingsTab({
           version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
           {new Date(APP_BUILD_TIME).toLocaleString()}
         </p>
+        {/* Waiting for the new worker to take over takes a moment, and an
+            unchanged button invites the second tap this is meant to remove. */}
         <button
-          onClick={() => void checkForUpdate()}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+          onClick={() => {
+            setCheckingUpdate(true)
+            void checkForUpdate()
+          }}
+          disabled={checkingUpdate}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2 disabled:text-neutral-500"
         >
-          check for updates &amp; reload
+          {checkingUpdate ? 'checking…' : 'check for updates & reload'}
         </button>
       </section>
 
