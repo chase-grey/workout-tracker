@@ -199,10 +199,21 @@ describe('weeksToClose', () => {
     expect(weeksToClose(25, 5, 0.9)!).toBeGreaterThan(5)
   })
 
-  it('returns null for a gap past the ceiling a decaying pace can reach', () => {
-    // 5/wk decaying 10%/wk can only ever add slope/(1 - decay) = 50.
-    expect(weeksToClose(49, 5, 0.9)).not.toBeNull()
-    expect(weeksToClose(51, 5, 0.9)).toBeNull()
+  it('still dates a gap past everything the taper alone could buy', () => {
+    // 5/wk decaying 10%/wk spends its taper on slope·(1 - floor)/(1 - decay) = 40
+    // over the first ~15 weeks, then holds at a fifth of the pace — so a gap of
+    // 60 is another 20 at 1/wk rather than the blank the bare taper reported.
+    const taper = weeksToClose(40, 5, 0.9)!
+    expect(taper).toBeCloseTo(15.3, 1)
+    expect(weeksToClose(60, 5, 0.9)).toBeCloseTo(taper + 20, 1)
+    // Far out is far out, not impossible.
+    expect(weeksToClose(500, 5, 0.9)).toBeGreaterThan(90)
+  })
+
+  it('projects the taper unchanged for gaps it can close on its own', () => {
+    // The floor only binds after the taper has run out, so every goal near
+    // enough to commit to reads exactly as it did before.
+    expect(weeksToClose(25, 5, 0.9)).toBeCloseTo(Math.log(0.5) / Math.log(0.9), 6)
   })
 
   it('returns null when flat or pointed away from the gap', () => {
@@ -230,13 +241,17 @@ describe('project with a decaying gain rate', () => {
     expect((decayed.etaDate as string) > (straight.etaDate as string)).toBe(true)
   })
 
-  it('reports a goal beyond the decaying ceiling as not on track', () => {
-    // A straight line always reaches it; a decaying pace tops out first.
+  it('dates a goal a long way out rather than reporting nothing', () => {
+    // 285 to go at +5/wk. The taper spends itself long before that, but the pace
+    // floors instead of vanishing, so the answer is a distant date — years of it
+    // — and not the blank the bare taper used to give.
     const straight = project(gaining, 400, today)
     const decayed = project(gaining, 400, today, { decayPerWeek: 0.9 })
     expect(straight.onTrack).toBe(true)
-    expect(decayed.onTrack).toBe(false)
-    expect(decayed.etaWeeks).toBeNull()
+    expect(decayed.onTrack).toBe(true)
+    expect(decayed.etaWeeks!).toBeGreaterThan(straight.etaWeeks!)
+    expect(decayed.etaWeeks!).toBeGreaterThan(52 * 4)
+    expect(decayed.etaDate).not.toBeNull()
   })
 })
 
@@ -295,14 +310,18 @@ describe('project with a capped pace', () => {
     expect(p.etaWeeks).toBe(10)
   })
 
-  it('holds the cap against a target the raw pace would claim to reach', () => {
-    // A decaying +3/wk tops out 30 lbs up; capped at +1 it only ever adds 10.
+  it('holds the cap against a target the raw pace would claim to reach soon', () => {
+    // A decaying +3/wk buys 24 lbs off its taper alone and covers the 25 to go in
+    // a few months; capped at +1 the same climb is bought a fifth of a pound a
+    // week once the taper's spent, which is years — the cap moves the date, it
+    // doesn't withhold it.
     const near = project(hotFortnight, 195, today, { decayPerWeek: 0.9 })
     const capped = project(hotFortnight, 195, today, { decayPerWeek: 0.9, capPerWeek: 1 })
 
     expect(near.onTrack).toBe(true)
-    expect(capped.onTrack).toBe(false)
-    expect(capped.etaDate).toBeNull()
+    expect(capped.onTrack).toBe(true)
+    expect(near.etaWeeks!).toBeLessThan(52)
+    expect(capped.etaWeeks!).toBeGreaterThan(52 * 1.5)
   })
 
   it('reports no pace at all when the window is too thin to read', () => {

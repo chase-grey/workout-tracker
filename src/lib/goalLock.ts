@@ -18,7 +18,7 @@
  */
 
 import { parseISODate, toISODate } from './dates'
-import { weeksToClose, type Projection } from './predictions'
+import { cumulativeGain, weeksToClose, type Projection } from './predictions'
 
 /** A goal enters lock-in once its projected ETA is this close. */
 export const LOCK_HORIZON_MONTHS = 6
@@ -210,8 +210,12 @@ export function lockProjectionByDate(
  *
  * A goal whose gains taper (see {@link decayOf}) is drawn concave, climbing fast
  * early and easing off near the target the way its ETA assumed: the fraction of
- * the way covered by week t of a span of S weeks is (1 − rᵗ)/(1 − rˢ), which
- * collapses to the straight-line t/S when r is 1.
+ * the way covered by week t of a span of S weeks is the tapering model's own
+ * cumulative gain at t over its cumulative gain at S (see
+ * predictions.cumulativeGain), which collapses to the straight-line t/S when the
+ * goal projects without decay. A long commitment therefore straightens out in
+ * its back half rather than flattening off, because that's where the pace it was
+ * quoted at has bottomed out rather than run to nothing.
  */
 export function expectedAt(lock: LockedProjection, date: string): number {
   const span = daysBetween(lock.lockedAt, lock.etaDate)
@@ -221,10 +225,7 @@ export function expectedAt(lock: LockedProjection, date: string): number {
   if (elapsed >= span) return round1(lock.target)
 
   const r = decayOf(lock)
-  const fraction =
-    r >= 1
-      ? elapsed / span
-      : (1 - Math.pow(r, elapsed / 7)) / (1 - Math.pow(r, span / 7))
+  const fraction = cumulativeGain(elapsed / 7, r) / cumulativeGain(span / 7, r)
   return round1(lock.startValue + (lock.target - lock.startValue) * fraction)
 }
 

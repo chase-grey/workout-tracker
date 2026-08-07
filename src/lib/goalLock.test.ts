@@ -328,6 +328,25 @@ describe('decayed locks', () => {
     expect(gentle.status).toBe('ahead')
     expect(decayed.aheadBy).toBeLessThan(gentle.aheadBy)
   })
+
+  it('keeps a long commitment climbing through its back half', () => {
+    // A two-year line drawn off a taper that decays to nothing puts four fifths
+    // of the climb in its first four months and then asks for almost nothing for
+    // the next twenty. With the pace floored (see predictions.PACE_FLOOR) the
+    // early months still carry more than their share, but the rest is a real
+    // grind rather than a flat line.
+    const LONG: LockedProjection = {
+      ...CLIMB,
+      etaDate: addDays('2026-01-01', 730),
+      decayPerWeek: 0.9,
+    }
+    const atFourMonths = expectedAt(LONG, addDays('2026-01-01', 120))
+    expect(atFourMonths).toBeGreaterThan(130) // ahead of a straight line's 116…
+    expect(atFourMonths).toBeLessThan(150) // …but nowhere near the old 180
+    // Every later stretch still has ground to make up.
+    expect(expectedAt(LONG, addDays('2026-01-01', 500))).toBeGreaterThan(atFourMonths + 20)
+    expect(expectedAt(LONG, LONG.etaDate)).toBe(200)
+  })
 })
 
 describe('adoptDecay', () => {

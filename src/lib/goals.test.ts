@@ -166,9 +166,11 @@ describe('flexibility goals join the goal set', () => {
     expect(tapered.etaWeeks).toBeGreaterThan(15)
   })
 
-  it('gives no date to a rung a modest pace can never reach', () => {
-    // 1.5°/week from 110° buys 15° in total before the taper runs it out (see
-    // FLEX_GAIN_DECAY): 120 is a date, 150 is "keep stretching", not a date.
+  it('dates the far rungs a modest pace only reaches years out', () => {
+    // 1.5°/week from 110°: the taper (see FLEX_GAIN_DECAY) buys 12° of that on
+    // its own and the floor grinds out the rest. 120 lands inside the taper, 150
+    // is a couple of years of this, 180 twice that again — each a date, because
+    // "a long way off" is what the rung should say, not a blank.
     const creeping: FlexEntry[] = [
       { date: '2026-01-08', splitDeg: 107, tailorsLeftDeg: null, tailorsRightDeg: null },
       { date: '2026-01-15', splitDeg: 108.5, tailorsLeftDeg: null, tailorsRightDeg: null },
@@ -180,9 +182,13 @@ describe('flexibility goals join the goal set', () => {
       return project(g.points, g.target, new Date(2026, 0, 22), { decayPerWeek: g.decayPerWeek })
     }
 
-    expect(at('split_120').onTrack).toBe(true)
-    expect(at('split_150').onTrack).toBe(false)
-    expect(at('split_150').etaDate).toBeNull()
+    expect(at('split_120').etaWeeks!).toBeLessThan(16)
+    expect(at('split_150').etaWeeks!).toBeGreaterThan(52 * 1.5)
+    expect(at('split_180').etaWeeks!).toBeGreaterThan(at('split_150').etaWeeks!)
+    for (const id of ['split_120', 'split_150', 'split_180']) {
+      expect(at(id).onTrack).toBe(true)
+      expect(at(id).etaDate).not.toBeNull()
+    }
   })
 
   it('lists the flex goals with empty series when no entries are given', () => {

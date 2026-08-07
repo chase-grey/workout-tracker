@@ -434,15 +434,6 @@ function GoalRow({
     lock && has && !reached && lastReadingDate
       ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek)
       : null
-  // Gaining toward the target but, once the pace is allowed to decay, not fast
-  // enough to actually reach it — distinct from flat or moving away.
-  const gainingButShort =
-    has &&
-    !proj.onTrack &&
-    !proj.basis.thin &&
-    proj.slopePerWeek !== 0 &&
-    Math.sign(goal.target - proj.current) === Math.sign(proj.slopePerWeek)
-
   const ring = grouped ? '' : goalRing(lockable, !!lock && !reached)
 
   return (
@@ -526,9 +517,7 @@ function GoalRow({
             ? 'log data to project this.'
             : proj.basis.thin
               ? 'not enough recent data to project.'
-              : gainingButShort
-                ? 'gaining, but not fast enough to reach this yet.'
-                : 'not trending toward this yet — keep at it.'}
+              : 'not trending toward this yet — keep at it.'}
         </p>
       )}
 

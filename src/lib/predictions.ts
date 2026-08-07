@@ -139,30 +139,73 @@ function fitSlopePerWeek(points: { date: string; value: number }[]): number {
 }
 
 /**
+ * The share of its starting pace a tapering projection never falls below.
+ *
+ * A geometric taper is the right shape for the first few months and the wrong
+ * one for a year: it decays to nothing, so the most any pace can ever add is
+ * slope/(1 − decay), and a gap past that is unreachable. That's how the far
+ * goals ended up with no date at all rather than a distant one — a 1.5°/wk
+ * stretch pace could only ever buy 15°, so a 180° split from 110° projected
+ * nowhere — while a gap a hair under the ceiling got quoted a date that was the
+ * asymptote talking rather than the training.
+ *
+ * Progress doesn't stop when the cheap early adaptation is spent; it drops to
+ * the slow grind underneath and keeps going for as long as you keep training.
+ * So the pace tapers to a fifth of what it started at and then holds there. The
+ * floor only binds once the taper has run itself out — about four months for
+ * strength, three and a half for flexibility — so every goal near enough to
+ * commit to projects exactly as it did before, and the ones a ways out get an
+ * honest, distant date instead of a blank.
+ */
+export const PACE_FLOOR = 0.2
+
+/** Weeks of taper before the pace bottoms out at {@link PACE_FLOOR}. */
+function weeksToFloor(decayPerWeek: number): number {
+  return Math.log(PACE_FLOOR) / Math.log(decayPerWeek)
+}
+
+/**
+ * Total gain after `weeks` at a starting pace of 1 per week, tapering by
+ * `decayPerWeek` each week until it bottoms out at {@link PACE_FLOOR}. Multiply
+ * by a real pace for real units; a decay of 1 or more is just `weeks`.
+ *
+ * Shared with the locked lines (see goalLock.expectedAt) so a commitment is
+ * drawn and judged through the same curve its ETA was read off.
+ */
+export function cumulativeGain(weeks: number, decayPerWeek: number): number {
+  if (decayPerWeek >= 1) return weeks
+  const bend = weeksToFloor(decayPerWeek)
+  if (weeks <= bend) return (1 - Math.pow(decayPerWeek, weeks)) / (1 - decayPerWeek)
+  return (1 - PACE_FLOOR) / (1 - decayPerWeek) + PACE_FLOOR * (weeks - bend)
+}
+
+/**
  * Weeks to close a `gap` starting at `slopePerWeek`, letting the weekly gain
- * decay by `decayPerWeek` each week (a straight line when it's 1).
+ * decay by `decayPerWeek` each week (a straight line when it's 1) down to
+ * {@link PACE_FLOOR} of where it started.
  *
  * Real strength gains taper — the first pounds come quickly and the last ones
  * grind — so extrapolating this week's pace in a straight line arrives too soon
  * and draws a line too steep to actually hold. Modelling the gain rate as
  * geometrically decaying (week n adds slope·rⁿ) bends the projection the way a
- * lifter's progress actually bends.
+ * lifter's progress actually bends, and the floor keeps that bend from flattening
+ * into a wall the far goals can never get over.
  *
- * The flip side of a decaying pace is a ceiling: the most it can ever add is
- * slope/(1−decay). A gap past that ceiling is unreachable at this pace, which
- * reads as null (no ETA) rather than a fantasy date — "gaining, but not fast
- * enough for this" is the honest answer, and the caller says exactly that.
- *
- * Returns null when the pace is flat, pointed away from the gap, or short of the
- * ceiling. Otherwise a positive number of weeks.
+ * Returns null only when there's no direction to project: a flat pace, or one
+ * pointed away from the gap. Otherwise a positive number of weeks — distant, for
+ * a goal a long way off at a slow pace, but a real date.
  */
 export function weeksToClose(gap: number, slopePerWeek: number, decayPerWeek = 1): number | null {
   if (slopePerWeek === 0 || Math.sign(gap) !== Math.sign(slopePerWeek)) return null
   if (decayPerWeek >= 1) return gap / slopePerWeek
-  // Cumulative gain over w weeks is slope·(1 − rʷ)/(1 − r); solve it for w.
-  const ratio = 1 - (gap * (1 - decayPerWeek)) / slopePerWeek // = rʷ, in (0, 1) when reachable
-  if (ratio <= 0) return null // gap sits past the ceiling slope/(1 − decay)
-  return Math.log(ratio) / Math.log(decayPerWeek)
+  // While the taper is still running, cumulative gain over w weeks is
+  // slope·(1 − rʷ)/(1 − r); solve it for w.
+  const ratio = 1 - (gap * (1 - decayPerWeek)) / slopePerWeek // = rʷ, until the floor
+  if (ratio >= PACE_FLOOR) return Math.log(ratio) / Math.log(decayPerWeek)
+  // Past everything the taper alone can buy: the rest comes at the floor pace.
+  const bend = weeksToFloor(decayPerWeek)
+  const bought = cumulativeGain(bend, decayPerWeek) * slopePerWeek
+  return bend + (gap - bought) / (slopePerWeek * PACE_FLOOR)
 }
 
 export type ProjectOptions = {
