@@ -129,6 +129,54 @@ function hasChanges() {
   return (worktreeGit(['status', '--porcelain']).stdout || '').trim().length > 0
 }
 
+/** True once origin/main carries `sha` — as its tip, or with later work on top. */
+function landedOnMain(sha) {
+  const head = ((worktreeGit(['ls-remote', 'origin', 'refs/heads/main']).stdout || '')
+    .trim()
+    .split(/\s+/)[0] || '')
+  if (!head) return false
+  if (head === sha) return true
+  // Someone landed between the push and this check. Still a success, as long as
+  // our commit is in the history they built on.
+  worktreeGit(['fetch', 'origin', 'main'])
+  return worktreeGit(['merge-base', '--is-ancestor', sha, head]).status === 0
+}
+
+/**
+ * Land the worktree's HEAD on `main`, and return the sha that landed.
+ *
+ * A fix takes minutes to write and `main` moves the whole time — you push, or the
+ * previous fix lands — so the first push of a run is routinely a non-fast-forward.
+ * That's a stale base, not a bad fix, so rebase onto whatever arrived and try
+ * again rather than throwing away work that's perfectly good. The sha changes on
+ * every rebase, which is why it's read fresh each pass and returned rather than
+ * captured by the caller.
+ */
+function pushToMain(attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    const sha = (worktreeGit(['rev-parse', 'HEAD']).stdout || '').trim()
+    // Push HEAD explicitly, not the branch NAME `main` — naming a local ref that
+    // isn't the commit we just built is how a fix got reported as shipped while
+    // `git push` sat there saying "Everything up-to-date".
+    const push = worktreeGit(['push', 'origin', `${sha}:refs/heads/main`])
+    // Trust the remote, not the exit code: confirm main really took our commit.
+    if (push.status === 0 && landedOnMain(sha)) return sha
+    const why = (push.stderr || '').trim() || `origin/main never took ${sha}`
+    if (attempt >= attempts) throw new Error(`git push failed after ${attempts} tries: ${why}`)
+    console.log(`autofix: push ${attempt} of ${attempts} bounced, rebasing onto the latest main.`)
+    const fetched = worktreeGit(['fetch', 'origin', 'main'])
+    if (fetched.status !== 0) throw new Error(`git fetch failed: ${fetched.stderr}`)
+    const rebase = worktreeGit(['rebase', 'origin/main'])
+    if (rebase.status !== 0) {
+      // Leave the worktree usable: an interrupted rebase would wedge every run
+      // after this one, and the next fix starts from a hard reset anyway.
+      worktreeGit(['rebase', '--abort'])
+      const detail = (rebase.stdout || rebase.stderr || '').trim().slice(0, 800)
+      throw new Error(`the fix conflicts with newer work on main:\n${detail}`)
+    }
+  }
+}
+
 /* ----------------------------------------------------------------- claude */
 
 function buildPrompt(issue, comments) {
@@ -241,18 +289,7 @@ async function processIssue(issue) {
     const msg = `Auto-fix issue #${n}: ${issue.title}\n\nFixes #${n}`
     const commit = worktreeGit(['commit', '-m', msg])
     if (commit.status !== 0) throw new Error(`git commit failed: ${commit.stderr}`)
-    const sha = (worktreeGit(['rev-parse', 'HEAD']).stdout || '').trim()
-    // Push HEAD explicitly, not the branch NAME `main` — naming a local ref that
-    // isn't the commit we just built is how a fix got reported as shipped while
-    // `git push` sat there saying "Everything up-to-date".
-    const push = worktreeGit(['push', 'origin', `${sha}:refs/heads/main`])
-    if (push.status !== 0) throw new Error(`git push failed: ${push.stderr}`)
-    // Trust the remote, not the exit code: confirm main really is our commit.
-    const remoteHead = ((worktreeGit(['ls-remote', 'origin', 'refs/heads/main']).stdout || '')
-      .trim()
-      .split(/\s+/)[0] || '')
-    if (remoteHead !== sha)
-      throw new Error(`push reported success but origin/main is ${remoteHead || '(unknown)'}, not ${sha}`)
+    const sha = pushToMain()
     await comment(n, `Fixed on \`main\` in ${sha.slice(0, 8)}. It will deploy once CI passes.`)
     await removeLabel(n, RUNNING_LABEL)
     await closeIssue(n)
