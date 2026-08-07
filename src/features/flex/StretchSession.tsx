@@ -52,6 +52,8 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const {
     flexPlan,
     updateFlexPlan,
+    settings,
+    updateSettings,
     workouts,
     flexEntries,
     logFlex,
@@ -301,24 +303,27 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // Whether rest rolls straight into this set. During rest `step` is already the
   // set the rest is leading into, so this reads the same from the set screen and
   // from the rest screen before it.
-  const savedAuto = step.kind === 'flex' && !!step.autoAdvance
+  const savedAuto = step.kind === 'flex' ? !!step.autoAdvance : !!settings.coreAutoAdvance
   const autoNow = autoOverride.get(step.exKey) ?? savedAuto
   const setAutoNow = (on: boolean) =>
     setAutoOverride((prev) => new Map(prev).set(step.exKey, on))
 
-  // Saving the default writes the flag onto the stretch in the stored routine, so
-  // it holds for the rest of this session too. The dead-bug block isn't part of
-  // the editable routine, so it has no default to save — its toggle is
-  // session-only.
+  // Saving the default takes effect for the rest of this session too. A stretch
+  // carries the flag on its routine entry; the dead-bug block has no routine
+  // entry to carry it, so it saves to settings (see Settings.coreAutoAdvance).
   const setAutoDefault = (on: boolean) => {
-    updateFlexPlan(
-      flexPlan.map((block) => ({
-        ...block,
-        exercises: block.exercises.map((e) =>
-          e.key === step.exKey ? { ...e, autoAdvance: on } : e,
-        ),
-      })),
-    )
+    if (step.kind === 'flex') {
+      updateFlexPlan(
+        flexPlan.map((block) => ({
+          ...block,
+          exercises: block.exercises.map((e) =>
+            e.key === step.exKey ? { ...e, autoAdvance: on } : e,
+          ),
+        })),
+      )
+    } else {
+      updateSettings({ ...settings, coreAutoAdvance: on })
+    }
     setAutoNow(on)
   }
 
@@ -329,16 +334,12 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
       label: autoNow ? 'wait for my tap after rest' : 'auto-advance out of rest',
       onClick: () => setAutoNow(!autoNow),
     },
-    ...(step.kind === 'flex'
-      ? [
-          {
-            label: savedAuto
-              ? `stop auto-advancing ${step.exName}`
-              : `always auto-advance ${step.exName}`,
-            onClick: () => setAutoDefault(!savedAuto),
-          },
-        ]
-      : []),
+    {
+      label: savedAuto
+        ? `stop auto-advancing ${step.exName}`
+        : `always auto-advance ${step.exName}`,
+      onClick: () => setAutoDefault(!savedAuto),
+    },
     { label: 'back to app (keep going)', onClick: onMinimize },
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'log measurement', onClick: () => setShowMeasure(true) },

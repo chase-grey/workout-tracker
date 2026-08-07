@@ -123,6 +123,14 @@ export type Settings = {
    * avatar's ab lines. Unset means not yet.
    */
   sixPackStatus?: SixPackStatus
+  /**
+   * Whether the dead-bug sets roll out of rest without waiting for a tap. Every
+   * other exercise keeps this flag on its own plan entry (`autoAdvance`), but the
+   * core block folded into the stretch session isn't part of the editable stretch
+   * routine — it's a constant (see config/plan.DEAD_BUG) — so its default lives
+   * here instead.
+   */
+  coreAutoAdvance?: boolean
 }
 
 /** The three answers the six-pack goal accepts. */
