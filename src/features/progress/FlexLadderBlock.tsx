@@ -111,16 +111,14 @@ export function FlexLadderBlock({
   const latest = headline(ladder, entries)
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Same weight as the rung titles below it — see the body weight block. */}
-      <h4 className="font-semibold">
+    <div className={`flex flex-col gap-3 ${ring ? `rounded-2xl p-2 ${ring}` : ''}`}>
+      {/* Inside the box, at the rung titles' weight — see the body weight block. */}
+      <h4 className="px-1 font-semibold">
         {title}
         {latest ? ` · ${latest}` : ''}
       </h4>
-      <div className={`flex flex-col gap-3 ${ring ? `rounded-2xl p-2 ${ring}` : ''}`}>
-        <AngleChart readings={readings} series={series} goals={goalLines} empty={empty} />
-        {rungs.map((g) => renderRow(g))}
-      </div>
+      <AngleChart readings={readings} series={series} goals={goalLines} empty={empty} />
+      {rungs.map((g) => renderRow(g))}
     </div>
   )
 }

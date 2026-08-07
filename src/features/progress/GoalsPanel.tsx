@@ -728,21 +728,19 @@ export function GoalsPanel({ months }: { months: number | null }) {
   // two goals reading off it underneath — each a row that turns itself over to
   // "goal reached!" the moment a weigh-in gets there.
   const bodyWeightBlock = (
-    <div className="flex flex-col gap-3">
-      {/* A block header names a group of goals, so it reads at the same weight as
-          the goal titles under it rather than as a dimmed section label. */}
-      <h4 className="font-semibold">
+    <div className={`flex flex-col gap-3 ${weightRing ? `rounded-2xl p-2 ${weightRing}` : ''}`}>
+      {/* The header names the group the box is drawn around, so it sits inside
+          that box, at the same weight as the goal titles under it. */}
+      <h4 className="px-1 font-semibold">
         body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
       </h4>
-      <div className={`flex flex-col gap-3 ${weightRing ? `rounded-2xl p-2 ${weightRing}` : ''}`}>
-        <BodyWeightChart
-          points={weightSeries}
-          calorieWeeks={calorieWeeks}
-          goals={weightGoalLines}
-          empty="log my weight to project these goals"
-        />
-        {weightGoals.map((g) => goalRow(g, true))}
-      </div>
+      <BodyWeightChart
+        points={weightSeries}
+        calorieWeeks={calorieWeeks}
+        goals={weightGoalLines}
+        empty="log my weight to project these goals"
+      />
+      {weightGoals.map((g) => goalRow(g, true))}
     </div>
   )
 
