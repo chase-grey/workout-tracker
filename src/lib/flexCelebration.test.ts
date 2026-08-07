@@ -95,7 +95,7 @@ describe('completedFlexGoals', () => {
       { date: '2026-07-31', splitDeg: null, warmSplitDeg: 95, tailorsLeftDeg: null, tailorsRightDeg: null },
       { date: '2026-08-05', splitDeg: null, warmSplitDeg: 152, tailorsLeftDeg: null, tailorsRightDeg: null },
     ]
-    expect(completedFlexGoals(leap, TODAY).map((g) => g.target)).toEqual([150, 120, 100])
+    expect(completedFlexGoals(leap, TODAY).map((g) => g.target)).toEqual([150, 135, 120, 100])
   })
 
   it('judges the tailor\'s goal on the average of the warm pair', () => {
