@@ -2,15 +2,9 @@ import { useEffect, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { fetchChatEndpoint, forgetChatEndpoint } from '../../services/chatEndpoint'
 import { listIssues, type TrackedIssue } from '../../services/issues'
-import { download, workoutsToCsv } from '../../lib/csv'
-import { ImportScreen } from './ImportScreen'
-import { PlanEditor } from './PlanEditor'
-import { FlexRoutineEditor } from './FlexRoutineEditor'
 import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
-import { DAY_TYPES, DEFAULT_PLAN } from '../../config/plan'
-import type { DayType } from '../../types'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
@@ -22,12 +16,7 @@ const SYNC_LABEL: Record<string, string> = {
 }
 
 export function SettingsTab() {
-  const { settings, updateSettings, refresh, sync, lastSync, pendingWrites, workouts, plan, updatePlan } = useData()
-  const [apiUrl, setApiUrl] = useState(settings.apiUrl)
-  const [saved, setSaved] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [editingPlan, setEditingPlan] = useState<DayType | null>(null)
-  const [editingFlex, setEditingFlex] = useState(false)
+  const { settings, updateSettings, sync, lastSync, pendingWrites } = useData()
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
@@ -59,6 +48,10 @@ export function SettingsTab() {
     }
   }, [settings.chatToken])
 
+  // Once the token reaches a coach there's nothing left to type, so the field only
+  // comes back if the coach goes missing and the token needs re-entering.
+  const showTokenField = coach !== 'live'
+
   const coachStatus =
     coach === 'untried'
       ? 'no token — chat falls back to the OpenAI key below'
@@ -67,13 +60,6 @@ export function SettingsTab() {
         : coach === 'live'
           ? 'coach found ✓'
           : 'no computer is running dev:tunnel right now'
-
-  const save = () => {
-    updateSettings({ ...settings, apiUrl: apiUrl.trim() })
-    setSaved(true)
-    void refresh()
-    setTimeout(() => setSaved(false), 1500)
-  }
 
   const saveKey = () => {
     updateSettings({ ...settings, openAiKey: openAiKey.trim() })
@@ -143,19 +129,7 @@ export function SettingsTab() {
       )}
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">google apps script url</label>
-        <input
-          value={apiUrl}
-          onChange={(e) => setApiUrl(e.target.value)}
-          placeholder="https://script.google.com/macros/s/…/exec"
-          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-        <button
-          onClick={save}
-          className="min-h-[44px] rounded-xl bg-accent font-semibold text-black active:opacity-80"
-        >
-          {saved ? 'saved ✓' : 'save & sync'}
-        </button>
+        <label className="text-sm font-medium text-neutral-300">sync</label>
         <p className="text-xs text-neutral-500">
           status: {SYNC_LABEL[sync] ?? sync}
           {pendingWrites > 0 && ` · ${pendingWrites} write${pendingWrites === 1 ? '' : 's'} queued`}
@@ -165,72 +139,28 @@ export function SettingsTab() {
         </p>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">plans</label>
-        {DAY_TYPES.map((t) => (
-          <button
-            key={t}
-            onClick={() => setEditingPlan(t)}
-            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-          >
-            edit {plan[t].label}
-          </button>
-        ))}
-        <button
-          onClick={() => setEditingFlex(true)}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          edit stretch
-        </button>
-        <button
-          onClick={() => {
-            if (confirm('replace your plan with the latest defaults? any customizations you made will be overwritten.'))
-              updatePlan(structuredClone(DEFAULT_PLAN))
-          }}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          reset plan to latest defaults
-        </button>
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">data</label>
-        <button
-          onClick={() => setImporting(true)}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          import historical data
-        </button>
-        <button
-          onClick={() => download(`workouts-${new Date().toISOString().slice(0, 10)}.csv`, workoutsToCsv(workouts))}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          export workouts as CSV
-        </button>
-      </section>
-
-      {importing && <ImportScreen onClose={() => setImporting(false)} />}
-      {editingPlan && <PlanEditor day={editingPlan} onClose={() => setEditingPlan(null)} />}
-      {editingFlex && <FlexRoutineEditor onClose={() => setEditingFlex(false)} />}
-
       <PhoneLink />
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">coach token (for chat)</label>
-        <input
-          type="password"
-          value={chatTokenDraft}
-          onChange={(e) => setChatTokenDraft(e.target.value)}
-          placeholder="the CHAT_SHARED_SECRET from your computer"
-          autoComplete="off"
-          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-        <button
-          onClick={saveChatToken}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          {chatTokenSaved ? 'saved ✓' : 'save token'}
-        </button>
+        {showTokenField && (
+          <>
+            <input
+              type="password"
+              value={chatTokenDraft}
+              onChange={(e) => setChatTokenDraft(e.target.value)}
+              placeholder="the CHAT_SHARED_SECRET from your computer"
+              autoComplete="off"
+              className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <button
+              onClick={saveChatToken}
+              className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+            >
+              {chatTokenSaved ? 'saved ✓' : 'save token'}
+            </button>
+          </>
+        )}
         <p className="text-xs text-neutral-500">{coachStatus}</p>
       </section>
 
