@@ -5,6 +5,7 @@ import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { ExerciseAverages, SessionDuration, SessionTimeSamples } from '../lib/estimate'
 import { storage } from './storage'
+import { DEFAULT_API_URL } from '../config/backend'
 
 /**
  * Thin client for the Google Apps Script web app that proxies the Sheet.
@@ -14,11 +15,8 @@ import { storage } from './storage'
  * The backend parses the raw body as JSON.
  */
 
-// Default Apps Script deployment. This endpoint is already public (the web app
-// is deployed "Anyone"), so baking it in just lets every device auto-connect
-// without pasting it into Settings first. A Settings value still overrides it.
-const DEFAULT_API_URL =
-  'https://script.google.com/macros/s/AKfycbxKDeDE9cRmW8eA5TjShq9dmRvJoVxVE4nsx0l43WLpyXBv_TvheDsYLpBCVuZHLL89xA/exec'
+// DEFAULT_API_URL is shared with vite.config.ts, which publishes to the same
+// backend. A Settings value still overrides it.
 
 function baseUrl(): string {
   // Prefer a user-configured URL (Settings), then a build-time env value, then the default.

@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useData } from '../../store/DataContext'
+import { fetchChatEndpoint, forgetChatEndpoint } from '../../services/chatEndpoint'
 import { download, workoutsToCsv } from '../../lib/csv'
 import { ImportScreen } from './ImportScreen'
 import { PlanEditor } from './PlanEditor'
@@ -28,6 +29,29 @@ export function SettingsTab() {
   const [editingFlex, setEditingFlex] = useState(false)
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
+  const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
+  const [chatTokenSaved, setChatTokenSaved] = useState(false)
+  // Whether a laptop has published a coach address the token can actually reach.
+  const [coach, setCoach] = useState<'checking' | 'live' | 'none' | 'untried'>('untried')
+
+  useEffect(() => {
+    if (!settings.chatToken.trim()) return setCoach('untried')
+    setCoach('checking')
+    let alive = true
+    void fetchChatEndpoint().then((e) => alive && setCoach(e ? 'live' : 'none'))
+    return () => {
+      alive = false
+    }
+  }, [settings.chatToken])
+
+  const coachStatus =
+    coach === 'untried'
+      ? 'no token — chat falls back to the OpenAI key below'
+      : coach === 'checking'
+        ? 'looking for your computer…'
+        : coach === 'live'
+          ? 'coach found ✓'
+          : 'no computer is running dev:tunnel right now'
 
   const save = () => {
     updateSettings({ ...settings, apiUrl: apiUrl.trim() })
@@ -40,6 +64,14 @@ export function SettingsTab() {
     updateSettings({ ...settings, openAiKey: openAiKey.trim() })
     setKeySaved(true)
     setTimeout(() => setKeySaved(false), 1500)
+  }
+
+  const saveChatToken = () => {
+    // The old token is what the cached coach address was looked up with.
+    forgetChatEndpoint()
+    updateSettings({ ...settings, chatToken: chatTokenDraft.trim() })
+    setChatTokenSaved(true)
+    setTimeout(() => setChatTokenSaved(false), 1500)
   }
 
   return (
@@ -118,6 +150,25 @@ export function SettingsTab() {
       {editingFlex && <FlexRoutineEditor onClose={() => setEditingFlex(false)} />}
 
       <PhoneLink />
+
+      <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">coach token (for chat)</label>
+        <input
+          type="password"
+          value={chatTokenDraft}
+          onChange={(e) => setChatTokenDraft(e.target.value)}
+          placeholder="the CHAT_SHARED_SECRET from your computer"
+          autoComplete="off"
+          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+        <button
+          onClick={saveChatToken}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          {chatTokenSaved ? 'saved ✓' : 'save token'}
+        </button>
+        <p className="text-xs text-neutral-500">{coachStatus}</p>
+      </section>
 
       {IS_DESKTOP && (
         <section className="flex flex-col gap-2">

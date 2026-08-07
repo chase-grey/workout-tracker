@@ -31,6 +31,8 @@
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
  *   GET  ?route=durations[&since=YYYY-MM-DD]
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
+ *   GET  ?route=chat_endpoint&secret=…  -> { url, updatedAt } (see getChatEndpoint)
+ *   POST ?route=chat_endpoint    body: { url, secret }
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
@@ -104,6 +106,8 @@ function doGet(e) {
         return json(getExerciseTimes())
       case 'plan':
         return json(getPlan())
+      case 'chat_endpoint':
+        return json(getChatEndpoint(e.parameter.secret))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -156,6 +160,8 @@ function doPost(e) {
         return json(withLock(function () { return foldExerciseTimes(body) }))
       case 'plan':
         return json(withLock(function () { return savePlan(body.plan) }))
+      case 'chat_endpoint':
+        return json(withLock(function () { return saveChatEndpoint(body) }))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -691,6 +697,69 @@ function savePlan(plan) {
     }
   }
   sh.appendRow(['plan', value])
+  return { saved: 1 }
+}
+
+/* ------------------------------------------------------------ chat endpoint */
+
+/**
+ * Where the phone should send chat, published by whichever laptop is running
+ * `npm run dev:tunnel`.
+ *
+ * The chat coach needs a proxy holding an Epic key that can reach the internal
+ * Epic LLM host, so it only exists while that laptop is up — behind a Cloudflare
+ * quick tunnel whose hostname is new every run. The installed app can't chase a
+ * moving hostname, so the laptop leaves its current address here and the phone
+ * reads it. That keeps the app installed from a URL that never changes.
+ *
+ * Both directions require CHAT_SHARED_SECRET, a Script Property you set once
+ * under Project Settings → Script properties. The /exec URL is baked into the
+ * public web bundle, so without it anyone could read the live tunnel address and
+ * spend the Epic key behind it — or publish an address of their own and receive
+ * the chat instead. Unset, this refuses to serve rather than failing open.
+ */
+function chatSecret() {
+  const expected = PropertiesService.getScriptProperties().getProperty('CHAT_SHARED_SECRET')
+  if (!expected) {
+    throw new Error('CHAT_SHARED_SECRET script property is not set on the backend')
+  }
+  return expected
+}
+
+function getChatEndpoint(secret) {
+  if (secret !== chatSecret()) throw new Error('Bad chat secret')
+  const sh = sheet('config', CONFIG_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'chat_endpoint') {
+      try {
+        return JSON.parse(rows[i][1])
+      } catch (e) {
+        return { url: null }
+      }
+    }
+  }
+  return { url: null } // no laptop has published yet
+}
+
+function saveChatEndpoint(body) {
+  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
+  const url = String(body.url || '').replace(/\/$/, '')
+  // Only an https origin, no path/query — this value becomes the prefix of a
+  // URL the phone POSTs its workout context to.
+  if (!/^https:\/\/[a-z0-9][a-z0-9.-]*[a-z0-9](:\d+)?$/i.test(url)) {
+    throw new Error('Invalid chat endpoint: ' + url)
+  }
+  const value = JSON.stringify({ url: url, updatedAt: new Date().toISOString() })
+  const sh = sheet('config', CONFIG_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'chat_endpoint') {
+      sh.getRange(i + 1, 2).setValue(value)
+      return { saved: 1 }
+    }
+  }
+  sh.appendRow(['chat_endpoint', value])
   return { saved: 1 }
 }
 

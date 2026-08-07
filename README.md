@@ -41,25 +41,49 @@ The chat can answer questions about your data and edit your plans. Two ways to p
      which injects the key server-side and relaxes TLS for `*.epic.com`. The key never enters
      the browser bundle. (`.env` is gitignored — never commit your key.)
 
-  **Using chat on your phone with the Epic key:** the deployed GitHub Pages site can't reach the
-  internal Epic proxy (internal-only + browser CORS + untrusted cert), so the phone has to load the
-  dev server instead. Two ways, both keeping the Epic hop on your computer — phone → dev proxy →
-  Epic proxy — so only the computer needs Epic wifi/VPN:
+### Chat on your phone (installed app + Epic key)
 
-  - **Same wifi:** `npm run dev:host`, then open the printed **Network** URL
-    (`http://<computer-ip>:5173/`) on your phone.
-  - **Anywhere, including off Epic's wifi:** `npm run dev:tunnel`. This starts the dev server behind
-    a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/),
-    which publishes it at a public `https://….trycloudflare.com` address. The URL is printed in the
-    terminal and shown as a QR in the app under **Settings → open on your phone** — scan it before
-    you leave and the phone works on cell data, at the gym, anywhere. Add it to your home screen for
-    a full-screen app. The hostname is new each run, so re-scan after restarting (or pin a stable one
-    with `SHARE_URL` in `.env`).
+The Epic proxy is internal-only, so the deployed site can't call it — only a computer on Epic's
+network can. The installed phone app therefore sends chat **to your computer**, which forwards it:
+phone → Cloudflare → your dev server → Epic proxy. Only the computer needs Epic wifi/VPN.
 
-  Needs [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
-  on `PATH`, in your home directory, or at `CLOUDFLARED_PATH`. Your computer has to stay awake and
-  connected for the tunnel to serve. On the deployed site, use a standard OpenAI key in Settings
-  instead.
+The app stays installed from the GitHub Pages URL, which never changes. Your computer's tunnel
+hostname *does* change every run, so the dev server publishes its current address to the Apps Script
+backend and the app looks it up. You never see the churn.
+
+```
+install once:  https://<you>.github.io/workout-tracker/     (permanent)
+each run:      dev:tunnel → random trycloudflare hostname
+               └─ published to the Apps Script config sheet
+phone chat:    reads that address → POSTs /api/chat → Epic proxy
+```
+
+**One-time setup.** Pick a token — `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`
+— and put that same value in three places:
+
+1. `CHAT_SHARED_SECRET` in `.env`.
+2. The Apps Script project: **Project Settings → Script properties → Add**, name `CHAT_SHARED_SECRET`.
+   Redeploy the web app so the `chat_endpoint` route in `SimpleBackend.gs` goes live.
+3. The phone: **Settings → coach token**. It should then read `coach found ✓` while your computer is
+   running. This also brings the Chat tab back on the phone.
+
+The token is why the setup is safe to hang off a public backend: the `/exec` URL is baked into the
+web bundle, so without it anyone could read your live tunnel address and spend the Epic key behind
+it. Both reading the address and calling the proxy require it, and the dev server refuses
+cross-origin chat without it.
+
+**Then, every time you want the coach:** run `npm run dev:tunnel` on your computer before you leave.
+It needs [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+on `PATH`, in your home directory, or at `CLOUDFLARED_PATH`. The computer has to stay awake and
+connected — asleep, chat says it can't reach the coach and everything else in the app keeps working.
+
+**Other ways in:**
+
+- **Same wifi, no install:** `npm run dev:host`, then open the printed **Network** URL on your phone.
+- **The dev server itself, from anywhere:** `npm run dev:tunnel` also shows its URL as a QR under
+  **Settings → open on your phone**. Loading that gives you the live dev build rather than the
+  installed app — handy for testing, but the address changes each run so don't install from it.
+- **No computer at all:** put a standard OpenAI key in Settings and chat talks to OpenAI directly.
 
 ## Deploy
 

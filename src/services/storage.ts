@@ -71,6 +71,12 @@ export type ActiveRest = RestState & {
 export type Settings = {
   apiUrl: string
   openAiKey: string
+  /**
+   * Shared token that reaches the chat coach running on the laptop. Kept
+   * on-device rather than bundled precisely because the bundle is public — see
+   * services/chatEndpoint.ts. Blank means chat falls back to a direct OpenAI key.
+   */
+  chatToken: string
   /** OpenAI model for the chat assistant. */
   openAiModel?: string
   /** ISO date of the last progress photo the user logged (for reminders). */
@@ -104,7 +110,12 @@ export type Settings = {
 /** The three answers the six-pack goal accepts. */
 export type SixPackStatus = 'none' | 'close' | 'have'
 
-const DEFAULT_SETTINGS: Settings = { apiUrl: '', openAiKey: '', openAiModel: 'gpt-4o-mini' }
+const DEFAULT_SETTINGS: Settings = {
+  apiUrl: '',
+  openAiKey: '',
+  chatToken: '',
+  openAiModel: 'gpt-4o-mini',
+}
 
 /** A write that failed to reach the backend and is waiting to be flushed. */
 export type QueuedWrite =

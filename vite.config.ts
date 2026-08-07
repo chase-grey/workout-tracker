@@ -10,9 +10,39 @@ import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { DEFAULT_API_URL } from './src/config/backend.js'
 
 // Repo name — used as the GitHub Pages base path in production.
 const REPO = 'workout-tracker'
+
+/**
+ * The origin the installed phone app is served from, which chats to this dev
+ * server cross-origin (see llmProxy).
+ *
+ * This has to be declared to Vite, not just handled in our own middleware:
+ * Vite's CORS layer answers the preflight before any plugin middleware runs, and
+ * it only echoes an `access-control-allow-origin` for origins it has been told
+ * to trust. Anything else gets a 204 with no such header, which curl ignores and
+ * a browser treats as a refusal.
+ *
+ * Derived from the git remote so a fork doesn't have to edit it; PAGES_ORIGIN
+ * overrides for a custom domain.
+ */
+function pagesOrigin(explicit: string): string {
+  if (explicit) return explicit.replace(/\/$/, '')
+  try {
+    const remote = execSync('git remote get-url origin').toString().trim()
+    const owner = /github\.com[:/]([^/]+)\//.exec(remote)?.[1]
+    if (owner) return `https://${owner.toLowerCase()}.github.io`
+  } catch {
+    /* no remote, or not a GitHub one */
+  }
+  return ''
+}
+
+// Vite's default: localhost in any form. Overriding server.cors replaces this
+// rather than adding to it, so it has to be carried along.
+const LOCALHOST_ORIGIN = /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/
 
 // Build stamp baked into the bundle so Settings can show exactly which build is
 // running — the quickest way to tell whether a phone is on a stale cached copy.
@@ -150,7 +180,13 @@ function postJson(
  * model } to /api/chat; we inject the key + base URL and forward to the LLM.
  * Only works locally (`npm run dev`) — the Epic proxy is internal-network-only.
  */
-function llmProxy(opts: { apiKey: string; baseUrl: string; model: string; insecure: boolean }): PluginOption {
+function llmProxy(opts: {
+  apiKey: string
+  baseUrl: string
+  model: string
+  insecure: boolean
+  sharedSecret: string
+}): PluginOption {
   return {
     name: 'llm-proxy',
     configureServer(server) {
@@ -160,7 +196,43 @@ function llmProxy(opts: { apiKey: string; baseUrl: string; model: string; insecu
           res.setHeader('content-type', 'application/json')
           res.end(JSON.stringify(obj))
         }
+
+        // The installed phone app is served from GitHub Pages, so its calls here
+        // are cross-origin: they need CORS, and a preflight for the JSON
+        // content-type and token header.
+        const origin = req.headers.origin
+        if (origin) {
+          res.setHeader('access-control-allow-origin', origin)
+          res.setHeader('vary', 'origin')
+          res.setHeader('access-control-allow-headers', 'content-type, x-chat-token')
+          res.setHeader('access-control-max-age', '86400')
+        }
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204
+          return res.end()
+        }
         if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' })
+
+        // A cross-origin caller reached us over the public tunnel, so it has to
+        // prove it's the phone. Same-origin dev browsing doesn't — nothing but
+        // this machine can make a same-origin request to it.
+        const crossOrigin = (() => {
+          if (!origin) return false
+          try {
+            return new URL(origin).host !== req.headers.host
+          } catch {
+            return true
+          }
+        })()
+        if (crossOrigin) {
+          if (!opts.sharedSecret) {
+            return json(503, { error: { message: 'No CHAT_SHARED_SECRET in .env' } })
+          }
+          if (req.headers['x-chat-token'] !== opts.sharedSecret) {
+            return json(401, { error: { message: 'Bad or missing chat token' } })
+          }
+        }
+
         if (!opts.apiKey) return json(503, { error: { message: 'No OPENAI_API_KEY in .env' } })
 
         let body = ''
@@ -227,9 +299,43 @@ async function getJson(url: string, timeoutMs: number): Promise<Record<string, u
  * hostname comes back with THIS nonce. If the round trip can't complete at all (no
  * egress), a single detected tunnel is reported unverified rather than dropped.
  */
-function shareLink(explicit: string | null): PluginOption {
+function shareLink(
+  explicit: string | null,
+  publish: { apiUrl: string; secret: string },
+): PluginOption {
   const nonce = `wt-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
   let cache: { at: number; value: { url: string; verified: boolean } | null } = { at: 0, value: null }
+  let published: string | null = null
+
+  /**
+   * Leave this tunnel's address on the Apps Script backend so the installed
+   * phone app can find it. That indirection is the whole point: the quick tunnel
+   * hostname changes every run, but the app stays installed from its permanent
+   * GitHub Pages URL and looks the current one up. See saveChatEndpoint in
+   * SimpleBackend.gs for why both directions need the shared secret.
+   */
+  const publishEndpoint = async (url: string) => {
+    if (url === published || !publish.apiUrl || !publish.secret) return
+    try {
+      const res = await fetch(`${publish.apiUrl}?route=chat_endpoint`, {
+        method: 'POST',
+        // text/plain keeps this a CORS "simple request", which is what the Apps
+        // Script web app can answer — same trick as src/services/api.ts.
+        headers: { 'content-type': 'text/plain' },
+        body: JSON.stringify({ url, secret: publish.secret }),
+        signal: AbortSignal.timeout(15000),
+      })
+      const body = (await res.json()) as { saved?: number; error?: string }
+      if (body.error) throw new Error(body.error)
+      published = url
+      console.log(`\n  Coach published to your phone: ${url}\n`)
+    } catch (err) {
+      console.warn(
+        `\n  Could not publish the chat endpoint (${String(err)}).` +
+          `\n  The phone won't find the coach until this succeeds.\n`,
+      )
+    }
+  }
 
   const detect = async () => {
     const hits = await Promise.all(
@@ -254,6 +360,29 @@ function shareLink(explicit: string | null): PluginOption {
   return {
     name: 'share-link',
     configureServer(server) {
+      // Publishing can't wait for someone to open Settings — the phone needs the
+      // address whether or not this machine's browser is ever touched. Poll until
+      // the tunnel is up and verified, then publish once and stop. The tunnel
+      // takes a few seconds longer than the dev server to come up, so a miss on
+      // the first passes is normal.
+      if (explicit) {
+        void publishEndpoint(explicit)
+      } else if (publish.apiUrl && publish.secret) {
+        let tries = 0
+        const timer = setInterval(() => {
+          if (published || ++tries > 40) return clearInterval(timer)
+          void detect()
+            .catch(() => null)
+            .then((found) => {
+              if (found?.verified) {
+                clearInterval(timer)
+                void publishEndpoint(found.url)
+              }
+            })
+        }, 3000)
+        timer.unref?.() // never hold the process open on this alone
+      }
+
       server.middlewares.use('/api/share/ping', (_req, res) => {
         res.setHeader('content-type', 'application/json')
         res.end(JSON.stringify({ nonce }))
@@ -292,6 +421,7 @@ export default defineConfig(({ mode }) => {
   const insecure =
     env.OPENAI_INSECURE_TLS === 'true' ||
     (env.OPENAI_INSECURE_TLS !== 'false' && host.endsWith('.epic.com'))
+  const pages = pagesOrigin((env.PAGES_ORIGIN || '').trim())
 
   return {
     base: mode === 'production' ? `/${REPO}/` : '/',
@@ -299,7 +429,14 @@ export default defineConfig(({ mode }) => {
     // server directly. allowedHosts lets a Cloudflare quick tunnel reach it too —
     // Vite otherwise rejects Host headers it doesn't recognize with "Blocked
     // request." Scoped to the tunnel domain, not opened wide.
-    server: { host: true, allowedHosts: ['.trycloudflare.com'] },
+    server: {
+      host: true,
+      allowedHosts: ['.trycloudflare.com'],
+      // Chat from the installed app is cross-origin; everything else here stays
+      // same-origin. The token in llmProxy is what actually guards /api/chat —
+      // this only gets the browser's preflight past Vite.
+      cors: { origin: pages ? [LOCALHOST_ORIGIN, pages] : [LOCALHOST_ORIGIN] },
+    },
     define: {
       __APP_COMMIT__: JSON.stringify(COMMIT),
       __BUILD_TIME__: JSON.stringify(BUILD_TIME),
@@ -313,13 +450,18 @@ export default defineConfig(({ mode }) => {
         baseUrl,
         model: env.OPENAI_MODEL || 'gpt-4o',
         insecure,
+        sharedSecret: (env.CHAT_SHARED_SECRET || '').trim(),
       }),
-      // The phone link Settings shows as a QR. SHARE_URL pins it (a named tunnel
-      // or a LAN address); left unset, a Cloudflare quick tunnel is auto-detected.
-      shareLink((env.SHARE_URL || '').trim().replace(/\/$/, '') || null),
+      // The phone link Settings shows as a QR, and the address published to the
+      // backend so the installed app can find this machine. SHARE_URL pins it (a
+      // named tunnel or a LAN address); left unset, a quick tunnel is detected.
+      shareLink((env.SHARE_URL || '').trim().replace(/\/$/, '') || null, {
+        apiUrl: ((env.VITE_API_URL || '').trim() || DEFAULT_API_URL).replace(/\/$/, ''),
+        secret: (env.CHAT_SHARED_SECRET || '').trim(),
+      }),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'icon.svg'],
+        includeAssets: ['favicon.svg', 'icon.svg', 'icon-maskable.svg'],
         workbox: {
           // The pose runtime and model are tens of megabytes — far too big to
           // precache on install. Cache them the first time a measurement runs
@@ -349,7 +491,9 @@ export default defineConfig(({ mode }) => {
           scope: `/${REPO}/`,
           icons: [
             { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-            { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+            // Full-bleed variant — see public/icon-maskable.svg for why the
+            // rounded-corner one can't serve both roles.
+            { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
           ],
         },
       }),

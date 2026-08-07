@@ -1,0 +1,19 @@
+<!-- The "maskable" variant of icon.svg: same barbell, but full-bleed.
+
+     Android applies its own launcher shape (circle, squircle, teardrop) to a
+     maskable icon and keeps only what falls inside. icon.svg's rx="112" corners
+     are transparent, which the mask happily shows through, so the installed icon
+     gets pale notches at the corners. Square background, no radius, fixes it.
+
+     The barbell already sits inside the 80% safe circle a mask can crop to, so
+     the artwork itself is unchanged. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0a0a0a"/>
+  <g fill="none" stroke="#f97316" stroke-width="34" stroke-linecap="round">
+    <line x1="150" y1="256" x2="362" y2="256"/>
+    <line x1="120" y1="200" x2="120" y2="312"/>
+    <line x1="170" y1="180" x2="170" y2="332"/>
+    <line x1="392" y1="200" x2="392" y2="312"/>
+    <line x1="342" y1="180" x2="342" y2="332"/>
+  </g>
+</svg>

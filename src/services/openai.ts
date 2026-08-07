@@ -10,6 +10,8 @@ export type ChatMessage = {
   content: string
 }
 
+import { chatToken, fetchChatEndpoint, forgetChatEndpoint } from './chatEndpoint'
+
 const ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 const DEFAULT_MODEL = 'gpt-4o-mini'
 
@@ -82,27 +84,47 @@ export async function chatCompleteRaw(
   messages: RawMessage[],
   opts?: { model?: string; tools?: Tool[] },
 ): Promise<AssistantTurn> {
-  // In local dev, route through the Vite dev proxy (/api/chat), which injects an
-  // Epic (or OpenAI) key server-side and can reach the internal Epic LLM proxy.
-  // In the deployed build there's no such server, so we call OpenAI directly.
-  const useDevProxy = import.meta.env.DEV
-  const res = useDevProxy
+  // Three ways to reach a model, in order of preference:
+  //   1. dev — the Vite proxy at /api/chat, holding an Epic key server-side.
+  //   2. installed app — the same proxy on the laptop, reached over its tunnel at
+  //      whatever address it last published (services/chatEndpoint.ts).
+  //   3. neither — a plain OpenAI key the user typed into Settings.
+  const proxyBody = JSON.stringify({ messages, tools: opts?.tools, model: opts?.model })
+  const remote = import.meta.env.DEV ? null : await fetchChatEndpoint()
+  const res = import.meta.env.DEV
     ? await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, tools: opts?.tools, model: opts?.model }),
+        body: proxyBody,
       })
-    : await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: opts?.model ?? DEFAULT_MODEL,
-          messages,
-          ...(opts?.tools ? { tools: opts.tools, tool_choice: 'auto' } : {}),
-        }),
-      })
+    : remote
+      ? await fetch(`${remote.url}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-chat-token': chatToken() },
+          body: proxyBody,
+        }).catch((err: unknown) => {
+          // A dead tunnel (laptop asleep, or restarted onto a new hostname) fails
+          // at the network layer. Drop the cached address so the next send looks
+          // the current one up instead of retrying a hostname that's gone.
+          forgetChatEndpoint()
+          throw new Error(
+            `can't reach the coach on your computer — is it awake and running dev:tunnel? (${String(err)})`,
+          )
+        })
+      : await fetch(ENDPOINT, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: opts?.model ?? DEFAULT_MODEL,
+            messages,
+            ...(opts?.tools ? { tools: opts.tools, tool_choice: 'auto' } : {}),
+          }),
+        })
 
   if (!res.ok) {
+    // A token the laptop no longer accepts also invalidates the address we looked
+    // up with it, so don't keep serving it from cache.
+    if (res.status === 401) forgetChatEndpoint()
     let detail = `${res.status} ${res.statusText}`
     try {
       const body = (await res.json()) as ErrorResponse

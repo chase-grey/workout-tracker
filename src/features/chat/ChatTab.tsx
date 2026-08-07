@@ -114,9 +114,13 @@ export function ChatTab() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, loading])
 
-  // In local dev the Vite proxy holds the key (Epic or OpenAI); in the deployed
-  // build the user must supply an OpenAI key (an Epic key can't reach the internal proxy).
-  const hasKey = import.meta.env.DEV || settings.openAiKey.trim().length > 0
+  // Three ways to be able to send (see chatCompleteRaw): the dev proxy holds the
+  // key locally, a coach token reaches that same proxy on a laptop over its
+  // tunnel, or an OpenAI key goes straight to OpenAI.
+  const hasKey =
+    import.meta.env.DEV ||
+    settings.chatToken.trim().length > 0 ||
+    settings.openAiKey.trim().length > 0
 
   const send = async () => {
     const text = input.trim()

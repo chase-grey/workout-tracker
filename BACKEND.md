@@ -51,3 +51,16 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=session` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=import` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
+| GET | `?route=chat_endpoint&secret=…` | — | `{ url, updatedAt }` |
+| POST | `?route=chat_endpoint` | `{ url, secret }` | `{ saved }` |
+
+### Chat endpoint
+
+`chat_endpoint` is a `config` row holding the address of whichever computer is currently running
+`npm run dev:tunnel`, so the installed phone app can find the chat coach behind a tunnel hostname
+that changes every run. See "Chat on your phone" in the [README](./README.md).
+
+Both directions require a `CHAT_SHARED_SECRET` **script property** (Project Settings → Script
+properties). The `/exec` URL above is public and baked into the web bundle, so without the secret
+anyone could read the live tunnel address — or publish one of their own and receive the chat. If the
+property is missing, both routes throw rather than failing open.

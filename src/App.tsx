@@ -21,7 +21,14 @@ import { MdFitnessCenter } from 'react-icons/md'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
 
-const CHAT_ENABLED = IS_DESKTOP
+/**
+ * Chat needs a proxy holding an Epic key, which the deployed site doesn't have —
+ * so it's hidden by default on a phone. A coach token means the user has pointed
+ * this device at a laptop that IS running one, which brings the tab back.
+ */
+function chatEnabled(settings: { chatToken: string }): boolean {
+  return IS_DESKTOP || settings.chatToken.trim().length > 0
+}
 
 export default function App() {
   return (
@@ -38,6 +45,7 @@ function AppShell() {
   const [tab, setTab] = useState<Tab>('today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, quickLog, settings, updateSettings } = useData()
+  const showChat = chatEnabled(settings)
   const { celebrate } = useCelebrate()
   const controls = useActiveSession()
   const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
@@ -172,7 +180,7 @@ function AppShell() {
           <>
             {tab === 'today' && <TodayTab onStart={startWorkout} onStartStretch={startStretch} />}
             {tab === 'progress' && <ProgressTab />}
-            {tab === 'chat' && CHAT_ENABLED && <ChatTab />}
+            {tab === 'chat' && showChat && <ChatTab />}
             {tab === 'settings' && <SettingsTab />}
           </>
         )}
@@ -186,7 +194,7 @@ function AppShell() {
           {controls.session ? 'back to your workout' : 'back to your stretch'}
         </button>
       )}
-      {!immersive && <BottomNav active={tab} onChange={setTab} showChat={CHAT_ENABLED} />}
+      {!immersive && <BottomNav active={tab} onChange={setTab} showChat={showChat} />}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
       {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}
     </div>
