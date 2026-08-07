@@ -878,7 +878,9 @@ function createIssue(body) {
   if (body.context) {
     parts.push('', '---', '```', String(body.context), '```')
   }
-  const labels = ['from-app']
+  // `auto-fix` is the label the local watcher (scripts/autofix.mjs) polls for, so
+  // tagging it here hands every coach-filed report straight to the auto-fixer.
+  const labels = ['from-app', 'auto-fix']
   if (area) labels.push('area:' + area)
 
   const res = UrlFetchApp.fetch('https://api.github.com/repos/' + ISSUE_REPO + '/issues', {

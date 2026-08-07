@@ -117,8 +117,10 @@ them on its own.
 Tell the coach something's broken and ask it to file it — *"the rest timer doesn't
 reset between sets, file that as a bug"*. It calls a `report_issue` tool, a grey
 "filed #N" line appears in the chat, and a GitHub issue is created on
-`chase-grey/workout-tracker` labelled `from-app`, with your userAgent, the current
-URL, and the last few chat turns attached so it's actionable.
+`chase-grey/workout-tracker` labelled `from-app` **and `auto-fix`**, with your
+userAgent, the current URL, and the last few chat turns attached so it's actionable.
+The `auto-fix` label hands it straight to the fixer below (if it's running) — so a
+coach-filed bug fixes itself with no extra step.
 
 The report goes through the **always-on Apps Script backend** (not your laptop), so
 it works even when your computer is asleep. It's gated by the same coach token as
@@ -152,8 +154,9 @@ dev:tunnel` runs the fixer alongside the tunnel.
 
 1. Put the same fine-grained PAT in `.env` as `GITHUB_ISSUE_TOKEN` — the local fixer
    additionally needs **Contents: Read/Write** on it (to push to `main`).
-2. Label an issue `auto-fix`, then run `npm run autofix` (or `AUTOFIX=1 npm run
-   dev:tunnel`).
+2. Run `npm run autofix` (or `AUTOFIX=1 npm run dev:tunnel`). Coach-filed issues
+   already carry the `auto-fix` label; to fix an issue raised any other way, add
+   that label to it yourself.
 
 `AUTOFIX_PERMISSION` in `.env` controls how hands-off it is: `acceptEdits` (default)
 lets `claude` edit files while the script handles git; `skip` passes
