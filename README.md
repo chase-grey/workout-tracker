@@ -106,6 +106,60 @@ connected — asleep, chat says it can't reach the coach and everything else in 
   installed app — handy for testing, but the address changes each run so don't install from it.
 - **No computer at all:** put a standard OpenAI key in Settings and chat talks to OpenAI directly.
 
+## Report bugs from the chat, and auto-fix them
+
+You can file a bug or feature request about the app straight from the coach chat,
+and — optionally — let the locally-installed `claude` pick those issues up and fix
+them on its own.
+
+### Reporting (always available)
+
+Tell the coach something's broken and ask it to file it — *"the rest timer doesn't
+reset between sets, file that as a bug"*. It calls a `report_issue` tool, a grey
+"filed #N" line appears in the chat, and a GitHub issue is created on
+`chase-grey/workout-tracker` labelled `from-app`, with your userAgent, the current
+URL, and the last few chat turns attached so it's actionable.
+
+The report goes through the **always-on Apps Script backend** (not your laptop), so
+it works even when your computer is asleep. It's gated by the same coach token as
+the chat, so only you can file.
+
+**One-time setup:**
+
+1. Create a GitHub **fine-grained PAT** at
+   [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta),
+   scoped to **only** `chase-grey/workout-tracker`, with **Issues: Read/Write**.
+2. Add it to the Apps Script project: **Project Settings → Script properties → Add**,
+   name `GITHUB_ISSUE_TOKEN`.
+3. Redeploy the web app so the `report_issue` route in `SimpleBackend.gs` goes live
+   (`npm run deploy:backend`, then redeploy `/exec` — see [BACKEND.md](./BACKEND.md)).
+
+### Auto-fixing (opt-in, laptop must be awake)
+
+`npm run autofix` watches for issues labelled `auto-fix` and hands each to your
+local `claude`, which fixes it in a **dedicated git worktree** (`.autofix/`, never
+your live checkout), commits straight to `main`, comments the commit SHA, and closes
+the issue. `main` auto-deploys, and the deploy workflow runs `npm test` first, so a
+change that breaks tests fails the deploy instead of shipping.
+
+It runs **locally, not as a GitHub Action**, on purpose: the `claude` here is signed
+in with an Epic work account, and that credential must never go into a public repo's
+Action secrets. The tradeoff is it only works while this machine is awake — which it
+usually is when `dev:tunnel` is up for the phone coach, so `AUTOFIX=1 npm run
+dev:tunnel` runs the fixer alongside the tunnel.
+
+**One-time setup:**
+
+1. Put the same fine-grained PAT in `.env` as `GITHUB_ISSUE_TOKEN` — the local fixer
+   additionally needs **Contents: Read/Write** on it (to push to `main`).
+2. Label an issue `auto-fix`, then run `npm run autofix` (or `AUTOFIX=1 npm run
+   dev:tunnel`).
+
+`AUTOFIX_PERMISSION` in `.env` controls how hands-off it is: `acceptEdits` (default)
+lets `claude` edit files while the script handles git; `skip` passes
+`--dangerously-skip-permissions` so it can run `npm test` itself before the commit
+(more autonomous, riskier).
+
 ## Deploy
 
 - **Frontend:** push to `main` → GitHub Actions builds and publishes to Pages
