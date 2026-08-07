@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { fetchChatEndpoint, forgetChatEndpoint } from '../../services/chatEndpoint'
-import { listIssues, type TrackedIssue } from '../../services/issues'
+import { cachedIssues, listIssues, type TrackedIssue } from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
@@ -23,8 +23,11 @@ export function SettingsTab() {
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
   // Whether a laptop has published a coach address the token can actually reach.
   const [coach, setCoach] = useState<'checking' | 'live' | 'none' | 'untried'>('untried')
-  // The bug reports filed from the coach chat, read back with their open/closed state.
-  const [issues, setIssues] = useState<'loading' | 'error' | TrackedIssue[]>('loading')
+  // The bug reports filed from the coach chat, read back with their open/closed
+  // state. Seeded from the last read so a revisit shows the history at once and
+  // only the refresh behind it is waited on; null means never fetched.
+  const [issues, setIssues] = useState<TrackedIssue[] | null>(cachedIssues)
+  const [issuesFailed, setIssuesFailed] = useState(false)
 
   useEffect(() => {
     if (!settings.chatToken.trim()) return setCoach('untried')
@@ -38,11 +41,14 @@ export function SettingsTab() {
 
   useEffect(() => {
     if (!settings.chatToken.trim()) return
-    setIssues('loading')
     let alive = true
     listIssues()
-      .then((list) => alive && setIssues(list))
-      .catch(() => alive && setIssues('error'))
+      .then((list) => {
+        if (!alive) return
+        setIssues(list)
+        setIssuesFailed(false)
+      })
+      .catch(() => alive && setIssuesFailed(true))
     return () => {
       alive = false
     }
@@ -96,10 +102,14 @@ export function SettingsTab() {
       {settings.chatToken.trim() && (
         <section className="flex flex-col gap-2">
           <label className="text-sm font-medium text-neutral-300">reported issues</label>
-          {issues === 'loading' ? (
-            <p className="text-xs text-neutral-500">loading…</p>
-          ) : issues === 'error' ? (
-            <p className="text-xs text-neutral-500">couldn’t reach the issue tracker</p>
+          {/* A failed refresh over a cached list stays quiet — the history on
+              screen is still the history. Only a cold miss has nothing to show. */}
+          {issues === null ? (
+            issuesFailed ? (
+              <p className="text-xs text-neutral-500">couldn’t reach the issue tracker</p>
+            ) : (
+              <p className="text-xs text-neutral-500">loading…</p>
+            )
           ) : issues.length === 0 ? (
             <p className="text-xs text-neutral-500">no issues filed yet</p>
           ) : (

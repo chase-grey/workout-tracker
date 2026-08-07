@@ -6,6 +6,7 @@ import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { LockedProjections } from '../lib/goalLock'
+import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
 
@@ -18,6 +19,7 @@ const KEYS = {
   cacheCalories: 'wt.cache.calories',
   cacheMeasurements: 'wt.cache.measurements',
   cacheDurations: 'wt.cache.durations',
+  cacheIssues: 'wt.cache.issues',
   // v2 dropped the pooled rest average (seconds) for a prescribed-rest ratio.
   // A fresh key rather than a migration: the v1 number is a duration, and there
   // is no way to recover what it was a fraction of, so it has to be re-learned.
@@ -180,6 +182,11 @@ export const storage = {
 
   loadDurations: (): SessionDuration[] => read(KEYS.cacheDurations, []),
   saveDurations: (entries: SessionDuration[]) => write(KEYS.cacheDurations, entries),
+
+  // null (not []) when nothing has ever been fetched, so Settings can tell an
+  // empty tracker apart from a cold cache it should show a spinner for.
+  loadIssues: (): TrackedIssue[] | null => read<TrackedIssue[] | null>(KEYS.cacheIssues, null),
+  saveIssues: (issues: TrackedIssue[]) => write(KEYS.cacheIssues, issues),
 
   loadExerciseAverages: (): ExerciseAverages =>
     normalizeExerciseAverages(read<unknown>(KEYS.cacheExerciseAverages, null)),

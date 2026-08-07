@@ -2,15 +2,25 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Isolate reportIssue from the network + Settings: stub the backend call and the
 // token lookup so we can assert exactly what gets posted.
-const { reportIssueMock, listIssuesMock, tokenRef } = vi.hoisted(() => ({
+const { reportIssueMock, listIssuesMock, tokenRef, cacheRef } = vi.hoisted(() => ({
   reportIssueMock: vi.fn(),
   listIssuesMock: vi.fn(),
   tokenRef: { value: '' },
+  // Stands in for localStorage, which the node test env doesn't have.
+  cacheRef: { value: null as unknown },
 }))
 vi.mock('./api', () => ({ api: { reportIssue: reportIssueMock, listIssues: listIssuesMock } }))
 vi.mock('./chatEndpoint', () => ({ chatToken: () => tokenRef.value }))
+vi.mock('./storage', () => ({
+  storage: {
+    loadIssues: () => cacheRef.value,
+    saveIssues: (v: unknown) => {
+      cacheRef.value = v
+    },
+  },
+}))
 
-import { reportIssue, listIssues } from './issues'
+import { reportIssue, listIssues, cachedIssues } from './issues'
 
 beforeEach(() => {
   tokenRef.value = 'secret-tok'
@@ -19,6 +29,7 @@ beforeEach(() => {
     url: 'https://github.com/chase-grey/workout-tracker/issues/42',
   })
   listIssuesMock.mockReset().mockResolvedValue([])
+  cacheRef.value = null
   // node test env has no DOM; collectContext reads these.
   vi.stubGlobal('navigator', { userAgent: 'test-agent' })
   vi.stubGlobal('location', { href: 'https://app.example/#/chat' })
@@ -78,5 +89,39 @@ describe('listIssues', () => {
     expect(listIssuesMock).toHaveBeenCalledWith('secret-tok')
     expect(res).toHaveLength(1)
     expect(res[0]).toMatchObject({ number: 7, state: 'open' })
+  })
+
+  it('caches what it read, so the next visit paints before the refresh lands', async () => {
+    expect(cachedIssues()).toBeNull()
+    listIssuesMock.mockResolvedValue([
+      { number: 7, title: 'timer broke', url: 'u', state: 'open', createdAt: 't' },
+    ])
+    await listIssues()
+    expect(cachedIssues()).toEqual([
+      { number: 7, title: 'timer broke', url: 'u', state: 'open', createdAt: 't' },
+    ])
+  })
+
+  it('replaces the cache rather than merging, so a closed issue stops reading open', async () => {
+    listIssuesMock.mockResolvedValue([
+      { number: 7, title: 'timer broke', url: 'u', state: 'open', createdAt: 't' },
+    ])
+    await listIssues()
+    listIssuesMock.mockResolvedValue([
+      { number: 7, title: 'timer broke', url: 'u', state: 'closed', createdAt: 't', closedAt: 'c' },
+    ])
+    await listIssues()
+    expect(cachedIssues()).toHaveLength(1)
+    expect(cachedIssues()?.[0]).toMatchObject({ number: 7, state: 'closed' })
+  })
+
+  it('leaves the cache alone when the fetch fails', async () => {
+    listIssuesMock.mockResolvedValue([
+      { number: 7, title: 'timer broke', url: 'u', state: 'open', createdAt: 't' },
+    ])
+    await listIssues()
+    listIssuesMock.mockRejectedValue(new Error('offline'))
+    await expect(listIssues()).rejects.toThrow('offline')
+    expect(cachedIssues()).toHaveLength(1)
   })
 })

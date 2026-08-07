@@ -12,6 +12,7 @@
  */
 import { api } from './api'
 import { chatToken } from './chatEndpoint'
+import { storage } from './storage'
 
 export type IssueArea = 'plan' | 'chat' | 'timer' | 'history' | 'other'
 
@@ -69,14 +70,31 @@ export async function reportIssue(
 }
 
 /**
+ * The last list read back from the tracker, or null if one never has been.
+ * Settings paints this immediately and refreshes behind it: the round trip goes
+ * through Apps Script to the GitHub API, which is slow enough that re-fetching
+ * from scratch on every visit shows a spinner over issues that haven't changed
+ * in weeks.
+ */
+export function cachedIssues(): TrackedIssue[] | null {
+  return storage.loadIssues()
+}
+
+/**
  * The issues filed from the app, newest first, with their open/closed state.
  * Gated by the coach token like reportIssue — the backend holds the GitHub token
  * and the repo's issues can't be read from the public bundle without it.
+ *
+ * A successful read replaces the cache wholesale rather than merging: state
+ * flips to closed and titles get edited on GitHub, so the server copy is the
+ * only correct one.
  */
 export async function listIssues(): Promise<TrackedIssue[]> {
   const secret = chatToken()
   if (!secret) {
     throw new Error('add your coach token in Settings to see filed issues.')
   }
-  return api.listIssues(secret)
+  const list = await api.listIssues(secret)
+  storage.saveIssues(list)
+  return list
 }
