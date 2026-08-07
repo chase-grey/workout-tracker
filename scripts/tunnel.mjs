@@ -30,6 +30,53 @@ function resolveCloudflared() {
   return 'cloudflared' // fall back to PATH; spawn reports ENOENT if it isn't there
 }
 
+/**
+ * Kill this project's leftovers from a previous run before starting.
+ *
+ * The shutdown handler below covers Ctrl+C, but nothing runs when the parent is
+ * killed outright — closing the terminal, or a tool that SIGKILLs the wrapper.
+ * Then the dev server keeps port 5173 and the next run dies on "already in use",
+ * with a stale public tunnel still pointed at it. Since a hard kill can't be
+ * intercepted, reclaim on the way in instead.
+ *
+ * Matching is deliberately narrow: only a vite serving THIS checkout on THIS
+ * port, and only a cloudflared tunnelling that same port. Other projects' dev
+ * servers and tunnels — often several here — must not be touched.
+ */
+function reclaimStaleProcesses() {
+  if (process.platform !== 'win32') return // POSIX kills the tree with the parent
+  const root = process.cwd().toLowerCase()
+  const script = `
+    Get-CimInstance Win32_Process |
+      Where-Object { $_.ProcessId -ne ${process.pid} -and $_.CommandLine } |
+      Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress`
+  let procs
+  try {
+    const out = spawnSync('powershell', ['-NoProfile', '-Command', script], {
+      encoding: 'utf8',
+      windowsHide: true,
+    }).stdout
+    procs = JSON.parse(out || '[]')
+  } catch {
+    return // can't enumerate; the port check below will report the conflict
+  }
+  if (!Array.isArray(procs)) procs = [procs]
+
+  const stale = procs.filter((p) => {
+    const cmd = String(p?.CommandLine || '').toLowerCase()
+    const ourVite =
+      cmd.includes(path.join(root, 'node_modules', 'vite', 'bin', 'vite.js').toLowerCase()) &&
+      cmd.includes(`--port ${PORT}`)
+    const ourTunnel = cmd.includes('cloudflared') && cmd.includes(`--url http://localhost:${PORT}`)
+    return ourVite || ourTunnel
+  })
+
+  for (const p of stale) {
+    console.log(`  Reclaiming a leftover process from an earlier run (pid ${p.ProcessId}).`)
+    spawnSync('taskkill', ['/pid', String(p.ProcessId), '/T', '/F'], { stdio: 'ignore' })
+  }
+}
+
 const children = []
 function run(command, args, opts = {}) {
   const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], shell: false, ...opts })
@@ -61,6 +108,8 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP']) {
   })
 }
 process.on('exit', shutdown)
+
+reclaimStaleProcesses()
 
 // --- the dev server -------------------------------------------------------
 // Run Vite's JS entry under this Node rather than the `vite` shim: Node on
