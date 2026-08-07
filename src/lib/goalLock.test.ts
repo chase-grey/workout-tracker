@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { project } from './predictions'
 import {
   addDays,
-  adoptDecay,
+  adoptModel,
   commitRange,
   expectedAt,
   lockProjection,
@@ -80,6 +80,21 @@ describe('lockProjection', () => {
 
   it('refuses to lock a projection going nowhere', () => {
     expect(lockProjection('squat', project([], 200), TODAY)).toBeNull()
+  })
+
+  it('carries the taper it was dated through, and only when it tapers', () => {
+    // A tapering goal's line needs to know how far the pace was let fall; a
+    // straight one isn't shaped by it, so it stores nothing rather than an inert
+    // number (see floorFor).
+    const tapered = lockProjection(
+      'split',
+      project(CLIMBING, 140, TODAY, { decayPerWeek: 0.9, taperSpentWeeks: 40 }),
+      TODAY,
+    )!
+    expect(tapered.paceFloorFraction).toBe(1)
+
+    const straight = lockProjection('squat', project(CLIMBING, 140, TODAY), TODAY)!
+    expect(straight.paceFloorFraction).toBeUndefined()
   })
 })
 
@@ -349,9 +364,9 @@ describe('decayed locks', () => {
   })
 })
 
-describe('adoptDecay', () => {
+describe('adoptModel', () => {
   it('bends a pre-decay lock without moving its start, target or eta', () => {
-    const bent = adoptDecay(CLIMB, 0.95)
+    const bent = adoptModel(CLIMB, 0.95)
     expect(bent.decayPerWeek).toBe(0.95)
     expect(bent.startValue).toBe(CLIMB.startValue)
     expect(bent.target).toBe(CLIMB.target)
@@ -362,7 +377,7 @@ describe('adoptDecay', () => {
 
   it('re-bends a lock frozen at an older decay to the goal\'s current one', () => {
     const already: LockedProjection = { ...CLIMB, decayPerWeek: 0.99 }
-    const bent = adoptDecay(already, 0.95)
+    const bent = adoptModel(already, 0.95)
     expect(bent.decayPerWeek).toBe(0.95)
     expect(bent.startValue).toBe(already.startValue)
     expect(bent.target).toBe(already.target)
@@ -371,7 +386,25 @@ describe('adoptDecay', () => {
 
   it('leaves a lock alone when it already matches, or the goal projects straight', () => {
     const already: LockedProjection = { ...CLIMB, decayPerWeek: 0.95 }
-    expect(adoptDecay(already, 0.95)).toBe(already)
-    expect(adoptDecay(CLIMB, undefined)).toBe(CLIMB)
+    expect(adoptModel(already, 0.95)).toBe(already)
+    expect(adoptModel(CLIMB, undefined)).toBe(CLIMB)
+  })
+
+  it('straightens a lock whose goal has since spent its taper on training age', () => {
+    // A lock frozen when the taper still ran full bends down to a fifth of its
+    // pace. Once the goal reads that taper as already spent, the same commitment
+    // has to be drawn straight — otherwise the line asks for a front-loaded climb
+    // the date it's drawn to was never computed from.
+    const tapered: LockedProjection = { ...CLIMB, etaDate: addDays('2026-01-01', 500), decayPerWeek: 0.9 }
+    const straightened = adoptModel(tapered, 0.9, 1)
+    expect(straightened.paceFloorFraction).toBe(1)
+    expect(straightened.etaDate).toBe(tapered.etaDate)
+    const midway = addDays('2026-01-01', 250)
+    expect(expectedAt(straightened, midway)).toBeLessThan(expectedAt(tapered, midway))
+    // Straight means exactly half the climb at half the span.
+    expect(expectedAt(straightened, midway)).toBeCloseTo(
+      (CLIMB.startValue + CLIMB.target) / 2,
+      1,
+    )
   })
 })

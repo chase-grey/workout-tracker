@@ -14,7 +14,8 @@ import { exerciseSeries, type Point } from './progress'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
-import { project, type Projection } from './predictions'
+import { project, type Projection, type TrendWindow } from './predictions'
+import { parseISODate } from './dates'
 
 /**
  * Weekly decay of the gain rate strength projections assume (see
@@ -44,6 +45,30 @@ export const STRENGTH_GAIN_DECAY = 0.93
  * they should: reachable, but years of it at this pace.
  */
 export const FLEX_GAIN_DECAY = 0.9
+
+/**
+ * How much history the flexibility ladders read their pace from.
+ *
+ * The default fortnight (see predictions.TREND_WINDOW) is right for a metric that
+ * moves every session and wrong for range of motion, which is measured warm, a
+ * couple of times a week, and swings a few degrees on the warm-up alone. Two weeks
+ * of that is three or four readings whose spread is mostly how long the hips had
+ * to settle, so the fitted pace lurches between "several degrees a week" and
+ * "nothing" depending on which fortnight you catch — and the taper it feeds then
+ * scales the whole ladder by that noise.
+ *
+ * Six weeks is enough readings for the warm-up scatter to average out, and short
+ * enough to still be the pace you're on rather than the pace you were on. It also
+ * makes the pace the taper carries forward one a longer history actually supports
+ * (see predictions.paceFloorFraction), which is the point: a projection read off a
+ * sustained six-week pace is worth straightening out, where one read off a lucky
+ * fortnight is not.
+ */
+export const FLEX_TREND_WINDOW: TrendWindow = {
+  windowDays: 42,
+  minPoints: 3,
+  minSpanDays: 10,
+}
 
 /**
  * The fastest weekly bodyweight change the goals will project against, in lbs.
@@ -127,6 +152,40 @@ export type GoalSpec = {
    * measurement with no weekly ceiling worth naming.
    */
   capPerWeek?: number
+  /**
+   * How much history this goal's pace is read from (see FLEX_TREND_WINDOW).
+   * Omitted for goals that use the default window (predictions.TREND_WINDOW).
+   */
+  window?: TrendWindow
+  /**
+   * Spend the taper against how long this goal's series has been logged rather
+   * than against week zero (see predictions.paceFloorFraction). Set where the
+   * series is a continuous record of training the capability, so its span is a
+   * fair read on training age — the flexibility ladders, where every rung shares
+   * one series that starts the day the stretching did.
+   *
+   * Left off where the span isn't that: a 1RM series starts at whichever lift was
+   * first logged, which says when the *logging* started, not when the lifting did.
+   */
+  taperFromHistory?: boolean
+}
+
+/**
+ * Weeks from a series' first reading to its last — the training age the taper is
+ * spent against when the goal asks for it (see GoalSpec.taperFromHistory).
+ *
+ * The first logged reading is a floor on how long the capability has been trained,
+ * not a measure of it: someone who stretched for a year before logging a split
+ * reads as new and gets a fuller taper than they've earned. Erring that way is
+ * deliberate — it makes the projection conservative for the one case it can't see,
+ * rather than optimistic.
+ */
+function trainingAgeWeeks(points: Point[]): number {
+  if (points.length < 2) return 0
+  const dates = points.map((p) => p.date).sort((a, b) => a.localeCompare(b))
+  const first = parseISODate(dates[0]).getTime()
+  const last = parseISODate(dates[dates.length - 1]).getTime()
+  return Math.max(0, (last - first) / (7 * 86_400_000))
 }
 
 /**
@@ -178,12 +237,18 @@ function reachedPoint(goal: GoalSpec): Point | undefined {
  * says it is, while the rung that same best had already cleared stayed cleared.
  * Strength and bodyweight goals keep the newest reading: you are not squatting 300
  * because you did once.
+ *
+ * A goal that declares {@link GoalSpec.taperFromHistory} spends its taper against
+ * the age of its own series, so a long log projects close to the pace it's holding
+ * instead of being charged a beginner's taper it has already worked through.
  */
 export function projectGoal(goal: GoalSpec, today?: Date): Projection {
   return project(goal.points, goal.target, today, {
+    window: goal.window,
     decayPerWeek: goal.decayPerWeek,
     capPerWeek: goal.capPerWeek,
     bestOf: goal.milestone ? (goal.direction === 'up' ? 'max' : 'min') : undefined,
+    taperSpentWeeks: goal.taperFromHistory ? trainingAgeWeeks(goal.points) : 0,
   })
 }
 
@@ -242,6 +307,8 @@ export function buildGoals({
     direction: 'up',
     milestone: true,
     decayPerWeek: FLEX_GAIN_DECAY,
+    window: FLEX_TREND_WINDOW,
+    taperFromHistory: true,
   }))
   const tailorsGoals: GoalSpec[] = TAILORS_GOALS.map((deg): GoalSpec => ({
     id: `tailors_${deg}`,
@@ -253,6 +320,8 @@ export function buildGoals({
     direction: 'up',
     milestone: true,
     decayPerWeek: FLEX_GAIN_DECAY,
+    window: FLEX_TREND_WINDOW,
+    taperFromHistory: true,
   }))
 
   // 999 stands in for "no bodyweight logged yet", so a moving target can't be 0

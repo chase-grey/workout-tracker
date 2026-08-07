@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { isPaceCapped, project, trendPoints, weeklyTarget, weeksToClose, TREND_WINDOW } from './predictions'
+import {
+  isPaceCapped,
+  paceFloorFraction,
+  project,
+  trendPoints,
+  weeklyTarget,
+  weeksToClose,
+  PACE_FLOOR,
+  TREND_WINDOW,
+} from './predictions'
 
 describe('project', () => {
   it('increasing bodyweight trending toward a higher target is on track', () => {
@@ -219,6 +228,44 @@ describe('weeksToClose', () => {
   it('returns null when flat or pointed away from the gap', () => {
     expect(weeksToClose(25, 0, 0.9)).toBeNull()
     expect(weeksToClose(25, -5, 0.9)).toBeNull()
+  })
+
+  it('projects straight once there is no taper left to spend', () => {
+    // A floor of 1 is a pace already at the bottom of its curve: nothing left to
+    // decay, so the gap closes at the pace measured.
+    expect(weeksToClose(60, 5, 0.9, 1)).toBe(12)
+    expect(weeksToClose(500, 5, 0.9, 1)).toBe(100)
+  })
+
+  it('tapers only the remainder for a pace partway down its curve', () => {
+    // Between the two: further out than a straight line, nearer than a full taper.
+    const partway = weeksToClose(60, 5, 0.9, 0.5)!
+    expect(partway).toBeGreaterThan(weeksToClose(60, 5, 0.9, 1)!)
+    expect(partway).toBeLessThan(weeksToClose(60, 5, 0.9)!)
+  })
+})
+
+describe('paceFloorFraction', () => {
+  it('takes the full taper for a series with no history behind it', () => {
+    expect(paceFloorFraction(0.9, 0)).toBe(PACE_FLOOR)
+    expect(paceFloorFraction(0.9)).toBe(PACE_FLOOR)
+  })
+
+  it('leaves no taper for a series already past the bend', () => {
+    // 0.9^15.3 is the floor, so a log that deep has worked through the whole
+    // taper: its measured pace *is* the floor pace and projects straight.
+    expect(paceFloorFraction(0.9, 16)).toBe(1)
+    expect(paceFloorFraction(0.9, 60)).toBe(1)
+  })
+
+  it('leaves the remainder for a series partway through', () => {
+    const half = paceFloorFraction(0.9, 7.6)
+    expect(half).toBeGreaterThan(PACE_FLOOR)
+    expect(half).toBeLessThan(1)
+  })
+
+  it('is the full floor for a model that does not taper at all', () => {
+    expect(paceFloorFraction(1, 40)).toBe(PACE_FLOOR)
   })
 })
 

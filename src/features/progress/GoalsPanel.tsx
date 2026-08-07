@@ -26,7 +26,7 @@ import {
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import type { SixPackStatus } from '../../services/storage'
 import {
-  adoptDecay,
+  adoptModel,
   commitRange,
   lockProjection,
   lockProjectionByDate,
@@ -618,7 +618,8 @@ export function GoalsPanel({ months }: { months: number | null }) {
 
   const locked = useMemo(() => settings.lockedGoals ?? {}, [settings.lockedGoals])
 
-  // Keep existing locks drawn against the goal's current curve shape. Locking
+  // Keep existing locks drawn against the goal's current curve shape — its decay
+  // and how much taper the series has left to spend (see adoptModel). Locking
   // itself is a deliberate act now (see lockIn) — a goal within reach lights up
   // and waits to be committed rather than snapshotting itself. This effect only
   // bends locks the user already made: a lock frozen before strength projections
@@ -631,7 +632,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
     for (const g of goals) {
       const existing = next[g.id]
       if (!existing) continue
-      const bent = adoptDecay(existing, g.decayPerWeek)
+      const bent = adoptModel(existing, g.decayPerWeek, projections.get(g.id)?.paceFloorFraction)
       if (bent !== existing) {
         next[g.id] = bent
         changed = true

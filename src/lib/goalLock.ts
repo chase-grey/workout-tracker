@@ -18,7 +18,7 @@
  */
 
 import { parseISODate, toISODate } from './dates'
-import { cumulativeGain, weeksToClose, type Projection } from './predictions'
+import { cumulativeGain, weeksToClose, PACE_FLOOR, type Projection } from './predictions'
 
 /** A goal enters lock-in once its projected ETA is this close. */
 export const LOCK_HORIZON_MONTHS = 6
@@ -53,6 +53,15 @@ export type LockedProjection = {
    * for goals that project straight; their line is straight too.
    */
   decayPerWeek?: number
+  /**
+   * How far the pace was allowed to taper when this ETA was computed, as a share
+   * of the pace at lock time (see predictions.paceFloorFraction). Carried for the
+   * same reason as `decayPerWeek`: the taper a long-trained series has left is a
+   * part of the curve its date came off, so a line drawn without it bends harder
+   * than the date it's drawn to. Absent on locks frozen before training age was
+   * read, which fall back to the full taper (see {@link floorOf}).
+   */
+  paceFloorFraction?: number
 }
 
 export type LockedProjections = Record<string, LockedProjection>
@@ -78,20 +87,50 @@ function decayOf(lock: LockedProjection): number {
 }
 
 /**
- * Adopt a goal's current decay into a lock, keeping the commitment (start,
- * target, ETA) but bending the line between them the way the goal now says gains
- * taper. The decay is a model assumption, not part of the commitment, so a
- * lock always reads with the goal's latest one — this covers both a lock frozen
- * before decay shipped and a lock frozen at an older decay value that's since
- * been retuned. Returns the lock untouched when it already matches, or when the
- * goal projects straight (no decay), so callers can run it on every lock.
+ * How far the lock's line lets its pace taper (see predictions.paceFloorFraction).
+ * Locks frozen before training age was read carry none, and take the full taper —
+ * which is the curve their date was actually computed off, so they keep reading
+ * consistently until {@link adoptModel} refreshes them.
  */
-export function adoptDecay(
+function floorOf(lock: LockedProjection): number {
+  return lock.paceFloorFraction ?? PACE_FLOOR
+}
+
+/**
+ * The floor worth storing on a lock: only a line that tapers is shaped by one, so
+ * a straight goal's lock is left without it rather than carrying an inert number
+ * into stored settings.
+ */
+function floorFor(proj: Projection): number | undefined {
+  return proj.decayPerWeek < 1 ? proj.paceFloorFraction : undefined
+}
+
+/**
+ * Adopt a goal's current curve into a lock, keeping the commitment (start,
+ * target, ETA) but bending the line between them the way the goal now says gains
+ * taper — both the weekly decay and how much taper is left to spend.
+ *
+ * The curve is a model assumption, not part of the commitment, so a lock always
+ * reads with the goal's latest one: this covers a lock frozen before decay
+ * shipped, one frozen at an older decay value since retuned, and one frozen
+ * before the taper was spent against training age (whose line would otherwise
+ * keep bending down to a fifth of a pace the goal now projects straight through).
+ * Returns the lock untouched when it already matches, so callers can run it on
+ * every lock.
+ */
+export function adoptModel(
   lock: LockedProjection,
   decayPerWeek: number | undefined,
+  paceFloorFraction?: number,
 ): LockedProjection {
-  if (decayPerWeek == null || lock.decayPerWeek === decayPerWeek) return lock
-  return { ...lock, decayPerWeek }
+  const nextDecay = decayPerWeek ?? lock.decayPerWeek
+  // A straight lock isn't shaped by a floor, so it doesn't take one on (see floorFor).
+  const nextFloor =
+    nextDecay != null && nextDecay < 1
+      ? (paceFloorFraction ?? lock.paceFloorFraction)
+      : lock.paceFloorFraction
+  if (nextDecay === lock.decayPerWeek && nextFloor === lock.paceFloorFraction) return lock
+  return { ...lock, decayPerWeek: nextDecay, paceFloorFraction: nextFloor }
 }
 
 /** Days from `from` to `to` (negative when `to` precedes `from`). */
@@ -138,6 +177,7 @@ export function lockProjection(
     etaDate: proj.etaDate,
     slopePerWeek: proj.slopePerWeek,
     decayPerWeek: proj.decayPerWeek,
+    paceFloorFraction: floorFor(proj),
   }
 }
 
@@ -200,6 +240,7 @@ export function lockProjectionByDate(
     etaDate,
     slopePerWeek: round1((proj.target - proj.current) / weeks),
     decayPerWeek: proj.decayPerWeek,
+    paceFloorFraction: floorFor(proj),
   }
 }
 
@@ -225,7 +266,9 @@ export function expectedAt(lock: LockedProjection, date: string): number {
   if (elapsed >= span) return round1(lock.target)
 
   const r = decayOf(lock)
-  const fraction = cumulativeGain(elapsed / 7, r) / cumulativeGain(span / 7, r)
+  const floor = floorOf(lock)
+  const fraction =
+    cumulativeGain(elapsed / 7, r, floor) / cumulativeGain(span / 7, r, floor)
   return round1(lock.startValue + (lock.target - lock.startValue) * fraction)
 }
 
@@ -302,7 +345,7 @@ export function paceAgainstLock(
   const sinceLockPerWeek = weeksSinceLock > 0 ? (actual - lock.startValue) / weeksSinceLock : 0
   const realSlopePerWeek = recentSlopePerWeek != null ? recentSlopePerWeek : sinceLockPerWeek
   const remaining = lock.target - actual
-  const weeksLeft = weeksToClose(remaining, realSlopePerWeek, decayOf(lock))
+  const weeksLeft = weeksToClose(remaining, realSlopePerWeek, decayOf(lock), floorOf(lock))
   let revisedEta: string | null = null
   if (weeksLeft != null) {
     const daysLeft = Math.round(weeksLeft * 7)

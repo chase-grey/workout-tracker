@@ -21,6 +21,12 @@ export type Projection = {
   onTrack: boolean // true iff etaWeeks is a positive finite number
   /** Weekly decay of the gain rate the ETA assumes (1 = none, i.e. straight line). */
   decayPerWeek: number
+  /**
+   * How far the ETA let the pace taper, as a share of the measured pace — the
+   * taper left after what training age has already spent (see
+   * {@link paceFloorFraction}). 1 when there was none left, so the ETA is straight.
+   */
+  paceFloorFraction: number
   /** What the slope was read from. */
   basis: ProjectionBasis
 }
@@ -186,56 +192,98 @@ function fitSlopePerWeek(points: { date: string; value: number }[]): number {
  * strength, three and a half for flexibility — so every goal near enough to
  * commit to projects exactly as it did before, and the ones a ways out get an
  * honest, distant date instead of a blank.
+ *
+ * This is the floor for a series being read at the *start* of its training, which
+ * is the only time a full taper is the right thing to apply — see
+ * {@link paceFloorFraction}.
  */
 export const PACE_FLOOR = 0.2
 
-/** Weeks of taper before the pace bottoms out at {@link PACE_FLOOR}. */
-function weeksToFloor(decayPerWeek: number): number {
-  return Math.log(PACE_FLOOR) / Math.log(decayPerWeek)
+/**
+ * How far a projection may still taper, as a share of the pace just measured, for
+ * a series that has already been training for `taperSpentWeeks`.
+ *
+ * The taper models cheap early adaptation being spent — so it has to be measured
+ * from when the training started, not from whenever the projection happens to be
+ * run. Applied from week zero every time, it charges that same first-months
+ * discount against a pace that has already outlived it: a log eight months deep
+ * has spent the easy range, its fitted pace *is* the grind underneath, and
+ * decaying that by another tenth a week down to a fifth prices the far rungs at
+ * one fifth of a pace that was already the floor. The taper gets counted twice
+ * and the ladder reads in years.
+ *
+ * Reading the floor off training age fixes that, because the pace observed at
+ * week T of a decay-r curve floored at {@link PACE_FLOOR} is already r^T of where
+ * it began: what's left to taper is only the distance from there down to the
+ * floor. A brand-new series still gets the full PACE_FLOOR taper; one already
+ * past the bend (~15 weeks at 0.9, ~23 at 0.93) gets 1 — a straight line at the
+ * pace it's actually holding — and the ones in between taper the remainder.
+ */
+export function paceFloorFraction(decayPerWeek: number, taperSpentWeeks = 0): number {
+  if (decayPerWeek >= 1 || taperSpentWeeks <= 0) return PACE_FLOOR
+  // Rounded because it's stored on a lock and compared for equality there (see
+  // goalLock.adoptModel) — a bare float would churn the setting on every rebuild.
+  return Math.min(1, round3(PACE_FLOOR / Math.pow(decayPerWeek, taperSpentWeeks)))
+}
+
+/** Weeks of taper before the pace bottoms out at `floorFraction` of where it started. */
+function weeksToFloor(decayPerWeek: number, floorFraction: number): number {
+  return Math.log(floorFraction) / Math.log(decayPerWeek)
 }
 
 /**
  * Total gain after `weeks` at a starting pace of 1 per week, tapering by
- * `decayPerWeek` each week until it bottoms out at {@link PACE_FLOOR}. Multiply
- * by a real pace for real units; a decay of 1 or more is just `weeks`.
+ * `decayPerWeek` each week until it bottoms out at `floorFraction` of that
+ * starting pace (see {@link paceFloorFraction}). Multiply by a real pace for real
+ * units; a decay of 1 or more is just `weeks`, and so is a floor of 1.
  *
  * Shared with the locked lines (see goalLock.expectedAt) so a commitment is
  * drawn and judged through the same curve its ETA was read off.
  */
-export function cumulativeGain(weeks: number, decayPerWeek: number): number {
+export function cumulativeGain(
+  weeks: number,
+  decayPerWeek: number,
+  floorFraction: number = PACE_FLOOR,
+): number {
   if (decayPerWeek >= 1) return weeks
-  const bend = weeksToFloor(decayPerWeek)
+  const bend = weeksToFloor(decayPerWeek, floorFraction)
   if (weeks <= bend) return (1 - Math.pow(decayPerWeek, weeks)) / (1 - decayPerWeek)
-  return (1 - PACE_FLOOR) / (1 - decayPerWeek) + PACE_FLOOR * (weeks - bend)
+  return (1 - floorFraction) / (1 - decayPerWeek) + floorFraction * (weeks - bend)
 }
 
 /**
  * Weeks to close a `gap` starting at `slopePerWeek`, letting the weekly gain
  * decay by `decayPerWeek` each week (a straight line when it's 1) down to
- * {@link PACE_FLOOR} of where it started.
+ * `floorFraction` of where it started (see {@link paceFloorFraction}).
  *
  * Real strength gains taper — the first pounds come quickly and the last ones
  * grind — so extrapolating this week's pace in a straight line arrives too soon
  * and draws a line too steep to actually hold. Modelling the gain rate as
  * geometrically decaying (week n adds slope·rⁿ) bends the projection the way a
  * lifter's progress actually bends, and the floor keeps that bend from flattening
- * into a wall the far goals can never get over.
+ * into a wall the far goals can never get over. A floor of 1 is a pace with no
+ * taper left to spend, which projects straight.
  *
  * Returns null only when there's no direction to project: a flat pace, or one
  * pointed away from the gap. Otherwise a positive number of weeks — distant, for
  * a goal a long way off at a slow pace, but a real date.
  */
-export function weeksToClose(gap: number, slopePerWeek: number, decayPerWeek = 1): number | null {
+export function weeksToClose(
+  gap: number,
+  slopePerWeek: number,
+  decayPerWeek = 1,
+  floorFraction: number = PACE_FLOOR,
+): number | null {
   if (slopePerWeek === 0 || Math.sign(gap) !== Math.sign(slopePerWeek)) return null
-  if (decayPerWeek >= 1) return gap / slopePerWeek
+  if (decayPerWeek >= 1 || floorFraction >= 1) return gap / slopePerWeek
   // While the taper is still running, cumulative gain over w weeks is
   // slope·(1 − rʷ)/(1 − r); solve it for w.
   const ratio = 1 - (gap * (1 - decayPerWeek)) / slopePerWeek // = rʷ, until the floor
-  if (ratio >= PACE_FLOOR) return Math.log(ratio) / Math.log(decayPerWeek)
+  if (ratio >= floorFraction) return Math.log(ratio) / Math.log(decayPerWeek)
   // Past everything the taper alone can buy: the rest comes at the floor pace.
-  const bend = weeksToFloor(decayPerWeek)
-  const bought = cumulativeGain(bend, decayPerWeek) * slopePerWeek
-  return bend + (gap - bought) / (slopePerWeek * PACE_FLOOR)
+  const bend = weeksToFloor(decayPerWeek, floorFraction)
+  const bought = cumulativeGain(bend, decayPerWeek, floorFraction) * slopePerWeek
+  return bend + (gap - bought) / (slopePerWeek * floorFraction)
 }
 
 export type ProjectOptions = {
@@ -243,6 +291,13 @@ export type ProjectOptions = {
   window?: TrendWindow
   /** Weekly decay of the gain rate for the ETA (see weeksToClose). 1 = straight line. */
   decayPerWeek?: number
+  /**
+   * Weeks of taper the series has already spent by the time it's being projected —
+   * its training age (see {@link paceFloorFraction}). Omitted (0) for a series
+   * whose history says nothing about how long the capability has been trained, and
+   * which therefore takes the full taper.
+   */
+  taperSpentWeeks?: number
   /** Ceiling on the pace the ETA is projected from (see capSlope). null = unbounded. */
   capPerWeek?: number | null
   /**
@@ -258,8 +313,17 @@ export function project(
   points: { date: string; value: number }[],
   target: number,
   today: Date = new Date(),
-  { window = TREND_WINDOW, decayPerWeek = 1, capPerWeek = null, bestOf }: ProjectOptions = {},
+  {
+    window = TREND_WINDOW,
+    decayPerWeek = 1,
+    capPerWeek = null,
+    bestOf,
+    taperSpentWeeks = 0,
+  }: ProjectOptions = {},
 ): Projection {
+  // What's left of the taper after the training age has spent its share.
+  const floorFraction = paceFloorFraction(decayPerWeek, taperSpentWeeks)
+
   if (points.length === 0) {
     return {
       slopePerWeek: 0,
@@ -271,6 +335,7 @@ export function project(
       etaDate: null,
       onTrack: false,
       decayPerWeek,
+      paceFloorFraction: floorFraction,
       basis: { points: 0, spanDays: 0, thin: true },
     }
   }
@@ -304,6 +369,7 @@ export function project(
       etaDate: toISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate())),
       onTrack: true,
       decayPerWeek,
+      paceFloorFraction: floorFraction,
       basis,
     }
   }
@@ -311,7 +377,7 @@ export function project(
   // Trending toward the target and projected to reach it, once the gain rate is
   // allowed to decay (a straight line when decayPerWeek is 1). null otherwise:
   // flat, moving away, or gaining too slowly to ever close the gap at this pace.
-  const etaWeeks = weeksToClose(diff, slopePerWeek, decayPerWeek)
+  const etaWeeks = weeksToClose(diff, slopePerWeek, decayPerWeek, floorFraction)
   if (etaWeeks != null) {
     return {
       slopePerWeek,
@@ -323,6 +389,7 @@ export function project(
       etaDate: addDaysISO(today, Math.round(etaWeeks * 7)),
       onTrack: true,
       decayPerWeek,
+      paceFloorFraction: floorFraction,
       basis,
     }
   }
@@ -338,6 +405,7 @@ export function project(
     etaDate: null,
     onTrack: false,
     decayPerWeek,
+    paceFloorFraction: floorFraction,
     basis,
   }
 }

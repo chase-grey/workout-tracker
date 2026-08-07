@@ -270,6 +270,79 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     expect(at('split_180').etaWeeks!).toBeGreaterThan(at('split_150').etaWeeks!)
   })
 
+  it('spends the flex taper against how long the log has been running', () => {
+    // The same six weeks of readings, once as the whole log and once as the tail
+    // of a year of them. The pace fitted is identical — only the training age
+    // behind it differs — so the taper is the only thing that can move the date.
+    const recent: FlexEntry[] = [
+      { date: '2026-01-10', splitDeg: 104, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-01-24', splitDeg: 106, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-02-07', splitDeg: 108, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-02-14', splitDeg: 110, tailorsLeftDeg: null, tailorsRightDeg: null },
+    ]
+    const seasoned: FlexEntry[] = [
+      { date: '2025-02-14', splitDeg: 74, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2025-06-14', splitDeg: 90, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2025-10-14', splitDeg: 100, tailorsLeftDeg: null, tailorsRightDeg: null },
+      ...recent,
+    ]
+    const eta = (entries: FlexEntry[], id: string) => {
+      const set = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: entries })
+      return projectGoal(set.find((g) => g.id === id)!, today)
+    }
+
+    const fresh = eta(recent, 'split_180')
+    const veteran = eta(seasoned, 'split_180')
+
+    // A new log has its whole taper ahead of it; a year-old one has worked through
+    // it, so the pace it is holding is the pace it gets projected at.
+    expect(fresh.paceFloorFraction).toBeLessThan(1)
+    expect(veteran.paceFloorFraction).toBe(1)
+    expect(veteran.slopePerWeek).toBe(fresh.slopePerWeek)
+    expect(veteran.etaWeeks!).toBeLessThan(fresh.etaWeeks!)
+    // Not made cheap — still years of it — just no longer charged the taper twice.
+    expect(veteran.etaWeeks!).toBeGreaterThan(52)
+  })
+
+  it('reads the flex pace off six weeks rather than a lucky fortnight', () => {
+    // A quiet month then one big session. Over a fortnight that jump is the whole
+    // series and fits a runaway pace; over six weeks it is one reading among four.
+    const spike: FlexEntry[] = [
+      { date: '2026-01-10', splitDeg: 108, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-01-24', splitDeg: 109, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-02-07', splitDeg: 109, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-02-14', splitDeg: 121, tailorsLeftDeg: null, tailorsRightDeg: null },
+    ]
+    const set = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: spike })
+    const g = set.find((x) => x.id === 'split_180')!
+    const fortnight = project(g.points, g.target, today, {
+      decayPerWeek: g.decayPerWeek,
+      bestOf: 'max',
+    })
+
+    expect(g.window!.windowDays).toBe(42)
+    expect(projectGoal(g, today).observedSlopePerWeek).toBeLessThan(
+      fortnight.observedSlopePerWeek,
+    )
+  })
+
+  it('leaves the strength and bodyweight ladders on the default window and taper', () => {
+    // Training age is only read where the series is a record of training the
+    // capability. A 1RM series starts whenever that lift was first logged.
+    for (const id of [
+      GOAL_IDS.weight180,
+      GOAL_IDS.benchBodyweight,
+      GOAL_IDS.squatBodyweight,
+      GOAL_IDS.squatOneAndAHalf,
+      GOAL_IDS.sixPack,
+    ]) {
+      const g = goals.find((x) => x.id === id)!
+      expect(g).toBeDefined()
+      expect(g.taperFromHistory).toBeUndefined()
+      expect(g.window).toBeUndefined()
+    }
+  })
+
   it('leaves a bodyweight goal reading off the latest weigh-in', () => {
     const slid = buildGoals(
       inputs([
