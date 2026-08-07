@@ -12,6 +12,7 @@ import { PhotoStep } from './PhotoStep'
 import { formatDuration, remainingSecs } from '../../lib/estimate'
 import { buildSessionSteps, type CoreSetStep } from '../../lib/flexSteps'
 import { COLD_GATE, PHOTO_SHOT, gateAfterStep, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
+import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement } from '../../store/DataContext'
 import { canResumeRest } from '../../lib/rest'
@@ -48,7 +49,10 @@ type PendingPhotos = { gate: PhotoGate; resumeIndex: number | null }
  * logged as workout rows. Finishing counts as a stretch/flex day.
  */
 export function StretchSession({ onClose, onMinimize }: { onClose: () => void; onMinimize: () => void }) {
-  const { flexPlan, workouts, logFlex, logCore, durations, logSessionDuration } = useData()
+  const { flexPlan, workouts, flexEntries, logFlex, logCore, durations, logSessionDuration } = useData()
+  // Held for the session's lifetime: which Mon–Sun week the photo cadence is
+  // measured against.
+  const [today] = useState(() => toISODate(new Date()))
   // The whole flow resumes from this snapshot, read once on mount: an app switch
   // or accidental refresh drops you back where you were, not at the top.
   const [saved] = useState(() => storage.loadStretch())
@@ -72,12 +76,15 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // Photo screens already offered this session, so resuming doesn't re-ask.
   const [seenGates, setSeenGates] = useState<Set<string>>(() => new Set(saved?.photoGates ?? []))
   // The cold shots open the session, before anything has warmed up. A resume
-  // that's already past the first set is past that moment, so it doesn't re-ask.
-  const [photos, setPhotos] = useState<PendingPhotos | null>(() =>
-    seenGates.has(COLD_GATE.id) || (saved?.step ?? 0) > 0 || (saved?.done?.length ?? 0) > 0
-      ? null
-      : { gate: COLD_GATE, resumeIndex: null },
-  )
+  // that's already past the first set is past that moment, so it doesn't re-ask,
+  // and neither does a week that already has the readings.
+  const [photos, setPhotos] = useState<PendingPhotos | null>(() => {
+    if (seenGates.has(COLD_GATE.id) || (saved?.step ?? 0) > 0 || (saved?.done?.length ?? 0) > 0) {
+      return null
+    }
+    const gate = dueGate(COLD_GATE, flexEntries, today)
+    return gate ? { gate, resumeIndex: null } : null
+  })
   // When the routine began (persisted so a resumed session still measures its
   // full length) and accumulated time spent on the rest screen.
   const [startedAt] = useState(saved?.startedAt)
@@ -251,7 +258,7 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
     setDone(nextDone)
     // A photo moment holds the flow on its own screen first: the rest clock only
     // starts once you're through with the camera.
-    const gate = gateAfterStep(steps, safeCurrent)
+    const gate = dueGate(gateAfterStep(steps, safeCurrent), flexEntries, today)
     if (gate && !seenGates.has(gate.id)) {
       setPhotos({ gate, resumeIndex: safeCurrent })
       return
