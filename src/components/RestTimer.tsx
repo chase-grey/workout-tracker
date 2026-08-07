@@ -164,6 +164,13 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
 }
 
 /**
+ * Width-to-height ratio of the 'dune' pile, held constant as it grows so the
+ * slope never changes. Sand rests at about 34° from horizontal, which puts the
+ * base at 2 / tan(34°) ≈ 3 times the height.
+ */
+const DUNE_ASPECT = 3
+
+/**
  * Full-screen rest shapes that fill rather than frame. Same contract as the boxed
  * ones: `fraction` is how much rest is left and drives the level directly. These
  * render below the up-next block rather than behind it, so the weight and reps
@@ -192,6 +199,13 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
   // floor. The mound grows taller *and* wider as it fills — the way real sand
   // spreads at its angle of repose — so its size is the time already spent, and
   // the falling stream always lands on the growing peak.
+  //
+  // Width comes from the height through the fixed aspect ratio rather than from
+  // its own percentage of the viewport, so the pile keeps one slope the whole way
+  // up. Past roughly a third of its growth that makes it wider than the screen;
+  // the overflow is clipped, which is exactly how a real pile taller than the
+  // frame would look — a broad slope running off both edges, not a narrow cone
+  // squeezed to fit.
   const grow = 1 - fraction
   const moundH = grow * 52 // capped so the pile never climbs the whole screen
   return (
@@ -206,8 +220,8 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
       {/* The mound: two stacked domes give it a brighter, denser center ridge
           and a soft rounded peak — no straight edges to read as a seam. */}
       <div
-        className="absolute bottom-0 left-1/2 -translate-x-1/2"
-        style={{ height: `${moundH}%`, width: `${34 + grow * 56}%`, ...drain }}
+        className="absolute bottom-0 left-1/2 w-auto -translate-x-1/2"
+        style={{ height: `${moundH}%`, aspectRatio: DUNE_ASPECT, ...drain }}
       >
         <div className="absolute inset-0 rounded-t-[50%] bg-accent-bright/25" />
         <div className="absolute inset-x-[20%] bottom-0 h-[66%] rounded-t-[50%] bg-accent-bright/30" />
