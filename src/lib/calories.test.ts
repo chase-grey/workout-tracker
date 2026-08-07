@@ -111,12 +111,45 @@ describe('mergeCaloriesByDate', () => {
     expect(mergeCaloriesByDate(local, server)).toEqual([{ date: '2026-07-08', calories: 3900 }])
   })
 
-  it('collapses legacy multi-row server dates into one summed total', () => {
+  it('collapses multi-row server dates to the last row, not their sum', () => {
+    // Each row is the whole running total at the moment of a tap, so summing
+    // them multiplies the day by its tap count — this is how 8/3/2026 came back
+    // as 35,000 calories once the client posted totals to a sheet still
+    // appending a row per POST.
     const server: CalorieEntry[] = [
       { date: '2026-07-08', calories: 500 },
-      { date: '2026-07-08', calories: 300 },
+      { date: '2026-07-08', calories: 800 },
+      { date: '2026-07-08', calories: 1300 },
     ]
-    expect(mergeCaloriesByDate([], server)).toEqual([{ date: '2026-07-08', calories: 800 }])
+    expect(mergeCaloriesByDate([], server)).toEqual([{ date: '2026-07-08', calories: 1300 }])
+  })
+
+  it('takes the last row even when it is lower, so a −100 correction survives', () => {
+    const server: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 4000 },
+      { date: '2026-07-08', calories: 3900 },
+    ]
+    expect(mergeCaloriesByDate([], server)).toEqual([{ date: '2026-07-08', calories: 3900 }])
+  })
+
+  it('serverWins overwrites a date local already has', () => {
+    const local: CalorieEntry[] = [{ date: '2026-07-08', calories: 35000 }] // inflated cache
+    const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 4000 }] // repaired sheet
+    expect(mergeCaloriesByDate(local, server, { serverWins: true })).toEqual([
+      { date: '2026-07-08', calories: 4000 },
+    ])
+  })
+
+  it('serverWins still keeps dates the server has nothing for', () => {
+    const local: CalorieEntry[] = [
+      { date: '2026-07-08', calories: 35000 },
+      { date: '2026-07-09', calories: 2200 }, // logged offline, never sent
+    ]
+    const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 4000 }]
+    expect(mergeCaloriesByDate(local, server, { serverWins: true })).toEqual([
+      { date: '2026-07-08', calories: 4000 },
+      { date: '2026-07-09', calories: 2200 },
+    ])
   })
 })
 

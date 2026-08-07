@@ -321,7 +321,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // Merge rather than replace: this device's local total wins for any date
       // it already has, so a fetch can't clobber optimistic taps (including a
       // −100 correction) the server hasn't recorded yet.
-      if (Array.isArray(c)) persistCalories(mergeCaloriesByDate(storage.loadCalories(), c))
+      //
+      // Exactly once, the server has to win instead. Caches written while the
+      // sheet still held a row per tap store those rows summed, and local-wins
+      // gives no way back — no later fetch can correct a date this device
+      // already has. Waiting for a *successful* fetch to spend the flag, rather
+      // than clearing the cache at startup, keeps a tap made before the first
+      // sync adding to a real total instead of restarting the day from zero.
+      if (Array.isArray(c)) {
+        const repaired = storage.caloriesRepaired()
+        persistCalories(mergeCaloriesByDate(storage.loadCalories(), c, { serverWins: !repaired }))
+        if (!repaired) storage.markCaloriesRepaired()
+      }
     } catch {
       /* ignore */
     }

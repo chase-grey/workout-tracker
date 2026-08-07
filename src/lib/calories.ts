@@ -90,6 +90,29 @@ export function totalForDate(entries: CalorieEntry[], date: string): number {
 }
 
 /**
+ * The last value recorded for each date, in array order — the right reducer for
+ * a *fetch*, where {@link dayTotals}'s sum is not just redundant but ruinous.
+ *
+ * A day is stored as one running total, so several rows sharing a date are
+ * successive snapshots of the same day, not separate meals: the newest one IS
+ * the total. Summing them multiplies a day's intake by its tap count. That
+ * isn't hypothetical — between the switch to running totals and the backend
+ * redeploy that taught the sheet to upsert by date, every tap appended a row
+ * carrying the whole running total, and 8/3/2026 read back as 35,000 calories.
+ *
+ * The local cache keeps a one-row-per-date invariant (see {@link setDayTotal}),
+ * so summing it is a no-op and `dayTotals` stays the reducer there.
+ */
+function latestByDate(entries: CalorieEntry[]): Map<string, number> {
+  const totals = new Map<string, number>()
+  for (const entry of entries) {
+    if (!isValidCalories(entry.calories)) continue
+    totals.set(entry.date, entry.calories)
+  }
+  return totals
+}
+
+/**
  * The most recent {@link CalorieEntry.loggedAt} recorded for `date`, or null
  * when that day has no timestamp (never logged, or logged before the field
  * existed / only ever backfilled).
@@ -140,14 +163,27 @@ export function setDayTotal(
  * The log timestamp is merged separately from the total, taking the newer of
  * the two sides: unlike the total it only ever moves forward, so a device that
  * hasn't logged today can still learn when the logging device last did.
+ *
+ * `serverWins` inverts the precedence for one fetch, letting the backend
+ * overwrite dates this device already has. Local-wins is otherwise permanent:
+ * a cache that recorded a wrong total once would keep it forever, with no fetch
+ * able to correct it. Used to heal the caches written while the sheet was
+ * returning per-tap rows — see {@link latestByDate}.
  */
-export function mergeCaloriesByDate(local: CalorieEntry[], server: CalorieEntry[]): CalorieEntry[] {
+export function mergeCaloriesByDate(
+  local: CalorieEntry[],
+  server: CalorieEntry[],
+  opts: { serverWins?: boolean } = {},
+): CalorieEntry[] {
   const localTotals = dayTotals(local)
-  const serverTotals = dayTotals(server)
+  // Last-wins, not summed: a fetch can carry several rows for one date, and
+  // each is the whole running total rather than a slice of it.
+  const serverTotals = latestByDate(server)
   const dates = new Set<string>([...localTotals.keys(), ...serverTotals.keys()])
   const out: CalorieEntry[] = []
   for (const date of dates) {
-    const total = localTotals.has(date) ? localTotals.get(date)! : serverTotals.get(date)!
+    const preferServer = opts.serverWins && serverTotals.has(date)
+    const total = !preferServer && localTotals.has(date) ? localTotals.get(date)! : serverTotals.get(date)!
     const localAt = lastLoggedAt(local, date)
     const serverAt = lastLoggedAt(server, date)
     const at = !localAt || (serverAt && serverAt > localAt) ? serverAt : localAt

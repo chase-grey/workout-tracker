@@ -22,6 +22,12 @@ const KEYS = {
   // A fresh key rather than a migration: the v1 number is a duration, and there
   // is no way to recover what it was a fraction of, so it has to be re-learned.
   cacheExerciseAverages: 'wt.cache.exerciseAverages.v2',
+  // Set once the calorie cache has taken a server-wins fetch. Caches written
+  // while the sheet still held a row per tap store those rows summed — 8/3/2026
+  // read as 35,000 calories — and local-wins would preserve the inflated total
+  // for good. A flag rather than a fresh cache key: dropping the cache outright
+  // would let a tap made before the first sync restart the day from zero.
+  caloriesRepaired: 'wt.cache.caloriesRepaired',
   queue: 'wt.queue',
   plan: 'wt.plan',
   planRevision: 'wt.planRevision',
@@ -165,6 +171,9 @@ export const storage = {
 
   loadCalories: (): CalorieEntry[] => read(KEYS.cacheCalories, []),
   saveCalories: (entries: CalorieEntry[]) => write(KEYS.cacheCalories, entries),
+
+  caloriesRepaired: (): boolean => read(KEYS.caloriesRepaired, false),
+  markCaloriesRepaired: () => write(KEYS.caloriesRepaired, true),
 
   loadMeasurements: (): MeasurementEntry[] => read(KEYS.cacheMeasurements, []),
   saveMeasurements: (entries: MeasurementEntry[]) => write(KEYS.cacheMeasurements, entries),
