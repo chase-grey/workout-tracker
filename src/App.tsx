@@ -19,6 +19,7 @@ import { useTrackedIssues } from './store/useTrackedIssues'
 import { issuesAwaitingAnswer } from './services/issues'
 import { IS_DESKTOP } from './lib/device'
 import { useBackGuard } from './lib/useBackGuard'
+import { takeResumeTab } from './lib/resumeTab'
 import { MdFitnessCenter } from 'react-icons/md'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
@@ -44,7 +45,9 @@ export default function App() {
 }
 
 function AppShell() {
-  const [tab, setTab] = useState<Tab>('today')
+  // A reload the app kicked off itself (the update check) picks its own landing
+  // tab; everything else starts on Today.
+  const [tab, setTab] = useState<Tab>(() => takeResumeTab() ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, quickLog, settings, updateSettings } = useData()
   const showChat = chatEnabled(settings)

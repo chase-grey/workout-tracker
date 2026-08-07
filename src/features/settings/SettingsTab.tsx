@@ -11,6 +11,7 @@ import {
 import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
+import { stashResumeTab } from '../../lib/resumeTab'
 import { DEFAULT_FLEX_ROUTINE } from '../../config/flexPlan'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
@@ -151,6 +152,9 @@ export function SettingsTab({
         <button
           onClick={() => {
             setCheckingUpdate(true)
+            // Come back here rather than to Today — you tapped this to see the
+            // build stamp change.
+            stashResumeTab('settings')
             void checkForUpdate()
           }}
           disabled={checkingUpdate}
