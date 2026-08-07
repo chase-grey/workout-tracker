@@ -106,8 +106,11 @@ export function SettingsTab() {
       {settings.chatToken.trim() && (
         <section className="flex flex-col gap-2">
           <label className="text-sm font-medium text-neutral-300">reported issues</label>
-          {/* A failed refresh over a cached list stays quiet — the history on
-              screen is still the history. Only a cold miss has nothing to show. */}
+          {/* A failed refresh still shows the cached list, but it says so: an issue
+              closed since the last read would otherwise sit here reading "open". */}
+          {issuesFailed && issues !== null && (
+            <p className="text-xs text-neutral-500">couldn’t reach the issue tracker — showing the last read</p>
+          )}
           {issues === null ? (
             issuesFailed ? (
               <p className="text-xs text-neutral-500">couldn’t reach the issue tracker</p>
