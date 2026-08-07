@@ -11,6 +11,11 @@ import { MdVpnKey, MdBuild } from 'react-icons/md'
 
 type Turn = { role: 'user' | 'assistant' | 'system'; content: string; error?: boolean }
 
+// ChatTab unmounts whenever you leave the coach tab or start a workout, so the
+// toggle and the thread outlive the component — otherwise "keep context" would
+// forget itself the moment you looked at anything else.
+const session: { keepContext: boolean; turns: Turn[] } = { keepContext: false, turns: [] }
+
 const UPDATE_PLAN_TOOL: Tool = {
   type: 'function',
   function: {
@@ -105,14 +110,28 @@ function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
 export function ChatTab() {
   const { workouts, bodyWeights, streaks, settings, plan, updatePlan, flexPlan, updateFlexPlan } =
     useData()
-  const [turns, setTurns] = useState<Turn[]>([])
+  // Only a kept thread comes back: with the toggle off, what's on screen has to
+  // match what the coach was given, which is nothing yet.
+  const [turns, setTurnsState] = useState<Turn[]>(() => {
+    if (!session.keepContext) session.turns = []
+    return session.turns
+  })
+  const setTurns = (next: Turn[]) => {
+    session.turns = next
+    setTurnsState(next)
+  }
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   // The reply as it streams in, before it becomes a turn.
   const [pending, setPending] = useState('')
   // Off by default: each message starts a fresh conversation, so an answer is
-  // never coloured by whatever was asked before it.
-  const [keepContext, setKeepContext] = useState(false)
+  // never coloured by whatever was asked before it. Once it's on it stays on
+  // for the rest of the session, tab switches and workouts included.
+  const [keepContext, setKeepContext] = useState(session.keepContext)
+  const toggleKeepContext = () => {
+    session.keepContext = !keepContext
+    setKeepContext(!keepContext)
+  }
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -227,7 +246,7 @@ export function ChatTab() {
     <div className="flex min-h-full flex-col">
       <div className="flex items-center justify-end pb-2">
         <button
-          onClick={() => setKeepContext((on) => !on)}
+          onClick={toggleKeepContext}
           aria-pressed={keepContext}
           className={`min-h-[44px] rounded-xl px-3 text-sm font-medium active:opacity-80 ${
             keepContext ? 'bg-accent text-black' : 'bg-surface text-neutral-300'
