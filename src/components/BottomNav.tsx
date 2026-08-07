@@ -14,10 +14,13 @@ export function BottomNav({
   active,
   onChange,
   showChat = true,
+  alerts = [],
 }: {
   active: Tab
   onChange: (t: Tab) => void
   showChat?: boolean
+  /** Tabs with something waiting on you, marked with a dot on the icon. */
+  alerts?: Tab[]
 }) {
   const tabs = TABS.filter((t) => t.id !== 'coach' || showChat)
   return (
@@ -36,7 +39,14 @@ export function BottomNav({
             active === t.id ? 'text-accent' : 'text-neutral-500'
           }`}
         >
-          <t.Icon className="text-xl leading-none" aria-hidden />
+          {/* The dot rides on the icon, not the button, so it sits against the
+              glyph rather than out in the tab's empty width. */}
+          <span className="relative leading-none">
+            <t.Icon className="text-xl leading-none" aria-hidden />
+            {alerts.includes(t.id) && (
+              <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-surface" />
+            )}
+          </span>
           <span className="text-[11px] font-medium">{t.label}</span>
         </button>
       ))}

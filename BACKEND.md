@@ -55,6 +55,10 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
 | GET | `?route=chat_endpoint&secret=…` | — | `{ url, updatedAt }` |
 | POST | `?route=chat_endpoint` | `{ url, secret }` | `{ saved }` |
+| GET | `?route=issues&secret=…` | — | `TrackedIssue[]` |
+| POST | `?route=report_issue` | `{ secret, title, body, area, context }` | `{ number, url }` |
+| GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |
+| POST | `?route=answer_issue` | `{ secret, number, answer }` | `{ answered }` |
 
 ### Settings
 
@@ -81,3 +85,17 @@ Both directions require a `CHAT_SHARED_SECRET` **script property** (Project Sett
 properties). The `/exec` URL above is public and baked into the web bundle, so without the secret
 anyone could read the live tunnel address — or publish one of their own and receive the chat. If the
 property is missing, both routes throw rather than failing open.
+
+### Issues
+
+The four issue routes are a thin proxy onto the GitHub API, so a bug filed from the coach chat lands
+even when the laptop running the auto-fixer is asleep. They need a `GITHUB_ISSUE_TOKEN` script
+property — a fine-grained PAT scoped to this one repo with Issues: Read/Write — and the same
+`CHAT_SHARED_SECRET` as the chat routes, for the same reason.
+
+`issue_thread` and `answer_issue` are the question round-trip: the auto-fixer parks an issue it
+can't act on under a `needs-input` label and comments its questions, the app reads that comment and
+takes a reply, and `answer_issue` posts the reply and swaps the label back to `auto-fix` — which is
+the handoff that puts the issue back in front of the fixer. Both refuse any issue not carrying
+`from-app`: the token can write to every issue in the repo, and there's no reason these routes
+should reach one the app didn't file.

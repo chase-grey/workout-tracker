@@ -557,7 +557,9 @@ export default defineConfig(({ mode }) => {
     ],
     test: {
       environment: 'node',
-      include: ['src/**/*.test.ts'],
+      // scripts/ is plain .mjs run by node, not part of the bundle — but the
+      // auto-fixer's reply parsing lives there and is worth covering.
+      include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
     },
   }
 })

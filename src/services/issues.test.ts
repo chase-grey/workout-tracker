@@ -2,14 +2,24 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Isolate reportIssue from the network + Settings: stub the backend call and the
 // token lookup so we can assert exactly what gets posted.
-const { reportIssueMock, listIssuesMock, tokenRef, cacheRef } = vi.hoisted(() => ({
-  reportIssueMock: vi.fn(),
-  listIssuesMock: vi.fn(),
-  tokenRef: { value: '' },
-  // Stands in for localStorage, which the node test env doesn't have.
-  cacheRef: { value: null as unknown },
+const { reportIssueMock, listIssuesMock, issueThreadMock, answerIssueMock, tokenRef, cacheRef } =
+  vi.hoisted(() => ({
+    reportIssueMock: vi.fn(),
+    listIssuesMock: vi.fn(),
+    issueThreadMock: vi.fn(),
+    answerIssueMock: vi.fn(),
+    tokenRef: { value: '' },
+    // Stands in for localStorage, which the node test env doesn't have.
+    cacheRef: { value: null as unknown },
+  }))
+vi.mock('./api', () => ({
+  api: {
+    reportIssue: reportIssueMock,
+    listIssues: listIssuesMock,
+    issueThread: issueThreadMock,
+    answerIssue: answerIssueMock,
+  },
 }))
-vi.mock('./api', () => ({ api: { reportIssue: reportIssueMock, listIssues: listIssuesMock } }))
 vi.mock('./chatEndpoint', () => ({ chatToken: () => tokenRef.value }))
 vi.mock('./storage', () => ({
   storage: {
@@ -20,8 +30,17 @@ vi.mock('./storage', () => ({
   },
 }))
 
-import { reportIssue, listIssues, cachedIssues, issueProgress } from './issues'
-import type { TrackedIssue } from './issues'
+import {
+  reportIssue,
+  listIssues,
+  cachedIssues,
+  issueProgress,
+  issuesAwaitingAnswer,
+  fetchIssueThread,
+  answerIssue,
+  latestQuestion,
+} from './issues'
+import type { IssueThread, TrackedIssue } from './issues'
 
 beforeEach(() => {
   tokenRef.value = 'secret-tok'
@@ -30,6 +49,14 @@ beforeEach(() => {
     url: 'https://github.com/chase-grey/workout-tracker/issues/42',
   })
   listIssuesMock.mockReset().mockResolvedValue([])
+  issueThreadMock.mockReset().mockResolvedValue({
+    number: 7,
+    title: 'timer broke',
+    state: 'open',
+    labels: ['from-app', 'needs-input'],
+    comments: [],
+  })
+  answerIssueMock.mockReset().mockResolvedValue({ answered: 7 })
   cacheRef.value = null
   // node test env has no DOM; collectContext reads these.
   vi.stubGlobal('navigator', { userAgent: 'test-agent' })
@@ -97,6 +124,18 @@ describe('issueProgress', () => {
     expect(issueProgress(issue({ labels: ['auto-fix', 'autofix-failed'] }))).toBe('stalled')
   })
 
+  it('asks once the fixer has posted a question and parked the issue', () => {
+    expect(issueProgress(issue({ labels: ['from-app', 'needs-input'] }))).toBe('asks')
+  })
+
+  it('still asks if the running label was left on alongside the question', () => {
+    expect(issueProgress(issue({ labels: ['autofix-running', 'needs-input'] }))).toBe('asks')
+  })
+
+  it('stops asking once the answer takes the label back off', () => {
+    expect(issueProgress(issue({ labels: ['from-app', 'auto-fix'] }))).toBe('open')
+  })
+
   it('is closed even if a claim label was left behind on a hand-closed issue', () => {
     expect(issueProgress(issue({ state: 'closed', labels: ['autofix-running'] }))).toBe('closed')
   })
@@ -104,6 +143,101 @@ describe('issueProgress', () => {
   it('falls back to open/closed for a cached entry read before labels existed', () => {
     expect(issueProgress(issue())).toBe('open')
     expect(issueProgress(issue({ state: 'closed' }))).toBe('closed')
+  })
+})
+
+describe('issuesAwaitingAnswer', () => {
+  const issue = (number: number, labels: string[]): TrackedIssue => ({
+    number,
+    title: 't',
+    url: 'u',
+    state: 'open',
+    createdAt: 't',
+    labels,
+  })
+
+  it('picks out only the issues waiting on an answer', () => {
+    const list = [
+      issue(1, ['auto-fix']),
+      issue(2, ['needs-input']),
+      issue(3, ['autofix-running']),
+      issue(4, ['needs-input']),
+    ]
+    expect(issuesAwaitingAnswer(list).map((i) => i.number)).toEqual([2, 4])
+  })
+
+  it('is empty before a list has ever been read', () => {
+    expect(issuesAwaitingAnswer(null)).toEqual([])
+  })
+
+  it('ignores a closed issue still carrying the label', () => {
+    const closed: TrackedIssue = { ...issue(9, ['needs-input']), state: 'closed' }
+    expect(issuesAwaitingAnswer([closed])).toEqual([])
+  })
+})
+
+describe('latestQuestion', () => {
+  const thread = (bodies: string[]): IssueThread => ({
+    number: 7,
+    title: 't',
+    state: 'open',
+    labels: ['needs-input'],
+    comments: bodies.map((body, i) => ({ id: i, author: 'me', body, createdAt: 't' })),
+  })
+
+  it('takes the newest comment — while an issue asks, that is the question', () => {
+    expect(latestQuestion(thread(['an older note', 'which day?']))).toBe('which day?')
+  })
+
+  it('drops the bold marker line both sides prefix their comments with', () => {
+    const body = '**Auto-fix needs a bit more to go on:**\n\nWhich day is this on?'
+    expect(latestQuestion(thread([body]))).toBe('Which day is this on?')
+  })
+
+  it('keeps bold text that is part of the question rather than a marker line', () => {
+    expect(latestQuestion(thread(['Should **both** days change?']))).toBe(
+      'Should **both** days change?',
+    )
+  })
+
+  it('is empty on a thread with no comments at all', () => {
+    expect(latestQuestion(thread([]))).toBe('')
+  })
+})
+
+describe('fetchIssueThread', () => {
+  it('refuses without a coach token, and never calls the backend', async () => {
+    tokenRef.value = ''
+    await expect(fetchIssueThread(7)).rejects.toThrow(/coach token/i)
+    expect(issueThreadMock).not.toHaveBeenCalled()
+  })
+
+  it('passes the token and the number', async () => {
+    const thread = await fetchIssueThread(7)
+    expect(issueThreadMock).toHaveBeenCalledWith('secret-tok', 7)
+    expect(thread.number).toBe(7)
+  })
+})
+
+describe('answerIssue', () => {
+  it('refuses without a coach token, and never calls the backend', async () => {
+    tokenRef.value = ''
+    await expect(answerIssue(7, 'push day')).rejects.toThrow(/coach token/i)
+    expect(answerIssueMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses to send an empty answer', async () => {
+    await expect(answerIssue(7, '   ')).rejects.toThrow(/write an answer/i)
+    expect(answerIssueMock).not.toHaveBeenCalled()
+  })
+
+  it('posts the trimmed answer against the issue', async () => {
+    await answerIssue(7, '  push day, both sides  ')
+    expect(answerIssueMock).toHaveBeenCalledWith({
+      secret: 'secret-tok',
+      number: 7,
+      answer: 'push day, both sides',
+    })
   })
 })
 

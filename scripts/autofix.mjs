@@ -16,10 +16,19 @@
  *     so a restart or a second tick never double-fixes one.
  *   - `main` auto-deploys, but the deploy workflow runs `npm test` first, so a
  *     change that breaks tests fails the deploy instead of shipping.
+ *
+ * Asking questions: a vague issue used to be dead — `claude -p` has no way to ask
+ * anything and the run just ended. Now it can answer with a NEEDS-INPUT block,
+ * which gets posted as an issue comment and parks the issue under `needs-input`.
+ * The app shows that question in the coach chat, the answer comes back as another
+ * comment, and the issue returns here labelled `auto-fix` again — this time run
+ * with the whole comment thread in the prompt. The thread IS the memory: nothing
+ * is resumed from a stored session, so a fixer restart loses none of it.
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { ASK_MARKER, parseAsk } from './parseAsk.mjs'
 
 try {
   process.loadEnvFile(path.join(process.cwd(), '.env'))
@@ -33,6 +42,9 @@ const INTERVAL_MS = Number(process.env.AUTOFIX_INTERVAL_SEC || 60) * 1000
 const PERMISSION = process.env.AUTOFIX_PERMISSION || 'acceptEdits' // 'acceptEdits' | 'skip'
 const RUNNING_LABEL = 'autofix-running'
 const FAILED_LABEL = 'autofix-failed'
+// Parks an issue while the reporter answers. `auto-fix` comes off at the same
+// time, so this poll leaves it alone until the app hands it back.
+const ASK_LABEL = 'needs-input'
 const WORKTREE = path.join(process.cwd(), '.autofix', 'worktree')
 // The worktree gets its OWN branch: git refuses to check out `main` while your
 // primary checkout has it, so borrowing the name left the worktree detached and
@@ -79,6 +91,8 @@ const removeLabel = (n, label) =>
   gh('DELETE', `/repos/${REPO}/issues/${n}/labels/${encodeURIComponent(label)}`).catch(() => {})
 const comment = (n, text) => gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: text })
 const closeIssue = (n) => gh('PATCH', `/repos/${REPO}/issues/${n}`, { state: 'closed' })
+const listComments = (n) =>
+  gh('GET', `/repos/${REPO}/issues/${n}/comments?per_page=100`).catch(() => [])
 
 /* --------------------------------------------------------------- worktree */
 
@@ -117,14 +131,24 @@ function hasChanges() {
 
 /* ----------------------------------------------------------------- claude */
 
-function buildPrompt(issue) {
-  return [
+function buildPrompt(issue, comments) {
+  const lines = [
     `You are fixing GitHub issue #${issue.number} in this repository.`,
     '',
     `Title: ${issue.title}`,
     '',
     'Body:',
     issue.body || '(no description)',
+  ]
+  // The thread carries every earlier question and its answer, which is the only
+  // memory across runs — each attempt is a fresh `claude`, not a resumed session.
+  if (comments.length) {
+    lines.push('', 'Comment thread so far (oldest first):')
+    for (const c of comments) {
+      lines.push('', `--- ${c.user?.login || 'someone'}:`, c.body || '')
+    }
+  }
+  lines.push(
     '',
     'Instructions:',
     '- Investigate and implement a focused change for this issue only. It may be a bug',
@@ -132,22 +156,48 @@ function buildPrompt(issue) {
     '  being a bug.',
     '- Run `npm test` and make sure it passes before finishing.',
     '- Do NOT commit or push — the surrounding script handles git.',
-    '- If the issue is too vague to act on, make no changes and explain what is missing.',
-  ].join('\n')
+    '- If you genuinely cannot act without more from the reporter, make NO changes and',
+    `  reply with the single word ${ASK_MARKER} on its own first line, then your`,
+    "  questions. They are shown on the reporter's phone and answered there, so ask",
+    '  the fewest that unblock you, in plain language, with no code or file paths.',
+    '  Prefer a reasonable assumption over a question whenever you can state it.',
+    '- Anything already answered in the thread above is settled — do not ask it again.',
+  )
+  return lines.join('\n')
 }
 
-/** Run the local `claude` on the prompt inside the worktree. Resolves on exit. */
-function runClaude(issue) {
+/**
+ * Run the local `claude` on the prompt inside the worktree. Resolves on exit.
+ *
+ * stdout is piped and echoed rather than inherited: the final message is how
+ * claude asks for more information, so it has to be readable here and not only
+ * on the console.
+ */
+function runClaude(issue, comments) {
   return new Promise((resolve) => {
     const args = ['-p']
     if (PERMISSION === 'skip') args.push('--dangerously-skip-permissions')
     else args.push('--permission-mode', 'acceptEdits')
     // shell:true resolves the claude.cmd shim on Windows; args are all static and
     // the (untrusted) issue text goes in over stdin, so nothing is shell-injected.
-    const child = spawn('claude', args, { cwd: WORKTREE, stdio: ['pipe', 'inherit', 'inherit'], shell: true })
-    child.on('error', (err) => resolve({ ok: false, detail: String(err) }))
-    child.on('exit', (code) => resolve({ ok: code === 0, detail: `claude exited ${code}` }))
-    child.stdin.write(buildPrompt(issue))
+    const child = spawn('claude', args, { cwd: WORKTREE, stdio: ['pipe', 'pipe', 'inherit'], shell: true })
+    let out = ''
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk) => {
+      out += chunk
+      process.stdout.write(chunk)
+    })
+    // `close`, not `exit`: exit fires the moment the process ends, with the tail
+    // of stdout still unread — which is exactly where the question would be.
+    let settled = false
+    const done = (result) => {
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
+    child.on('error', (err) => done({ ok: false, out, detail: String(err) }))
+    child.on('close', (code) => done({ ok: code === 0, out, detail: `claude exited ${code}` }))
+    child.stdin.write(buildPrompt(issue, comments))
     child.stdin.end()
   })
 }
@@ -162,9 +212,26 @@ async function processIssue(issue) {
   await addLabels(n, [RUNNING_LABEL])
   try {
     prepareWorktree()
-    const res = await runClaude(issue)
+    const comments = await listComments(n)
+    const res = await runClaude(issue, comments)
     if (!res.ok) throw new Error(res.detail)
     if (!hasChanges()) {
+      // A question is only a question if nothing was changed — a run that both
+      // edited files and mused about what it was unsure of is a fix, and the
+      // musing belongs in the commit, not on the reporter's phone.
+      const ask = parseAsk(res.out)
+      if (ask) {
+        await comment(n, `**Auto-fix needs a bit more to go on:**\n\n${ask}`)
+        await removeLabel(n, RUNNING_LABEL)
+        // Drop `auto-fix` as well: with it on, the next tick would pick the issue
+        // straight back up and ask the same question into the void.
+        await removeLabel(n, LABEL)
+        await addLabels(n, [ASK_LABEL])
+        // Forget it, so the answer can bring it back around this same run.
+        seen.delete(n)
+        console.log(`autofix: #${n} is waiting on an answer.`)
+        return
+      }
       await comment(n, `Auto-fix ran but made no changes (${res.detail}). Leaving open for a human.`)
       await removeLabel(n, RUNNING_LABEL)
       await addLabels(n, [FAILED_LABEL])
@@ -210,6 +277,9 @@ async function tick() {
     if (issue.pull_request) continue // the issues endpoint also returns PRs
     const labels = (issue.labels || []).map((l) => (typeof l === 'string' ? l : l.name))
     if (labels.includes(RUNNING_LABEL) || labels.includes(FAILED_LABEL)) continue
+    // Asking removes `auto-fix`, so this shouldn't come back — unless both labels
+    // were put on by hand, in which case the answer still hasn't arrived.
+    if (labels.includes(ASK_LABEL)) continue
     if (seen.has(issue.number)) continue
     seen.add(issue.number)
     await processIssue(issue) // one at a time: they share one worktree + main

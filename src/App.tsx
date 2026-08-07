@@ -15,6 +15,8 @@ import { ActiveSession } from './features/today/ActiveSession'
 import { useActiveSession } from './features/today/useActiveSession'
 import { StretchSession } from './features/flex/StretchSession'
 import { storage } from './services/storage'
+import { useTrackedIssues } from './store/useTrackedIssues'
+import { issuesAwaitingAnswer } from './services/issues'
 import { IS_DESKTOP } from './lib/device'
 import { useBackGuard } from './lib/useBackGuard'
 import { MdFitnessCenter } from 'react-icons/md'
@@ -56,6 +58,13 @@ function AppShell() {
   // elapsed-time accounting carry on untouched until you jump back in.
   const [minimized, setMinimized] = useState(false)
   const sessionActive = controls.session != null || stretching
+  // Filed issues, polled app-wide rather than only while Settings is open: the
+  // point of the dot is to tell you a question is waiting when you weren't
+  // looking for one. Settings reads the same shared list.
+  const { issues, failed: issuesFailed } = useTrackedIssues(settings.chatToken.trim().length > 0)
+  const awaiting = issuesAwaitingAnswer(issues)
+  // The issue whose question the coach tab is currently taking an answer for.
+  const [answering, setAnswering] = useState<number | null>(null)
 
   // Scroll back to the top when switching tabs.
   useEffect(() => {
@@ -183,8 +192,19 @@ function AppShell() {
           <>
             {tab === 'today' && <TodayTab onStart={startWorkout} onStartStretch={startStretch} />}
             {tab === 'progress' && <ProgressTab />}
-            {tab === 'coach' && showChat && <ChatTab />}
-            {tab === 'settings' && <SettingsTab />}
+            {tab === 'coach' && showChat && (
+              <ChatTab answering={answering} onAnsweringDone={() => setAnswering(null)} />
+            )}
+            {tab === 'settings' && (
+              <SettingsTab
+                issues={issues}
+                issuesFailed={issuesFailed}
+                onAnswer={(number) => {
+                  setAnswering(number)
+                  setTab('coach')
+                }}
+              />
+            )}
           </>
         )}
       </main>
@@ -197,7 +217,14 @@ function AppShell() {
           {controls.session ? 'back to your workout' : 'back to your stretch'}
         </button>
       )}
-      {!immersive && <BottomNav active={tab} onChange={setTab} showChat={showChat} />}
+      {!immersive && (
+        <BottomNav
+          active={tab}
+          onChange={setTab}
+          showChat={showChat}
+          alerts={awaiting.length > 0 ? ['settings'] : []}
+        />
+      )}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
       {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}
     </div>

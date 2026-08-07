@@ -4,11 +4,18 @@ import { buildSystemPrompt } from '../../lib/chatPrompt'
 import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/openai'
 import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
 import { applyFlexEdits, type FlexEdit } from '../../lib/flexTools'
-import { reportIssue, type IssueArea } from '../../services/issues'
+import {
+  answerIssue,
+  fetchIssueThread,
+  latestQuestion,
+  reportIssue,
+  type IssueArea,
+} from '../../services/issues'
+import { refreshIssues } from '../../store/useTrackedIssues'
 import { repRangeLabel, type Plan } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
-import { MdVpnKey, MdBuild } from 'react-icons/md'
+import { MdVpnKey, MdBuild, MdClose, MdHelpOutline } from 'react-icons/md'
 
 /**
  * A change the coach wants to make, held until the user says yes.
@@ -162,7 +169,23 @@ function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
   return lines.join('\n')
 }
 
-export function ChatTab() {
+/** A question the auto-fixer left on an issue, waiting on a reply here. */
+type AnswerTarget = { number: number; title: string; question: string }
+
+export function ChatTab({
+  answering,
+  onAnsweringDone,
+}: {
+  /**
+   * An issue number to answer, set when you tap an asking issue in Settings.
+   * The coach chat is where the answer gets typed: the fixer's question arrived
+   * without you, so this is the one place in the app already built to hold a
+   * back-and-forth about the app itself.
+   */
+  answering?: number | null
+  /** Called once the question is answered or dismissed, so it isn't re-opened. */
+  onAnsweringDone?: () => void
+}) {
   const { workouts, bodyWeights, streaks, settings, plan, updatePlan, flexPlan, updateFlexPlan } =
     useData()
   // Only a kept thread comes back: with the toggle off, what's on screen has to
@@ -188,6 +211,71 @@ export function ChatTab() {
     setKeepContext(!keepContext)
   }
   const endRef = useRef<HTMLDivElement>(null)
+  // Answering an issue takes over the composer: what you type goes to the fixer
+  // as a comment, not to the model. Null means the tab is a normal chat.
+  const [answerTarget, setAnswerTarget] = useState<AnswerTarget | null>(null)
+  const [answerLoading, setAnswerLoading] = useState(false)
+  const [answerError, setAnswerError] = useState('')
+
+  // Pull the question itself only when one is actually being answered — the list
+  // in Settings knows an issue is asking, but not what it asked.
+  useEffect(() => {
+    setAnswerError('')
+    if (answering == null) {
+      setAnswerTarget(null)
+      return
+    }
+    let alive = true
+    setAnswerLoading(true)
+    fetchIssueThread(answering)
+      .then((thread) => {
+        if (!alive) return
+        setAnswerTarget({
+          number: thread.number,
+          title: thread.title,
+          question: latestQuestion(thread),
+        })
+      })
+      .catch(
+        (e) =>
+          alive && setAnswerError(e instanceof Error ? e.message : 'could not read that issue.'),
+      )
+      .finally(() => alive && setAnswerLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [answering])
+
+  const dismissAnswer = () => {
+    setAnswerTarget(null)
+    setAnswerError('')
+    onAnsweringDone?.()
+  }
+
+  /** Send the typed text to the fixer as an issue comment rather than to the model. */
+  const sendAnswer = async (target: AnswerTarget, text: string) => {
+    setLoading(true)
+    setAnswerError('')
+    try {
+      await answerIssue(target.number, text)
+      setInput('')
+      setTurns([
+        ...turns,
+        { role: 'user', content: text },
+        { role: 'system', content: `answered #${target.number} — ${target.title}` },
+      ])
+      setAnswerTarget(null)
+      onAnsweringDone?.()
+      // The label just moved off `needs-input`; re-read so the nav dot clears
+      // now instead of at the next poll.
+      refreshIssues()
+    } catch (e) {
+      // Leave the target and the typed text in place so it can just be re-sent.
+      setAnswerError(e instanceof Error ? e.message : 'could not send that answer.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   /**
    * Commit or discard a proposed edit. The proposal carries the whole resulting
@@ -222,6 +310,10 @@ export function ChatTab() {
   const send = async () => {
     const text = input.trim()
     if (!text || loading) return
+    // Typing ahead of a question that's still loading is an answer, not a
+    // message to the coach — hold it rather than sending it to the model.
+    if (answerLoading) return
+    if (answerTarget) return sendAnswer(answerTarget, text)
 
     // Without "keep context" the thread starts over on every send, so what's on
     // screen is exactly what the coach was given.
@@ -441,25 +533,56 @@ export function ChatTab() {
       {/* Frosted glass, so the tail of the thread dissolves behind the input
           instead of stopping at a hard edge. -mb-4 cancels the main scroller's
           bottom padding so the bar sits right down at the bottom of the screen. */}
-      <div className="sticky bottom-0 -mx-4 -mb-4 flex gap-2 border-t border-border bg-bg/80 px-4 pb-2 pt-2 backdrop-blur-md">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void send()
-          }}
-          // The keyboard opening shrinks the thread; keep its tail in view.
-          onFocus={() => endRef.current?.scrollIntoView({ behavior: 'smooth' })}
-          placeholder="ask your coach"
-          className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-        <button
-          onClick={() => void send()}
-          disabled={loading || input.trim().length === 0}
-          className="min-h-[44px] rounded-xl bg-accent px-4 font-semibold text-black active:opacity-80 disabled:opacity-40"
-        >
-          send
-        </button>
+      <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 pb-2 pt-2 backdrop-blur-md">
+        {/* The question rides above the composer rather than sitting in the
+            thread: it has to stay on screen while the answer is being typed. */}
+        {(answerLoading || answerTarget || answerError) && (
+          <div className="rounded-xl border border-accent/40 bg-surface px-3 py-2">
+            <div className="flex items-start gap-2">
+              <MdHelpOutline className="mt-0.5 shrink-0 text-accent" aria-hidden />
+              <span className="min-w-0 flex-1 text-xs text-accent">
+                {answerTarget
+                  ? `#${answerTarget.number} asks — ${answerTarget.title}`
+                  : answerLoading
+                    ? 'loading the question…'
+                    : `#${answering}`}
+              </span>
+              <button
+                onClick={dismissAnswer}
+                aria-label="stop answering"
+                className="-my-1 -mr-1 shrink-0 p-1 text-neutral-400 active:opacity-70"
+              >
+                <MdClose aria-hidden />
+              </button>
+            </div>
+            {answerTarget?.question && (
+              <p className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-neutral-100">
+                {answerTarget.question}
+              </p>
+            )}
+            {answerError && <p className="mt-1 text-sm text-red-400">{answerError}</p>}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void send()
+            }}
+            // The keyboard opening shrinks the thread; keep its tail in view.
+            onFocus={() => endRef.current?.scrollIntoView({ behavior: 'smooth' })}
+            placeholder={answerTarget ? `answer #${answerTarget.number}` : 'ask your coach'}
+            className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <button
+            onClick={() => void send()}
+            disabled={loading || answerLoading || input.trim().length === 0}
+            className="min-h-[44px] rounded-xl bg-accent px-4 font-semibold text-black active:opacity-80 disabled:opacity-40"
+          >
+            {answerTarget ? 'reply' : 'send'}
+          </button>
+        </div>
       </div>
     </div>
   )

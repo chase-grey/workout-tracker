@@ -41,6 +41,12 @@
  *                 (the app-filed GitHub issues + their open/closed state; see listIssues)
  *   POST ?route=report_issue    body: { secret, title, body, area, context }
  *                 -> { number, url }  (files a GitHub issue; see createIssue)
+ *   GET  ?route=issue_thread&secret=…&number=N
+ *                 -> { number, title, state, labels, comments: [{id,author,body,createdAt}] }
+ *                 (one issue's comment thread — how the fixer's question reaches the app)
+ *   POST ?route=answer_issue    body: { secret, number, answer }
+ *                 -> { answered: N }  (comments the answer and hands the issue back
+ *                 to the auto-fixer; see answerIssue)
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
  *   POST ?route=bodyweight    body: { date, weightLbs }
@@ -120,6 +126,8 @@ function doGet(e) {
         return json(getChatEndpoint(e.parameter.secret))
       case 'issues':
         return json(listIssues(e.parameter.secret))
+      case 'issue_thread':
+        return json(getIssueThread(e.parameter.secret, e.parameter.number))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -180,6 +188,8 @@ function doPost(e) {
         // Not under withLock: GitHub is the store of record, not a sheet, and two
         // reports racing just make two issues — no row to clobber.
         return json(createIssue(body))
+      case 'answer_issue':
+        return json(answerIssue(body))
       default:
         return json({ error: 'Unknown route' }, 404)
     }
@@ -861,6 +871,63 @@ function githubToken() {
 }
 
 /**
+ * The label scripts/autofix.mjs polls for, and the one it parks an issue under
+ * while it waits on an answer. Answering swaps the second back for the first,
+ * which is what puts the issue back in front of the fixer.
+ */
+const FIX_LABEL = 'auto-fix'
+const ASK_LABEL = 'needs-input'
+
+/**
+ * One GitHub REST call against ISSUE_REPO, with the token and headers attached.
+ *
+ * Throws on any non-2xx: GitHub reports a bad token or a missing issue in the
+ * body of a response the caller would otherwise parse as data.
+ */
+function githubApi(method, path, payload) {
+  const options = {
+    method: method,
+    muteHttpExceptions: true,
+    headers: {
+      Authorization: 'Bearer ' + githubToken(),
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  }
+  if (payload) {
+    options.contentType = 'application/json'
+    options.payload = JSON.stringify(payload)
+  }
+  const res = UrlFetchApp.fetch('https://api.github.com/repos/' + ISSUE_REPO + path, options)
+  const code = res.getResponseCode()
+  if (code < 200 || code >= 300) {
+    throw new Error(
+      'GitHub ' + method + ' ' + path + ' failed (' + code + '): ' + res.getContentText(),
+    )
+  }
+  const text = res.getContentText()
+  return text ? JSON.parse(text) : null
+}
+
+/**
+ * Read one issue, refusing anything the app didn't file.
+ *
+ * The secret already gates these routes, but the token can write to every issue
+ * in the repo — scoping the per-issue routes to `from-app` keeps a mistyped or
+ * guessed number from reaching an unrelated one.
+ */
+function requireAppIssue(number) {
+  const n = parseInt(number, 10)
+  if (!n) throw new Error('An issue number is required')
+  const issue = githubApi('get', '/issues/' + n)
+  const labels = issue.labels || []
+  for (let i = 0; i < labels.length; i++) {
+    if (String(labels[i].name || '') === 'from-app') return issue
+  }
+  throw new Error('Issue #' + n + ' was not filed from the app')
+}
+
+/**
  * File a bug/feature report from the app as a GitHub issue.
  *
  * Gated by the same shared secret as the chat routes: the /exec URL is public in
@@ -880,27 +947,73 @@ function createIssue(body) {
   }
   // `auto-fix` is the label the local watcher (scripts/autofix.mjs) polls for, so
   // tagging it here hands every coach-filed report straight to the auto-fixer.
-  const labels = ['from-app', 'auto-fix']
+  const labels = ['from-app', FIX_LABEL]
   if (area) labels.push('area:' + area)
 
-  const res = UrlFetchApp.fetch('https://api.github.com/repos/' + ISSUE_REPO + '/issues', {
-    method: 'post',
-    contentType: 'application/json',
-    muteHttpExceptions: true,
-    headers: {
-      Authorization: 'Bearer ' + githubToken(),
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-    payload: JSON.stringify({ title: title, body: parts.join('\n'), labels: labels }),
+  const data = githubApi('post', '/issues', {
+    title: title,
+    body: parts.join('\n'),
+    labels: labels,
   })
-
-  const code = res.getResponseCode()
-  if (code < 200 || code >= 300) {
-    throw new Error('GitHub issue create failed (' + code + '): ' + res.getContentText())
-  }
-  const data = JSON.parse(res.getContentText())
   return { number: data.number, url: data.html_url }
+}
+
+/**
+ * One issue's comment thread, so the app can show what the auto-fixer asked.
+ *
+ * Comments come back oldest-first, which is what makes "the last one" the
+ * question while the issue is sitting under `needs-input`.
+ */
+function getIssueThread(secret, number) {
+  if (secret !== chatSecret()) throw new Error('Bad chat secret')
+  const issue = requireAppIssue(number)
+  const raw = githubApi('get', '/issues/' + issue.number + '/comments?per_page=100')
+  const comments = []
+  for (let i = 0; i < raw.length; i++) {
+    comments.push({
+      id: raw[i].id,
+      author: raw[i].user ? String(raw[i].user.login || '') : '',
+      body: String(raw[i].body || ''),
+      createdAt: raw[i].created_at,
+    })
+  }
+  const labels = []
+  const issueLabels = issue.labels || []
+  for (let j = 0; j < issueLabels.length; j++) labels.push(String(issueLabels[j].name || ''))
+  return {
+    number: issue.number,
+    title: String(issue.title || ''),
+    state: issue.state,
+    labels: labels,
+    comments: comments,
+  }
+}
+
+/**
+ * Answer the auto-fixer's question from the app.
+ *
+ * Posts the answer as a comment, then swaps `needs-input` back for `auto-fix` so
+ * the next poll on the laptop picks the issue up again and re-reads the thread.
+ * The label swap is the handoff — without it the answer just sits there.
+ */
+function answerIssue(body) {
+  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
+  const answer = String(body.answer || '').trim()
+  if (!answer) throw new Error('An answer is required')
+  const issue = requireAppIssue(body.number)
+
+  githubApi('post', '/issues/' + issue.number + '/comments', {
+    body: '**Answered from the app:**\n\n' + answer,
+  })
+  // A hand-removed label (or a second answer) makes this a 404 — the issue is
+  // already off `needs-input`, which is all this call was for.
+  try {
+    githubApi('delete', '/issues/' + issue.number + '/labels/' + encodeURIComponent(ASK_LABEL))
+  } catch (err) {
+    // already gone
+  }
+  githubApi('post', '/issues/' + issue.number + '/labels', { labels: [FIX_LABEL] })
+  return { answered: issue.number }
 }
 
 /**
@@ -918,25 +1031,10 @@ function createIssue(body) {
  */
 function listIssues(secret) {
   if (secret !== chatSecret()) throw new Error('Bad chat secret')
-  const res = UrlFetchApp.fetch(
-    'https://api.github.com/repos/' +
-      ISSUE_REPO +
-      '/issues?labels=from-app&state=all&per_page=100&sort=created&direction=desc',
-    {
-      method: 'get',
-      muteHttpExceptions: true,
-      headers: {
-        Authorization: 'Bearer ' + githubToken(),
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
+  const data = githubApi(
+    'get',
+    '/issues?labels=from-app&state=all&per_page=100&sort=created&direction=desc',
   )
-  const code = res.getResponseCode()
-  if (code < 200 || code >= 300) {
-    throw new Error('GitHub issue list failed (' + code + '): ' + res.getContentText())
-  }
-  const data = JSON.parse(res.getContentText())
   const out = []
   for (let i = 0; i < data.length; i++) {
     const it = data[i]

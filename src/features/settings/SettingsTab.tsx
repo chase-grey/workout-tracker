@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { fetchChatEndpoint, forgetChatEndpoint } from '../../services/chatEndpoint'
-import {
-  cachedIssues,
-  issueProgress,
-  listIssues,
-  type IssueProgress,
-  type TrackedIssue,
-} from '../../services/issues'
+import { issueProgress, type IssueProgress, type TrackedIssue } from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
@@ -16,9 +10,11 @@ import { DEFAULT_FLEX_ROUTINE } from '../../config/flexPlan'
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
 // `working` reads amber rather than green: it's a run in flight, not a result.
+// `asks` is the only one that wants you to do something, so it's the loudest.
 const ISSUE_BADGE: Record<IssueProgress, string> = {
   open: 'bg-accent/20 text-accent',
   working: 'bg-amber-400/20 text-amber-400',
+  asks: 'bg-accent text-black',
   stalled: 'bg-red-400/20 text-red-400',
   closed: 'bg-neutral-700 text-neutral-300',
 }
@@ -30,7 +26,17 @@ const SYNC_LABEL: Record<string, string> = {
   error: 'sync error',
 }
 
-export function SettingsTab() {
+export function SettingsTab({
+  issues,
+  issuesFailed,
+  onAnswer,
+}: {
+  /** The shared issue list from useTrackedIssues; null before a first read. */
+  issues: TrackedIssue[] | null
+  issuesFailed: boolean
+  /** Hand an issue the fixer is asking about to the coach tab to be answered. */
+  onAnswer: (number: number) => void
+}) {
   const { settings, updateSettings, sync, lastSync, pendingWrites, updateFlexPlan } = useData()
   // Two taps to restore the routine: it throws away every coach edit ever made
   // to it, which is the point after a bad one, but not something to do by brush.
@@ -41,11 +47,6 @@ export function SettingsTab() {
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
   // Whether a laptop has published a coach address the token can actually reach.
   const [coach, setCoach] = useState<'checking' | 'live' | 'none' | 'untried'>('untried')
-  // The bug reports filed from the coach chat, read back with their open/closed
-  // state. Seeded from the last read so a revisit shows the history at once and
-  // only the refresh behind it is waited on; null means never fetched.
-  const [issues, setIssues] = useState<TrackedIssue[] | null>(cachedIssues)
-  const [issuesFailed, setIssuesFailed] = useState(false)
 
   useEffect(() => {
     if (!settings.chatToken.trim()) return setCoach('untried')
@@ -54,28 +55,6 @@ export function SettingsTab() {
     void fetchChatEndpoint().then((e) => alive && setCoach(e ? 'live' : 'none'))
     return () => {
       alive = false
-    }
-  }, [settings.chatToken])
-
-  useEffect(() => {
-    if (!settings.chatToken.trim()) return
-    let alive = true
-    const refresh = () =>
-      listIssues()
-        .then((list) => {
-          if (!alive) return
-          setIssues(list)
-          setIssuesFailed(false)
-        })
-        .catch(() => alive && setIssuesFailed(true))
-    refresh()
-    // Keep re-reading while this tab is open: the interesting states — the fixer
-    // claiming an issue, then closing it — both land minutes after the first read,
-    // and a list frozen at mount would never show them.
-    const timer = setInterval(refresh, 30_000)
-    return () => {
-      alive = false
-      clearInterval(timer)
     }
   }, [settings.chatToken])
 
@@ -141,25 +120,45 @@ export function SettingsTab() {
           ) : issues.length === 0 ? (
             <p className="text-xs text-neutral-500">no issues filed yet</p>
           ) : (
-            issues.map((issue) => (
-              <a
-                key={issue.number}
-                href={issue.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3 active:bg-surface-2"
-              >
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    ISSUE_BADGE[issueProgress(issue)]
-                  }`}
+            issues.map((issue) => {
+              const progress = issueProgress(issue)
+              const badge = (
+                <>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${ISSUE_BADGE[progress]}`}
+                  >
+                    {progress}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
+                  <span className="shrink-0 font-mono text-xs text-neutral-500">
+                    #{issue.number}
+                  </span>
+                </>
+              )
+              const row = 'flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3'
+              // An issue that's asking goes to the coach to be answered instead of
+              // out to github.com — answering is the whole reason it's on screen,
+              // and the phone is where you'll be when you see it.
+              return progress === 'asks' ? (
+                <button
+                  key={issue.number}
+                  onClick={() => onAnswer(issue.number)}
+                  className={`${row} w-full text-left active:bg-surface-2`}
                 >
-                  {issueProgress(issue)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
-                <span className="shrink-0 font-mono text-xs text-neutral-500">#{issue.number}</span>
-              </a>
-            ))
+                  {badge}
+                </button>
+              ) : (
+                <a
+                  key={issue.number}
+                  href={issue.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`${row} active:bg-surface-2`}
+                >
+                  {badge}
+                </a>
+              )
+            })
           )}
         </section>
       )}

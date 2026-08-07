@@ -38,18 +38,37 @@ export type TrackedIssue = {
   labels?: string[]
 }
 
+/** One comment on an issue — either the fixer's question or an answer sent back. */
+export type IssueComment = {
+  id: number
+  author: string
+  body: string
+  createdAt: string
+}
+
+/** An issue plus its comment thread, read when the fixer has asked something. */
+export type IssueThread = {
+  number: number
+  title: string
+  state: 'open' | 'closed'
+  labels: string[]
+  comments: IssueComment[]
+}
+
 /**
  * How far along an issue is, one step finer than GitHub's open/closed.
  *
  * `working` means the auto-fixer (scripts/autofix.mjs) has claimed the issue and
- * Claude is on it right now; `stalled` means it tried and backed off, leaving the
- * issue open for a human. Both come from labels the fixer sets, so this is the
+ * Claude is on it right now; `asks` means it stopped to ask something and is
+ * waiting on an answer; `stalled` means it tried and backed off, leaving the
+ * issue open for a human. All come from labels the fixer sets, so this is the
  * real state of the run and not a guess from timestamps.
  */
-export type IssueProgress = 'open' | 'working' | 'stalled' | 'closed'
+export type IssueProgress = 'open' | 'working' | 'asks' | 'stalled' | 'closed'
 
-/** Labels scripts/autofix.mjs sets — RUNNING_LABEL and FAILED_LABEL there. */
+/** Labels scripts/autofix.mjs sets — RUNNING_LABEL, ASK_LABEL, FAILED_LABEL there. */
 const WORKING_LABEL = 'autofix-running'
+const ASKS_LABEL = 'needs-input'
 const STALLED_LABEL = 'autofix-failed'
 
 export function issueProgress(issue: TrackedIssue): IssueProgress {
@@ -57,9 +76,17 @@ export function issueProgress(issue: TrackedIssue): IssueProgress {
   // hand-closed issue can still be carrying one.
   if (issue.state === 'closed') return 'closed'
   const labels = issue.labels ?? []
+  // Ahead of `working`: the fixer drops its running label before asking, but the
+  // two calls aren't atomic and an issue caught between them is asking, not running.
+  if (labels.includes(ASKS_LABEL)) return 'asks'
   if (labels.includes(WORKING_LABEL)) return 'working'
   if (labels.includes(STALLED_LABEL)) return 'stalled'
   return 'open'
+}
+
+/** The issues the fixer is blocked on, oldest question first. */
+export function issuesAwaitingAnswer(issues: TrackedIssue[] | null): TrackedIssue[] {
+  return (issues ?? []).filter((i) => issueProgress(i) === 'asks')
 }
 
 /** A short, non-sensitive snapshot of the runtime, so an issue is actionable. */
@@ -123,4 +150,42 @@ export async function listIssues(): Promise<TrackedIssue[]> {
   const list = await api.listIssues(secret)
   storage.saveIssues(list)
   return list
+}
+
+/** The comment thread on one issue — the fixer's question and anything since. */
+export async function fetchIssueThread(number: number): Promise<IssueThread> {
+  const secret = chatToken()
+  if (!secret) {
+    throw new Error('add your coach token in Settings to read this issue.')
+  }
+  return api.issueThread(secret, number)
+}
+
+/**
+ * Reply to the fixer's question. The answer lands as an issue comment and the
+ * backend hands the issue back to the fixer (`needs-input` off, `auto-fix` on),
+ * so the next poll picks it up with the whole thread as context.
+ */
+export async function answerIssue(number: number, answer: string): Promise<void> {
+  const secret = chatToken()
+  if (!secret) {
+    throw new Error('add your coach token in Settings to answer.')
+  }
+  const text = answer.trim()
+  if (!text) throw new Error('write an answer first.')
+  await api.answerIssue({ secret, number, answer: text })
+}
+
+/**
+ * What the fixer is asking, taken from the newest comment on the thread.
+ *
+ * The `needs-input` label goes on immediately after the question is posted and
+ * comes off the moment an answer is, so while an issue reads `asks` its last
+ * comment IS the question. Both sides prefix their comments with a bold marker
+ * line for anyone reading on GitHub; that line is noise in the app, so it's cut.
+ */
+export function latestQuestion(thread: IssueThread): string {
+  const last = thread.comments[thread.comments.length - 1]
+  if (!last) return ''
+  return last.body.replace(/^\s*\*\*.*\*\*\s*\n+/, '').trim()
 }

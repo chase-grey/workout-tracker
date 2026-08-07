@@ -163,6 +163,31 @@ lets `claude` edit files while the script handles git; `skip` passes
 `--dangerously-skip-permissions` so it can run `npm test` itself before the commit
 (more autonomous, riskier).
 
+### When the fixer needs to ask you something
+
+A vague report used to be a dead end — `claude -p` has no way to ask a question, so
+the run just ended and the issue sat there `stalled`. Now it can ask, and you answer
+on your phone without ever opening a terminal.
+
+```
+fixer can't act    → comments its questions, labels the issue `needs-input`
+your phone         → dot on the settings tab; the issue reads "asks"
+tap it             → the coach chat opens with the question above the composer
+you reply          → posted as a comment, label swaps back to `auto-fix`
+next poll (≤60s)   → the fixer picks it up again, thread and all
+```
+
+Nothing is resumed from a stored Claude session: each attempt is a fresh run given
+the whole comment thread, so the conversation survives restarting the fixer, and a
+question answered days later still lands with its context intact.
+
+Answering doesn't need the laptop awake — it goes through the same always-on Apps
+Script backend as filing. The fix just waits until the fixer is running again.
+
+This needs the two extra backend routes (`issue_thread`, `answer_issue`), so
+**redeploy the Apps Script web app** if you set the reporting up before this existed.
+The token needs nothing new.
+
 ## Deploy
 
 - **Frontend:** push to `main` → GitHub Actions builds and publishes to Pages
