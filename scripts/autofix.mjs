@@ -116,10 +116,12 @@ function buildPrompt(issue) {
     issue.body || '(no description)',
     '',
     'Instructions:',
-    '- Investigate and implement a focused fix for this issue only.',
+    '- Investigate and implement a focused change for this issue only. It may be a bug',
+    '  report or a feature request — both are in scope, so do not refuse one for not',
+    '  being a bug.',
     '- Run `npm test` and make sure it passes before finishing.',
     '- Do NOT commit or push — the surrounding script handles git.',
-    '- If the issue is unclear or not a real bug, make no changes and explain why.',
+    '- If the issue is too vague to act on, make no changes and explain what is missing.',
   ].join('\n')
 }
 
