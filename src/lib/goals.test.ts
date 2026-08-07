@@ -1,15 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import {
+  BENCH_GAIN_CAP,
   BODYWEIGHT_GAIN_CAP,
   buildGoals,
   FLEX_GAIN_DECAY,
   GOAL_IDS,
   isReached,
   reachedDate,
+  SQUAT_GAIN_CAP,
 } from './goals'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import type { FlexEntry } from './flex'
-import { project } from './predictions'
+import type { WorkoutRow } from '../types'
+import { isPaceCapped, project } from './predictions'
 
 /** A fortnight of weigh-ins climbing 3 lbs a week — a good run, plus water. */
 const HOT_FORTNIGHT = [
@@ -45,10 +48,65 @@ describe('bodyweight goals cap the pace they project against', () => {
     expect(p.etaWeeks).toBe(10)
   })
 
-  it('leaves the lift goals uncapped — their own taper handles it', () => {
+  it('caps the lift goals too — the taper alone scales with the fit', () => {
     for (const g of goals.filter((x) => x.exerciseKey != null)) {
-      expect(g.capPerWeek).toBeUndefined()
+      expect(g.capPerWeek).toBeDefined()
     }
+  })
+})
+
+describe('lift goals cap the pace they project against', () => {
+  /** One top set of five, a week apart, climbing 20 lbs a session. */
+  const squatSet = (date: string, weight: number): WorkoutRow => ({
+    session_id: date,
+    date,
+    day_type: 'fullbody',
+    exercise: 'barbell_squat',
+    set_number: 1,
+    weight_lbs: weight,
+    reps: 5,
+    notes: '',
+    is_historical: false,
+  })
+  const HOT_SQUATS = [
+    squatSet('2026-02-01', 155),
+    squatSet('2026-02-08', 175),
+    squatSet('2026-02-15', 195),
+  ]
+
+  const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: HOT_SQUATS })
+  const today = new Date(2026, 1, 15)
+
+  it('caps squat harder than bench, in line with what each adds', () => {
+    expect(goals.find((g) => g.id === GOAL_IDS.squatBodyweight)!.capPerWeek).toBe(SQUAT_GAIN_CAP)
+    expect(goals.find((g) => g.id === GOAL_IDS.squatOneAndAHalf)!.capPerWeek).toBe(SQUAT_GAIN_CAP)
+    expect(goals.find((g) => g.id === GOAL_IDS.benchBodyweight)!.capPerWeek).toBe(BENCH_GAIN_CAP)
+  })
+
+  it('projects 1.5× bodyweight weeks out, not days', () => {
+    // Three sessions of +20 lbs fit 23 lbs of estimated 1RM a week. Tapered but
+    // uncapped, that reads as arriving inside a fortnight; held to five a week,
+    // the same climb takes a couple of months.
+    const g = goals.find((x) => x.id === GOAL_IDS.squatOneAndAHalf)!
+    const uncapped = project(g.points, g.target, today, { decayPerWeek: g.decayPerWeek })
+    const capped = project(g.points, g.target, today, {
+      decayPerWeek: g.decayPerWeek,
+      capPerWeek: g.capPerWeek,
+    })
+
+    expect(capped.observedSlopePerWeek).toBeCloseTo(23.35, 2)
+    expect(capped.slopePerWeek).toBe(SQUAT_GAIN_CAP)
+    expect(uncapped.etaWeeks).toBeLessThan(2)
+    expect(capped.etaWeeks).toBeGreaterThan(6)
+  })
+
+  it('reports the pace as capped so the panel can say so', () => {
+    const g = goals.find((x) => x.id === GOAL_IDS.squatOneAndAHalf)!
+    const p = project(g.points, g.target, today, {
+      decayPerWeek: g.decayPerWeek,
+      capPerWeek: g.capPerWeek,
+    })
+    expect(isPaceCapped(p)).toBe(true)
   })
 })
 

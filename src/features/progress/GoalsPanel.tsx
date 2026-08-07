@@ -266,9 +266,10 @@ function DataChart({ points, target, targetLabel }: { points: Point[]; target: n
 
 /**
  * The pace a projection is drawing its ETA from. Marked "max" when that's the
- * goal's cap rather than the measured pace (see predictions.capSlope), so a
- * fortnight of water weight reading +3 lbs/wk doesn't look like the app lost the
- * plot when it projects a pound.
+ * goal's cap rather than the measured pace (see predictions.capSlope), so
+ * neither a fortnight of water weight reading +3 lbs/wk nor one extra rep on a
+ * top set reading +23 lbs of 1RM a week looks like the app lost the plot when it
+ * projects the ceiling instead.
  */
 function paceLabel(proj: Projection, unit: string): string {
   const sign = proj.slopePerWeek > 0 ? '+' : ''

@@ -54,6 +54,26 @@ export const FLEX_GAIN_DECAY = 0.9
  */
 export const BODYWEIGHT_GAIN_CAP = 1
 
+/**
+ * The fastest weekly 1RM gain the lift goals will project against, in lbs.
+ *
+ * The taper alone doesn't make a lift projection honest, because the total gain
+ * it allows — pace ÷ (1 − decay), so about fourteen times the weekly figure — is
+ * scaled by whatever the last fortnight fit. And a fortnight of estimated 1RMs
+ * doesn't move smoothly: the readings come off top sets through Epley, so one
+ * extra rep on one set reads as +6 lbs/week and licenses a projection nearly
+ * ninety pounds long. Bending that line doesn't make it true.
+ *
+ * So the pace is held to what a good month of actual training adds, spread over
+ * its weeks (see predictions.capSlope), and the taper works on a figure the
+ * sessions can support. Squat takes more than bench because it always has: more
+ * muscle over a longer range, off a base that's further from its ceiling. With
+ * the decay on top, the caps put a total of about 71 lbs on the squat and 43 on
+ * the bench, which is what reaching these targets from here actually asks for.
+ */
+export const SQUAT_GAIN_CAP = 5
+export const BENCH_GAIN_CAP = 3
+
 /** Stable ids, used as the keys locked projections are stored under. */
 export const GOAL_IDS = {
   weight180: 'bodyweight_180',
@@ -100,8 +120,8 @@ export type GoalSpec = {
   decayPerWeek?: number
   /**
    * Fastest weekly change this goal's ETA may be projected from, in the goal's
-   * unit (see BODYWEIGHT_GAIN_CAP). Omitted for goals with no physiological
-   * ceiling worth naming — a 1RM's own decay already keeps its projection honest.
+   * unit (see BODYWEIGHT_GAIN_CAP, SQUAT_GAIN_CAP). Omitted for goals read off a
+   * measurement with no weekly ceiling worth naming.
    */
   capPerWeek?: number
 }
@@ -238,6 +258,7 @@ export function buildGoals({
       direction: 'up',
       movingTarget: true,
       decayPerWeek: STRENGTH_GAIN_DECAY,
+      capPerWeek: BENCH_GAIN_CAP,
     },
     {
       id: GOAL_IDS.squatBodyweight,
@@ -249,6 +270,7 @@ export function buildGoals({
       direction: 'up',
       movingTarget: true,
       decayPerWeek: STRENGTH_GAIN_DECAY,
+      capPerWeek: SQUAT_GAIN_CAP,
     },
     {
       id: GOAL_IDS.squatOneAndAHalf,
@@ -260,6 +282,7 @@ export function buildGoals({
       direction: 'up',
       movingTarget: true,
       decayPerWeek: STRENGTH_GAIN_DECAY,
+      capPerWeek: SQUAT_GAIN_CAP,
     },
     {
       id: GOAL_IDS.sixPack,
