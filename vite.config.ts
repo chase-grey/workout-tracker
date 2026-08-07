@@ -198,6 +198,84 @@ function llmProxy(opts: { apiKey: string; baseUrl: string; model: string; insecu
   }
 }
 
+/**
+ * A Cloudflare quick tunnel (`npm run dev:tunnel`) publishes this dev server at a
+ * random *.trycloudflare.com hostname, which is how the phone reaches it from
+ * anywhere — including off Epic's wifi. cloudflared advertises that hostname on a
+ * local metrics port (20241 by default, walking up when it's taken), so the dev
+ * server can discover its own public URL and hand it to Settings as a QR.
+ */
+const CF_METRICS_PORTS = [20241, 20242, 20243, 20244, 20245]
+
+/** GET JSON with a deadline; any failure is just "no answer" — every caller here
+ *  is probing something that may not exist. */
+async function getJson(url: string, timeoutMs: number): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+    return res.ok ? ((await res.json()) as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Serves /api/share: the public URL to open this dev server on a phone, or null.
+ *
+ * A tunnel being alive doesn't make it OURS — other dev servers on this machine
+ * may have tunnels of their own. This process mints a nonce and serves it at
+ * /api/share/ping; a tunnel is only reported once a round trip through the public
+ * hostname comes back with THIS nonce. If the round trip can't complete at all (no
+ * egress), a single detected tunnel is reported unverified rather than dropped.
+ */
+function shareLink(explicit: string | null): PluginOption {
+  const nonce = `wt-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
+  let cache: { at: number; value: { url: string; verified: boolean } | null } = { at: 0, value: null }
+
+  const detect = async () => {
+    const hits = await Promise.all(
+      CF_METRICS_PORTS.map((p) => getJson(`http://127.0.0.1:${p}/quicktunnel`, 700)),
+    )
+    const hosts = [...new Set(hits.map((h) => h?.hostname).filter(Boolean))] as string[]
+    if (!hosts.length) return null
+    // true = answered with our nonce, false = someone else's server, null = no answer.
+    const checked = await Promise.all(
+      hosts.map(async (host) => {
+        const pong = await getJson(`https://${host}/api/share/ping`, 6000)
+        return { host, mine: pong ? pong.nonce === nonce : null }
+      }),
+    )
+    const verified = checked.find((c) => c.mine === true)
+    if (verified) return { url: `https://${verified.host}`, verified: true }
+    if (checked.length === 1 && checked[0].mine === null)
+      return { url: `https://${checked[0].host}`, verified: false }
+    return null
+  }
+
+  return {
+    name: 'share-link',
+    configureServer(server) {
+      server.middlewares.use('/api/share/ping', (_req, res) => {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ nonce }))
+      })
+
+      server.middlewares.use('/api/share', (_req, res) => {
+        res.setHeader('content-type', 'application/json')
+        if (explicit) return res.end(JSON.stringify({ url: explicit, verified: true }))
+        // Probing costs an internet round trip, so hold the answer briefly —
+        // reopening Settings shouldn't re-run the whole dance.
+        if (Date.now() - cache.at < 20_000) return res.end(JSON.stringify(cache.value ?? { url: null }))
+        void detect()
+          .catch(() => null) // report no link rather than fail the request
+          .then((value) => {
+            cache = { at: Date.now(), value }
+            res.end(JSON.stringify(value ?? { url: null }))
+          })
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // Empty prefix → load all vars (incl. non-VITE) from .env into this Node config.
@@ -217,6 +295,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: mode === 'production' ? `/${REPO}/` : '/',
+    // host: true binds to the LAN so a phone on the same wifi can reach the dev
+    // server directly. allowedHosts lets a Cloudflare quick tunnel reach it too —
+    // Vite otherwise rejects Host headers it doesn't recognize with "Blocked
+    // request." Scoped to the tunnel domain, not opened wide.
+    server: { host: true, allowedHosts: ['.trycloudflare.com'] },
     define: {
       __APP_COMMIT__: JSON.stringify(COMMIT),
       __BUILD_TIME__: JSON.stringify(BUILD_TIME),
@@ -231,6 +314,9 @@ export default defineConfig(({ mode }) => {
         model: env.OPENAI_MODEL || 'gpt-4o',
         insecure,
       }),
+      // The phone link Settings shows as a QR. SHARE_URL pins it (a named tunnel
+      // or a LAN address); left unset, a Cloudflare quick tunnel is auto-detected.
+      shareLink((env.SHARE_URL || '').trim().replace(/\/$/, '') || null),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.svg', 'icon.svg'],

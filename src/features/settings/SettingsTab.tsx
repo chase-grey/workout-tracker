@@ -4,6 +4,7 @@ import { download, workoutsToCsv } from '../../lib/csv'
 import { ImportScreen } from './ImportScreen'
 import { PlanEditor } from './PlanEditor'
 import { FlexRoutineEditor } from './FlexRoutineEditor'
+import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { DAY_TYPES, DEFAULT_PLAN } from '../../config/plan'
@@ -115,6 +116,8 @@ export function SettingsTab() {
       {importing && <ImportScreen onClose={() => setImporting(false)} />}
       {editingPlan && <PlanEditor day={editingPlan} onClose={() => setEditingPlan(null)} />}
       {editingFlex && <FlexRoutineEditor onClose={() => setEditingFlex(false)} />}
+
+      <PhoneLink />
 
       {IS_DESKTOP && (
         <section className="flex flex-col gap-2">
