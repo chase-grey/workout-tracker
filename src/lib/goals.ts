@@ -20,9 +20,27 @@ import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
  * predictions.weeksToClose). Strength gains taper — a straight-line projection
  * off a few promising early sessions arrives too soon and draws a line too steep
  * to hold — so their ETAs and locked lines bend, easing ~7% off the pace each
- * week. Body-composition goals keep a straight line (no decay).
+ * week. Flexibility tapers harder still (see FLEX_GAIN_DECAY); body-composition
+ * goals keep a straight line (no decay).
  */
 export const STRENGTH_GAIN_DECAY = 0.93
+
+/**
+ * Weekly decay of the gain rate the flexibility ladders project with.
+ *
+ * Range of motion tapers harder than strength does. The first weeks of honest
+ * stretching buy degrees cheaply — much of that early range is the nervous system
+ * agreeing to relax into a position the hips could already reach — and once
+ * that's spent, the rest comes out of tissue that changes on a scale of months.
+ * A fortnight of the cheap range fits several degrees a week, and drawn straight
+ * that line puts a full 180° split inside the year.
+ *
+ * Easing 10% off the pace each week, against strength's 7%, caps the total gain
+ * any one pace can buy at ten times its weekly figure. A good fortnight still
+ * pulls the next milestone closer, and the far ones say what they should: moving,
+ * but not at this pace.
+ */
+export const FLEX_GAIN_DECAY = 0.9
 
 /**
  * The fastest weekly bodyweight change the goals will project against, in lbs.
@@ -76,7 +94,8 @@ export type GoalSpec = {
   milestone?: boolean
   /**
    * Weekly decay of the gain rate for this goal's projection (see
-   * STRENGTH_GAIN_DECAY). Omitted for goals that project as a straight line.
+   * STRENGTH_GAIN_DECAY, FLEX_GAIN_DECAY). Omitted for goals that project as a
+   * straight line.
    */
   decayPerWeek?: number
   /**
@@ -170,6 +189,7 @@ export function buildGoals({
     target: deg,
     direction: 'up',
     milestone: true,
+    decayPerWeek: FLEX_GAIN_DECAY,
   }))
   const tailorsGoals: GoalSpec[] = TAILORS_GOALS.map((deg): GoalSpec => ({
     id: `tailors_${deg}`,
@@ -180,6 +200,7 @@ export function buildGoals({
     target: deg,
     direction: 'up',
     milestone: true,
+    decayPerWeek: FLEX_GAIN_DECAY,
   }))
 
   // 999 stands in for "no bodyweight logged yet", so a moving target can't be 0

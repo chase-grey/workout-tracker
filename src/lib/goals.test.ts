@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { BODYWEIGHT_GAIN_CAP, buildGoals, GOAL_IDS, isReached, reachedDate } from './goals'
+import {
+  BODYWEIGHT_GAIN_CAP,
+  buildGoals,
+  FLEX_GAIN_DECAY,
+  GOAL_IDS,
+  isReached,
+  reachedDate,
+} from './goals'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import type { FlexEntry } from './flex'
 import { project } from './predictions'
@@ -72,11 +79,52 @@ describe('flexibility goals join the goal set', () => {
     }
   })
 
+  it('tapers every ladder rung', () => {
+    for (const deg of SPLIT_GOALS) {
+      expect(goals.find((x) => x.id === `split_${deg}`)!.decayPerWeek).toBe(FLEX_GAIN_DECAY)
+    }
+    for (const deg of TAILORS_GOALS) {
+      expect(goals.find((x) => x.id === `tailors_${deg}`)!.decayPerWeek).toBe(FLEX_GAIN_DECAY)
+    }
+  })
+
   it('projects an improving split on track toward a far goal', () => {
     const g = goals.find((x) => x.id === 'split_180')!
-    const p = project(g.points, g.target, new Date(2026, 0, 22))
+    const p = project(g.points, g.target, new Date(2026, 0, 22), { decayPerWeek: g.decayPerWeek })
     expect(p.onTrack).toBe(true)
     expect(p.etaDate! > '2026-01-22').toBe(true)
+  })
+
+  it('holds the far rung back well past where a straight line would put it', () => {
+    // 10°/week off the recent window, 80° short of a full split: drawn straight
+    // that's eight weeks away. Tapering, the same pace takes twice as long.
+    const g = goals.find((x) => x.id === 'split_180')!
+    const straight = project(g.points, g.target, new Date(2026, 0, 22))
+    const tapered = project(g.points, g.target, new Date(2026, 0, 22), {
+      decayPerWeek: g.decayPerWeek,
+    })
+
+    expect(straight.etaWeeks).toBeCloseTo(8, 5)
+    expect(tapered.etaWeeks).toBeGreaterThan(15)
+  })
+
+  it('gives no date to a rung a modest pace can never reach', () => {
+    // 1.5°/week from 110° buys 15° in total before the taper runs it out (see
+    // FLEX_GAIN_DECAY): 120 is a date, 150 is "keep stretching", not a date.
+    const creeping: FlexEntry[] = [
+      { date: '2026-01-08', splitDeg: 107, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-01-15', splitDeg: 108.5, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-01-22', splitDeg: 110, tailorsLeftDeg: null, tailorsRightDeg: null },
+    ]
+    const slow = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: creeping })
+    const at = (id: string) => {
+      const g = slow.find((x) => x.id === id)!
+      return project(g.points, g.target, new Date(2026, 0, 22), { decayPerWeek: g.decayPerWeek })
+    }
+
+    expect(at('split_120').onTrack).toBe(true)
+    expect(at('split_150').onTrack).toBe(false)
+    expect(at('split_150').etaDate).toBeNull()
   })
 
   it('lists the flex goals with empty series when no entries are given', () => {

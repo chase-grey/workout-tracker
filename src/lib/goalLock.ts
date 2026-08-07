@@ -59,8 +59,7 @@ export type LockedProjections = Record<string, LockedProjection>
 
 /**
  * The weekly taper a lock is drawn and judged with: the goal's own, or 1 — a
- * straight line — for the goals that project straight (bodyweight, body fat,
- * flexibility).
+ * straight line — for the goals that project straight (bodyweight, body fat).
  *
  * This has to be the same model the ETA came from, and the line has to be shaped
  * by the *pace* rather than by the span, or the commitment starts asking for
