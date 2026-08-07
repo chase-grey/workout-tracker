@@ -39,6 +39,7 @@ import {
   fetchIssueThread,
   answerIssue,
   latestQuestion,
+  partitionIssues,
 } from './issues'
 import type { IssueThread, TrackedIssue } from './issues'
 
@@ -173,6 +174,49 @@ describe('issuesAwaitingAnswer', () => {
   it('ignores a closed issue still carrying the label', () => {
     const closed: TrackedIssue = { ...issue(9, ['needs-input']), state: 'closed' }
     expect(issuesAwaitingAnswer([closed])).toEqual([])
+  })
+})
+
+describe('partitionIssues', () => {
+  const issue = (number: number, over: Partial<TrackedIssue> = {}): TrackedIssue => ({
+    number,
+    title: 't',
+    url: 'u',
+    state: 'open',
+    createdAt: 't',
+    ...over,
+  })
+
+  it('splits the closed issues out from everything still live', () => {
+    const { active, closed } = partitionIssues([
+      issue(1),
+      issue(2, { state: 'closed' }),
+      issue(3, { labels: ['needs-input'] }),
+      issue(4, { state: 'closed', closedAt: 'c' }),
+    ])
+    expect(active.map((i) => i.number)).toEqual([1, 3])
+    expect(closed.map((i) => i.number)).toEqual([2, 4])
+  })
+
+  it('keeps a working or stalled issue out of the closed pile', () => {
+    const { active, closed } = partitionIssues([
+      issue(1, { labels: ['autofix-running'] }),
+      issue(2, { labels: ['autofix-failed'] }),
+    ])
+    expect(active).toHaveLength(2)
+    expect(closed).toEqual([])
+  })
+
+  it('files a hand-closed issue that kept its running label as closed', () => {
+    const { active, closed } = partitionIssues([
+      issue(9, { state: 'closed', labels: ['autofix-running'] }),
+    ])
+    expect(active).toEqual([])
+    expect(closed.map((i) => i.number)).toEqual([9])
+  })
+
+  it('gives back two empty lists for an empty list', () => {
+    expect(partitionIssues([])).toEqual({ active: [], closed: [] })
   })
 })
 

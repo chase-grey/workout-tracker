@@ -89,6 +89,25 @@ export function issuesAwaitingAnswer(issues: TrackedIssue[] | null): TrackedIssu
   return (issues ?? []).filter((i) => issueProgress(i) === 'asks')
 }
 
+/**
+ * The list split into what's still live and what's done, keeping each side in the
+ * order it arrived. Nothing ever gets filed off a closed issue — it's there to
+ * look back at — so Settings folds that half away and leads with the live ones,
+ * which otherwise get pushed off screen as the closed pile grows.
+ */
+export function partitionIssues(issues: TrackedIssue[]): {
+  active: TrackedIssue[]
+  closed: TrackedIssue[]
+} {
+  const active: TrackedIssue[] = []
+  const closed: TrackedIssue[] = []
+  for (const issue of issues) {
+    if (issueProgress(issue) === 'closed') closed.push(issue)
+    else active.push(issue)
+  }
+  return { active, closed }
+}
+
 /** A short, non-sensitive snapshot of the runtime, so an issue is actionable. */
 function collectContext(chatTail?: string): string {
   const lines = [

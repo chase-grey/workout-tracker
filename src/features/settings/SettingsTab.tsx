@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
+import { MdKeyboardArrowDown } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { fetchChatEndpoint, forgetChatEndpoint } from '../../services/chatEndpoint'
-import { issueProgress, type IssueProgress, type TrackedIssue } from '../../services/issues'
+import {
+  issueProgress,
+  partitionIssues,
+  type IssueProgress,
+  type TrackedIssue,
+} from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
@@ -17,6 +23,45 @@ const ISSUE_BADGE: Record<IssueProgress, string> = {
   asks: 'bg-accent text-black',
   stalled: 'bg-red-400/20 text-red-400',
   closed: 'bg-neutral-700 text-neutral-300',
+}
+
+const ISSUE_ROW = 'flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3'
+
+/**
+ * One issue in the Settings list. An issue that's asking goes to the coach to be
+ * answered instead of out to github.com — answering is the whole reason it's on
+ * screen, and the phone is where you'll be when you see it.
+ */
+function IssueRow({ issue, onAnswer }: { issue: TrackedIssue; onAnswer: (n: number) => void }) {
+  const progress = issueProgress(issue)
+  const badge = (
+    <>
+      <span
+        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${ISSUE_BADGE[progress]}`}
+      >
+        {progress}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
+      <span className="shrink-0 font-mono text-xs text-neutral-500">#{issue.number}</span>
+    </>
+  )
+  return progress === 'asks' ? (
+    <button
+      onClick={() => onAnswer(issue.number)}
+      className={`${ISSUE_ROW} w-full text-left active:bg-surface-2`}
+    >
+      {badge}
+    </button>
+  ) : (
+    <a
+      href={issue.url}
+      target="_blank"
+      rel="noreferrer"
+      className={`${ISSUE_ROW} active:bg-surface-2`}
+    >
+      {badge}
+    </a>
+  )
 }
 
 const SYNC_LABEL: Record<string, string> = {
@@ -48,6 +93,11 @@ export function SettingsTab({
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   // Whether a laptop has published a coach address the token can actually reach.
   const [coach, setCoach] = useState<'checking' | 'live' | 'none' | 'untried'>('untried')
+  // Closed issues fold away by default — they're history, and the live ones are
+  // what you came here for. Opening them lasts only as long as the visit.
+  const [showClosed, setShowClosed] = useState(false)
+
+  const { active, closed } = partitionIssues(issues ?? [])
 
   useEffect(() => {
     if (!settings.chatToken.trim()) return setCoach('untried')
@@ -127,45 +177,31 @@ export function SettingsTab({
           ) : issues.length === 0 ? (
             <p className="text-xs text-neutral-500">no issues filed yet</p>
           ) : (
-            issues.map((issue) => {
-              const progress = issueProgress(issue)
-              const badge = (
+            <>
+              {active.map((issue) => (
+                <IssueRow key={issue.number} issue={issue} onAnswer={onAnswer} />
+              ))}
+              {active.length === 0 && <p className="text-xs text-neutral-500">nothing open</p>}
+              {closed.length > 0 && (
                 <>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${ISSUE_BADGE[progress]}`}
+                  <button
+                    onClick={() => setShowClosed(!showClosed)}
+                    aria-expanded={showClosed}
+                    className="flex min-h-[44px] items-center gap-1 self-start text-sm text-neutral-400 active:text-neutral-200"
                   >
-                    {progress}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
-                  <span className="shrink-0 font-mono text-xs text-neutral-500">
-                    #{issue.number}
-                  </span>
+                    closed ({closed.length})
+                    <MdKeyboardArrowDown
+                      className={`text-lg ${showClosed ? 'rotate-180' : ''}`}
+                      aria-hidden
+                    />
+                  </button>
+                  {showClosed &&
+                    closed.map((issue) => (
+                      <IssueRow key={issue.number} issue={issue} onAnswer={onAnswer} />
+                    ))}
                 </>
-              )
-              const row = 'flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3'
-              // An issue that's asking goes to the coach to be answered instead of
-              // out to github.com — answering is the whole reason it's on screen,
-              // and the phone is where you'll be when you see it.
-              return progress === 'asks' ? (
-                <button
-                  key={issue.number}
-                  onClick={() => onAnswer(issue.number)}
-                  className={`${row} w-full text-left active:bg-surface-2`}
-                >
-                  {badge}
-                </button>
-              ) : (
-                <a
-                  key={issue.number}
-                  href={issue.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`${row} active:bg-surface-2`}
-                >
-                  {badge}
-                </a>
-              )
-            })
+              )}
+            </>
           )}
         </section>
       )}
