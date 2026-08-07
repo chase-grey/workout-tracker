@@ -79,6 +79,20 @@ export function SettingsTab() {
       <h2 className="text-xl font-bold">settings</h2>
 
       <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">build</label>
+        <p className="text-xs text-neutral-500">
+          version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
+          {new Date(APP_BUILD_TIME).toLocaleString()}
+        </p>
+        <button
+          onClick={() => void checkForUpdate()}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          check for updates &amp; reload
+        </button>
+      </section>
+
+      <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">google apps script url</label>
         <input
           value={apiUrl}
@@ -200,20 +214,6 @@ export function SettingsTab() {
           </select>
         </section>
       )}
-
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">build</label>
-        <p className="text-xs text-neutral-500">
-          version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
-          {new Date(APP_BUILD_TIME).toLocaleString()}
-        </p>
-        <button
-          onClick={() => void checkForUpdate()}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          check for updates &amp; reload
-        </button>
-      </section>
     </div>
   )
 }

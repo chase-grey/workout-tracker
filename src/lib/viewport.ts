@@ -25,7 +25,16 @@
 // covers any browser where it doesn't — iOS, or an Android too old for
 // interactive-widget. It can't reintroduce the lag either: on a lagging resize
 // event we simply haven't run yet, so there's no stale height to override with.
-const COVERED_SLOP_PX = 8
+//
+// A gap only counts as a keyboard once it's keyboard-sized. Installed from Chrome,
+// this app runs edge-to-edge — it's drawn behind the status and navigation bars —
+// and there the two viewports differ by those bars' heights with no keyboard in
+// sight. Mirroring that sizes the shell to the wrong box and offsets it down the
+// screen by the status bar, which pushes the tail of every tab off the bottom where
+// no amount of scrolling reaches it. The bars are tens of px; a keyboard takes a
+// third of a phone screen, so the two don't overlap. Bars are exactly what
+// `env(safe-area-inset-*)` is for, and that's who handles them (see index.css).
+const KEYBOARD_MIN_PX = 120
 
 export function trackVisualViewport(): void {
   const vv = window.visualViewport
@@ -35,8 +44,12 @@ export function trackVisualViewport(): void {
     // Scale confuses the comparison (a pinch-zoomed vv is smaller for reasons that
     // have nothing to do with a keyboard), so measure at the layout's own scale.
     const visible = vv.height * vv.scale
-    if (window.innerHeight - visible > COVERED_SLOP_PX) {
-      root.style.setProperty('--vvh', `${Math.round(visible)}px`)
+    if (window.innerHeight - visible > KEYBOARD_MIN_PX) {
+      // The shell is offset by --vv-top, so it can only be as tall as what's left
+      // below that — otherwise it hangs off the bottom of the screen and takes the
+      // end of the scroller with it.
+      const height = Math.min(visible, window.innerHeight - vv.offsetTop)
+      root.style.setProperty('--vvh', `${Math.round(height)}px`)
       root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`)
     } else {
       // The layout viewport is tracking the keyboard on its own — hand the shell
