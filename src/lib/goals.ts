@@ -174,10 +174,10 @@ function reachedPoint(goal: GoalSpec): Point | undefined {
  * already applies: a milestone is earned at your best, so the distance to the next
  * one is owed from your best too. The ladders need it most — a warm split lands a
  * few degrees under its own best whenever the warm-up was short, and reading the
- * gap off that one session had the next rung projecting months further out than
- * the session before it, while the rung that same log had already cleared stayed
- * cleared. Strength and bodyweight goals keep the newest reading: you are not
- * squatting 300 because you did once.
+ * gap off that one session put the next rung further away than the log's own best
+ * says it is, while the rung that same best had already cleared stayed cleared.
+ * Strength and bodyweight goals keep the newest reading: you are not squatting 300
+ * because you did once.
  */
 export function projectGoal(goal: GoalSpec, today?: Date): Projection {
   return project(goal.points, goal.target, today, {

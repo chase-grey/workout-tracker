@@ -370,15 +370,17 @@ describe('project anchored on the best of the window', () => {
     expect(best.etaWeeks!).toBeLessThan(latest.etaWeeks!)
   })
 
-  it('does not let one tight session push the next rung months out', () => {
-    // Dropping the 123° tight session leaves 127° as the newest reading, which is
-    // what an unanchored projection would have quoted the session before. The
-    // anchored projection agrees with it rather than retreating.
+  it('does not reopen a gap the log had already closed', () => {
+    // Before the tight session, 127° was the newest reading and the gap was 8°.
+    // The tight session honestly slows the fitted pace, but it should not also
+    // hand back four of those degrees — the anchored gap stays where it was.
     const before = project(tightLastSession.slice(0, -1), 135, new Date(2026, 1, 11))
     const after = project(tightLastSession, 135, today, { bestOf: 'max' })
+    const unanchored = project(tightLastSession, 135, today)
 
     expect(before.current).toBe(127)
-    expect(after.etaWeeks!).toBeLessThanOrEqual(before.etaWeeks!)
+    expect(after.current).toBe(before.current)
+    expect(unanchored.current).toBeLessThan(before.current)
   })
 
   it('takes the lowest reading for a metric that has to come down', () => {

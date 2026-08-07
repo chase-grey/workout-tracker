@@ -106,12 +106,13 @@ export function trendPoints<T extends { date: string }>(
  * rather than a standing state, and for those the newest number is the effort
  * that happened to be measured last, not the range you have. A warm side split
  * comes in a few degrees under its own best whenever the warm-up ran short or
- * the room was cold, and projecting off that day says the next rung is months
- * further off than it was before a tight session — while the rung already
- * cleared stays cleared, because that one is judged on the best (see
- * goals.isReached). Anchoring those on the best reading in the same window the
- * pace is read from keeps the two answers on the same number: what you can
- * currently get into, rather than the last time you tried.
+ * the room was cold, and measuring the gap from that session hands back degrees
+ * the same fortnight already reached — while the rung those degrees cleared stays
+ * cleared, because that one is judged on the best (see goals.isReached). A tight
+ * session should cost you the pace it honestly fitted, which it still does, and
+ * not the range as well. Anchoring on the best reading in the same window the
+ * pace is read from keeps the two answers on one number: what you can currently
+ * get into, rather than the last time you tried.
  *
  * `'max'` when higher is better, `'min'` when lower is. The window always ends on
  * the newest reading (see {@link trendPoints}), so this can only ever be the

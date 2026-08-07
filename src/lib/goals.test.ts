@@ -253,16 +253,15 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     expect(at('split_135').current).toBe(127)
   })
 
-  it('does not push a rung further out than the session before did', () => {
-    const before = buildGoals({
-      ...inputs(HOT_FORTNIGHT),
-      flexEntries: tightLastSession.slice(0, -1),
-    })
-    const wasProjected = projectGoal(
-      before.find((g) => g.id === 'split_135')!,
-      new Date(2026, 1, 11),
-    )
-    expect(at('split_135').etaWeeks!).toBeLessThanOrEqual(wasProjected.etaWeeks!)
+  it('pulls the rung in from where the tight session alone would put it', () => {
+    // Read off the tight 123°, the rung is 12° away and a couple of months out.
+    // Read off the 127° the same fortnight already reached, it's 8° and half that.
+    const g = goals.find((x) => x.id === 'split_135')!
+    const unanchored = project(g.points, g.target, today, { decayPerWeek: g.decayPerWeek })
+
+    expect(unanchored.current).toBe(123)
+    expect(at('split_135').current).toBe(127)
+    expect(at('split_135').etaWeeks!).toBeLessThan(unanchored.etaWeeks!)
   })
 
   it('still tapers and still reaches the far rungs', () => {
@@ -285,17 +284,22 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
   })
 
   it('carries both the taper and the pace ceiling a lift goal declares', () => {
-    const squats: WorkoutRow[] = ['2026-02-01', '2026-02-08', '2026-02-14'].map((date, i) => ({
+    const topSet = (date: string, weight: number): WorkoutRow => ({
       session_id: date,
       date,
       day_type: 'fullbody',
       exercise: 'barbell_squat',
       set_number: 1,
-      weight_lbs: 155 + i * 20,
+      weight_lbs: weight,
       reps: 5,
       notes: '',
       is_historical: false,
-    }))
+    })
+    const squats = [
+      topSet('2026-02-01', 155),
+      topSet('2026-02-08', 175),
+      topSet('2026-02-14', 195),
+    ]
     const p = projectGoal(
       buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: squats }).find(
         (g) => g.id === GOAL_IDS.squatOneAndAHalf,

@@ -614,11 +614,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
     [workouts, bodyWeights, measurements, heightIn, flexEntries],
   )
 
-  const projections = useMemo(
-    () =>
-      new Map(goals.map((g) => [g.id, projectGoal(g)])),
-    [goals],
-  )
+  const projections = useMemo(() => new Map(goals.map((g) => [g.id, projectGoal(g)])), [goals])
 
   const locked = useMemo(() => settings.lockedGoals ?? {}, [settings.lockedGoals])
 
