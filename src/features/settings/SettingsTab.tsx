@@ -5,6 +5,7 @@ import { cachedIssues, listIssues, type TrackedIssue } from '../../services/issu
 import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
+import { DEFAULT_FLEX_ROUTINE } from '../../config/flexPlan'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
@@ -16,7 +17,10 @@ const SYNC_LABEL: Record<string, string> = {
 }
 
 export function SettingsTab() {
-  const { settings, updateSettings, sync, lastSync, pendingWrites } = useData()
+  const { settings, updateSettings, sync, lastSync, pendingWrites, updateFlexPlan } = useData()
+  // Two taps to restore the routine: it throws away every coach edit ever made
+  // to it, which is the point after a bad one, but not something to do by brush.
+  const [confirmRestore, setConfirmRestore] = useState(false)
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
@@ -147,6 +151,24 @@ export function SettingsTab() {
         <p className="text-xs text-neutral-500">
           last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
         </p>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">stretch routine</label>
+        <button
+          onClick={() => {
+            if (!confirmRestore) {
+              setConfirmRestore(true)
+              return
+            }
+            updateFlexPlan(DEFAULT_FLEX_ROUTINE)
+            setConfirmRestore(false)
+          }}
+          onBlur={() => setConfirmRestore(false)}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          {confirmRestore ? 'tap again to restore' : 'restore default routine'}
+        </button>
       </section>
 
       <PhoneLink />

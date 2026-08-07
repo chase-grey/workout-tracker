@@ -10,7 +10,31 @@ import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
 import { MdVpnKey, MdBuild } from 'react-icons/md'
 
-type Turn = { role: 'user' | 'assistant' | 'system'; content: string; error?: boolean }
+/**
+ * A change the coach wants to make, held until the user says yes.
+ *
+ * The coach reaches for the nearest tool when it can't do what was asked — told
+ * to add a flexibility goal, with no goal tool to hand, it went and invented two
+ * stretches instead. So an edit is never written straight through: the pure
+ * apply* function produces the whole resulting plan, that snapshot waits here
+ * behind an approve button, and only a tap commits it.
+ */
+type Proposal = {
+  kind: 'plan' | 'flex'
+  /** The full plan/routine the edits produce, saved verbatim on approval. */
+  next: Plan | FlexBlock[]
+  /** What the edits do, one line each, as shown to the user. */
+  changes: string[]
+  status: 'pending' | 'approved' | 'rejected'
+}
+
+type Turn = {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  error?: boolean
+  /** Set on a system turn that is asking for approval rather than reporting. */
+  proposal?: Proposal
+}
 
 // ChatTab unmounts whenever you leave the coach tab or start a workout, so the
 // toggle and the thread outlive the component — otherwise "keep context" would
@@ -22,7 +46,7 @@ const UPDATE_PLAN_TOOL: Tool = {
   function: {
     name: 'update_plan',
     description:
-      "Edit the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, or rename a day. Only call when the user asks to change their plan.",
+      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those.",
     parameters: {
       type: 'object',
       properties: {
@@ -59,7 +83,7 @@ const UPDATE_FLEX_TOOL: Tool = {
   function: {
     name: 'update_flex_routine',
     description:
-      "Edit the user's side-splits stretch routine: change/add/remove a stretch, add/remove a block, or set a block note. Blocks are matched by label. Only call when the user asks to change their stretch routine.",
+      "Propose an edit to the user's side-splits stretch routine: change/add/remove a stretch, add/remove a block, or set a block note. Blocks are matched by label. Only call when the user asks to change which stretches they do. Nothing is saved until the user approves the proposal in the app. This tool does not create flexibility goals or change their target angles — a request for a goal at some number of degrees is not a request for a new stretch, so file it with report_issue instead.",
     parameters: {
       type: 'object',
       properties: {
@@ -95,8 +119,10 @@ const REPORT_ISSUE_TOOL: Tool = {
     name: 'report_issue',
     description:
       'File a bug or feature request about the workout app itself as a GitHub issue. ' +
-      'Call only when the user asks to report a problem, says something is broken, or ' +
-      'wants a change filed — not for questions about their training. Confirm the ' +
+      'Call when the user asks to report a problem, says something is broken, or ' +
+      'wants a change filed — and also whenever they ask for an app change the other ' +
+      'tools cannot make, such as a new or changed goal, a chart, a screen, or ' +
+      'different app behaviour. Not for questions about their training. Confirm the ' +
       'created issue number/link back to the user.',
     parameters: {
       type: 'object',
@@ -163,6 +189,24 @@ export function ChatTab() {
   }
   const endRef = useRef<HTMLDivElement>(null)
 
+  /**
+   * Commit or discard a proposed edit. The proposal carries the whole resulting
+   * plan, so approving is a straight save of that snapshot — no replaying edits
+   * against a plan that may have moved on since.
+   */
+  const resolveProposal = (index: number, approve: boolean) => {
+    const turn = turns[index]
+    const proposal = turn?.proposal
+    if (!proposal || proposal.status !== 'pending') return
+    if (approve) {
+      if (proposal.kind === 'plan') updatePlan(proposal.next as Plan)
+      else updateFlexPlan(proposal.next as FlexBlock[])
+    }
+    const next = [...turns]
+    next[index] = { ...turn, proposal: { ...proposal, status: approve ? 'approved' : 'rejected' } }
+    setTurns(next)
+  }
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, pending, loading])
@@ -226,17 +270,39 @@ export function ChatTab() {
             if (call.name === 'update_plan') {
               const parsed = JSON.parse(call.arguments) as { edits: PlanEdit[] }
               const res = applyPlanEdits(workingPlan, parsed.edits ?? [])
+              // Chain the preview so a second edit in the same reply builds on the
+              // first, but write nothing — the snapshot goes to the user instead.
               workingPlan = res.plan
-              updatePlan(res.plan)
-              if (res.applied.length) newTurns.push({ role: 'system', content: res.applied.join('; ') })
-              resultMsg = JSON.stringify({ applied: res.applied, errors: res.errors })
+              if (res.applied.length) {
+                newTurns.push({
+                  role: 'system',
+                  content: 'the coach wants to change your workout plan',
+                  proposal: { kind: 'plan', next: res.plan, changes: res.applied, status: 'pending' },
+                })
+              }
+              resultMsg = JSON.stringify({
+                status: 'awaiting_approval',
+                proposed: res.applied,
+                errors: res.errors,
+                note: 'Nothing has been saved. The user must tap approve. Tell them what you proposed and that it is waiting on them.',
+              })
             } else if (call.name === 'update_flex_routine') {
               const parsed = JSON.parse(call.arguments) as { edits: FlexEdit[] }
               const res = applyFlexEdits(workingFlex, parsed.edits ?? [])
               workingFlex = res.routine
-              updateFlexPlan(res.routine)
-              if (res.applied.length) newTurns.push({ role: 'system', content: res.applied.join('; ') })
-              resultMsg = JSON.stringify({ applied: res.applied, errors: res.errors })
+              if (res.applied.length) {
+                newTurns.push({
+                  role: 'system',
+                  content: 'the coach wants to change your stretch routine',
+                  proposal: { kind: 'flex', next: res.routine, changes: res.applied, status: 'pending' },
+                })
+              }
+              resultMsg = JSON.stringify({
+                status: 'awaiting_approval',
+                proposed: res.applied,
+                errors: res.errors,
+                note: 'Nothing has been saved. The user must tap approve. Tell them what you proposed and that it is waiting on them.',
+              })
             } else if (call.name === 'report_issue') {
               const parsed = JSON.parse(call.arguments) as {
                 title: string
@@ -302,7 +368,39 @@ export function ChatTab() {
 
       <div className="flex flex-1 flex-col gap-3 pb-24">
         {turns.map((t, i) =>
-          t.role === 'system' ? (
+          t.proposal ? (
+            <div key={i} className="mx-auto w-full max-w-[85%] rounded-2xl border border-border bg-surface px-3 py-2">
+              <div className="flex items-center gap-1 text-xs text-accent-2">
+                <MdBuild aria-hidden />
+                {t.content}
+              </div>
+              <ul className="mt-1 list-disc pl-5 text-sm text-neutral-100">
+                {t.proposal.changes.map((c, j) => (
+                  <li key={j}>{c}</li>
+                ))}
+              </ul>
+              {t.proposal.status === 'pending' ? (
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => resolveProposal(i, true)}
+                    className="min-h-[44px] flex-1 rounded-xl bg-accent px-3 font-semibold text-black active:opacity-80"
+                  >
+                    approve
+                  </button>
+                  <button
+                    onClick={() => resolveProposal(i, false)}
+                    className="min-h-[44px] flex-1 rounded-xl bg-bg px-3 font-medium text-neutral-300 active:opacity-80"
+                  >
+                    reject
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-neutral-500">
+                  {t.proposal.status === 'approved' ? 'approved — saved' : 'rejected — nothing changed'}
+                </div>
+              )}
+            </div>
+          ) : t.role === 'system' ? (
             <div key={i} className="mx-auto rounded-full bg-accent-2/15 px-3 py-1 text-xs text-accent-2">
               <MdBuild className="inline align-text-bottom mr-1" aria-hidden />
               {t.content}

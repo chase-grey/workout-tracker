@@ -77,4 +77,18 @@ describe('buildSystemPrompt', () => {
     expect(prompt).not.toContain('225x5')
     expect(prompt).not.toContain('2026-01-01')
   })
+
+  // The coach once answered "add a flexibility goal at 135°" by inventing a
+  // 135-degree stretch, because update_flex_routine was the closest tool it had.
+  // The prompt has to name goals as off-limits and send them to report_issue.
+  it('sends app changes it cannot make, goals included, to report_issue', () => {
+    expect(prompt).toContain('report_issue')
+    expect(prompt).toMatch(/goals?/i)
+    expect(prompt).toContain('Adding a goal is not adding an exercise')
+  })
+
+  it('tells the coach its edits are proposals awaiting approval', () => {
+    expect(prompt).toContain('only propose a change')
+    expect(prompt).toContain('never report an edit as done')
+  })
 })
