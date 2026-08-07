@@ -17,10 +17,13 @@ import { DEFAULT_API_URL } from '../config/backend'
 
 export type ChatEndpoint = { url: string; updatedAt?: string }
 
-// A lookup per chat message would add a round trip to every send, so hold the
-// answer for a few minutes. Short enough that restarting the laptop mid-session
-// recovers on its own.
-const TTL_MS = 5 * 60 * 1000
+// A lookup per chat message would add a round trip to every send, so hold a
+// found address for a few minutes.
+const FOUND_TTL_MS = 5 * 60 * 1000
+// "No coach" is held far more briefly. It's the answer you get in the minute
+// before the laptop finishes starting, and caching it for minutes means Settings
+// keeps insisting nothing is there well after the tunnel came up.
+const MISSING_TTL_MS = 15 * 1000
 let cache: { at: number; value: ChatEndpoint | null } | null = null
 
 function backendUrl(): string {
@@ -41,7 +44,8 @@ export function forgetChatEndpoint(): void {
 export async function fetchChatEndpoint(): Promise<ChatEndpoint | null> {
   const token = chatToken()
   if (!token) return null
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value
+  const ttl = cache?.value ? FOUND_TTL_MS : MISSING_TTL_MS
+  if (cache && Date.now() - cache.at < ttl) return cache.value
 
   let value: ChatEndpoint | null = null
   try {

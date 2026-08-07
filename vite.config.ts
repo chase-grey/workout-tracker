@@ -365,6 +365,15 @@ function shareLink(
       // the tunnel is up and verified, then publish once and stop. The tunnel
       // takes a few seconds longer than the dev server to come up, so a miss on
       // the first passes is normal.
+      // Skipping this silently is the worst outcome: the tunnel comes up, the
+      // terminal looks healthy, and the phone just says no computer is running.
+      if (!publish.secret) {
+        console.warn(
+          '\n  No CHAT_SHARED_SECRET in .env — not publishing an address, so the' +
+            '\n  installed phone app will not find the coach. See README.\n',
+        )
+      }
+
       if (explicit) {
         void publishEndpoint(explicit)
       } else if (publish.apiUrl && publish.secret) {
