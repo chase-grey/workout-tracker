@@ -167,7 +167,7 @@ function AppShell() {
   }
 
   return (
-    <div className="mx-auto flex h-[100dvh] max-w-md flex-col">
+    <div className="app-shell mx-auto flex max-w-md flex-col">
       <main
         ref={mainRef}
         className="flex-1 overflow-y-auto px-4 pb-4"
@@ -180,7 +180,7 @@ function AppShell() {
           <>
             {tab === 'today' && <TodayTab onStart={startWorkout} onStartStretch={startStretch} />}
             {tab === 'progress' && <ProgressTab />}
-            {tab === 'chat' && showChat && <ChatTab />}
+            {tab === 'coach' && showChat && <ChatTab />}
             {tab === 'settings' && <SettingsTab />}
           </>
         )}

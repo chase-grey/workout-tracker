@@ -1,12 +1,12 @@
 import type { IconType } from 'react-icons'
 import { MdFitnessCenter, MdInsights, MdChatBubbleOutline, MdSettings } from 'react-icons/md'
 
-export type Tab = 'today' | 'progress' | 'chat' | 'settings'
+export type Tab = 'today' | 'progress' | 'coach' | 'settings'
 
 const TABS: { id: Tab; Icon: IconType; label: string }[] = [
   { id: 'today', Icon: MdFitnessCenter, label: 'today' },
   { id: 'progress', Icon: MdInsights, label: 'progress' },
-  { id: 'chat', Icon: MdChatBubbleOutline, label: 'chat' },
+  { id: 'coach', Icon: MdChatBubbleOutline, label: 'coach' },
   { id: 'settings', Icon: MdSettings, label: 'settings' },
 ]
 
@@ -19,7 +19,7 @@ export function BottomNav({
   onChange: (t: Tab) => void
   showChat?: boolean
 }) {
-  const tabs = TABS.filter((t) => t.id !== 'chat' || showChat)
+  const tabs = TABS.filter((t) => t.id !== 'coach' || showChat)
   return (
     <nav
       className="sticky bottom-0 z-30 grid border-t border-border bg-surface/95 backdrop-blur"

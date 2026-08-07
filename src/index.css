@@ -18,6 +18,29 @@ body,
   height: 100%;
 }
 
+/* The app shell fills the screen the keyboard leaves behind, so the chat input
+   rides up with it instead of hiding underneath. Chrome/Android does this
+   natively via `100dvh` + interactive-widget=resizes-content (index.html) — the
+   fast path, no JS. iOS ignores interactive-widget, so there src/lib/viewport.ts
+   sets --vvh from the visual viewport and it wins over the dvh fallback; --vv-top
+   keeps the fixed shell aligned when iOS pushes the visual viewport down the
+   layout one. Order matters: the plain `100dvh` line is the base, then --vvh
+   overrides it on iOS. */
+.app-shell {
+  height: 100dvh;
+}
+@media (max-width: 700px) {
+  .app-shell {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--vv-top, 0px);
+    bottom: auto;
+    height: 100dvh;
+    height: var(--vvh, 100dvh);
+  }
+}
+
 body {
   margin: 0;
   background-color: var(--color-bg);

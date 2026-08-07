@@ -199,7 +199,7 @@ export function ChatTab() {
         <MdVpnKey className="text-5xl" aria-hidden />
         <h2 className="text-xl font-bold">add your openai key</h2>
         <p className="max-w-xs text-sm text-neutral-500">
-          to use the assistant in the deployed app, add an openai api key in settings (stored on this
+          to use the coach in the deployed app, add an openai api key in settings (stored on this
           device only). an epic key only works when you run the app locally (<code>npm run dev</code>)
           on epic's network — see the readme.
         </p>
@@ -209,8 +209,7 @@ export function ChatTab() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="flex items-center justify-between pb-2">
-        <h2 className="text-xl font-bold">assistant</h2>
+      <div className="flex items-center justify-end pb-2">
         <button
           onClick={() => setTurns([])}
           disabled={turns.length === 0 || loading}
@@ -221,13 +220,6 @@ export function ChatTab() {
       </div>
 
       <div className="flex flex-1 flex-col gap-3 pb-24">
-        {turns.length === 0 && !loading && (
-          <p className="pt-8 text-center text-sm text-neutral-500">
-            ask about your training, or tell me to tweak your plan — e.g. "add face pulls to pull day"
-            or "bump incline bench to 4×5–8".
-          </p>
-        )}
-
         {turns.map((t, i) =>
           t.role === 'system' ? (
             <div key={i} className="mx-auto rounded-full bg-accent-2/15 px-3 py-1 text-xs text-accent-2">
@@ -259,14 +251,19 @@ export function ChatTab() {
         <div ref={endRef} />
       </div>
 
-      <div className="sticky bottom-0 flex gap-2 border-t border-border bg-bg pb-4 pt-2">
+      {/* Frosted glass, so the tail of the thread dissolves behind the input
+          instead of stopping at a hard edge. -mb-4 cancels the main scroller's
+          bottom padding so the bar sits right down at the bottom of the screen. */}
+      <div className="sticky bottom-0 -mx-4 -mb-4 flex gap-2 border-t border-border bg-bg/80 px-4 pb-2 pt-2 backdrop-blur-md">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') void send()
           }}
-          placeholder="ask, or tell me to change your plan…"
+          // The keyboard opening shrinks the thread; keep its tail in view.
+          onFocus={() => endRef.current?.scrollIntoView({ behavior: 'smooth' })}
+          placeholder="ask your coach"
           className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
         />
         <button
