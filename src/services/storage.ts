@@ -1,3 +1,4 @@
+import { v4 as uuid } from 'uuid'
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
 import { DEFAULT_PLAN, PLAN_REVISION, withPlanDefaults, type Plan } from '../config/plan'
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
@@ -5,7 +6,8 @@ import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { LockedProjections } from '../lib/goalLock'
-import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration, type SessionTimeSamples } from '../lib/estimate'
+import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
+import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -117,16 +119,7 @@ const DEFAULT_SETTINGS: Settings = {
   openAiModel: 'gpt-4o-mini',
 }
 
-/** A write that failed to reach the backend and is waiting to be flushed. */
-export type QueuedWrite =
-  | { type: 'session'; rows: WorkoutRow[] }
-  | { type: 'bodyweight'; entry: BodyWeightEntry }
-  | { type: 'flex'; entry: FlexEntry }
-  | { type: 'calorie'; entry: CalorieEntry }
-  | { type: 'measurement'; entry: MeasurementEntry }
-  | { type: 'duration'; entry: SessionDuration }
-  | { type: 'exerciseTimes'; samples: SessionTimeSamples }
-  | { type: 'plan'; plan: Plan }
+export type { QueuedWrite }
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -178,8 +171,18 @@ export const storage = {
   loadLastSync: (): string | null => read(KEYS.lastSync, null),
   saveLastSync: (iso: string) => write(KEYS.lastSync, iso),
 
-  loadQueue: (): QueuedWrite[] => read(KEYS.queue, []),
-  saveQueue: (q: QueuedWrite[]) => write(KEYS.queue, q),
+  loadQueue: (): QueuedWrite[] => normalizeQueue(read<unknown>(KEYS.queue, []), uuid),
+  /**
+   * Read-modify-write the outbox against what is on disk *now*, returning the
+   * stored result. Every queue change straddles a network round-trip, and a
+   * snapshot taken before one is stale by the time it's written back — it would
+   * erase whatever was logged while the request was in flight.
+   */
+  updateQueue: (fn: (q: QueuedWrite[]) => QueuedWrite[]): QueuedWrite[] => {
+    const next = fn(normalizeQueue(read<unknown>(KEYS.queue, []), uuid))
+    write(KEYS.queue, next)
+    return next
+  },
 
   /**
    * The stored plan reconciled against the shipped defaults. The revision the
