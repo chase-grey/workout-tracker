@@ -532,8 +532,10 @@ export function ChatTab({
 
       {/* Frosted glass, so the tail of the thread dissolves behind the input
           instead of stopping at a hard edge. -mb-4 cancels the main scroller's
-          bottom padding so the bar sits right down at the bottom of the screen. */}
-      <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 pb-2 pt-2 backdrop-blur-md">
+          bottom padding so the bar sits right down at the bottom of the screen,
+          and pb-1 keeps the gap to the nav below it tighter than the breathing
+          room above — the nav brings its own padding around the icons. */}
+      <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 pb-1 pt-2 backdrop-blur-md">
         {/* The question rides above the composer rather than sitting in the
             thread: it has to stay on screen while the answer is being typed. */}
         {(answerLoading || answerTarget || answerError) && (

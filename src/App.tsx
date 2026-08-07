@@ -20,6 +20,7 @@ import { issuesAwaitingAnswer } from './services/issues'
 import { IS_DESKTOP } from './lib/device'
 import { useBackGuard } from './lib/useBackGuard'
 import { takeResumeTab } from './lib/resumeTab'
+import { useKeyboardOpen } from './lib/useKeyboardOpen'
 import { MdFitnessCenter } from 'react-icons/md'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
@@ -68,6 +69,7 @@ function AppShell() {
   const awaiting = issuesAwaitingAnswer(issues)
   // The issue whose question the coach tab is currently taking an answer for.
   const [answering, setAnswering] = useState<number | null>(null)
+  const keyboardOpen = useKeyboardOpen()
 
   // Scroll back to the top when switching tabs.
   useEffect(() => {
@@ -135,6 +137,14 @@ function AppShell() {
   // Workouts and stretches take over the whole screen (no tabs / bottom nav)
   // unless they've been set aside.
   const immersive = (sessionActive && !minimized) || finishSummary != null
+
+  // The keyboard shrinks the shell, and everything in it rides up — including the
+  // nav, which then sits between the composer and the keys taking a row out of an
+  // already short screen. Nothing there is reachable mid-message anyway, so while
+  // the coach's keyboard is up the nav stands down and only the composer follows
+  // it. It comes back when the keyboard goes, measured rather than guessed from
+  // focus (see useKeyboardOpen).
+  const typingToCoach = tab === 'coach' && keyboardOpen
 
   const dismissFinish = () => {
     const ambient = finishSummary?.ambient ?? null
@@ -220,7 +230,7 @@ function AppShell() {
           {controls.session ? 'back to your workout' : 'back to your stretch'}
         </button>
       )}
-      {!immersive && (
+      {!immersive && !typingToCoach && (
         <BottomNav
           active={tab}
           onChange={setTab}

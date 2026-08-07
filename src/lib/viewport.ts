@@ -36,14 +36,63 @@
 // `env(safe-area-inset-*)` is for, and that's who handles them (see index.css).
 const KEYBOARD_MIN_PX = 120
 
+/**
+ * Fold one viewport measurement into the running "is the keyboard up?" state.
+ *
+ * There is no keyboard API, so the keyboard is inferred: the visible height has
+ * dropped a keyboard's worth below the tallest this orientation has ever been.
+ * That reads true on both browsers — iOS shrinks only the visual viewport,
+ * Android with interactive-widget=resizes-content shrinks the layout one in step
+ * with it, and `visible` falls either way. Measuring against a remembered
+ * resting height rather than `innerHeight` is what makes the Android case
+ * detectable at all: there the two shrink together, so the gap the --vvh mirror
+ * below looks for stays stubbornly zero.
+ *
+ * The resting height is keyed to the width so a rotation starts over. Landscape
+ * is shorter than the portrait resting height by more than a keyboard, which
+ * would otherwise read as a keyboard that never goes away.
+ */
+export function foldKeyboard(
+  prev: { width: number; rest: number },
+  next: { width: number; visible: number },
+): { width: number; rest: number; open: boolean } {
+  const rest = next.width === prev.width ? Math.max(prev.rest, next.visible) : next.visible
+  return { width: next.width, rest, open: rest - next.visible > KEYBOARD_MIN_PX }
+}
+
+let keyboardOpen = false
+const keyboardListeners = new Set<() => void>()
+
+/** Whether an on-screen keyboard is currently covering the bottom of the screen. */
+export function isKeyboardOpen(): boolean {
+  return keyboardOpen
+}
+
+/** Subscribe to keyboard open/close; returns the unsubscribe. */
+export function onKeyboardChange(notify: () => void): () => void {
+  keyboardListeners.add(notify)
+  return () => {
+    keyboardListeners.delete(notify)
+  }
+}
+
 export function trackVisualViewport(): void {
   const vv = window.visualViewport
   if (!vv) return
   const root = document.documentElement
+  let resting = { width: 0, rest: 0 }
   const apply = () => {
     // Scale confuses the comparison (a pinch-zoomed vv is smaller for reasons that
     // have nothing to do with a keyboard), so measure at the layout's own scale.
     const visible = vv.height * vv.scale
+
+    const folded = foldKeyboard(resting, { width: window.innerWidth, visible })
+    resting = { width: folded.width, rest: folded.rest }
+    if (folded.open !== keyboardOpen) {
+      keyboardOpen = folded.open
+      for (const notify of keyboardListeners) notify()
+    }
+
     if (window.innerHeight - visible > KEYBOARD_MIN_PX) {
       // The shell is offset by --vv-top, so it can only be as tall as what's left
       // below that — otherwise it hangs off the bottom of the screen and takes the
@@ -61,4 +110,8 @@ export function trackVisualViewport(): void {
   apply()
   vv.addEventListener('resize', apply)
   vv.addEventListener('scroll', apply)
+  // Where interactive-widget shrinks the layout viewport, that resize lands here
+  // as the keyboard slides in rather than waiting for vv's end-of-animation
+  // event — so the nav gets out of the way sooner.
+  window.addEventListener('resize', apply)
 }
