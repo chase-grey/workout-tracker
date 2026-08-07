@@ -22,7 +22,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { Projection } from '../../lib/predictions'
-import type { Point } from '../../lib/progress'
+import { filterRange, type Point } from '../../lib/progress'
 import { addDays, commitRange, lockProjection, lockProjectionByDate, projectedSeries } from '../../lib/goalLock'
 import { LINE_GOAL, LINE_GOAL_LABEL, LINE_PRIMARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { parseISODate, toISODate } from '../../lib/dates'
@@ -31,9 +31,6 @@ import { ChartTag } from '../../components/ChartTag'
 
 const MS_PER_DAY = 86_400_000
 const axisTick = { fill: '#737373', fontSize: 10 }
-
-/** At least this much run-up is shown, so the history isn't a single point. */
-const MIN_RUNUP_DAYS = 30
 
 /** Plot-area insets, matching the chart's own margins and Y-axis width. */
 const PLOT_LEFT = 40
@@ -86,6 +83,7 @@ export function CommitChart({
   goalId,
   proj,
   points,
+  months,
   date,
   onChange,
   now,
@@ -94,6 +92,8 @@ export function CommitChart({
   proj: Projection
   /** The goal's logged history. */
   points: Point[]
+  /** The range pill, so the run-up shows the same window as the rest of the tab. */
+  months: number | null
   /** The date currently chosen, ISO. */
   date: string
   onChange: (iso: string) => void
@@ -124,13 +124,10 @@ export function CommitChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goalId, proj, date])
 
-  // Enough run-up to read the trend the projection came off, without letting a
-  // year of weigh-ins squeeze the part of the chart that's actually in play.
-  const history = useMemo(() => {
-    const from = addDays(toISODate(today), -Math.max(MIN_RUNUP_DAYS, daysBetween(toISODate(today), proj.etaDate!)))
-    return points.filter((p) => p.date >= from)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, proj.etaDate])
+  // The run-up honours the tab's range pill, so every commit chart looks as far
+  // back as the rest of the tab does — and two goals on one series show the same
+  // past, rather than the nearer goal clipping off history the farther one keeps.
+  const history = useMemo(() => filterRange(points, months, today), [points, months, today])
 
   const rows = useMemo(
     () => withTime(mergeRows(history, reference, candidate)),

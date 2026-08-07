@@ -288,10 +288,13 @@ function paceLabel(proj: Projection, unit: string): string {
 function LockInPrompt({
   goal,
   proj,
+  months,
   onLock,
 }: {
   goal: GoalSpec
   proj: Projection
+  /** The tab's range pill, passed on to the commit chart's run-up. */
+  months: number | null
   onLock: (etaDate: string) => void
 }) {
   const [date, setDate] = useState(proj.etaDate ?? '')
@@ -304,7 +307,7 @@ function LockInPrompt({
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
         in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
       </p>
-      <CommitChart goalId={goal.id} proj={proj} points={goal.points} date={date} onChange={setDate} />
+      <CommitChart goalId={goal.id} proj={proj} points={goal.points} months={months} date={date} onChange={setDate} />
       <div className="mt-3 flex items-center gap-2">
         <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
           hit it by
@@ -354,6 +357,7 @@ function GoalRow({
   goal,
   proj,
   lock,
+  months,
   onRecalculate,
   onLock,
   showData,
@@ -364,6 +368,8 @@ function GoalRow({
   goal: GoalSpec
   proj: Projection
   lock?: LockedProjection
+  /** The tab's range pill, handed to the commit chart's run-up. */
+  months: number | null
   onRecalculate: () => void
   /** Commit the goal to a target date once it's within reach. */
   onLock: (etaDate: string) => void
@@ -492,7 +498,7 @@ function GoalRow({
           )}
         </>
       ) : lockable ? (
-        <LockInPrompt goal={goal} proj={proj} onLock={onLock} />
+        <LockInPrompt goal={goal} proj={proj} months={months} onLock={onLock} />
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
           on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
@@ -694,6 +700,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
       goal={g}
       proj={projections.get(g.id)!}
       lock={locked[g.id]}
+      months={months}
       onRecalculate={() => recalculate(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       showData={g.exerciseKey != null || g.milestone}
