@@ -1,5 +1,5 @@
 /**
- * Minimal OpenAI Chat Completions client. Non-streaming.
+ * Minimal OpenAI Chat Completions client.
  *
  * The API key is supplied by the caller (stored on-device in Settings) and is
  * never logged or persisted here.
@@ -82,14 +82,25 @@ export type AssistantTurn = {
 export async function chatCompleteRaw(
   apiKey: string,
   messages: RawMessage[],
-  opts?: { model?: string; tools?: Tool[] },
+  opts?: {
+    model?: string
+    tools?: Tool[]
+    /** Called with the reply so far as it arrives. Its presence asks for a stream. */
+    onText?: (textSoFar: string) => void
+  },
 ): Promise<AssistantTurn> {
+  const wantStream = typeof opts?.onText === 'function'
   // Three ways to reach a model, in order of preference:
   //   1. dev — the Vite proxy at /api/chat, holding an Epic key server-side.
   //   2. installed app — the same proxy on the laptop, reached over its tunnel at
   //      whatever address it last published (services/chatEndpoint.ts).
   //   3. neither — a plain OpenAI key the user typed into Settings.
-  const proxyBody = JSON.stringify({ messages, tools: opts?.tools, model: opts?.model })
+  const proxyBody = JSON.stringify({
+    messages,
+    tools: opts?.tools,
+    model: opts?.model,
+    stream: wantStream,
+  })
   const remote = import.meta.env.DEV ? null : await fetchChatEndpoint()
   const res = import.meta.env.DEV
     ? await fetch('/api/chat', {
@@ -118,6 +129,7 @@ export async function chatCompleteRaw(
             model: opts?.model ?? DEFAULT_MODEL,
             messages,
             ...(opts?.tools ? { tools: opts.tools, tool_choice: 'auto' } : {}),
+            ...(wantStream ? { stream: true } : {}),
           }),
         })
 
@@ -135,6 +147,13 @@ export async function chatCompleteRaw(
     throw new Error(`openai request failed: ${detail}`)
   }
 
+  // Asking for a stream doesn't guarantee getting one — an older coach proxy on
+  // the laptop ignores the flag and answers with a whole JSON body. Decide by
+  // what actually came back rather than by what we asked for.
+  if (wantStream && res.headers.get('content-type')?.includes('text/event-stream')) {
+    return readStream(res, opts!.onText!)
+  }
+
   const data = (await res.json()) as {
     choices?: { message?: { content?: string | null; tool_calls?: RawToolCall[] } }[]
   }
@@ -148,5 +167,90 @@ export async function chatCompleteRaw(
     message: { role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls },
     content: msg.content ?? null,
     toolCalls,
+  }
+}
+
+type StreamChunk = {
+  choices?: {
+    delta?: {
+      content?: string | null
+      tool_calls?: {
+        index?: number
+        id?: string
+        function?: { name?: string; arguments?: string }
+      }[]
+    }
+  }[]
+}
+
+/**
+ * Read a server-sent-events completion, reporting the reply as it arrives.
+ *
+ * The wire format is the same whichever hop produced it — OpenAI directly, or
+ * the dev proxy piping OpenAI through untouched — so this is the only place that
+ * has to understand it. Tool calls arrive in fragments too: a name and id on the
+ * first delta for an index, then the JSON arguments a few characters at a time,
+ * so they're reassembled by index before being handed back.
+ */
+async function readStream(res: Response, onText: (textSoFar: string) => void): Promise<AssistantTurn> {
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('openai response did not include a stream.')
+
+  const decoder = new TextDecoder()
+  const partials: RawToolCall[] = []
+  let buffer = ''
+  let content = ''
+
+  const consume = (data: string) => {
+    if (data === '[DONE]') return
+    const delta = (JSON.parse(data) as StreamChunk).choices?.[0]?.delta
+    if (!delta) return
+    if (delta.content) {
+      content += delta.content
+      onText(content)
+    }
+    for (const tc of delta.tool_calls ?? []) {
+      const at = tc.index ?? 0
+      const call = (partials[at] ??= { id: '', type: 'function', function: { name: '', arguments: '' } })
+      if (tc.id) call.id = tc.id
+      if (tc.function?.name) call.function.name += tc.function.name
+      if (tc.function?.arguments) call.function.arguments += tc.function.arguments
+    }
+  }
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    // Events are separated by a blank line and may split across chunks, so only
+    // whole ones are handled here and the remainder waits for more bytes.
+    buffer += decoder.decode(value, { stream: true }).replace(/\r/g, '')
+    let end: number
+    while ((end = buffer.indexOf('\n\n')) !== -1) {
+      const event = buffer.slice(0, end)
+      buffer = buffer.slice(end + 2)
+      for (const line of event.split('\n')) {
+        if (!line.startsWith('data:')) continue
+        try {
+          consume(line.slice(5).trim())
+        } catch {
+          /* a malformed chunk shouldn't lose the reply built up so far */
+        }
+      }
+    }
+  }
+
+  const toolCalls = partials.filter(Boolean)
+  return {
+    message: {
+      role: 'assistant',
+      content: content || null,
+      ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+    },
+    content: content || null,
+    toolCalls: toolCalls.map((tc) => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: tc.function.arguments,
+    })),
   }
 }

@@ -139,8 +139,12 @@ function mediapipeAssets(): PluginOption {
 }
 
 /**
- * POST JSON to an upstream. Internal Epic hosts present a cert Node doesn't trust
- * by default, so `insecure` mirrors the `--insecure` in Noggin's example curl.
+ * POST JSON to an upstream and resolve with the response, still unread, so the
+ * caller can pipe it straight through — a streamed completion has to reach the
+ * browser token by token, not be collected here first.
+ *
+ * Internal Epic hosts present a cert Node doesn't trust by default, so `insecure`
+ * mirrors the `--insecure` in Noggin's example curl.
  * Runs ONLY in the local dev server — never in the browser bundle.
  */
 function postJson(
@@ -148,7 +152,7 @@ function postJson(
   headers: Record<string, string>,
   payload: unknown,
   insecure: boolean,
-): Promise<{ status: number; body: string }> {
+): Promise<http.IncomingMessage> {
   return new Promise((resolve, reject) => {
     const u = new URL(urlString)
     const mod = u.protocol === 'http:' ? http : https
@@ -162,11 +166,7 @@ function postJson(
         headers: { ...headers, 'content-length': Buffer.byteLength(data) },
         ...(u.protocol === 'https:' ? { rejectUnauthorized: !insecure } : {}),
       },
-      (res) => {
-        let body = ''
-        res.on('data', (c) => (body += c))
-        res.on('end', () => resolve({ status: res.statusCode || 502, body }))
-      },
+      resolve,
     )
     req.on('error', reject)
     req.write(data)
@@ -243,6 +243,7 @@ function llmProxy(opts: {
               messages: unknown
               tools?: unknown
               model?: string
+              stream?: boolean
             }
             const payload: Record<string, unknown> = {
               model: parsed.model || opts.model,
@@ -252,15 +253,32 @@ function llmProxy(opts: {
               payload.tools = parsed.tools
               payload.tool_choice = 'auto'
             }
+            if (parsed.stream) payload.stream = true
             const upstream = await postJson(
               `${opts.baseUrl}/chat/completions`,
-              { 'content-type': 'application/json', authorization: `Bearer ${opts.apiKey}` },
+              {
+                'content-type': 'application/json',
+                authorization: `Bearer ${opts.apiKey}`,
+                ...(parsed.stream ? { accept: 'text/event-stream' } : {}),
+              },
               payload,
               opts.insecure,
             )
-            res.statusCode = upstream.status
-            res.setHeader('content-type', 'application/json')
-            res.end(upstream.body)
+            // Hand back whatever the upstream is sending — event-stream for a
+            // streamed reply, JSON for a whole one or an error — and pipe rather
+            // than buffer so each token leaves as it lands. An error answer to a
+            // stream request comes back as JSON, which the client sorts out by
+            // content type.
+            res.statusCode = upstream.statusCode || 502
+            res.setHeader('content-type', upstream.headers['content-type'] || 'application/json')
+            if (parsed.stream) {
+              res.setHeader('cache-control', 'no-cache, no-transform')
+              // Nothing in this path buffers today, but a proxy in front of the
+              // tunnel that decides to would silently undo the streaming.
+              res.setHeader('x-accel-buffering', 'no')
+              res.flushHeaders?.()
+            }
+            upstream.pipe(res)
           } catch (err) {
             json(500, { error: { message: `proxy_error: ${String(err)}` } })
           }

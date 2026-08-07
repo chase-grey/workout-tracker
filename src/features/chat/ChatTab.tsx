@@ -108,11 +108,16 @@ export function ChatTab() {
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  // The reply as it streams in, before it becomes a turn.
+  const [pending, setPending] = useState('')
+  // Off by default: each message starts a fresh conversation, so an answer is
+  // never coloured by whatever was asked before it.
+  const [keepContext, setKeepContext] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [turns, loading])
+  }, [turns, pending, loading])
 
   // Three ways to be able to send (see chatCompleteRaw): the dev proxy holds the
   // key locally, a coach token reaches that same proxy on a laptop over its
@@ -126,9 +131,13 @@ export function ChatTab() {
     const text = input.trim()
     if (!text || loading) return
 
-    const priorTurns = turns
-    setTurns([...priorTurns, { role: 'user', content: text }])
+    // Without "keep context" the thread starts over on every send, so what's on
+    // screen is exactly what the coach was given.
+    const priorTurns = keepContext ? turns : []
+    const base: Turn[] = [...priorTurns, { role: 'user', content: text }]
+    setTurns(base)
     setInput('')
+    setPending('')
     setLoading(true)
 
     // Build the raw message history (system context + visible turns + new user).
@@ -144,19 +153,24 @@ export function ChatTab() {
     let workingPlan = plan
     let workingFlex = flexPlan
     const newTurns: Turn[] = []
+    const show = () => setTurns([...base, ...newTurns])
     try {
       // Tool loop: let the model call a tool, apply it, feed results back.
       for (let i = 0; i < 4; i++) {
         const turn = await chatCompleteRaw(settings.openAiKey, messages, {
           tools: [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL],
           model: settings.openAiModel,
+          onText: setPending,
         })
         messages.push(turn.message)
 
-        if (turn.toolCalls.length === 0) {
-          if (turn.content) newTurns.push({ role: 'assistant', content: turn.content })
-          break
-        }
+        // Settle the streamed text into a turn, then clear the live buffer — the
+        // two must swap in the same commit or the reply flickers.
+        if (turn.content) newTurns.push({ role: 'assistant', content: turn.content })
+        show()
+        setPending('')
+
+        if (turn.toolCalls.length === 0) break
 
         for (const call of turn.toolCalls) {
           let resultMsg = ''
@@ -183,12 +197,14 @@ export function ChatTab() {
           }
           messages.push({ role: 'tool', tool_call_id: call.id, content: resultMsg })
         }
+        // Show what the tools did while the coach works on what to say about it.
+        show()
       }
-      setTurns([...priorTurns, { role: 'user', content: text }, ...newTurns])
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'something went wrong.'
-      setTurns([...priorTurns, { role: 'user', content: text }, { role: 'assistant', content: msg, error: true }])
+      setTurns([...base, ...newTurns, { role: 'assistant', content: msg, error: true }])
     } finally {
+      setPending('')
       setLoading(false)
     }
   }
@@ -211,11 +227,13 @@ export function ChatTab() {
     <div className="flex min-h-full flex-col">
       <div className="flex items-center justify-end pb-2">
         <button
-          onClick={() => setTurns([])}
-          disabled={turns.length === 0 || loading}
-          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm font-medium text-neutral-300 active:bg-surface-2 disabled:opacity-40"
+          onClick={() => setKeepContext((on) => !on)}
+          aria-pressed={keepContext}
+          className={`min-h-[44px] rounded-xl px-3 text-sm font-medium active:opacity-80 ${
+            keepContext ? 'bg-accent text-black' : 'bg-surface text-neutral-300'
+          }`}
         >
-          clear chat
+          keep context
         </button>
       </div>
 
@@ -243,9 +261,17 @@ export function ChatTab() {
           ),
         )}
 
+        {/* The reply lands here as it streams; "…" holds the spot until the
+            first token, and again while a tool call is being worked out. */}
         {loading && (
           <div className="flex justify-start">
-            <div className="rounded-2xl bg-surface px-3 py-2 text-sm text-neutral-400">…</div>
+            <div
+              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl bg-surface px-3 py-2 text-sm ${
+                pending ? 'text-neutral-100' : 'text-neutral-400'
+              }`}
+            >
+              {pending || '…'}
+            </div>
           </div>
         )}
         <div ref={endRef} />
