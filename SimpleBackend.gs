@@ -942,9 +942,11 @@ function listIssues(secret) {
     const it = data[i]
     if (it.pull_request) continue // the list endpoint mixes PRs in with issues
     let area = ''
+    const names = []
     const labels = it.labels || []
     for (let j = 0; j < labels.length; j++) {
       const name = String(labels[j].name || '')
+      names.push(name)
       if (name.indexOf('area:') === 0) area = name.slice('area:'.length)
     }
     out.push({
@@ -955,6 +957,9 @@ function listIssues(secret) {
       area: area,
       createdAt: it.created_at,
       closedAt: it.closed_at || '',
+      // The whole label set, not just area: the auto-fixer marks an issue it has
+      // claimed with `autofix-running`, which is how the app shows "working".
+      labels: names,
     })
   }
   return out

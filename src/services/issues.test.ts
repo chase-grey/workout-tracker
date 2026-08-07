@@ -20,7 +20,8 @@ vi.mock('./storage', () => ({
   },
 }))
 
-import { reportIssue, listIssues, cachedIssues } from './issues'
+import { reportIssue, listIssues, cachedIssues, issueProgress } from './issues'
+import type { TrackedIssue } from './issues'
 
 beforeEach(() => {
   tokenRef.value = 'secret-tok'
@@ -74,6 +75,38 @@ describe('reportIssue', () => {
   })
 })
 
+describe('issueProgress', () => {
+  const issue = (over: Partial<TrackedIssue> = {}): TrackedIssue => ({
+    number: 7,
+    title: 'timer broke',
+    url: 'u',
+    state: 'open',
+    createdAt: 't',
+    ...over,
+  })
+
+  it('is open for a filed issue nothing has touched yet', () => {
+    expect(issueProgress(issue({ labels: ['from-app', 'auto-fix'] }))).toBe('open')
+  })
+
+  it('is working once the fixer claims it', () => {
+    expect(issueProgress(issue({ labels: ['auto-fix', 'autofix-running'] }))).toBe('working')
+  })
+
+  it('is stalled when the fixer gave up and left it for a human', () => {
+    expect(issueProgress(issue({ labels: ['auto-fix', 'autofix-failed'] }))).toBe('stalled')
+  })
+
+  it('is closed even if a claim label was left behind on a hand-closed issue', () => {
+    expect(issueProgress(issue({ state: 'closed', labels: ['autofix-running'] }))).toBe('closed')
+  })
+
+  it('falls back to open/closed for a cached entry read before labels existed', () => {
+    expect(issueProgress(issue())).toBe('open')
+    expect(issueProgress(issue({ state: 'closed' }))).toBe('closed')
+  })
+})
+
 describe('listIssues', () => {
   it('refuses without a coach token, and never calls the backend', async () => {
     tokenRef.value = ''
@@ -113,6 +146,21 @@ describe('listIssues', () => {
     await listIssues()
     expect(cachedIssues()).toHaveLength(1)
     expect(cachedIssues()?.[0]).toMatchObject({ number: 7, state: 'closed' })
+  })
+
+  it('keeps the labels, which is how the fixer’s progress reaches the UI', async () => {
+    listIssuesMock.mockResolvedValue([
+      {
+        number: 7,
+        title: 'timer broke',
+        url: 'u',
+        state: 'open',
+        createdAt: 't',
+        labels: ['from-app', 'auto-fix', 'autofix-running'],
+      },
+    ])
+    const res = await listIssues()
+    expect(res[0].labels).toContain('autofix-running')
   })
 
   it('leaves the cache alone when the fetch fails', async () => {

@@ -34,6 +34,32 @@ export type TrackedIssue = {
   createdAt: string
   /** ISO close time, or '' while still open. */
   closedAt?: string
+  /** Every label on the issue, so progress past open/closed can be read off. */
+  labels?: string[]
+}
+
+/**
+ * How far along an issue is, one step finer than GitHub's open/closed.
+ *
+ * `working` means the auto-fixer (scripts/autofix.mjs) has claimed the issue and
+ * Claude is on it right now; `stalled` means it tried and backed off, leaving the
+ * issue open for a human. Both come from labels the fixer sets, so this is the
+ * real state of the run and not a guess from timestamps.
+ */
+export type IssueProgress = 'open' | 'working' | 'stalled' | 'closed'
+
+/** Labels scripts/autofix.mjs sets — RUNNING_LABEL and FAILED_LABEL there. */
+const WORKING_LABEL = 'autofix-running'
+const STALLED_LABEL = 'autofix-failed'
+
+export function issueProgress(issue: TrackedIssue): IssueProgress {
+  // Closed wins: the fixer removes its running label before closing, but a
+  // hand-closed issue can still be carrying one.
+  if (issue.state === 'closed') return 'closed'
+  const labels = issue.labels ?? []
+  if (labels.includes(WORKING_LABEL)) return 'working'
+  if (labels.includes(STALLED_LABEL)) return 'stalled'
+  return 'open'
 }
 
 /** A short, non-sensitive snapshot of the runtime, so an issue is actionable. */

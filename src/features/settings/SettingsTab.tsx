@@ -1,13 +1,27 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { fetchChatEndpoint, forgetChatEndpoint } from '../../services/chatEndpoint'
-import { cachedIssues, listIssues, type TrackedIssue } from '../../services/issues'
+import {
+  cachedIssues,
+  issueProgress,
+  listIssues,
+  type IssueProgress,
+  type TrackedIssue,
+} from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { DEFAULT_FLEX_ROUTINE } from '../../config/flexPlan'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
+
+// `working` reads amber rather than green: it's a run in flight, not a result.
+const ISSUE_BADGE: Record<IssueProgress, string> = {
+  open: 'bg-accent/20 text-accent',
+  working: 'bg-amber-400/20 text-amber-400',
+  stalled: 'bg-red-400/20 text-red-400',
+  closed: 'bg-neutral-700 text-neutral-300',
+}
 
 const SYNC_LABEL: Record<string, string> = {
   idle: 'synced',
@@ -46,15 +60,22 @@ export function SettingsTab() {
   useEffect(() => {
     if (!settings.chatToken.trim()) return
     let alive = true
-    listIssues()
-      .then((list) => {
-        if (!alive) return
-        setIssues(list)
-        setIssuesFailed(false)
-      })
-      .catch(() => alive && setIssuesFailed(true))
+    const refresh = () =>
+      listIssues()
+        .then((list) => {
+          if (!alive) return
+          setIssues(list)
+          setIssuesFailed(false)
+        })
+        .catch(() => alive && setIssuesFailed(true))
+    refresh()
+    // Keep re-reading while this tab is open: the interesting states — the fixer
+    // claiming an issue, then closing it — both land minutes after the first read,
+    // and a list frozen at mount would never show them.
+    const timer = setInterval(refresh, 30_000)
     return () => {
       alive = false
+      clearInterval(timer)
     }
   }, [settings.chatToken])
 
@@ -130,12 +151,10 @@ export function SettingsTab() {
               >
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    issue.state === 'open'
-                      ? 'bg-accent/20 text-accent'
-                      : 'bg-neutral-700 text-neutral-300'
+                    ISSUE_BADGE[issueProgress(issue)]
                   }`}
                 >
-                  {issue.state === 'open' ? 'open' : 'closed'}
+                  {issueProgress(issue)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
                 <span className="shrink-0 font-mono text-xs text-neutral-500">#{issue.number}</span>
