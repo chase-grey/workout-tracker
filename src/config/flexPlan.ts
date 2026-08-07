@@ -10,6 +10,13 @@ export type FlexExercise = {
   reps: number
   tempo: string
   restSec: number
+  /**
+   * Roll straight from this stretch's rest into its next set without waiting for
+   * a tap. Set from the session's overflow menu, so it sticks for every set of
+   * the stretch and for future sessions (it's stored on the routine like any
+   * other field).
+   */
+  autoAdvance?: boolean
 }
 
 export type FlexBlock = {

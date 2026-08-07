@@ -49,7 +49,16 @@ type PendingPhotos = { gate: PhotoGate; resumeIndex: number | null }
  * logged as workout rows. Finishing counts as a stretch/flex day.
  */
 export function StretchSession({ onClose, onMinimize }: { onClose: () => void; onMinimize: () => void }) {
-  const { flexPlan, workouts, flexEntries, logFlex, logCore, durations, logSessionDuration } = useData()
+  const {
+    flexPlan,
+    updateFlexPlan,
+    workouts,
+    flexEntries,
+    logFlex,
+    logCore,
+    durations,
+    logSessionDuration,
+  } = useData()
   // Held for the session's lifetime: which Mon–Sun week the photo cadence is
   // measured against.
   const [today] = useState(() => toISODate(new Date()))
@@ -73,6 +82,10 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const [showList, setShowList] = useState(false)
   const [showMeasure, setShowMeasure] = useState(false)
   const [paused, setPaused] = useState(false)
+  // Per-exercise auto-advance for this session only, keyed by exercise. An entry
+  // overrides the saved `autoAdvance` default either way, so "auto just for now"
+  // and "not this time" are both possible without editing the routine.
+  const [autoOverride, setAutoOverride] = useState<Map<string, boolean>>(new Map())
   // Photo screens already offered this session, so resuming doesn't re-ask.
   const [seenGates, setSeenGates] = useState<Set<string>>(() => new Set(saved?.photoGates ?? []))
   // The cold shots open the session, before anything has warmed up. A resume
@@ -285,9 +298,47 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
     completeSetAndAdvance()
   }
 
+  // Whether rest rolls straight into this set. During rest `step` is already the
+  // set the rest is leading into, so this reads the same from the set screen and
+  // from the rest screen before it.
+  const savedAuto = step.kind === 'flex' && !!step.autoAdvance
+  const autoNow = autoOverride.get(step.exKey) ?? savedAuto
+  const setAutoNow = (on: boolean) =>
+    setAutoOverride((prev) => new Map(prev).set(step.exKey, on))
+
+  // Saving the default writes the flag onto the stretch in the stored routine, so
+  // it holds for the rest of this session too. The dead-bug block isn't part of
+  // the editable routine, so it has no default to save — its toggle is
+  // session-only.
+  const setAutoDefault = (on: boolean) => {
+    updateFlexPlan(
+      flexPlan.map((block) => ({
+        ...block,
+        exercises: block.exercises.map((e) =>
+          e.key === step.exKey ? { ...e, autoAdvance: on } : e,
+        ),
+      })),
+    )
+    setAutoNow(on)
+  }
+
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
+    {
+      label: autoNow ? 'wait for my tap after rest' : 'auto-advance out of rest',
+      onClick: () => setAutoNow(!autoNow),
+    },
+    ...(step.kind === 'flex'
+      ? [
+          {
+            label: savedAuto
+              ? `stop auto-advancing ${step.exName}`
+              : `always auto-advance ${step.exName}`,
+            onClick: () => setAutoDefault(!savedAuto),
+          },
+        ]
+      : []),
     { label: 'back to app (keep going)', onClick: onMinimize },
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'log measurement', onClick: () => setShowMeasure(true) },
@@ -387,6 +438,7 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         <RestTimer
           seconds={rest.seconds}
           endsAt={rest.endsAt}
+          autoAdvance={autoNow}
           menu={menuItems}
           progress={{ done: completed, total: N, unit: 'sets' }}
           timeLeftLabel={`${formatDuration(timeLeft)} left`}
