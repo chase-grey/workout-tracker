@@ -15,7 +15,7 @@ import { refreshIssues } from '../../store/useTrackedIssues'
 import { repRangeLabel, type Plan } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
-import { MdVpnKey, MdBuild, MdClose, MdHelpOutline } from 'react-icons/md'
+import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
 
 /**
  * A change the coach wants to make, held until the user says yes.
@@ -578,9 +578,10 @@ export function ChatTab({
           <button
             onClick={() => void send()}
             disabled={loading || answerLoading || input.trim().length === 0}
-            className="min-h-[44px] rounded-xl bg-accent px-4 font-semibold text-black active:opacity-80 disabled:opacity-40"
+            aria-label={answerTarget ? 'reply' : 'send'}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-black active:opacity-80 disabled:opacity-40"
           >
-            {answerTarget ? 'reply' : 'send'}
+            <MdArrowForward className="text-xl" aria-hidden />
           </button>
         </div>
       </div>

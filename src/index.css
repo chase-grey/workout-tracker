@@ -10,6 +10,7 @@
   --color-accent-deep: #15803d; /* deep green — progress fills, which shouldn't compete with the CTA */
   --color-accent-2: #22c55e; /* medium green — success / completed states */
   --color-accent-bright: #4ade80; /* bright green — rhythm/rest animations that call attention */
+  --color-accent-dark: #14532d; /* dark green — fills that sit under white text, like the user's chat bubbles */
 }
 
 html,
