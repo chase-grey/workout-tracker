@@ -107,6 +107,41 @@ export function SettingsTab() {
         </button>
       </section>
 
+      {settings.chatToken.trim() && (
+        <section className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-neutral-300">reported issues</label>
+          {issues === 'loading' ? (
+            <p className="text-xs text-neutral-500">loading…</p>
+          ) : issues === 'error' ? (
+            <p className="text-xs text-neutral-500">couldn’t reach the issue tracker</p>
+          ) : issues.length === 0 ? (
+            <p className="text-xs text-neutral-500">no issues filed yet</p>
+          ) : (
+            issues.map((issue) => (
+              <a
+                key={issue.number}
+                href={issue.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3 active:bg-surface-2"
+              >
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    issue.state === 'open'
+                      ? 'bg-accent/20 text-accent'
+                      : 'bg-neutral-700 text-neutral-300'
+                  }`}
+                >
+                  {issue.state === 'open' ? 'open' : 'closed'}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
+                <span className="shrink-0 font-mono text-xs text-neutral-500">#{issue.number}</span>
+              </a>
+            ))
+          )}
+        </section>
+      )}
+
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">google apps script url</label>
         <input
@@ -198,41 +233,6 @@ export function SettingsTab() {
         </button>
         <p className="text-xs text-neutral-500">{coachStatus}</p>
       </section>
-
-      {settings.chatToken.trim() && (
-        <section className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-300">reported issues</label>
-          {issues === 'loading' ? (
-            <p className="text-xs text-neutral-500">loading…</p>
-          ) : issues === 'error' ? (
-            <p className="text-xs text-neutral-500">couldn’t reach the issue tracker</p>
-          ) : issues.length === 0 ? (
-            <p className="text-xs text-neutral-500">no issues filed yet</p>
-          ) : (
-            issues.map((issue) => (
-              <a
-                key={issue.number}
-                href={issue.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3 active:bg-surface-2"
-              >
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    issue.state === 'open'
-                      ? 'bg-accent/20 text-accent'
-                      : 'bg-neutral-700 text-neutral-300'
-                  }`}
-                >
-                  {issue.state === 'open' ? 'open' : 'closed'}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
-                <span className="shrink-0 font-mono text-xs text-neutral-500">#{issue.number}</span>
-              </a>
-            ))
-          )}
-        </section>
-      )}
 
       {IS_DESKTOP && (
         <section className="flex flex-col gap-2">
