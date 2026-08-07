@@ -54,6 +54,15 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Scroll, but never show a bar. Every scroll container in the app is either
+   full-height or an obvious list, so the bar only ever added visual noise. */
+* {
+  scrollbar-width: none; /* Firefox */
+}
+*::-webkit-scrollbar {
+  display: none; /* WebKit / Chromium */
+}
+
 /* Numeric inputs: no spinners — thumb-friendly in the gym. */
 input[type='number']::-webkit-outer-spin-button,
 input[type='number']::-webkit-inner-spin-button {
