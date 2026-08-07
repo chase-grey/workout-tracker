@@ -62,6 +62,17 @@ export function cycleProgress(phases: TempoPhase[], idx: number, progress: numbe
   return (before + phases[idx].seconds * progress) / total
 }
 
+/**
+ * Whether a set's rep target has been met, given the rep currently in progress.
+ * The counter names the rep you're working on, so reading "rep 5 / 5" means the
+ * last rep has only just *started* — the target isn't met until that rep is
+ * finished and the count moves past it. Counting continues beyond the target,
+ * so anything past it stays met.
+ */
+export function hitRepTarget(rep: number, reps?: number): boolean {
+  return reps != null && reps > 0 && rep > reps
+}
+
 /** Seconds spent dissolving the finished rep into the new one at the loop point. */
 export const LOOP_FADE_SECONDS = 1
 

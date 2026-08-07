@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseTempo } from './tempo'
-import { cycleProgress, loopFadeIn, motionForPhases, phaseDepths } from './rhythmMotion'
+import { cycleProgress, hitRepTarget, loopFadeIn, motionForPhases, phaseDepths } from './rhythmMotion'
 
 describe('motionForPhases', () => {
   it('reads a down · hold · up rep as a breath', () => {
@@ -41,6 +41,27 @@ describe('cycleProgress', () => {
 
   it('is 0 for a tempo with no duration', () => {
     expect(cycleProgress(parseTempo(''), 0, 0.5)).toBe(0)
+  })
+})
+
+describe('hitRepTarget', () => {
+  it('is not met while the last rep is still running', () => {
+    expect(hitRepTarget(5, 5)).toBe(false)
+  })
+
+  it('is met once the last rep finishes and the count moves past it', () => {
+    expect(hitRepTarget(6, 5)).toBe(true)
+    expect(hitRepTarget(9, 5)).toBe(true)
+  })
+
+  it('is not met earlier in the set', () => {
+    expect(hitRepTarget(1, 5)).toBe(false)
+    expect(hitRepTarget(4, 5)).toBe(false)
+  })
+
+  it('is never met without a target to hit', () => {
+    expect(hitRepTarget(3)).toBe(false)
+    expect(hitRepTarget(3, 0)).toBe(false)
   })
 })
 

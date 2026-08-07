@@ -3,6 +3,7 @@ import { MdKeyboardArrowDown } from 'react-icons/md'
 import { parseTempo } from '../lib/tempo'
 import {
   cycleProgress,
+  hitRepTarget,
   loopFadeIn,
   motionForPhases,
   phaseDepths,
@@ -348,10 +349,11 @@ export function RhythmGuide({
   const fadeIn = motion === 'descent' ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
   const showPrevRep = fadeIn < 1 && rep > startRep
 
-  // Once you've hit the target the count reads entirely in the accent colour and
-  // the shape brightens with it, so "done" is a single glance at the guide rather
-  // than a comparison of two numbers.
-  const hitTarget = reps != null && rep >= reps
+  // Once you've finished the target the count reads entirely in the accent colour
+  // and the shape brightens with it, so "done" is a single glance at the guide
+  // rather than a comparison of two numbers. It waits for the last rep to end,
+  // not to begin — the counter shows the rep you're mid-way through.
+  const hitTarget = hitRepTarget(rep, reps)
 
   return (
     <div className="flex flex-1 flex-col items-center py-3">
