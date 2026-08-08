@@ -466,7 +466,14 @@ export function ChatTab({
         </button>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 pb-24">
+      {/* pb-5 matches the scroller's own top padding (see AppShell's main), so
+          the thread ends the same distance above the composer as it starts below
+          the top of the screen. It wants no more than that: the composer is an
+          ordinary sticky sibling at the end of the column, so once you're
+          scrolled to the bottom it's sitting in its own space rather than over
+          the thread, and every pixel of tail here is blank screen holding the
+          conversation up off the input. */}
+      <div className="flex flex-1 flex-col gap-3 pb-5">
         {turns.map((t, i) =>
           t.proposal ? (
             <div key={i} className="mx-auto w-full max-w-[85%] rounded-2xl border border-border bg-surface px-3 py-2">

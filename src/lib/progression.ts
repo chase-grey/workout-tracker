@@ -1,12 +1,33 @@
 import type { WorkoutRow } from '../types'
 import type { VariantKey } from '../config/plan'
 import { parseISODate, toISODate } from './dates'
+import { epley1RM } from './epley'
 
 export type Target = { weightLbs: number | null; reps: number }
 
 /** Round a weight to the nearest 0.5 lb. */
 function roundHalf(n: number): number {
   return Math.round(n * 2) / 2
+}
+
+/**
+ * A lighter weight at which `repMin` reps is about as hard as `topWeight`×`topReps`
+ * was — the two share an estimated 1RM, solved back for the higher rep count.
+ *
+ * Used when a lift is being worked too heavy for its own rep range. Rounded DOWN
+ * to a whole `increment` step so the suggestion is a load that exists on the rack
+ * and errs toward achievable; below a single increment there's no step to land on,
+ * so the estimate itself is used.
+ */
+function weightForRepMin(
+  topWeight: number,
+  topReps: number,
+  repMin: number,
+  increment: number,
+): number {
+  const est = epley1RM(topWeight, topReps) / (1 + repMin / 30)
+  const stepped = Math.floor(est / increment) * increment
+  return roundHalf(stepped > 0 ? stepped : est)
 }
 
 /**
@@ -188,9 +209,15 @@ export function lastPerformance(
  * ladders. Without it, the fresh press would be prescribed off a tired session and
  * the tired one asked to beat a fresh session it can't.
  *
- * The prescribed reps never exceed repMax. They're allowed to sit BELOW repMin —
- * if the last session only managed 4 reps of an 8–12 exercise, the next target is
- * 5, not a demoralizing jump straight back to 8.
+ * The prescribed reps always land inside [repMin, repMax]. A weight you can't
+ * carry to repMin is simply too heavy for the range the exercise is meant to be
+ * trained in — 75×5 of an 8–12 press is a strength prescription on a hypertrophy
+ * slot — so the answer is to lighten the load, not to prescribe out-of-range reps.
+ * When even a step up wouldn't reach repMin, the weight drops to one that makes
+ * repMin a realistic ask (see weightForRepMin) and the reps go to repMin.
+ *
+ * Reps-only lifts are the exception: with no load to shed, a bodyweight exercise
+ * below its range can only climb back a rep at a time.
  */
 export function nextTarget(
   workouts: WorkoutRow[],
@@ -232,21 +259,28 @@ export function nextTarget(
    */
   const repeat = stale || !last.sameSlot
 
-  // Bodyweight (flagged, or no weight recorded): progress reps only.
+  // Bodyweight (flagged, or no weight recorded): progress reps only. Nothing to
+  // lighten, so this is the one case where the target may sit below repMin.
   if (opts.bodyweight || last.topWeight == null) {
     return { weightLbs: null, reps: repeat ? repeatReps : Math.max(1, oneMoreRep) }
   }
 
-  const weightLbs = roundHalf(last.topWeight)
-
-  if (repeat) {
-    return { weightLbs, reps: repeatReps }
-  }
-
-  // Weighted double progression.
-  if (last.topReps >= repMax) {
-    // Earned a weight bump: increase weight, reset reps to the bottom of the range.
+  // Weighted double progression: earned a weight bump at the top of the range.
+  if (!repeat && last.topReps >= repMax) {
     return { weightLbs: roundHalf(last.topWeight + increment), reps: repMin }
   }
-  return { weightLbs, reps: Math.max(1, oneMoreRep) }
+
+  const reps = repeat ? repeatReps : oneMoreRep
+
+  // Too heavy for the range: the reps this weight allows fall short of repMin, so
+  // drop to a load that carries the bottom of the range rather than prescribing a
+  // set outside it.
+  if (reps < repMin) {
+    return {
+      weightLbs: weightForRepMin(last.topWeight, last.topReps, repMin, increment),
+      reps: repMin,
+    }
+  }
+
+  return { weightLbs: roundHalf(last.topWeight), reps: Math.max(1, reps) }
 }

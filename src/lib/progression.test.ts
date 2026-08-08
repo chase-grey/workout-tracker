@@ -71,11 +71,47 @@ describe('nextTarget', () => {
     })
   })
 
-  it('climbs back toward the range rather than jumping to repMin', () => {
-    // Only managed 4 reps of an 8-12 exercise: ask for 5, not a demoralizing 8.
-    const rows = [row({ weight_lbs: 135, reps: 4 })]
+  it('lightens the weight instead of prescribing 5 reps of an 8-12 lift', () => {
+    // The reported case: 75x5 on an 8-12 overhead press. Asking for 75x6 next time
+    // keeps the lift stuck below its own range, so drop to a weight that carries 8
+    // reps at the same estimated effort (87.5 e1RM -> ~69 lb -> 65 on 5s).
+    const rows = [row({ exercise: 'db_overhead_press', weight_lbs: 75, reps: 5 })]
+    expect(
+      nextTarget(rows, 'db_overhead_press', { repMin: 8, repMax: 12, increment: 5, today: TODAY }),
+    ).toEqual({ weightLbs: 65, reps: 8 })
+  })
+
+  it('keeps the weight when a single added rep already reaches repMin', () => {
+    // 7 reps of an 8-12 lift is one short: plain double progression gets there.
+    const rows = [row({ weight_lbs: 135, reps: 7 })]
     expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, today: TODAY })).toEqual({
       weightLbs: 135,
+      reps: 8,
+    })
+  })
+
+  it('rounds a lightened weight down to the exercise increment', () => {
+    // On 2.5s the ~69 lb estimate floors to the 67.5 step, not 65.
+    const rows = [row({ weight_lbs: 75, reps: 5 })]
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, increment: 2.5, today: TODAY })).toEqual({
+      weightLbs: 67.5,
+      reps: 8,
+    })
+  })
+
+  it('lightens the weight after a layoff rather than repeating an out-of-range set', () => {
+    const rows = [row({ date: '2026-01-01', weight_lbs: 75, reps: 5 })]
+    const backAfterABreak = new Date(2026, 0, 1 + STALE_HISTORY_DAYS + 1)
+    expect(
+      nextTarget(rows, 'bench', { repMin: 8, repMax: 12, increment: 5, today: backAfterABreak }),
+    ).toEqual({ weightLbs: 65, reps: 8 })
+  })
+
+  it('still climbs a rep at a time for a bodyweight lift below its range', () => {
+    // No load to shed, so the only way back into the range is more reps.
+    const rows = [row({ exercise: 'pullup', weight_lbs: null, reps: 4 })]
+    expect(nextTarget(rows, 'pullup', { repMin: 10, repMax: 15, today: TODAY })).toEqual({
+      weightLbs: null,
       reps: 5,
     })
   })

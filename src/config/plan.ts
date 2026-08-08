@@ -7,7 +7,8 @@ import type { DayType } from '../types'
  *
  * `restSec` is the prescribed rest after each set.
  * `repMin`/`repMax` define the rep range used by the progression engine
- * (double progression climbs to repMax, then adds weight and resets to repMin).
+ * (double progression climbs to repMax, then adds weight and resets to repMin;
+ * a weight too heavy to reach repMin is lightened rather than prescribed short).
  * `increment` is the weight step (lbs) when a weight bump is earned.
  * `bodyweight: true` means the weight field defaults to blank/"BW".
  */
