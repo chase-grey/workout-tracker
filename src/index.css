@@ -220,9 +220,10 @@ input[type='number'] {
     opacity: 0;
   }
 }
+/* No `will-change` here: there are nine of these on screen and they animate for
+   a fifth of the cycle, so a permanent layer each costs more than it buys. */
 .rest-splash-drop {
   animation: rest-splash-drop 4s linear infinite;
-  will-change: transform, opacity;
 }
 
 /* The ripple running out across the surface once the crown collapses. */

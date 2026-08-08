@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { KebabMenu, type MenuItem } from './KebabMenu'
 import { SessionProgress } from './SessionProgress'
 
@@ -249,6 +249,9 @@ const SURFACING_BUBBLES = [
   { left: 76, size: 5, delay: '2.9s' },
 ] as const
 
+/** Below this much rest left, the water is too shallow to surface through. */
+const TIDE_SURFACING_MIN = 0.08
+
 /** Droplets thrown by one splash: position across the crown and how far out each flies. */
 const SPLASH_DROPS = [
   { left: 34, size: 7, dx: '-300%' },
@@ -293,7 +296,7 @@ function SurfacingBubble({ left, size, delay }: { left: number; size: number; de
                 width: `${drop.size}%`,
                 '--dx': drop.dx,
                 animationDelay: delay,
-              } as React.CSSProperties
+              } as CSSProperties
             }
           />
         ))}
@@ -310,7 +313,9 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
   switch (variant) {
     case 'tide':
       // A vessel that empties: the liquid line drops from full to nothing. The
-      // surface glint and slow bubbles read as liquid without moving the line.
+      // surface glint and the bubbles read as liquid without moving the line —
+      // small ones fading out mid-water, bigger ones surfacing and bursting into
+      // a splash that runs out across the top of the water.
       return (
         <div className="absolute h-[74%] w-[74%] overflow-hidden rounded-full ring-1 ring-accent-bright/50">
           <div className="absolute inset-0 bg-accent-bright/12" />
@@ -321,6 +326,11 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
               className="rest-bubble absolute bottom-[8%] left-[62%] h-[4%] w-[4%] rounded-full bg-accent-bright/70"
               style={{ animationDelay: '1.6s' }}
             />
+            {/* Dropped once the water is too shallow to rise through: down there a
+                bubble would be taller than the liquid and would just sit on the
+                floor pulsing, with nothing left to break the surface of. */}
+            {fraction > TIDE_SURFACING_MIN &&
+              SURFACING_BUBBLES.map((b) => <SurfacingBubble key={b.left} {...b} />)}
           </div>
         </div>
       )
