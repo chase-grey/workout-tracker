@@ -150,30 +150,23 @@ describe('issueProgress', () => {
     // Local time on both sides — the day boundary that matters is the one on the
     // reader's own clock, not UTC's.
     const now = new Date(2026, 7, 8, 16, 8)
-    const at = (d: Date) => d.toISOString()
+    /** A closed issue whose close time is that local instant, as GitHub sends it. */
+    const closedAt = (d: Date) => issue({ state: 'closed', closedAt: d.toISOString() })
 
     it('reads completed for a fix that landed earlier today', () => {
-      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2026, 7, 8, 9, 30)) }), now)).toBe(
-        'completed',
-      )
+      expect(issueProgress(closedAt(new Date(2026, 7, 8, 9, 30)), now)).toBe('completed')
     })
 
     it('still reads completed just after midnight today', () => {
-      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2026, 7, 8, 0, 1)) }), now)).toBe(
-        'completed',
-      )
+      expect(issueProgress(closedAt(new Date(2026, 7, 8, 0, 1)), now)).toBe('completed')
     })
 
     it('goes back to closed for one closed late yesterday', () => {
-      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2026, 7, 7, 23, 59)) }), now)).toBe(
-        'closed',
-      )
+      expect(issueProgress(closedAt(new Date(2026, 7, 7, 23, 59)), now)).toBe('closed')
     })
 
     it('is closed a year on, not completed by the matching day and month', () => {
-      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2025, 7, 8, 16, 8)) }), now)).toBe(
-        'closed',
-      )
+      expect(issueProgress(closedAt(new Date(2025, 7, 8, 16, 8)), now)).toBe('closed')
     })
 
     it('treats a closed issue with no usable close time as history', () => {

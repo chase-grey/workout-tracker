@@ -16,6 +16,7 @@ import { repRangeLabel, type Plan } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
 import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
+import { Markdown } from './Markdown'
 
 /**
  * A change the coach wants to make, held until the user says yes.
@@ -528,11 +529,13 @@ export function ChatTab({
         {loading && (
           <div className="flex justify-start">
             <div
-              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl bg-surface px-3 py-2 text-sm ${
+              className={`max-w-[85%] rounded-2xl bg-surface px-3 py-2 text-sm ${
                 pending ? 'text-neutral-100' : 'text-neutral-400'
               }`}
             >
-              {pending || '…'}
+              {/* Rendered as it streams, so the reply doesn't reflow the moment
+                  it settles into a turn. */}
+              {pending ? <Markdown text={pending} /> : '…'}
             </div>
           </div>
         )}

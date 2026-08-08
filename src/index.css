@@ -124,6 +124,127 @@ input[type='number'] {
   will-change: transform, opacity;
 }
 
+/* Tide, the ones that make it: a riser column spans the liquid's full height, so
+   translating it -96% carries its bubble from the floor right through the
+   surface line however far the water has drained. The bubble bursts as it breaks
+   through and the splash pieces below fire at the same point in the cycle —
+   riser, burst and splash all share one duration and one delay, so the splash
+   always lands on the pop. */
+@keyframes rest-riser {
+  0% {
+    transform: translateY(0);
+  }
+  86%,
+  100% {
+    transform: translateY(-96%);
+  }
+}
+.rest-riser {
+  animation: rest-riser 4s ease-in infinite;
+  will-change: transform;
+}
+
+@keyframes rest-riser-bubble {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  12% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  78% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+  /* Breaking the surface: the bubble stretches thin and is gone. */
+  88% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+.rest-riser-bubble {
+  animation: rest-riser-bubble 4s ease-in infinite;
+  will-change: transform, opacity;
+}
+
+/* The splash: a crown of water thrown up where the bubble burst. */
+@keyframes rest-splash-crown {
+  0%,
+  80% {
+    transform: scaleX(0.7) scaleY(0.1);
+    opacity: 0;
+  }
+  87% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scaleX(1.6) scaleY(0.05);
+    opacity: 0;
+  }
+}
+.rest-splash-crown {
+  transform-origin: 50% 100%;
+  animation: rest-splash-crown 4s ease-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Droplets flung off the crown, each on its own parabola: `--dx` is how far it
+   travels sideways (in multiples of its own width) and the keyframes step the
+   arc up and back down onto the surface. */
+@keyframes rest-splash-drop {
+  0%,
+  82% {
+    transform: translate(0, 0) scale(0.5);
+    opacity: 0;
+  }
+  84% {
+    opacity: 0.95;
+  }
+  87% {
+    transform: translate(calc(var(--dx) * 0.28), -320%) scale(1);
+  }
+  91% {
+    transform: translate(calc(var(--dx) * 0.55), -420%) scale(1);
+  }
+  96% {
+    transform: translate(calc(var(--dx) * 0.8), -280%) scale(0.9);
+  }
+  100% {
+    transform: translate(var(--dx), 0) scale(0.6);
+    opacity: 0;
+  }
+}
+.rest-splash-drop {
+  animation: rest-splash-drop 4s linear infinite;
+  will-change: transform, opacity;
+}
+
+/* The ripple running out across the surface once the crown collapses. */
+@keyframes rest-splash-ripple {
+  0%,
+  82% {
+    transform: scaleX(0.1);
+    opacity: 0;
+  }
+  88% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scaleX(1.6);
+    opacity: 0;
+  }
+}
+.rest-splash-ripple {
+  animation: rest-splash-ripple 4s ease-out infinite;
+  will-change: transform, opacity;
+}
+
 /* Candle: the flame flickers from its base without shifting the wax level.
    Horizontal centering is left to the element's `-translate-x-1/2` (Tailwind's
    `translate` property); the keyframes touch only `transform` so the two don't
@@ -200,14 +321,20 @@ input[type='number'] {
 
 @media (prefers-reduced-motion: reduce) {
   .rest-bubble,
+  .rest-riser,
+  .rest-riser-bubble,
   .rest-flame,
   .rest-ember,
   .rest-pip,
   .rest-perimeter-glow {
     animation: none;
   }
-  /* No flying sparks for reduced motion — hide them rather than freeze mid-air. */
-  .rest-ember {
+  /* No flying sparks or splashes for reduced motion — hide them rather than
+     freeze them mid-air. The bubbles themselves stay, resting in the liquid. */
+  .rest-ember,
+  .rest-splash-crown,
+  .rest-splash-drop,
+  .rest-splash-ripple {
     display: none;
   }
   /* Keep a settled stream in the neck rather than animating the grains. */

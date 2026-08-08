@@ -209,7 +209,9 @@ function parseList(lines: string[], start: number, first: Marker): { block: MdBl
   }
 
   // Trailing blanks inside an item would otherwise become empty paragraphs.
-  for (const item of items) while (item.length && !item[item.length - 1].trim()) item.pop()
+  for (const item of items) {
+    while (item.length && !item[item.length - 1].trim()) item.pop()
+  }
 
   return {
     block: {

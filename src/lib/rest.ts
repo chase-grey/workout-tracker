@@ -41,6 +41,22 @@ export function upNextTargetLabel(setIndex: number, target: string | null): stri
 }
 
 /**
+ * The load/reps line a rest screen shows for the set it leads into, or `null`
+ * when that rest shouldn't carry one. `target` is the already-formatted line
+ * ("135 × 8", "12 reps") and `setIndex` is the 0-based position of the coming
+ * set within its exercise.
+ *
+ * Only the rest before an exercise's *first* set gets the numbers. That's the
+ * moment they're worth reading: the move is new, nothing about it is on screen
+ * yet, and you're walking over to load it. From the second set on, the set
+ * screen prefills what you actually just lifted rather than the progression
+ * target, so a target shown here describes a set you aren't about to do.
+ */
+export function upNextTargetLabel(setIndex: number, target: string | null): string | null {
+  return setIndex === 0 ? target : null
+}
+
+/**
  * Moving between stations of a circuit: just long enough to walk over and set
  * up. The point of a circuit is that the muscle you just worked recovers while
  * you work the others, so a full rest here would throw that away.
