@@ -26,7 +26,7 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
             autoFocus
             type="number"
             inputMode="decimal"
-            placeholder="172.4"
+            autoComplete="off"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             className="min-h-[52px] w-0 flex-1 rounded-xl bg-surface-2 px-4 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"

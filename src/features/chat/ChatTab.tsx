@@ -574,7 +574,8 @@ export function ChatTab({
             }}
             // The keyboard opening shrinks the thread; keep its tail in view.
             onFocus={() => endRef.current?.scrollIntoView({ behavior: 'smooth' })}
-            placeholder={answerTarget ? `answer #${answerTarget.number}` : 'ask your coach'}
+            aria-label={answerTarget ? `answer #${answerTarget.number}` : 'message'}
+            placeholder={answerTarget ? `answer #${answerTarget.number}` : ''}
             className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
           />
           <button
