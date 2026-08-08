@@ -24,6 +24,19 @@ export const EAT_END_HOUR = 21
 export const STALE_LOG_HOURS = 4
 
 /**
+ * Hour of day before which a day with nothing logged at all says nothing. Early
+ * in the morning an empty day is just an early morning, not a missed meal, so
+ * warning about it is clutter. Past this hour it's a real gap worth flagging.
+ */
+export const EMPTY_LOG_NAG_HOUR = 11
+
+/** True once it's late enough in the day for a day with nothing logged to be worth flagging. */
+export function isEmptyDayNagTime(now: Date = new Date()): boolean {
+  const h = now.getHours() + now.getMinutes() / 60
+  return h >= EMPTY_LOG_NAG_HOUR && h <= EAT_END_HOUR
+}
+
+/**
  * Fraction of the eating window (default 9am–9pm) elapsed at `now`, clamped to
  * 0..1. Multiply by the goal to get where you "should" be to finish on time.
  */
@@ -60,12 +73,13 @@ export function formatElapsed(then: Date, now: Date = new Date()): string {
  * True when it's been {@link STALE_LOG_HOURS} or more since the last log while
  * the eating window is open — the "you probably forgot a meal" signal. Outside
  * the window a long gap is just the overnight fast, so nothing is flagged.
- * A day with nothing logged at all (`last` = null) is stale on the same terms.
+ * A day with nothing logged at all (`last` = null) has no gap to measure, so it
+ * waits on the clock instead: nothing is flagged until {@link EMPTY_LOG_NAG_HOUR}.
  */
 export function isFoodLogStale(last: Date | null, now: Date = new Date()): boolean {
   const h = now.getHours() + now.getMinutes() / 60
   if (h < EAT_START_HOUR || h > EAT_END_HOUR) return false
-  if (!last) return true
+  if (!last) return isEmptyDayNagTime(now)
   return now.getTime() - last.getTime() >= STALE_LOG_HOURS * 3600_000
 }
 

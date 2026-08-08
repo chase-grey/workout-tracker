@@ -445,7 +445,14 @@ export function ChatTab({
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    /* A screenful plus the scroller's own bottom padding, then pulled back by the
+       same amount: the tab reaches the very bottom of the screen without adding
+       anything to scroll. The composer below can then sit flush there as an
+       ordinary last child, rather than reaching down with a negative margin of
+       its own — a sticky box is held inside its containing block, so a bottom
+       margin that hangs past it just parks the bar that far short of the bottom
+       once the thread is long enough to scroll. */
+    <div className="-mb-4 flex min-h-[calc(100%+1rem)] flex-col">
       <div className="flex items-center justify-end pb-2">
         <button
           onClick={toggleKeepContext}
@@ -531,11 +538,10 @@ export function ChatTab({
       </div>
 
       {/* Frosted glass, so the tail of the thread dissolves behind the input
-          instead of stopping at a hard edge. -mb-4 cancels the main scroller's
-          bottom padding so the bar sits right down at the bottom of the screen,
-          and there's no padding under the input at all — the nav below already
-          brings its own space around the icons, and the keyboard needs none. */}
-      <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 pb-0 pt-2 backdrop-blur-md">
+          instead of stopping at a hard edge. Equal padding top and bottom, so the
+          input sits the same distance from the line above it as from the nav
+          below (or the keyboard, once that's covered the nav). */}
+      <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 py-2 backdrop-blur-md">
         {/* The question rides above the composer rather than sitting in the
             thread: it has to stay on screen while the answer is being typed. */}
         {(answerLoading || answerTarget || answerError) && (

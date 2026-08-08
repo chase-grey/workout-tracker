@@ -5,6 +5,7 @@ import {
   CALORIE_GOAL,
   caloriePaceFraction,
   formatElapsed,
+  isEmptyDayNagTime,
   isFoodLogStale,
   lastLoggedAt,
   totalForDate,
@@ -46,15 +47,17 @@ export function CalorieLogger() {
   // a total but no timestamp — logged before the field existed, or only ever
   // backfilled — and then there's nothing honest to say, so it falls back to
   // "today". An empty today is the one exception: no total AND no timestamp is
-  // itself the answer.
+  // itself the answer — but only once it's late enough for that to mean
+  // something, since every day starts out empty.
   const loggedAt = lastLoggedAt(calorieEntries, selDate)
   const untouchedToday = isToday && !loggedAt && selTotal === 0
-  const stale = isToday && (loggedAt != null || untouchedToday) && isFoodLogStale(loggedAt, now)
+  const flagUntouched = untouchedToday && isEmptyDayNagTime(now)
+  const stale = isToday && (loggedAt != null || flagUntouched) && isFoodLogStale(loggedAt, now)
   const selLabel = !isToday
     ? selDate.slice(5)
     : loggedAt
       ? formatElapsed(loggedAt, now)
-      : untouchedToday
+      : flagUntouched
         ? 'nothing logged yet'
         : 'today'
 

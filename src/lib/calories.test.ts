@@ -11,6 +11,7 @@ import {
   mergeCaloriesByDate,
   formatClock,
   formatElapsed,
+  isEmptyDayNagTime,
   isFoodLogStale,
   lastLoggedAt,
   type CalorieEntry,
@@ -274,9 +275,28 @@ describe('isFoodLogStale', () => {
     expect(isFoodLogStale(at(20, 0), at(7, 0))).toBe(false) // overnight fast
   })
 
-  it('treats a day with nothing logged as stale once the window is open', () => {
+  it('treats a day with nothing logged as stale only from the nag hour', () => {
     expect(isFoodLogStale(null, at(13))).toBe(true)
     expect(isFoodLogStale(null, at(7))).toBe(false)
+    expect(isFoodLogStale(null, at(10, 59))).toBe(false) // morning is not a missed meal
+    expect(isFoodLogStale(null, at(11))).toBe(true)
+  })
+})
+
+describe('isEmptyDayNagTime', () => {
+  const at = (h: number, m = 0) => new Date(2026, 6, 8, h, m)
+
+  it('stays quiet through the morning', () => {
+    expect(isEmptyDayNagTime(at(6))).toBe(false)
+    expect(isEmptyDayNagTime(at(9))).toBe(false)
+    expect(isEmptyDayNagTime(at(10, 59))).toBe(false)
+  })
+
+  it('starts at 11am and runs to the end of the eating window', () => {
+    expect(isEmptyDayNagTime(at(11))).toBe(true)
+    expect(isEmptyDayNagTime(at(17))).toBe(true)
+    expect(isEmptyDayNagTime(at(21))).toBe(true)
+    expect(isEmptyDayNagTime(at(22))).toBe(false)
   })
 })
 
