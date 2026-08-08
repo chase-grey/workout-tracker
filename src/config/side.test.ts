@@ -26,12 +26,12 @@ describe('sideOrderedExercises', () => {
 
   it('leads with the left raise on a left session', () => {
     const keys = pushKeys('left')
-    expect(keys.indexOf('lateral_raise_l')).toBe(keys.indexOf('lateral_raise_r') - 1)
+    expect(keys.indexOf('lateral_raise_l')).toBeLessThan(keys.indexOf('lateral_raise_r'))
   })
 
   it('leads with the right raise on a right session', () => {
     const keys = pushKeys('right')
-    expect(keys.indexOf('lateral_raise_r')).toBe(keys.indexOf('lateral_raise_l') - 1)
+    expect(keys.indexOf('lateral_raise_r')).toBeLessThan(keys.indexOf('lateral_raise_l'))
   })
 
   it('moves nothing but the pair', () => {
@@ -42,29 +42,39 @@ describe('sideOrderedExercises', () => {
     expect([...right].sort()).toEqual([...left].sort())
   })
 
-  it('keeps the raise between the two tricep movements either way', () => {
+  it('leads with the fresh arm between the two tricep movements either way', () => {
+    // The leading arm takes the slot between pushdown and extension; the other one
+    // follows the extension, so whichever arm goes first is also the one done fresh.
     for (const side of ['left', 'right'] as const) {
       const keys = pushKeys(side)
-      expect(keys.indexOf('lateral_raise_l')).toBeGreaterThan(keys.indexOf('tricep_pushdown'))
-      expect(keys.indexOf('lateral_raise_r')).toBeGreaterThan(keys.indexOf('tricep_pushdown'))
-      expect(keys.indexOf('lateral_raise_l')).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
-      expect(keys.indexOf('lateral_raise_r')).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
+      const lead = keys.indexOf(side === 'left' ? 'lateral_raise_l' : 'lateral_raise_r')
+      const follow = keys.indexOf(side === 'left' ? 'lateral_raise_r' : 'lateral_raise_l')
+      expect(lead).toBeGreaterThan(keys.indexOf('tricep_pushdown'))
+      expect(lead).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
+      expect(follow).toBeGreaterThan(keys.indexOf('overhead_tricep_ext'))
     }
   })
 
-  it('rotates both arms inside one round of the arm circuit', () => {
-    // The point of the pair being two adjacent stations: each round is pushdown,
-    // both arms, extension — not three rounds of one arm and then three of the
-    // other, which is what one station of six sets would give.
+  it('rotates delt, tricep, delt, tricep through one round of the arm circuit', () => {
+    // Each round is pushdown, one arm, extension, the other arm — not three rounds
+    // of one arm and then three of the other (what one station of six sets would
+    // give), and not both arms back to back either.
     const exercises = sideOrderedExercises(variantExercises(DEFAULT_PLAN.push, 'A'), 'right')
     const order = buildSetOrder(
       exercises,
       exercises.map((e) => e.sets),
     )
-    const raises = order
+    const arms = order
       .map((s) => exercises[s.exIndex].key)
-      .filter((k) => k.startsWith('lateral_raise'))
-    expect(raises.slice(0, 2)).toEqual(['lateral_raise_r', 'lateral_raise_l'])
+      .filter((k) => k.startsWith('lateral_raise') || k.includes('tricep'))
+    expect(arms.slice(0, 4)).toEqual([
+      'tricep_pushdown',
+      'lateral_raise_r',
+      'overhead_tricep_ext',
+      'lateral_raise_l',
+    ])
+    // And the next round picks up the same way round.
+    expect(arms.slice(4, 8)).toEqual(arms.slice(0, 4))
   })
 
   it('swaps a pair declared right-first just the same', () => {

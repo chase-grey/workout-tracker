@@ -12,7 +12,7 @@ import {
   type IssueArea,
 } from '../../services/issues'
 import { refreshIssues } from '../../store/useTrackedIssues'
-import { repRangeLabel, type Plan } from '../../config/plan'
+import { repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
 import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
@@ -171,7 +171,9 @@ function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
   for (const d of DAY_TYPES) {
     lines.push(`${plan[d].label} (${d}):`)
     for (const e of plan[d].exercises) {
-      lines.push(`  key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s`)
+      lines.push(
+        `  key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s${circuitNote(e)}`,
+      )
     }
   }
   lines.push('', 'CURRENT STRETCH ROUTINE (use block label + stretch key with update_flex_routine):')

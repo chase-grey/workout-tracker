@@ -24,6 +24,30 @@ describe('applyPlanEdits', () => {
     expect(ex?.repMin).toBe(8)
   })
 
+  it('setExercise sets a per-station circuit rest, zero included', () => {
+    // "Rest only after the lateral raise": the stations either side of it roll
+    // straight on, so their rest has to be settable to 0 and stay 0.
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'setExercise', day: 'push', key: 'tricep_pushdown', fields: { circuitRestSec: 0 } },
+      { op: 'setExercise', day: 'push', key: 'lateral_raise_l', fields: { circuitRestSec: 60 } },
+    ])
+    const push = (key: string) => plan.push.exercises.find((e) => e.key === key)
+    expect(push('tricep_pushdown')?.circuitRestSec).toBe(0)
+    expect(push('lateral_raise_l')?.circuitRestSec).toBe(60)
+  })
+
+  it('setExercise clears a circuit rest with null', () => {
+    const { plan: set } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'setExercise', day: 'push', key: 'tricep_pushdown', fields: { circuitRestSec: 0 } },
+    ])
+    const { plan: cleared } = applyPlanEdits(set, [
+      { op: 'setExercise', day: 'push', key: 'tricep_pushdown', fields: { circuitRestSec: null } },
+    ])
+    expect(cleared.push.exercises.find((e) => e.key === 'tricep_pushdown')).not.toHaveProperty(
+      'circuitRestSec',
+    )
+  })
+
   it('setExercise on a missing key records an error', () => {
     const { applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
       { op: 'setExercise', day: 'push', key: 'nope', fields: { sets: 4 } },

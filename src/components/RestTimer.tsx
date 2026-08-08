@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { KebabMenu, type MenuItem } from './KebabMenu'
 import { SessionProgress } from './SessionProgress'
 import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } from '../lib/tide'
@@ -15,7 +15,7 @@ import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } fr
 const BOX_VARIANTS = ['sandglass', 'tide', 'candle', 'pips'] as const
 // 'perimeter' frames the screen edge; the other two fill it, so they sit below the
 // up-next block rather than behind it.
-const FILL_VARIANTS = ['curtain', 'dune'] as const
+const FILL_VARIANTS = ['curtain', 'dune', 'hourglass'] as const
 const FULL_VARIANTS = ['perimeter', ...FILL_VARIANTS] as const
 const VARIANTS = [...BOX_VARIANTS, ...FULL_VARIANTS] as const
 type Variant = (typeof VARIANTS)[number]
@@ -172,6 +172,225 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
 const DUNE_ASPECT = 3
 
 /**
+ * The 'hourglass' shape's geometry, in its own SVG user units — a 100 × 164 box,
+ * so every number here is also a percentage of the glass.
+ *
+ * The sand is two fixed shapes that *slide* rather than two shapes redrawn on
+ * every tick: the upper charge is a block with a crater scooped out of its top
+ * edge that sinks down the funnel, the pile is a block with a mound on top that
+ * rises out of the floor, and each bulb clips whatever leaves it. Both surfaces
+ * keep their own shape at every level that way, and the motion stays on
+ * `transform`, so the countdown's 250ms steps smooth into one continuous fall the
+ * way the other shapes' `height` transitions do.
+ */
+const GLASS = {
+  width: 100,
+  height: 164,
+  /** Inside face of the upper bulb's ceiling and of the lower bulb's floor. */
+  ceiling: 9,
+  floor: 155,
+  /** The waist: sand leaves the upper bulb here and lands in the lower one. */
+  neckTop: 79,
+  neckBottom: 85,
+  /** Half-width of the throat between them. */
+  neckHalf: 3.5,
+  /** How far the glass sits inside the frame's posts. */
+  wall: 13,
+} as const
+
+/**
+ * Top of the upper sand in a glass that hasn't started draining — a touch above
+ * the ceiling, so a full glass reads as packed rather than settled a hair short.
+ */
+const UPPER_SAND_TOP = GLASS.ceiling - 2
+
+/** How deep the crater in the draining sand's surface runs at its centre. */
+const CRATER = 7
+
+/**
+ * How high the pile's peak stands over its own skirt. Sand piles at roughly 34°
+ * from horizontal, which across the width of this glass is about this much.
+ */
+const MOUND = 18
+
+/** How far the sand travels: the full height of either bulb. */
+const SAND_FALL = GLASS.floor - GLASS.neckBottom
+const SAND_DRAIN = GLASS.neckTop - UPPER_SAND_TOP
+
+/**
+ * A body of sand with a shaped top: a flat edge at `y` bulging `depth` at its
+ * centre — positive digs a bowl, negative heaps a mound — filled down to `bottom`
+ * and run wider than the glass so a clipped edge never shows. The control point
+ * is twice that depth, since a quadratic only reaches halfway toward it.
+ */
+function sandBody(y: number, depth: number, bottom: number): string {
+  const right = GLASS.width + 12
+  return [
+    `M -12 ${y}`,
+    `Q ${GLASS.width / 2} ${y + 2 * depth} ${right} ${y}`,
+    `L ${right} ${bottom}`,
+    `L -12 ${bottom}`,
+    'Z',
+  ].join(' ')
+}
+
+/** The charge still to fall, at rest in a full glass. */
+const UPPER_SAND_PATH = sandBody(UPPER_SAND_TOP, CRATER, GLASS.neckBottom)
+
+/**
+ * The pile, parked with its peak exactly on the floor and its skirt below it: an
+ * empty lower bulb shows nothing at all, and the first grains raise a small cone
+ * rather than popping a whole mound into being.
+ */
+const LOWER_SAND_PATH = sandBody(GLASS.floor + MOUND, -MOUND, GLASS.floor + MOUND + SAND_FALL)
+
+/** How far down a bulb's wall runs straight before it starts leaning in. */
+const SHOULDER = 44
+/** Where that lean tightens into the funnel feeding the throat. */
+const THROAT = { x: 62, y: 58 } as const
+/** The lower bulb is the upper one turned over about the waist. */
+const flipY = (y: number) => GLASS.floor - (y - GLASS.ceiling)
+const NECK_L = GLASS.width / 2 - GLASS.neckHalf
+const NECK_R = GLASS.width / 2 + GLASS.neckHalf
+const GLASS_L = GLASS.wall
+const GLASS_R = GLASS.width - GLASS.wall
+
+/**
+ * The bulbs: each wall drops straight from its plate, takes a shoulder, then
+ * sweeps into the throat. That line is what reads as an hourglass — two triangles
+ * meeting at a point read as a diagram of one.
+ */
+const TOP_BULB_PATH = [
+  `M ${GLASS_L} ${GLASS.ceiling}`,
+  `L ${GLASS_R} ${GLASS.ceiling}`,
+  `C ${GLASS_R} ${SHOULDER} ${THROAT.x} ${THROAT.y} ${NECK_R} ${GLASS.neckTop}`,
+  `L ${NECK_L} ${GLASS.neckTop}`,
+  `C ${GLASS.width - THROAT.x} ${THROAT.y} ${GLASS_L} ${SHOULDER} ${GLASS_L} ${GLASS.ceiling}`,
+  'Z',
+].join(' ')
+
+const BOTTOM_BULB_PATH = [
+  `M ${NECK_L} ${GLASS.neckBottom}`,
+  `L ${NECK_R} ${GLASS.neckBottom}`,
+  `C ${THROAT.x} ${flipY(THROAT.y)} ${GLASS_R} ${flipY(SHOULDER)} ${GLASS_R} ${GLASS.floor}`,
+  `L ${GLASS_L} ${GLASS.floor}`,
+  `C ${GLASS_L} ${flipY(SHOULDER)} ${GLASS.width - THROAT.x} ${flipY(THROAT.y)} ${NECK_L} ${GLASS.neckBottom}`,
+  'Z',
+].join(' ')
+
+/**
+ * Where the sand sits with `fraction` of the rest left (1 at the start, 0 when
+ * it's up): how far the upper charge has sunk, how far the pile has risen, and
+ * the peak of that pile — which is where the falling grains land.
+ */
+function hourglassLevels(fraction: number) {
+  const spent = 1 - clamp01(fraction)
+  const rise = SAND_FALL * spent
+  return { drop: SAND_DRAIN * spent, rise, peakY: GLASS.floor - rise }
+}
+
+/**
+ * The 'hourglass' shape: a whole hourglass — frame, glass and all — standing the
+ * full height of the rest screen. The upper bulb's sand sinks down its funnel as
+ * the rest runs out, a stream of grains falls through the throat, and the pile in
+ * the lower bulb rises to meet it, so either half alone says how much rest is
+ * left.
+ *
+ * One SVG, letterboxed into whatever space the rest screen has: the glass keeps
+ * its proportions on any display instead of being stretched to the viewport, and
+ * sand, grains and frame all live in the one coordinate system — which is what
+ * keeps the falling grains landing exactly on the peak of the pile at every
+ * level.
+ */
+function Hourglass({ fraction }: { fraction: number }) {
+  // The bulbs clip their sand, and a clip path is referenced by id. Stripped to
+  // word characters: useId's own punctuation has no business inside a url(#…).
+  const id = useId().replace(/\W/g, '')
+  const { drop, rise, peakY } = hourglassLevels(fraction)
+  const slide = (dy: number): CSSProperties => ({
+    transform: `translateY(${dy}px)`,
+    transition: 'transform 260ms linear',
+  })
+
+  return (
+    <div className="pointer-events-none absolute inset-0 text-accent-bright" aria-hidden>
+      <svg
+        className="absolute inset-0 h-full w-full"
+        viewBox={`0 0 ${GLASS.width} ${GLASS.height}`}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <clipPath id={`${id}-upper`}>
+            <path d={TOP_BULB_PATH} />
+          </clipPath>
+          <clipPath id={`${id}-lower`}>
+            <path d={BOTTOM_BULB_PATH} />
+          </clipPath>
+        </defs>
+        <g fill="currentColor">
+          {/* Empty glass, so both bulbs are still there once their sand has gone. */}
+          <path d={TOP_BULB_PATH} fillOpacity={0.1} />
+          <path d={BOTTOM_BULB_PATH} fillOpacity={0.1} />
+          {/* The sand still to fall, and the sand already fallen. */}
+          <g clipPath={`url(#${id}-upper)`}>
+            <path d={UPPER_SAND_PATH} fillOpacity={0.85} style={slide(drop)} />
+          </g>
+          <g clipPath={`url(#${id}-lower)`}>
+            <path d={LOWER_SAND_PATH} fillOpacity={0.85} style={slide(-rise)} />
+          </g>
+        </g>
+        {/* Grains falling through the throat onto the peak of the pile: the dash
+            pattern is the grains, and the run shortens as the pile climbs to meet
+            it. Nothing before the first grain leaves or after the last lands. */}
+        {fraction > 0 && fraction < 1 && (
+          <line
+            className="rest-grain-fall"
+            x1={GLASS.width / 2}
+            y1={GLASS.neckBottom}
+            x2={GLASS.width / 2}
+            y2={peakY}
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+        )}
+        {/* The glass itself, over the sand so its walls stay crisp, and a highlight
+            down each bulb so it reads as glass rather than as an outline. */}
+        <g fill="none" stroke="currentColor" vectorEffect="non-scaling-stroke">
+          <path d={TOP_BULB_PATH} strokeWidth={3} strokeOpacity={0.5} />
+          <path d={BOTTOM_BULB_PATH} strokeWidth={3} strokeOpacity={0.5} />
+          <path
+            d="M 22 15 C 22 34 33 47 42 58"
+            strokeWidth={2}
+            strokeOpacity={0.3}
+            strokeLinecap="round"
+          />
+          <path
+            d="M 42 106 C 33 117 22 130 22 149"
+            strokeWidth={2}
+            strokeOpacity={0.3}
+            strokeLinecap="round"
+          />
+        </g>
+        {/* The frame: the plates the glass sits between, and the posts joining them. */}
+        <g fill="currentColor" fillOpacity={0.6}>
+          <rect x={2} y={0} width={GLASS.width - 4} height={GLASS.ceiling} rx={4} />
+          <rect
+            x={2}
+            y={GLASS.floor}
+            width={GLASS.width - 4}
+            height={GLASS.height - GLASS.floor}
+            rx={4}
+          />
+          <rect x={5} y={4} width={4} height={GLASS.height - 8} rx={2} fillOpacity={0.35} />
+          <rect x={91} y={4} width={4} height={GLASS.height - 8} rx={2} fillOpacity={0.35} />
+        </g>
+      </svg>
+    </div>
+  )
+}
+
+/**
  * Full-screen rest shapes that fill rather than frame. Same contract as the boxed
  * ones: `fraction` is how much rest is left and drives the level directly. These
  * render below the up-next block rather than behind it, so what's coming stays
@@ -179,6 +398,8 @@ const DUNE_ASPECT = 3
  */
 function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction: number }) {
   const drain = { transition: 'height 260ms linear, width 260ms linear' } as const
+
+  if (variant === 'hourglass') return <Hourglass fraction={fraction} />
 
   if (variant === 'curtain') {
     // The whole viewport is the vessel: the level falls from the top of the

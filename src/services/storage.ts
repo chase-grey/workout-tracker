@@ -8,6 +8,7 @@ import type { MeasurementEntry } from '../lib/bodyComp'
 import type { LockedProjections } from '../lib/goalLock'
 import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
+import type { RestTally } from '../lib/rest'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
 
 const KEYS = {
@@ -37,6 +38,7 @@ const KEYS = {
   activeStep: 'wt.activeStep',
   activeStepKey: 'wt.activeStepKey',
   activeRest: 'wt.activeRest',
+  activeRestTally: 'wt.activeRestTally',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
 } as const
@@ -249,6 +251,14 @@ export const storage = {
   loadActiveRest: (): ActiveRest | null => read(KEYS.activeRest, null),
   saveActiveRest: (r: ActiveRest | null) =>
     r ? write(KEYS.activeRest, r) : localStorage.removeItem(KEYS.activeRest),
+
+  /**
+   * How much rest the workout in progress has banked. Read through
+   * lib/rest.resumeRestTally, which drops a tally belonging to another session.
+   */
+  loadRestTally: (): RestTally | null => read<RestTally | null>(KEYS.activeRestTally, null),
+  saveRestTally: (t: RestTally | null) =>
+    t ? write(KEYS.activeRestTally, t) : localStorage.removeItem(KEYS.activeRestTally),
 
   loadStretch: (): StretchState | null => read(KEYS.stretch, null),
   saveStretch: (s: StretchState | null) =>

@@ -105,6 +105,21 @@ input[type='number'] {
   will-change: background-position;
 }
 
+/* Hourglass: grains falling through the throat. The dash pattern *is* the
+   grains, and sliding it one whole period per cycle keeps the fall seamless. How
+   long the run is comes from the gap between the throat and the pile, so this
+   never touches the reading. */
+@keyframes rest-grain-fall {
+  to {
+    stroke-dashoffset: -6;
+  }
+}
+.rest-grain-fall {
+  stroke-dasharray: 2.5 3.5;
+  animation: rest-grain-fall 0.35s linear infinite;
+  will-change: stroke-dashoffset;
+}
+
 /* Tide: bubbles drifting up through the draining liquid. */
 @keyframes rest-bubble {
   0% {
@@ -314,6 +329,11 @@ input[type='number'] {
     animation: none;
     background-image: none;
     background-color: var(--color-accent-bright);
+  }
+  /* Likewise the hourglass: a settled column of sand in the throat, not grains. */
+  .rest-grain-fall {
+    animation: none;
+    stroke-dasharray: none;
   }
 }
 

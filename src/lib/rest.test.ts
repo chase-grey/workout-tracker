@@ -3,6 +3,7 @@ import {
   canResumeRest,
   restBeforeNextSet,
   upNextTargetLabel,
+  CIRCUIT_STATION_REST_SEC,
   RESUMABLE_REST_GRACE_SEC,
   TRANSITION_REST_CAP_SEC,
 } from './rest'
@@ -38,6 +39,99 @@ describe('restBeforeNextSet', () => {
     expect(
       restBeforeNextSet({ currentRestSec: 120, sameExercise: false, nextRestSec: null }),
     ).toBe(0)
+  })
+
+  it('uses the brief station rest when a circuit station prescribes none of its own', () => {
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 60,
+        sameCircuit: true,
+      }),
+    ).toBe(CIRCUIT_STATION_REST_SEC)
+  })
+
+  it("uses the station's own rest when it prescribes one", () => {
+    // Rest only after the lateral raise: it asks for 60s, longer than the default
+    // station change would give.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 60,
+        sameCircuit: true,
+        circuitRestSec: 60,
+      }),
+    ).toBe(60)
+  })
+
+  it('rolls straight on from a station that prescribes no rest', () => {
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 60,
+        sameCircuit: true,
+        circuitRestSec: 0,
+      }),
+    ).toBe(0)
+  })
+
+  it("honours the station's rest at a round boundary too", () => {
+    // The last station wrapping into the next round would otherwise take the next
+    // exercise's capped rest — which is exactly what "no rest after this move"
+    // has to be able to overrule.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 60,
+        sameCircuit: true,
+        newCircuitRound: true,
+        circuitRestSec: 0,
+      }),
+    ).toBe(0)
+  })
+
+  it('leaves the round boundary on the next exercise rest when no station rest is set', () => {
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 45,
+        sameCircuit: true,
+        newCircuitRound: true,
+      }),
+    ).toBe(45)
+  })
+
+  it('ignores a station rest when the next set is outside the circuit', () => {
+    // Leaving the circuit for an ordinary exercise is a transition, sized to what
+    // is coming up rather than to the station being left behind.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 90,
+        sameCircuit: false,
+        circuitRestSec: 0,
+      }),
+    ).toBe(90)
+  })
+
+  it('still gives a full inter-set rest to back-to-back sets of one station', () => {
+    // A station left with sets after the others have finished runs them
+    // consecutively — nothing recovers in between, so its own rest applies.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: true,
+        nextRestSec: 60,
+        sameCircuit: true,
+        circuitRestSec: 0,
+      }),
+    ).toBe(60)
   })
 })
 

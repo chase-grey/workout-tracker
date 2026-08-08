@@ -39,7 +39,7 @@ describe('variantExercises', () => {
       const keys = variantExercises(DEFAULT_PLAN.push, variant).map((e) => e.key)
       // Core still opens the day and the arm circuit still closes it.
       expect(keys[0]).toBe('cable_crunch')
-      expect(keys[keys.length - 1]).toBe('overhead_tricep_ext')
+      expect(keys[keys.length - 1]).toBe('lateral_raise_r')
     }
   })
 

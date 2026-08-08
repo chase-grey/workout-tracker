@@ -19,8 +19,13 @@ function renderPlan(): string {
       // Exercises sharing a load are prescribed one weight between them, so the
       // coach shouldn't propose a number for either of them alone.
       const shared = ex.sharedLoad ? ` [shares one weight with the other ${ex.sharedLoad} move]` : ''
+      // Circuit stations rotate rather than running their sets back to back, and
+      // each one sets the rest that follows it, so both belong on the line.
+      const circuit = ex.circuit
+        ? ` [circuit ${ex.circuit}${ex.circuitRestSec == null ? '' : `, ${ex.circuitRestSec}s rest after each of its sets`}]`
+        : ''
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}${shared}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}${shared}${circuit}`,
       )
     }
   }

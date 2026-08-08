@@ -41,6 +41,64 @@ export function upNextTargetLabel(setIndex: number, target: string | null): stri
 }
 
 /**
+ * A session's rest accounting so far: seconds actually spent on the rest screen,
+ * the rest those intervals prescribed, and how many were taken. Prescribed and
+ * count ride along with the time taken because the estimator learns the *ratio*
+ * between the two (see lib/estimate) — measure one without the other and the
+ * ratio is against the wrong denominator.
+ *
+ * `sessionId` is the session it was measured in, so a tally left behind by a
+ * finished or discarded workout can't be credited to the next one.
+ */
+export type RestTally = {
+  sessionId: string
+  takenSec: number
+  prescribedSec: number
+  count: number
+}
+
+export function emptyRestTally(sessionId: string): RestTally {
+  return { sessionId, takenSec: 0, prescribedSec: 0, count: 0 }
+}
+
+/**
+ * The tally a session resumes with. A workout's total length is derived from its
+ * persisted `startedAt`, so this has to be persisted too: a reload that started
+ * the rest count over kept the full total and lost the rest, charging every rest
+ * taken before it to working time. Anything stored under a different session is
+ * ignored rather than carried over.
+ */
+export function resumeRestTally(saved: RestTally | null, sessionId: string): RestTally {
+  if (!saved || saved.sessionId !== sessionId) return emptyRestTally(sessionId)
+  return {
+    sessionId,
+    takenSec: Math.max(0, saved.takenSec || 0),
+    prescribedSec: Math.max(0, saved.prescribedSec || 0),
+    count: Math.max(0, saved.count || 0),
+  }
+}
+
+/** Record a rest interval as it opens, by the seconds it prescribes. */
+export function openRest(tally: RestTally, prescribedSec: number): RestTally {
+  return {
+    ...tally,
+    prescribedSec: tally.prescribedSec + Math.max(0, prescribedSec),
+    count: tally.count + 1,
+  }
+}
+
+/**
+ * Fold the rest currently on the clock into the tally. `startedAt` is 0 when no
+ * rest is running and banks nothing, so this is safe on every exit from the rest
+ * screen — including finishing the workout straight out of it, which the rest
+ * screen's own menu can do.
+ */
+export function bankRest(tally: RestTally, startedAt: number, now: number): RestTally {
+  if (!startedAt || now <= startedAt) return tally
+  return { ...tally, takenSec: tally.takenSec + (now - startedAt) / 1000 }
+}
+
+/**
  * Moving between stations of a circuit: just long enough to walk over and set
  * up. The point of a circuit is that the muscle you just worked recovers while
  * you work the others, so a full rest here would throw that away.

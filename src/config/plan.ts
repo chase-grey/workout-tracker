@@ -127,8 +127,12 @@ export type Plan = Record<DayType, DayPlan>
  *
  * 4 — push + core: the lateral raise splits into a left and a right station, so
  *     each arm is logged and charted on its own. The single-arm entry is retired.
+ *
+ * 5 — push + core: the arm circuit interleaves its delt and tricep stations —
+ *     pushdown → one arm's raise → overhead extension → the other arm's raise —
+ *     rather than running the two arms back to back.
  */
-export const PLAN_REVISION = 4
+export const PLAN_REVISION = 5
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -190,10 +194,12 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders' },
       { key: 'iso_chest', name: 'chest fly / pec deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'chest finisher' },
 
-      // Circuit: pushdown → lateral raise → overhead extension, rotating. Keeps
-      // the two tricep movements out of back-to-back sets (the second one would
-      // run pre-fatigued) and shortens the block, since the delts recover while
-      // the triceps work and vice versa.
+      // Circuit: pushdown → one arm's raise → overhead extension → the other arm's
+      // raise, rotating. Alternating delt and tricep the whole way round is the
+      // point: neither tricep movement runs pre-fatigued by the other, and neither
+      // does either arm of the raise, so nothing in the block ever follows itself.
+      // It also shortens the block, since each muscle recovers while the other
+      // works.
       //
       // Both tricep moves work off the same cable stack, so they share one load —
       // rotating through the circuit would otherwise mean re-pinning it twice a
@@ -205,8 +211,8 @@ export const DEFAULT_PLAN: Plan = {
       // leading arm alternates each session (see lib/pushSide).
       { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'triceps' },
       { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'lateral' },
-      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'lateral' },
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'triceps' },
+      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'lateral' },
     ],
   },
   pull: {
@@ -524,15 +530,18 @@ export function variantExercises(day: DayPlan, variant: VariantKey | null): Plan
 /**
  * The same list with each one-limb-at-a-time pair ordered so `side` goes first.
  *
- * A sided movement ships as two consecutive entries — left then right — and the
- * arm that leads is the one done fresh, before the other side (and, inside the
- * arm circuit, before another trip round the stations). Flipping which of the two
- * leads every session is what keeps that advantage from always landing on the
- * same arm; the caller decides whose turn it is (see lib/pushSide).
+ * A sided movement ships as two entries — left then right — and the arm that leads
+ * is the one done fresh, before the other side (and, inside the arm circuit, before
+ * another trip round the stations). Flipping which of the two leads every session
+ * is what keeps that advantage from always landing on the same arm; the caller
+ * decides whose turn it is (see lib/pushSide).
  *
- * Only a *consecutive* left/right pair is swapped, the same rule circuits use, so
- * two unrelated sided movements in one day can't reorder each other. `side` of
- * null leaves the list exactly as the plan declares it.
+ * The two halves needn't be neighbours: in the arm circuit a tricep station sits
+ * between them, so the arms land on opposite halves of every round. A pair is
+ * therefore a sided entry plus the next one facing the other way, and the scan
+ * resumes past that second half — so two unrelated sided movements in one day
+ * still can't reorder each other. `side` of null leaves the list exactly as the
+ * plan declares it.
  */
 export function sideOrderedExercises(
   exercises: PlannedExercise[],
@@ -540,13 +549,15 @@ export function sideOrderedExercises(
 ): PlannedExercise[] {
   if (side == null) return exercises
   const out = [...exercises]
-  for (let i = 0; i < out.length - 1; i++) {
+  for (let i = 0; i < out.length; i++) {
     const a = out[i]
-    const b = out[i + 1]
-    if (!a.side || !b.side || a.side === b.side) continue
-    if (a.side !== side) [out[i], out[i + 1]] = [b, a]
+    if (!a.side) continue
+    const j = out.findIndex((e, k) => k > i && e.side && e.side !== a.side)
+    if (j < 0) continue
+    // Trade the pair's two positions, leaving whatever sits between them put.
+    if (a.side !== side) [out[i], out[j]] = [out[j], out[i]]
     // Past the pair either way — its second half isn't the start of another one.
-    i += 1
+    i = j
   }
   return out
 }
