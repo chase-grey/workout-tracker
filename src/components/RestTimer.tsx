@@ -318,27 +318,10 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
   const drain = { transition: 'height 260ms linear' } as const
   switch (variant) {
     case 'tide':
-      // A vessel that empties: the liquid line drops from full to nothing. The
-      // surface glint and the bubbles read as liquid without moving the line —
-      // small ones fading out mid-water, bigger ones surfacing and bursting into
-      // a splash that runs out across the top of the water.
-      return (
-        <div className="absolute h-[74%] w-[74%] overflow-hidden rounded-full ring-1 ring-accent-bright/50">
-          <div className="absolute inset-0 bg-accent-bright/12" />
-          <div className="absolute inset-x-0 bottom-0 bg-accent-bright/70" style={{ height: level, ...drain }}>
-            <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
-            <div className="rest-bubble absolute bottom-[8%] left-[34%] h-[6%] w-[6%] rounded-full bg-accent-bright/70" />
-            <div
-              className="rest-bubble absolute bottom-[8%] left-[62%] h-[4%] w-[4%] rounded-full bg-accent-bright/70"
-              style={{ animationDelay: '1.6s' }}
-            />
-            {/* Dropped once the water is too shallow to rise through, leaving the
-                small drifting bubbles above to carry the last of the rest. */}
-            {fraction > TIDE_SURFACING_MIN &&
-              SURFACING_BUBBLES.map((b) => <SurfacingBubble key={b.left} {...b} />)}
-          </div>
-        </div>
-      )
+      // A vessel that empties: the water line drops from full to nothing, and the
+      // line itself is a wave that rocks when a bubble bursts through it. Small
+      // bubbles fade out mid-water; the rare one that surfaces splashes.
+      return <TideVessel fraction={fraction} />
     case 'candle':
       // A candle burning down: the wax column (darker green) is squared off like
       // a real candle and its height is the time left; the flame (brighter green)
