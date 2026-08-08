@@ -23,7 +23,10 @@ export type PlanEdit =
           | 'bodyweight'
           | 'group'
         >
-      >
+      > & {
+        /** Rest after this station inside its circuit; `null` clears the override. */
+        circuitRestSec?: number | null
+      }
     }
   | {
       op: 'addExercise'
@@ -42,7 +45,7 @@ export const PLAN_EDIT_OPS = [
 ] as const
 
 /** Numeric fields on a PlannedExercise that must be finite and >= 0. */
-const NUMERIC_FIELDS = ['sets', 'repMin', 'repMax', 'restSec', 'increment'] as const
+const NUMERIC_FIELDS = ['sets', 'repMin', 'repMax', 'restSec', 'circuitRestSec', 'increment'] as const
 type NumericField = (typeof NUMERIC_FIELDS)[number]
 
 function isNumericField(field: string): field is NumericField {
@@ -107,6 +110,12 @@ export function applyPlanEdits(
         }
         for (const [field, value] of Object.entries(edit.fields)) {
           if (value === undefined) continue
+          // Null clears the circuit-rest override, handing the station back to
+          // the built-in timing — otherwise there'd be no way to undo one.
+          if (field === 'circuitRestSec' && value === null) {
+            delete exercise.circuitRestSec
+            continue
+          }
           if (isNumericField(field)) {
             if (isValidNumber(value)) {
               ;(exercise[field] as number) = value

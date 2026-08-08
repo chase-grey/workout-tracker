@@ -345,3 +345,125 @@ describe('nextTarget across A/B slots', () => {
     })
   })
 })
+
+/**
+ * The two tricep movements run off the same cable stack as a circuit, so they're
+ * prescribed one weight between them rather than a number each to re-pin twice a
+ * round (see PlannedExercise.sharedLoad).
+ */
+describe('nextTargets with a shared load', () => {
+  const PUSHDOWN: TargetInputs = {
+    key: 'tricep_pushdown',
+    repMin: 10,
+    repMax: 15,
+    increment: 2.5,
+    sharedLoad: 'triceps',
+  }
+  const EXTENSION: TargetInputs = { ...PUSHDOWN, key: 'overhead_tricep_ext' }
+  const LATERAL: TargetInputs = { key: 'lateral_raise', repMin: 12, repMax: 20, increment: 2.5 }
+
+  const targets = (rows: WorkoutRow[], exercises = [PUSHDOWN, LATERAL, EXTENSION]) =>
+    nextTargets(rows, exercises, { today: TODAY })
+
+  it('loads the group to the lighter suggestion, with the stronger move taking the reps', () => {
+    // Pushdown topped its range at 40, so on its own it would earn 42.5; the
+    // extension is still mid-range at 30. Asking the extension for 42.5 would put
+    // it far short of its 10-rep minimum, so 30 is the weight both can train at —
+    // and the pushdown absorbs the lighter load in reps, up to the top of its range.
+    const rows = [
+      row({ exercise: 'tricep_pushdown', weight_lbs: 40, reps: 15 }),
+      row({ exercise: 'overhead_tricep_ext', weight_lbs: 30, reps: 12 }),
+    ]
+    const t = targets(rows)
+    expect(t.get('tricep_pushdown')).toEqual({ weightLbs: 30, reps: 15 })
+    expect(t.get('overhead_tricep_ext')).toEqual({ weightLbs: 30, reps: 13 })
+  })
+
+  it('leaves exercises outside the group exactly where nextTarget puts them', () => {
+    const rows = [
+      row({ exercise: 'tricep_pushdown', weight_lbs: 40, reps: 15 }),
+      row({ exercise: 'overhead_tricep_ext', weight_lbs: 30, reps: 12 }),
+      row({ exercise: 'lateral_raise', weight_lbs: 15, reps: 14 }),
+    ]
+    expect(targets(rows).get('lateral_raise')).toEqual(
+      nextTarget(rows, 'lateral_raise', { repMin: 12, repMax: 20, increment: 2.5, today: TODAY }),
+    )
+  })
+
+  it('holds the pair together, and climbs only once the weaker move earns it', () => {
+    // Both now trained at 30. The pushdown is capped at the top of its range
+    // instead of being handed a bump the extension can't follow…
+    const holding = [
+      row({ exercise: 'tricep_pushdown', weight_lbs: 30, reps: 15 }),
+      row({ exercise: 'overhead_tricep_ext', weight_lbs: 30, reps: 13 }),
+    ]
+    const held = targets(holding)
+    expect(held.get('tricep_pushdown')).toEqual({ weightLbs: 30, reps: 15 })
+    expect(held.get('overhead_tricep_ext')).toEqual({ weightLbs: 30, reps: 14 })
+
+    // …and once the extension reaches the top too, the whole group steps up.
+    const earned = [
+      row({ exercise: 'tricep_pushdown', weight_lbs: 30, reps: 15 }),
+      row({ exercise: 'overhead_tricep_ext', weight_lbs: 30, reps: 15 }),
+    ]
+    const stepped = targets(earned)
+    expect(stepped.get('tricep_pushdown')).toEqual({ weightLbs: 32.5, reps: 10 })
+    expect(stepped.get('overhead_tricep_ext')).toEqual({ weightLbs: 32.5, reps: 10 })
+  })
+
+  it('reads the held-back move’s reps off what it actually lifted', () => {
+    // The pushdown topped its range at 30. Pulled down to the extension's 25, the
+    // reps come from the session it really trained, not from the 32.5 it would
+    // have been given on its own — so the lighter load never reads as easier work.
+    const rows = [
+      row({ exercise: 'tricep_pushdown', weight_lbs: 30, reps: 15 }),
+      row({ exercise: 'overhead_tricep_ext', weight_lbs: 25, reps: 11 }),
+    ]
+    const t = targets(rows)
+    expect(t.get('tricep_pushdown')).toEqual({ weightLbs: 25, reps: 15 })
+    expect(t.get('overhead_tricep_ext')).toEqual({ weightLbs: 25, reps: 12 })
+  })
+
+  it('starts a move with no history of its own at the group weight', () => {
+    // The stack is already pinned there, which is the whole point of sharing it.
+    const rows = [row({ exercise: 'tricep_pushdown', weight_lbs: 40, reps: 12 })]
+    const t = targets(rows)
+    expect(t.get('tricep_pushdown')).toEqual({ weightLbs: 40, reps: 13 })
+    expect(t.get('overhead_tricep_ext')).toEqual({ weightLbs: 40, reps: 10 })
+  })
+
+  it('leaves the group blank while nothing in it has been logged', () => {
+    const t = targets([])
+    expect(t.get('tricep_pushdown')).toEqual({ weightLbs: null, reps: 10 })
+    expect(t.get('overhead_tricep_ext')).toEqual({ weightLbs: null, reps: 10 })
+  })
+
+  it('does not share when only one member of the group is being trained', () => {
+    const rows = [
+      row({ exercise: 'tricep_pushdown', weight_lbs: 40, reps: 15 }),
+      row({ exercise: 'overhead_tricep_ext', weight_lbs: 30, reps: 12 }),
+    ]
+    // The extension isn't in today's list, so the pushdown climbs on its own.
+    expect(targets(rows, [PUSHDOWN, LATERAL]).get('tricep_pushdown')).toEqual({
+      weightLbs: 42.5,
+      reps: 10,
+    })
+  })
+
+  it('never pulls a bodyweight move into a group — it has no load to share', () => {
+    const dips: TargetInputs = {
+      key: 'dips',
+      repMin: 8,
+      repMax: 12,
+      bodyweight: true,
+      sharedLoad: 'triceps',
+    }
+    const rows = [
+      row({ exercise: 'tricep_pushdown', weight_lbs: 40, reps: 15 }),
+      row({ exercise: 'dips', weight_lbs: null, reps: 10 }),
+    ]
+    const t = nextTargets(rows, [PUSHDOWN, dips], { today: TODAY })
+    expect(t.get('dips')).toEqual({ weightLbs: null, reps: 11 })
+    expect(t.get('tricep_pushdown')).toEqual({ weightLbs: 42.5, reps: 10 })
+  })
+})

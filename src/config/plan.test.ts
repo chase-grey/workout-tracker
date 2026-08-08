@@ -113,8 +113,15 @@ describe('withPlanDefaults', () => {
 
     it('adopts the shipped order, so the arm circuit really alternates', () => {
       const keys = merged.push.exercises.map((e) => e.key)
-      expect(keys.indexOf('lateral_raise')).toBeGreaterThan(keys.indexOf('tricep_pushdown'))
-      expect(keys.indexOf('lateral_raise')).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
+      expect(keys.indexOf('lateral_raise_l')).toBeGreaterThan(keys.indexOf('tricep_pushdown'))
+      expect(keys.indexOf('lateral_raise_r')).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
+    })
+
+    it('replaces the both-arms lateral raise with the left/right pair', () => {
+      const keys = merged.push.exercises.map((e) => e.key)
+      expect(keys).not.toContain('lateral_raise')
+      expect(keys).toContain('lateral_raise_l')
+      expect(keys).toContain('lateral_raise_r')
     })
 
     it('adopts the shipped volume, so core reaches four sets', () => {

@@ -105,7 +105,7 @@ describe('leadVariant', () => {
   })
 
   it('has no lead for an exercise the variants train alike', () => {
-    for (const key of ['cable_crunch', 'db_overhead_press', 'lateral_raise']) {
+    for (const key of ['cable_crunch', 'db_overhead_press', 'lateral_raise_l']) {
       expect(leadVariant(DEFAULT_PLAN.push, key)).toBeNull()
     }
   })
@@ -139,7 +139,7 @@ describe('progressionVariant', () => {
     // Splitting these would halve the rate each one climbs: Tuesday's cable
     // crunch target would ignore the reps earned on Friday.
     expect(progressionVariant('cable_crunch', 'A')).toBeNull()
-    expect(progressionVariant('lateral_raise', 'B')).toBeNull()
+    expect(progressionVariant('lateral_raise_r', 'B')).toBeNull()
   })
 
   it('is unscoped for a session with no variant at all', () => {

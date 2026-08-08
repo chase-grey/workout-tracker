@@ -54,7 +54,8 @@ const UPDATE_PLAN_TOOL: Tool = {
   function: {
     name: 'update_plan',
     description:
-      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those.",
+      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those. " +
+      'Exercises marked circuit=<id> in the snapshot are performed as a rotation, one set at each station in turn, and their rest is per station: circuitRestSec on an exercise is the rest taken AFTER each of its sets in the rotation, where 0 rolls straight on to the next station and null hands the station back to the default timing. restSec is not what the user feels inside a circuit — to rest only after one station, set circuitRestSec on every station of that circuit, 0 on the ones to roll through.',
     parameters: {
       type: 'object',
       properties: {
@@ -70,7 +71,8 @@ const UPDATE_PLAN_TOOL: Tool = {
               label: { type: 'string', description: 'new day label (setDayLabel)' },
               fields: {
                 type: 'object',
-                description: 'fields to change (setExercise): name, sets, repMin, repMax, restSec, increment, bodyweight, group',
+                description:
+                  'fields to change (setExercise): name, sets, repMin, repMax, restSec, circuitRestSec, increment, bodyweight, group',
               },
               exercise: {
                 type: 'object',
@@ -149,6 +151,18 @@ const REPORT_ISSUE_TOOL: Tool = {
       required: ['title'],
     },
   },
+}
+
+/**
+ * The circuit an exercise belongs to and the rest it takes after each of its sets
+ * in the rotation — without both, the coach can't tell a circuit station from an
+ * ordinary exercise, or see which stations already roll straight on.
+ */
+function circuitNote(e: PlannedExercise): string {
+  if (!e.circuit) return ''
+  const rest =
+    e.circuitRestSec == null ? 'circuitRestSec unset (default)' : `circuitRestSec ${e.circuitRestSec}s`
+  return `, circuit=${e.circuit}, ${rest}`
 }
 
 /** A compact snapshot of the current plans so the assistant knows exact keys. */

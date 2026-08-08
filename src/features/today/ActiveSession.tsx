@@ -347,18 +347,26 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     // start a fresh round of it (the set number goes up).
     const sameCircuit = !!nextStep && !!planned.circuit && nextStep.ex.circuit === planned.circuit
     const newCircuitRound = sameCircuit && nextStep!.setIndex > step.setIndex
-    restStartRef.current = Date.now()
-    restCount.current += 1
     // Full inter-set rest within an exercise, a brief station change inside a
-    // circuit, and a shorter transition rest (sized to the next exercise, capped)
-    // when moving to a different move.
+    // circuit (or whatever that station prescribes), and a shorter transition
+    // rest (sized to the next exercise, capped) when moving to a different move.
     const restSec = restBeforeNextSet({
       currentRestSec: planned.restSec,
       sameExercise: !nextIsNewExercise,
       nextRestSec: nextStep ? nextStep.ex.restSec : null,
       sameCircuit,
       newCircuitRound,
+      circuitRestSec: planned.circuitRestSec,
     })
+    setCurrent(safeCurrent + 1)
+    // A station set to no rest goes straight on to the next move: a zero-second
+    // timer would open already in overtime, and it isn't a rest to be counted.
+    if (restSec <= 0) {
+      activeStartRef.current = Date.now()
+      return
+    }
+    restStartRef.current = Date.now()
+    restCount.current += 1
     restPrescribedSec.current += restSec
     setRest({
       seconds: restSec,
@@ -367,7 +375,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       isLastSetOfExercise: step.setIndex === step.setCount - 1,
       upNext: nextIsNewExercise ? `up next: ${nextStep!.ex.name}` : null,
     })
-    setCurrent(safeCurrent + 1)
   }
 
   // Add a set to whichever exercise is in play. During an exercise's *final* rest
@@ -412,7 +419,12 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       ? `${target.reps} reps`
       : `${target.weightLbs} × ${target.reps}`
     : null
-  const restLabel = planned.restSec >= 60 ? `${planned.restSec / 60} min` : `${planned.restSec}s`
+  // A circuit station never runs two of its sets back to back, so what follows one
+  // of its sets is the rest that station prescribes — not its inter-set number.
+  const restShownSec =
+    planned.circuit && planned.circuitRestSec != null ? planned.circuitRestSec : planned.restSec
+  const restLabel =
+    restShownSec === 0 ? 'none' : restShownSec >= 60 ? `${restShownSec / 60} min` : `${restShownSec}s`
 
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
