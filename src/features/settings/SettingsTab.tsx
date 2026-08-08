@@ -16,17 +16,18 @@ import { DEFAULT_FLEX_ROUTINE } from '../../config/flexPlan'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
-// `working` reads amber rather than green: it's a run in flight, not a result.
-// `asks` is the only one that wants you to do something, so it's the loudest.
-// `completed` is a fix that landed today, green because it's the one result
-// worth looking at; `closed` is that same issue tomorrow, greyed into history.
+// The greens run brightest-first down the same order the list is sorted in:
+// `working` is a run happening right now, `open` is waiting its turn, and a fix
+// that landed sits in dark green with the rest of history. `stalled` drops out of
+// the ladder into grey — nothing is moving on it. `asks` keeps the solid fill:
+// it's the only one that wants something from you.
 const ISSUE_BADGE: Record<IssueProgress, string> = {
-  open: 'bg-accent/20 text-accent',
-  working: 'bg-amber-400/20 text-amber-400',
   asks: 'bg-accent text-black',
-  stalled: 'bg-red-400/20 text-red-400',
-  completed: 'bg-accent-2/20 text-accent-2',
-  closed: 'bg-neutral-700 text-neutral-300',
+  working: 'bg-accent-bright/20 text-accent-bright',
+  open: 'bg-accent-2/20 text-accent-2',
+  stalled: 'bg-neutral-700 text-neutral-300',
+  completed: 'bg-accent/20 text-accent',
+  closed: 'bg-accent/20 text-accent',
 }
 
 const ISSUE_ROW = 'flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3'

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { DAY_TYPES, DEFAULT_PLAN, PLAN_REVISION, withPlanDefaults, type Plan } from './plan'
+import {
+  DAY_TYPES,
+  DEFAULT_PLAN,
+  PLAN_REVISION,
+  exerciseName,
+  withPlanDefaults,
+  type Plan,
+} from './plan'
 
 describe('withPlanDefaults', () => {
   it('keeps only the current day types and fills any missing one from the defaults', () => {
@@ -163,5 +170,22 @@ describe('withPlanDefaults', () => {
     expect(merged.push.exercises.map((e) => e.key)).toEqual(
       DEFAULT_PLAN.push.exercises.map((e) => e.key),
     )
+  })
+})
+
+describe('exerciseName', () => {
+  it('names a planned exercise', () => {
+    expect(exerciseName('lateral_raise_l')).toBe('lateral raise (left)')
+  })
+
+  it('still names a retired exercise whose history remains', () => {
+    // The both-arms raise, retired when it split into a left and a right station.
+    expect(exerciseName('lateral_raise')).toBe('lateral raise')
+    expect(exerciseName('pullups_or_pulldown')).toBe('weighted pull-ups or lat pulldown')
+  })
+
+  it('never shows an unknown key with its underscores', () => {
+    expect(exerciseName('face_pull')).toBe('face pull')
+    expect(exerciseName('side-bend')).toBe('side bend')
   })
 })

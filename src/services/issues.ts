@@ -113,16 +113,35 @@ export function issueProgress(issue: TrackedIssue, now: Date = new Date()): Issu
   return 'open'
 }
 
+/**
+ * Where each state sits in the Settings list: working first, then open, then
+ * stalled, then today's fixes down with the rest of history. `asks` leads the
+ * lot — it's the only state that can't move without you.
+ */
+const PROGRESS_ORDER: Record<IssueProgress, number> = {
+  asks: 0,
+  working: 1,
+  open: 2,
+  stalled: 3,
+  completed: 4,
+  closed: 5,
+}
+
 /** The issues the fixer is blocked on, oldest question first. */
 export function issuesAwaitingAnswer(issues: TrackedIssue[] | null): TrackedIssue[] {
   return (issues ?? []).filter((i) => issueProgress(i) === 'asks')
 }
 
 /**
- * The list split into what's still live and what's done, keeping each side in the
- * order it arrived. Nothing ever gets filed off a closed issue — it's there to
- * look back at — so Settings folds that half away and leads with the live ones,
- * which otherwise get pushed off screen as the closed pile grows.
+ * The list split into what's still live and what's done. Nothing ever gets filed
+ * off a closed issue — it's there to look back at — so Settings folds that half
+ * away and leads with the live ones, which otherwise get pushed off screen as the
+ * closed pile grows.
+ *
+ * The live half comes back grouped by how far along each issue is
+ * (PROGRESS_ORDER), so the run in flight is the first thing read and the day's
+ * finished work settles at the bottom; issues at the same stage keep the order
+ * they arrived. The closed pile stays in arrival order — it's a pile.
  *
  * Today's fixes stay up top with the live ones until the day is out: folding one
  * away the moment it lands means the result of a report filed this morning is
@@ -138,10 +157,20 @@ export function partitionIssues(
 } {
   const active: TrackedIssue[] = []
   const closed: TrackedIssue[] = []
+  // Ranked once per issue up front: sorting would otherwise re-derive the
+  // progress — and re-read the clock — on every comparison.
+  const rank = new Map<TrackedIssue, number>()
   for (const issue of issues) {
-    if (issueProgress(issue, now) === 'closed') closed.push(issue)
-    else active.push(issue)
+    const progress = issueProgress(issue, now)
+    if (progress === 'closed') {
+      closed.push(issue)
+    } else {
+      rank.set(issue, PROGRESS_ORDER[progress])
+      active.push(issue)
+    }
   }
+  // Array.sort is stable, so same-stage issues hold their arrival order.
+  active.sort((a, b) => rank.get(a)! - rank.get(b)!)
   return { active, closed }
 }
 

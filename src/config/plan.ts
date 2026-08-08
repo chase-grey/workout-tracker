@@ -475,9 +475,28 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
   db_overhead_press: ['shoulder press', 'overhead press'],
 }
 
-/** Lookup an exercise's display name by key, falling back to the key itself. */
+/**
+ * Display names for movements the defaults have retired (see RETIRED_EXERCISES).
+ * The plan entry goes away but the logged history stays, so PRs, the challenge
+ * readout and the AI prompt all still ask for these keys by name.
+ */
+const RETIRED_EXERCISE_NAMES: Record<string, string> = {
+  lateral_raise: 'lateral raise',
+  pullups_or_pulldown: 'weighted pull-ups or lat pulldown',
+}
+
+/**
+ * Lookup an exercise's display name by key: the plan defaults first, then the
+ * retired movements above. A key that's in neither — one the user added, or one
+ * that arrived from an import — has its separators spaced out rather than being
+ * shown raw, so no exercise ever surfaces with its underscores intact.
+ */
 export function exerciseName(key: string): string {
-  return ALL_EXERCISES.find((e) => e.key === key)?.name ?? key
+  return (
+    ALL_EXERCISES.find((e) => e.key === key)?.name ??
+    RETIRED_EXERCISE_NAMES[key] ??
+    key.replace(/[_-]+/g, ' ').trim()
+  )
 }
 
 /**

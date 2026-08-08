@@ -6,6 +6,7 @@ import {
   FLEX_GAIN_DECAY,
   GOAL_IDS,
   isReached,
+  offSlotLatest,
   projectGoal,
   PULLUP_GAIN_CAP,
   PULLUP_GOAL_REPS,
@@ -487,5 +488,145 @@ describe('reachedDate reports the day the target was first met', () => {
   it('gives no date for a target no reading ever met', () => {
     const goals = buildGoals(inputs(HOT_FORTNIGHT))
     expect(reachedDate(goals.find((g) => g.id === GOAL_IDS.weight190)!)).toBeNull()
+  })
+})
+
+describe('goalsHitInWeek lists the goals that landed this week', () => {
+  /** Thursday of the Mon 2026-02-09 – Sun 2026-02-15 week. */
+  const thursday = new Date(2026, 1, 12)
+
+  const spec = (over: Partial<GoalSpec> & { id: string }): GoalSpec => ({
+    title: over.id,
+    unit: 'lbs',
+    exerciseKey: null,
+    points: [],
+    target: 100,
+    direction: 'up',
+    ...over,
+  })
+
+  it('lists a goal whose target was crossed inside the week', () => {
+    const g = spec({ id: 'a', points: [{ date: '2026-02-10', value: 101 }] })
+    expect(goalsHitInWeek([g], thursday)).toEqual([{ goal: g, date: '2026-02-10' }])
+  })
+
+  it('leaves out one crossed in an earlier week', () => {
+    const g = spec({ id: 'a', points: [{ date: '2026-02-08', value: 101 }] })
+    expect(goalsHitInWeek([g], thursday)).toEqual([])
+  })
+
+  it('orders them by the day they landed on', () => {
+    const wed = spec({ id: 'wed', points: [{ date: '2026-02-11', value: 101 }] })
+    const mon = spec({ id: 'mon', points: [{ date: '2026-02-09', value: 101 }] })
+    expect(goalsHitInWeek([wed, mon], thursday).map((h) => h.goal.id)).toEqual(['mon', 'wed'])
+  })
+
+  it('drops a goal that touched its target this week and slid back off it', () => {
+    const g = spec({
+      id: 'a',
+      points: [
+        { date: '2026-02-10', value: 101 },
+        { date: '2026-02-11', value: 97 },
+      ],
+    })
+    expect(goalsHitInWeek([g], thursday)).toEqual([])
+  })
+
+  it('keeps a milestone that slid back — a rung hit stays hit', () => {
+    const g = spec({
+      id: 'a',
+      milestone: true,
+      points: [
+        { date: '2026-02-10', value: 101 },
+        { date: '2026-02-11', value: 97 },
+      ],
+    })
+    expect(goalsHitInWeek([g], thursday)).toEqual([{ goal: g, date: '2026-02-10' }])
+  })
+
+  it('never lists the six-pack goal, which is called by eye rather than measured', () => {
+    const g = spec({
+      id: GOAL_IDS.sixPack,
+      direction: 'down',
+      target: 12,
+      points: [{ date: '2026-02-10', value: 11 }],
+    })
+    expect(goalsHitInWeek([g], thursday)).toEqual([])
+  })
+
+  it('reads the real goal set — a weigh-in that hit 180 this week', () => {
+    const goals = buildGoals(
+      inputs([
+        { date: '2026-02-07', weightLbs: 178 },
+        { date: '2026-02-11', weightLbs: 181 },
+      ]),
+    )
+    expect(goalsHitInWeek(goals, thursday).map((h) => h.goal.id)).toEqual([GOAL_IDS.weight180])
+  })
+})
+
+describe('offSlotLatest names the session a lift goal leaves off its line', () => {
+  const bench = (
+    session: string,
+    date: string,
+    weight: number,
+    reps: number,
+    variant?: 'A' | 'B',
+  ): WorkoutRow => ({
+    session_id: session,
+    date,
+    day_type: 'push',
+    exercise: 'flat_bench',
+    set_number: 1,
+    weight_lbs: weight,
+    reps,
+    notes: '',
+    is_historical: false,
+    variant,
+  })
+
+  const benchGoal = (workouts: WorkoutRow[]) =>
+    buildGoals({ ...inputs(HOT_FORTNIGHT), workouts }).find(
+      (g) => g.id === GOAL_IDS.benchBodyweight,
+    )!
+
+  // Flat bench leads variant B — four sets, first press of the day — and follows
+  // incline in variant A, so A is the slot the goal's line doesn't read.
+  it('reports the variant-A session, with what it lifted, when it is the newest', () => {
+    const rows = [bench('lead', '2026-08-04', 155, 8, 'B'), bench('off', '2026-08-08', 145, 8, 'A')]
+    const goal = benchGoal(rows)
+
+    // The line itself still stops at the fresh-slot session.
+    expect(goal.points.map((p) => p.date)).toEqual(['2026-08-04'])
+
+    const off = offSlotLatest(goal, rows)
+    expect(off?.date).toBe('2026-08-08')
+    expect(off?.value).toBeCloseTo(183.7, 1) // 145×8 through Epley
+  })
+
+  it('says nothing when the newest session is the one on the line', () => {
+    const rows = [bench('off', '2026-08-04', 145, 8, 'A'), bench('lead', '2026-08-08', 155, 8, 'B')]
+    expect(offSlotLatest(benchGoal(rows), rows)).toBeNull()
+  })
+
+  it('says nothing for a session with no slot recorded — it is plotted already', () => {
+    const rows = [bench('imported', '2026-08-08', 155, 8)]
+    const goal = benchGoal(rows)
+    expect(goal.points.map((p) => p.date)).toEqual(['2026-08-08'])
+    expect(offSlotLatest(goal, rows)).toBeNull()
+  })
+
+  it('leaves the rep-counted and body-composition goals alone', () => {
+    const rows = [bench('off', '2026-08-08', 145, 8, 'A')]
+    const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: rows })
+    for (const g of goals.filter((x) => x.measure === 'reps' || x.exerciseKey == null)) {
+      expect(offSlotLatest(g, rows)).toBeNull()
+    }
+  })
+
+  it('leaves squat alone — the variants train it alike', () => {
+    const rows = [{ ...bench('off', '2026-08-08', 225, 5, 'A'), exercise: 'barbell_squat' }]
+    const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: rows })
+    expect(offSlotLatest(goals.find((g) => g.id === GOAL_IDS.squatBodyweight)!, rows)).toBeNull()
   })
 })

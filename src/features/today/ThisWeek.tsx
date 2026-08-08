@@ -1,7 +1,16 @@
-import { MdAcUnit, MdCheckCircle, MdEmojiEvents, MdLocalFireDepartment, MdStar } from 'react-icons/md'
+import { useMemo } from 'react'
+import {
+  MdAcUnit,
+  MdCelebration,
+  MdCheckCircle,
+  MdEmojiEvents,
+  MdLocalFireDepartment,
+  MdStar,
+} from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
+import { buildGoals, goalsHitInWeek } from '../../lib/goals'
 import { weekCompletedDaysFraction } from '../../lib/dates'
 
 function MetricBar({ label, value, goal, suffix }: { label: string; value: number; goal: number; suffix?: string }) {
@@ -30,11 +39,21 @@ function MetricBar({ label, value, goal, suffix }: { label: string; value: numbe
 }
 
 export function ThisWeek() {
-  const { weekProgress: wp, goals, streaks, workouts, bodyWeights, flexEntries, calorieEntries } = useData()
+  const { weekProgress: wp, goals, streaks, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
+    useData()
 
   const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
   const calPR = caloriePR(calorieEntries)
   const hasPRs = summary.prs.length > 0 || calPR != null
+
+  // The long-run goals that landed this week, above the week's PRs: a goal
+  // reached is the bigger of the two, and it would otherwise show up nowhere but
+  // the Goals panel, on whichever row had quietly turned over.
+  const heightIn = settings.heightIn ?? 0
+  const goalsHit = useMemo(
+    () => goalsHitInWeek(buildGoals({ workouts, bodyWeights, measurements, heightIn, flexEntries })),
+    [workouts, bodyWeights, measurements, heightIn, flexEntries],
+  )
 
   const overallToGoal =
     (Math.min(wp.workouts, goals.workouts) / goals.workouts +
@@ -95,6 +114,17 @@ export function ThisWeek() {
           </span>{' '}
           lbs this week
         </p>
+      )}
+
+      {goalsHit.length > 0 && (
+        <ul className="mt-2 space-y-1 text-sm">
+          {goalsHit.map(({ goal }) => (
+            <li key={goal.id} className="font-medium text-accent-bright">
+              <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
+              {goal.title} — goal reached!
+            </li>
+          ))}
+        </ul>
       )}
 
       {hasPRs && (

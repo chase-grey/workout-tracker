@@ -228,7 +228,8 @@ describe('partitionIssues', () => {
       issue(3, { labels: ['needs-input'] }),
       issue(4, { state: 'closed', closedAt: 'c' }),
     ])
-    expect(active.map((i) => i.number)).toEqual([1, 3])
+    // 3 leads 1: it's asking, and the live half comes back by progress.
+    expect(active.map((i) => i.number)).toEqual([3, 1])
     expect(closed.map((i) => i.number)).toEqual([2, 4])
   })
 
@@ -253,7 +254,7 @@ describe('partitionIssues', () => {
     expect(partitionIssues([])).toEqual({ active: [], closed: [] })
   })
 
-  it('keeps today’s fixes up with the live ones, in the order they arrived', () => {
+  it('keeps today’s fixes up with the live ones, below what is still moving', () => {
     const now = new Date(2026, 7, 8, 16, 8)
     const { active, closed } = partitionIssues(
       [
@@ -263,8 +264,33 @@ describe('partitionIssues', () => {
       ],
       now,
     )
-    expect(active.map((i) => i.number)).toEqual([1, 2])
+    expect(active.map((i) => i.number)).toEqual([2, 1])
     expect(closed.map((i) => i.number)).toEqual([3])
+  })
+
+  it('orders the live half asks, working, open, stalled, then today’s fixes', () => {
+    const now = new Date(2026, 7, 8, 16, 8)
+    const { active } = partitionIssues(
+      [
+        issue(1, { state: 'closed', closedAt: new Date(2026, 7, 8, 9, 0).toISOString() }),
+        issue(2, { labels: ['autofix-failed'] }),
+        issue(3),
+        issue(4, { labels: ['autofix-running'] }),
+        issue(5, { labels: ['needs-input'] }),
+      ],
+      now,
+    )
+    expect(active.map((i) => i.number)).toEqual([5, 4, 3, 2, 1])
+  })
+
+  it('keeps issues at the same stage in the order they arrived', () => {
+    const { active } = partitionIssues([
+      issue(1),
+      issue(2, { labels: ['autofix-running'] }),
+      issue(3),
+      issue(4, { labels: ['autofix-running'] }),
+    ])
+    expect(active.map((i) => i.number)).toEqual([2, 4, 1, 3])
   })
 
   it('folds a fix away once the day it landed is over', () => {

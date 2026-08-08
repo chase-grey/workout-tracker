@@ -15,7 +15,8 @@ import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './b
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import { project, type Projection, type TrendWindow } from './predictions'
-import { parseISODate } from './dates'
+import { parseISODate, toISODate, weekStartISO } from './dates'
+import { leadVariantForKey, otherVariant } from './pushVariant'
 
 /**
  * Weekly decay of the gain rate strength projections assume (see
@@ -254,6 +255,37 @@ function reachedPoint(goal: GoalSpec): Point | undefined {
   return goal.points.find((p) => (goal.direction === 'up' ? p.value >= goal.target : p.value <= goal.target))
 }
 
+/** A goal that landed, and the day it landed on. */
+export type GoalHit = { goal: GoalSpec; date: string }
+
+/**
+ * The goals whose target was met inside the Mon–Sun week containing `today`,
+ * earliest first — the week's finished goals, for the Today tab to show next to
+ * the week's PRs.
+ *
+ * A goal counts only while it's still reached (see {@link isReached}). A
+ * bodyweight goal that was touched on Tuesday and slid back off by Friday is one
+ * the Goals panel shows as still open, and a Today tab cheering it in the same
+ * week would be contradicting the panel rather than reporting the week. The
+ * milestone goals — the ladders — stay earned by their own rule, so they stay
+ * listed for the rest of the week however the next session read.
+ *
+ * The six-pack goal is left out: it's called by eye rather than read off the
+ * body-fat estimate (see the Goals panel's SixPackRow), so the day a tape
+ * measure's estimate happened to cross its target isn't a day anything was
+ * achieved.
+ */
+export function goalsHitInWeek(goals: GoalSpec[], today: Date = new Date()): GoalHit[] {
+  const week = weekStartISO(toISODate(today))
+  const hits: GoalHit[] = []
+  for (const goal of goals) {
+    if (goal.id === GOAL_IDS.sixPack || !isReached(goal)) continue
+    const date = reachedDate(goal)
+    if (date && weekStartISO(date) === week) hits.push({ goal, date })
+  }
+  return hits.sort((a, b) => a.date.localeCompare(b.date))
+}
+
 /**
  * A goal's live projection, run through the model the goal itself declares.
  *
@@ -284,6 +316,37 @@ export function projectGoal(goal: GoalSpec, today?: Date): Projection {
     bestOf: goal.milestone ? (goal.direction === 'up' ? 'max' : 'min') : undefined,
     taperSpentWeeks: goal.taperFromHistory ? trainingAgeWeeks(goal.points) : 0,
   })
+}
+
+/**
+ * The most recent session that trained a goal's lift but isn't on the goal's line,
+ * and what it read — or null when the newest session is already plotted.
+ *
+ * A strength goal is measured on the slot that trains the lift freshest (see
+ * progress.SlotScope): a press that follows the day's other press is necessarily
+ * lighter, and plotting both drew a sawtooth that looked like backsliding every
+ * other session. The cost is that a whole session disappears — flat bench on a
+ * variant-A push day is logged, and then shows up nowhere on the bench goal, which
+ * reads as the app having lost it. So the row names that session and says what it
+ * lifted, while the projection still runs off the fresh-slot line alone.
+ *
+ * Only for the lifts the variants train differently, and only for goals measured on
+ * estimated 1RM: a rep-counted ladder leaves sessions out for a different reason —
+ * too few sets to judge the standard (see progress.sustainedRepsSeries) — which
+ * this wouldn't be describing.
+ */
+export function offSlotLatest(goal: GoalSpec, workouts: WorkoutRow[]): Point | null {
+  if (!goal.exerciseKey || goal.measure === 'reps') return null
+  const lead = leadVariantForKey(goal.exerciseKey)
+  if (!lead) return null
+
+  // A session with no slot recorded — imported history, or a day that doesn't run
+  // variants — is kept under either scope, so if one of those were the newest it
+  // would be on the line already and fail the date test below.
+  const off = exerciseSeries(workouts, goal.exerciseKey, '1rm', otherVariant(lead))
+  const last = off.length ? off[off.length - 1] : null
+  const plotted = goal.points.length ? goal.points[goal.points.length - 1].date : ''
+  return last && last.date > plotted ? last : null
 }
 
 export type GoalInputs = {
