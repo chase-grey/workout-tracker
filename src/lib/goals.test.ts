@@ -5,6 +5,8 @@ import {
   buildGoals,
   FLEX_GAIN_DECAY,
   GOAL_IDS,
+  type GoalSpec,
+  goalsHitInWeek,
   isReached,
   offSlotLatest,
   projectGoal,
