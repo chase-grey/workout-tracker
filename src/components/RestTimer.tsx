@@ -369,14 +369,17 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
  * user what's coming; `progress` + `timeLeftLabel` (rendered verbatim, so the
  * caller phrases it — "~5 min left in workout") show the same session progress
  * bar as the session header — pinned to the top of the rest screen — so rest says
- * how far in you are and not just how long is left. `menu` keeps the session's
- * overflow actions reachable without ending rest first.
+ * how far in you are and not just how long is left. `upNextTarget` puts the load
+ * and reps for the coming set alongside its name — see lib/rest for which rests
+ * get it. `menu` keeps the session's overflow actions reachable without ending
+ * rest first.
  */
 export function RestTimer({
   seconds,
   endsAt,
   onClose,
   upNext,
+  upNextTarget,
   progress,
   timeLeftLabel,
   autoAdvance,
@@ -391,6 +394,8 @@ export function RestTimer({
   endsAt?: number
   onClose: () => void
   upNext?: string | null
+  /** What to go for on the coming set, pre-formatted ("135 × 8", "12 reps"). */
+  upNextTarget?: string | null
   /** Session position for the progress bar — completed sets out of the total. */
   progress?: { done: number; total: number; unit?: string }
   timeLeftLabel?: string | null
@@ -484,9 +489,9 @@ export function RestTimer({
       {variant === 'perimeter' && <PerimeterFrame fraction={remainingFraction} />}
 
       {/* Top region: the "how far through the workout" bar sits at the very top,
-          with the up-next/menu row under it. This is the part you're resting to
-          read, so it gets the top of the screen and the filling shapes start
-          below it. */}
+          with the up-next/menu row and the coming set's numbers under it. This
+          is the part you're resting to read, so it gets the top of the screen
+          and the filling shapes start below it. */}
       <div className="relative z-10 w-full pt-[calc(0.75rem+env(safe-area-inset-top))]">
         {progress && (
           <SessionProgress
@@ -508,6 +513,13 @@ export function RestTimer({
               {menu && <KebabMenu items={menu} />}
             </div>
           </div>
+        )}
+        {upNextTarget && (
+          // The numbers for the coming set, big enough to read at arm's length
+          // while you walk over and load it.
+          <p className="mt-2 text-center text-4xl font-bold tabular-nums text-white">
+            {upNextTarget}
+          </p>
         )}
       </div>
 

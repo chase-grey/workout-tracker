@@ -145,6 +145,47 @@ describe('issueProgress', () => {
     expect(issueProgress(issue())).toBe('open')
     expect(issueProgress(issue({ state: 'closed' }))).toBe('closed')
   })
+
+  describe('closed today', () => {
+    // Local time on both sides — the day boundary that matters is the one on the
+    // reader's own clock, not UTC's.
+    const now = new Date(2026, 7, 8, 16, 8)
+    const at = (d: Date) => d.toISOString()
+
+    it('reads completed for a fix that landed earlier today', () => {
+      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2026, 7, 8, 9, 30)) }), now)).toBe(
+        'completed',
+      )
+    })
+
+    it('still reads completed just after midnight today', () => {
+      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2026, 7, 8, 0, 1)) }), now)).toBe(
+        'completed',
+      )
+    })
+
+    it('goes back to closed for one closed late yesterday', () => {
+      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2026, 7, 7, 23, 59)) }), now)).toBe(
+        'closed',
+      )
+    })
+
+    it('is closed a year on, not completed by the matching day and month', () => {
+      expect(issueProgress(issue({ state: 'closed', closedAt: at(new Date(2025, 7, 8, 16, 8)) }), now)).toBe(
+        'closed',
+      )
+    })
+
+    it('treats a closed issue with no usable close time as history', () => {
+      expect(issueProgress(issue({ state: 'closed' }), now)).toBe('closed')
+      expect(issueProgress(issue({ state: 'closed', closedAt: '' }), now)).toBe('closed')
+      expect(issueProgress(issue({ state: 'closed', closedAt: 'not a date' }), now)).toBe('closed')
+    })
+
+    it('leaves an open issue alone whatever the clock says', () => {
+      expect(issueProgress(issue({ labels: ['needs-input'] }), now)).toBe('asks')
+    })
+  })
 })
 
 describe('issuesAwaitingAnswer', () => {
@@ -217,6 +258,29 @@ describe('partitionIssues', () => {
 
   it('gives back two empty lists for an empty list', () => {
     expect(partitionIssues([])).toEqual({ active: [], closed: [] })
+  })
+
+  it('keeps today’s fixes up with the live ones, in the order they arrived', () => {
+    const now = new Date(2026, 7, 8, 16, 8)
+    const { active, closed } = partitionIssues(
+      [
+        issue(1, { state: 'closed', closedAt: new Date(2026, 7, 8, 9, 0).toISOString() }),
+        issue(2),
+        issue(3, { state: 'closed', closedAt: new Date(2026, 7, 7, 9, 0).toISOString() }),
+      ],
+      now,
+    )
+    expect(active.map((i) => i.number)).toEqual([1, 2])
+    expect(closed.map((i) => i.number)).toEqual([3])
+  })
+
+  it('folds a fix away once the day it landed is over', () => {
+    const landedToday = issue(1, {
+      state: 'closed',
+      closedAt: new Date(2026, 7, 8, 9, 0).toISOString(),
+    })
+    const tomorrow = new Date(2026, 7, 9, 0, 1)
+    expect(partitionIssues([landedToday], tomorrow).closed.map((i) => i.number)).toEqual([1])
   })
 })
 

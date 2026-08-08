@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { canResumeRest, restBeforeNextSet, RESUMABLE_REST_GRACE_SEC, TRANSITION_REST_CAP_SEC } from './rest'
+import {
+  canResumeRest,
+  restBeforeNextSet,
+  upNextTargetLabel,
+  RESUMABLE_REST_GRACE_SEC,
+  TRANSITION_REST_CAP_SEC,
+} from './rest'
 
 describe('restBeforeNextSet', () => {
   it('uses the exercise rest between sets of the same exercise', () => {
@@ -32,6 +38,25 @@ describe('restBeforeNextSet', () => {
     expect(
       restBeforeNextSet({ currentRestSec: 120, sameExercise: false, nextRestSec: null }),
     ).toBe(0)
+  })
+})
+
+describe('upNextTargetLabel', () => {
+  it('shows the numbers on the rest leading into an exercise first set', () => {
+    expect(upNextTargetLabel(0, '135 × 8')).toBe('135 × 8')
+  })
+
+  it('shows a reps-only target the same way', () => {
+    expect(upNextTargetLabel(0, '12 reps')).toBe('12 reps')
+  })
+
+  it('stays quiet between sets of an exercise already under way', () => {
+    expect(upNextTargetLabel(1, '65 × 12')).toBeNull()
+    expect(upNextTargetLabel(3, '65 × 12')).toBeNull()
+  })
+
+  it('shows nothing when the coming set has no target', () => {
+    expect(upNextTargetLabel(0, null)).toBeNull()
   })
 })
 

@@ -17,7 +17,7 @@ import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder } from '../../lib/circuit'
-import { canResumeRest, restBeforeNextSet } from '../../lib/rest'
+import { canResumeRest, restBeforeNextSet, upNextTargetLabel } from '../../lib/rest'
 import { ExerciseHistorySheet } from '../../components/ExerciseHistorySheet'
 import {
   formatDuration,
@@ -547,6 +547,10 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           seconds={rest.seconds}
           endsAt={rest.endsAt}
           upNext={rest.upNext}
+          // The flow advances before resting, so `step` is already the set this
+          // rest leads into and `targetNumbers` is its target — the numbers to
+          // walk back to the bar with, on the rests that should carry them.
+          upNextTarget={upNextTargetLabel(step.setIndex, targetNumbers)}
           autoAdvance={autoNow}
           menu={menuItems}
           progress={{ done: totals.done, total: totals.all, unit: 'sets' }}

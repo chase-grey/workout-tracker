@@ -63,18 +63,47 @@ export type IssueThread = {
  * waiting on an answer; `stalled` means it tried and backed off, leaving the
  * issue open for a human. All come from labels the fixer sets, so this is the
  * real state of the run and not a guess from timestamps.
+ *
+ * `completed` is a fix that landed today: still closed on GitHub, but shown as a
+ * result you can see rather than folded into history — see issueProgress.
  */
-export type IssueProgress = 'open' | 'working' | 'asks' | 'stalled' | 'closed'
+export type IssueProgress = 'open' | 'working' | 'asks' | 'stalled' | 'completed' | 'closed'
 
 /** Labels scripts/autofix.mjs sets — RUNNING_LABEL, ASK_LABEL, FAILED_LABEL there. */
 const WORKING_LABEL = 'autofix-running'
 const ASKS_LABEL = 'needs-input'
 const STALLED_LABEL = 'autofix-failed'
 
-export function issueProgress(issue: TrackedIssue): IssueProgress {
+/** Whether two instants land on the same day on this device's clock. */
+function sameLocalDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+/**
+ * How far along an issue is. `now` is the clock to date `completed` against and
+ * only exists so tests can pin it.
+ *
+ * An issue closed earlier today reads `completed` rather than `closed`: you filed
+ * it, it got fixed, and that's worth seeing for the rest of the day before it
+ * drops into history at the next local midnight. A closed issue with no usable
+ * close time — a cache written before closedAt existed, or a bad stamp — counts
+ * as old, since the collapsed pile is where a closed issue belongs unless it can
+ * prove it landed today.
+ */
+export function issueProgress(issue: TrackedIssue, now: Date = new Date()): IssueProgress {
   // Closed wins: the fixer removes its running label before closing, but a
   // hand-closed issue can still be carrying one.
-  if (issue.state === 'closed') return 'closed'
+  if (issue.state === 'closed') {
+    const closedAt = issue.closedAt ? new Date(issue.closedAt) : null
+    if (closedAt && !Number.isNaN(closedAt.getTime()) && sameLocalDay(closedAt, now)) {
+      return 'completed'
+    }
+    return 'closed'
+  }
   const labels = issue.labels ?? []
   // Ahead of `working`: the fixer drops its running label before asking, but the
   // two calls aren't atomic and an issue caught between them is asking, not running.
@@ -94,15 +123,23 @@ export function issuesAwaitingAnswer(issues: TrackedIssue[] | null): TrackedIssu
  * order it arrived. Nothing ever gets filed off a closed issue — it's there to
  * look back at — so Settings folds that half away and leads with the live ones,
  * which otherwise get pushed off screen as the closed pile grows.
+ *
+ * Today's fixes stay up top with the live ones until the day is out: folding one
+ * away the moment it lands means the result of a report filed this morning is
+ * only ever seen by going looking for it. `now` is handed to issueProgress and
+ * only exists so tests can pin the day boundary.
  */
-export function partitionIssues(issues: TrackedIssue[]): {
+export function partitionIssues(
+  issues: TrackedIssue[],
+  now: Date = new Date(),
+): {
   active: TrackedIssue[]
   closed: TrackedIssue[]
 } {
   const active: TrackedIssue[] = []
   const closed: TrackedIssue[] = []
   for (const issue of issues) {
-    if (issueProgress(issue) === 'closed') closed.push(issue)
+    if (issueProgress(issue, now) === 'closed') closed.push(issue)
     else active.push(issue)
   }
   return { active, closed }

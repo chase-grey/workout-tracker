@@ -507,15 +507,17 @@ export function ChatTab({
           ) : (
             <div key={i} className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+                className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
                   t.role === 'user'
-                    ? 'bg-accent-dark text-white'
+                    ? 'whitespace-pre-wrap bg-accent-dark text-white'
                     : t.error
-                      ? 'bg-surface text-red-400'
+                      ? 'whitespace-pre-wrap bg-surface text-red-400'
                       : 'bg-surface text-neutral-100'
                 }`}
               >
-                {t.content}
+                {/* Only the coach's own replies are Markdown. What the user typed
+                    is shown exactly as typed, and an error is a bare sentence. */}
+                {t.role === 'assistant' && !t.error ? <Markdown text={t.content} /> : t.content}
               </div>
             </div>
           ),
@@ -538,10 +540,14 @@ export function ChatTab({
       </div>
 
       {/* Frosted glass, so the tail of the thread dissolves behind the input
-          instead of stopping at a hard edge. Equal padding top and bottom, so the
-          input sits the same distance from the line above it as from the nav
-          below (or the keyboard, once that's covered the nav). */}
-      <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 py-2 backdrop-blur-md">
+          instead of stopping at a hard edge. All the padding is above the input
+          and none below it, which puts the field as low on the screen as this
+          layout can: the bar's bottom edge is already pinned to the bottom of the
+          scroller, so padding under the input is the only thing that can hold it
+          up off the nav (or off the keyboard, once that's covered the nav) — and
+          both of those bring their own space, the nav around its icons and the
+          keyboard above its top row. */}
+      <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 pb-0 pt-2 backdrop-blur-md">
         {/* The question rides above the composer rather than sitting in the
             thread: it has to stay on screen while the answer is being typed. */}
         {(answerLoading || answerTarget || answerError) && (
