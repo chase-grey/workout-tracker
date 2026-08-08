@@ -173,8 +173,8 @@ const DUNE_ASPECT = 3
 /**
  * Full-screen rest shapes that fill rather than frame. Same contract as the boxed
  * ones: `fraction` is how much rest is left and drives the level directly. These
- * render below the up-next block rather than behind it, so the weight and reps
- * you're about to go for stay readable while the shape runs.
+ * render below the up-next block rather than behind it, so what's coming stays
+ * readable while the shape runs.
  */
 function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction: number }) {
   const drain = { transition: 'height 260ms linear, width 260ms linear' } as const
@@ -369,9 +369,7 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
  * user what's coming; `progress` + `timeLeftLabel` (rendered verbatim, so the
  * caller phrases it — "~5 min left in workout") show the same session progress
  * bar as the session header — pinned to the top of the rest screen — so rest says
- * how far in you are and not just how long is left. `nextSet` puts the numbers you
- * came here for on the screen you're already looking at: what to load and how many
- * reps to go for on the set this rest is leading into. `menu` keeps the session's
+ * how far in you are and not just how long is left. `menu` keeps the session's
  * overflow actions reachable without ending rest first.
  */
 export function RestTimer({
@@ -379,7 +377,6 @@ export function RestTimer({
   endsAt,
   onClose,
   upNext,
-  nextSet,
   progress,
   timeLeftLabel,
   autoAdvance,
@@ -394,11 +391,6 @@ export function RestTimer({
   endsAt?: number
   onClose: () => void
   upNext?: string | null
-  /**
-   * What to go for on the set this rest leads into — `target` is the load and reps
-   * ("135 × 8"), `position` is where that set falls in its exercise ("set 2/4").
-   */
-  nextSet?: { target: string | null; position: string } | null
   /** Session position for the progress bar — completed sets out of the total. */
   progress?: { done: number; total: number; unit?: string }
   timeLeftLabel?: string | null
@@ -492,9 +484,9 @@ export function RestTimer({
       {variant === 'perimeter' && <PerimeterFrame fraction={remainingFraction} />}
 
       {/* Top region: the "how far through the workout" bar sits at the very top,
-          with the up-next/menu row and then the numbers for the coming set. This is
-          the part you're resting to read, so it gets the top of the screen and the
-          filling shapes start below it. */}
+          with the up-next/menu row under it. This is the part you're resting to
+          read, so it gets the top of the screen and the filling shapes start
+          below it. */}
       <div className="relative z-10 w-full pt-[calc(0.75rem+env(safe-area-inset-top))]">
         {progress && (
           <SessionProgress
@@ -517,24 +509,12 @@ export function RestTimer({
             </div>
           </div>
         )}
-        {nextSet && (
-          // The load and the rep target for the set you're about to do, big enough
-          // to read at arm's length while you're walking back to the bar.
-          <div className="mt-3 flex flex-col items-center gap-1">
-            {nextSet.target && (
-              <span className="text-4xl font-bold tabular-nums text-white">{nextSet.target}</span>
-            )}
-            <span className="text-sm font-semibold tracking-wide text-neutral-400">
-              {nextSet.position}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* The animation is the timer: the shape's level carries the countdown
           (full at the start, empty when rest is up); any looping motion is just
           texture and never drives the level. A filling shape and a boxed one both
-          take the space under the numbers above rather than running behind them. */}
+          take the space under the row above rather than running behind it. */}
       <div className="relative flex w-full flex-1 items-center justify-center">
         {fills && <FullBleedShape variant={variant} fraction={remainingFraction} />}
         {!full && (

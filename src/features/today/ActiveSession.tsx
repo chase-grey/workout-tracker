@@ -547,12 +547,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           seconds={rest.seconds}
           endsAt={rest.endsAt}
           upNext={rest.upNext}
-          // `planned` is already the set this rest leads into, so the load and rep
-          // target on the rest screen are the ones to walk back to the bar with.
-          nextSet={{
-            target: targetNumbers,
-            position: `set ${step.setIndex + 1}/${step.setCount}`,
-          }}
           autoAdvance={autoNow}
           menu={menuItems}
           progress={{ done: totals.done, total: totals.all, unit: 'sets' }}
