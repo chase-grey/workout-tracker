@@ -83,6 +83,23 @@ describe('sideOrderedExercises', () => {
     expect(sideOrderedExercises(list, 'right').map((e) => e.key)).toEqual(['a', 'r', 'l', 'b'])
   })
 
+  it('swaps the two halves of a pair that are not neighbours', () => {
+    // The shipped case: a tricep station sits between the arms, and it stays put.
+    const list = [ex('l', { side: 'left' }), ex('between'), ex('r', { side: 'right' }), ex('after')]
+    expect(sideOrderedExercises(list, 'left').map((e) => e.key)).toEqual([
+      'l',
+      'between',
+      'r',
+      'after',
+    ])
+    expect(sideOrderedExercises(list, 'right').map((e) => e.key)).toEqual([
+      'r',
+      'between',
+      'l',
+      'after',
+    ])
+  })
+
   it('orders two separate pairs independently', () => {
     const list = [
       ex('curl_l', { side: 'left' }),

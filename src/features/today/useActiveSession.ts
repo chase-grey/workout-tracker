@@ -30,6 +30,7 @@ export function useActiveSession() {
       storage.saveActiveStep(0)
       storage.saveActiveStepKey(null)
       storage.saveActiveRest(null)
+      storage.saveRestTally(null)
       const chosen = variant ?? nextVariant(workouts, dayType) ?? undefined
       // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
       const startSide = nextStartSide(workouts, dayType)
@@ -129,6 +130,7 @@ export function useActiveSession() {
     storage.saveActiveStep(0)
     storage.saveActiveStepKey(null)
     storage.saveActiveRest(null)
+    storage.saveRestTally(null)
     commit(null)
   }, [commit])
 

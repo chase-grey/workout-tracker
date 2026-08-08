@@ -103,10 +103,16 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // When the routine began (persisted so a resumed session still measures its
   // full length) and accumulated time spent on the rest screen.
   const [startedAt] = useState(saved?.startedAt)
-  const restAccumSec = useRef(0)
+  const restAccumSec = useRef(Math.max(0, saved?.restSec ?? 0))
   // Initial value only: a resumed rest began before the reload, so credit it from
   // its real start rather than from now.
   const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)
+
+  /** Move the rest currently on the clock into the session's total. */
+  const bankRest = () => {
+    if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
+    restStartRef.current = 0
+  }
 
   const steps = useMemo(() => buildSessionSteps(flexPlan), [flexPlan])
   const N = steps.length
@@ -133,6 +139,9 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
       coreReps,
       rep,
       rest,
+      // Written on every snapshot: `rest` flipping to null is the tick right after
+      // a rest was banked, so the two always go to storage together.
+      restSec: restAccumSec.current,
       photoGates: [...seenGates],
     })
   }, [safeCurrent, done, startedAt, coreReps, rep, rest, seenGates])
@@ -159,6 +168,9 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // Record the finished routine's length once, for time-left learning + reporting.
   const recordDuration = () => {
     if (!startedAt) return
+    // The rest screen carries the finish actions, so bank the rest still on the
+    // clock rather than logging it as time stretching.
+    bankRest()
     void logSessionDuration({
       date: toISODate(new Date()),
       kind: 'stretch',
@@ -242,8 +254,7 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
 
   // Bank the rest slice just spent, then hand the screen to the get-ready count.
   const closeRest = () => {
-    if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
-    restStartRef.current = 0
+    bankRest()
     setRest(null)
     // Hand off to the get-into-position count only when the upcoming set has one;
     // otherwise (a between-dead-bugs set) go straight to the set.

@@ -68,13 +68,13 @@ describe('the push + core day', () => {
     expect(gap).toBeGreaterThan(1)
   })
 
-  it('puts the arm work in one circuit', () => {
+  it('puts the arm work in one circuit, alternating delt and tricep stations', () => {
     const circuit = DEFAULT_PLAN.push.exercises.filter((e) => e.circuit === 'arms').map((e) => e.key)
     expect(circuit).toEqual([
       'tricep_pushdown',
       'lateral_raise_l',
-      'lateral_raise_r',
       'overhead_tricep_ext',
+      'lateral_raise_r',
     ])
   })
 

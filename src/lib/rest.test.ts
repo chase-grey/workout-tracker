@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
+  bankRest,
   canResumeRest,
+  emptyRestTally,
+  openRest,
   restBeforeNextSet,
+  resumeRestTally,
   upNextTargetLabel,
   CIRCUIT_STATION_REST_SEC,
   RESUMABLE_REST_GRACE_SEC,

@@ -80,9 +80,10 @@ export type PlannedExercise = {
    * key, its own history, its own line on the chart — so an imbalance between them
    * is visible instead of averaged away.
    *
-   * The two sides sit next to each other in the day, and which one leads flips
-   * from session to session (see lib/pushSide + {@link sideOrderedExercises}), so
-   * the same arm isn't always the one working second.
+   * The two sides ship as a pair in the day — not necessarily adjacent; the arm
+   * circuit puts a tricep station between them — and which one leads flips from
+   * session to session (see lib/pushSide + {@link sideOrderedExercises}), so the
+   * same arm isn't always the one working second.
    */
   side?: Side
   /** Per-variant deltas; absent means the exercise is identical in both. */
@@ -378,10 +379,11 @@ function mergeDayExercises(
   // when it still matches a name/group the defaults used to ship with. A name the
   // user actually chose reads as neither and is left alone.
   //
-  // The structural fields (circuit, sharedLoad, byVariant, repsOnly) are program
-  // design rather than user preference, and the plan editor doesn't expose them,
-  // so they always come from the defaults — otherwise a stored day would never
-  // pick up the arm circuit, the shared tricep load or the push A/B split.
+  // The structural fields (circuit, sharedLoad, side, byVariant, repsOnly) are
+  // program design rather than user preference, and the plan editor doesn't expose
+  // them, so they always come from the defaults — otherwise a stored day would
+  // never pick up the arm circuit, the shared tricep load, which arm a raise
+  // trains, or the push A/B split.
   const out = kept.map((e) => {
     const def = defaults.find((d) => d.key === e.key)
     if (!def) return e
@@ -397,6 +399,7 @@ function mergeDayExercises(
       group: wasDefaultGroup ? def.group : e.group,
       circuit: def.circuit,
       sharedLoad: def.sharedLoad,
+      side: def.side,
       byVariant: def.byVariant,
       repsOnly: def.repsOnly,
     }

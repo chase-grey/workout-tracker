@@ -65,6 +65,12 @@ export type StretchState = {
   rep?: number
   /** The rest countdown that was on screen, if any. */
   rest?: RestState | null
+  /**
+   * Seconds banked on the rest screen so far. Persisted for the same reason
+   * `startedAt` is: the routine's total length spans a reload, so a rest tally
+   * that restarted at zero would leave that rest counted as stretching.
+   */
+  restSec?: number
   /** Ids of the photo screens already offered, so a reload doesn't re-ask. */
   photoGates?: string[]
 }

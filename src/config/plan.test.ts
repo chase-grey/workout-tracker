@@ -113,8 +113,11 @@ describe('withPlanDefaults', () => {
 
     it('adopts the shipped order, so the arm circuit really alternates', () => {
       const keys = merged.push.exercises.map((e) => e.key)
+      // A raise between the two tricep movements, and a tricep movement between
+      // the two arms — the stored day had all three moves in a row instead.
       expect(keys.indexOf('lateral_raise_l')).toBeGreaterThan(keys.indexOf('tricep_pushdown'))
-      expect(keys.indexOf('lateral_raise_r')).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
+      expect(keys.indexOf('lateral_raise_l')).toBeLessThan(keys.indexOf('overhead_tricep_ext'))
+      expect(keys.indexOf('lateral_raise_r')).toBeGreaterThan(keys.indexOf('overhead_tricep_ext'))
     })
 
     it('replaces the both-arms lateral raise with the left/right pair', () => {

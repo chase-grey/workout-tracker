@@ -22,7 +22,15 @@ import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder } from '../../lib/circuit'
-import { canResumeRest, restBeforeNextSet, upNextTargetLabel } from '../../lib/rest'
+import {
+  bankRest,
+  canResumeRest,
+  openRest,
+  restBeforeNextSet,
+  resumeRestTally,
+  upNextTargetLabel,
+  type RestTally,
+} from '../../lib/rest'
 import { ExerciseHistorySheet } from '../../components/ExerciseHistorySheet'
 import {
   formatDuration,
@@ -103,23 +111,27 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // overrides the saved `autoAdvance` default either way, so "auto just for now"
   // and "not this time" are both possible without editing the plan.
   const [autoOverride, setAutoOverride] = useState<Map<string, boolean>>(new Map())
-  // Accumulated time spent on the rest-timer screen (the "resting" slice of the
-  // session). restStartRef marks when the current rest overlay opened — for a
-  // resumed rest that's before the reload, so credit it from its real start.
-  const restAccumSec = useRef(0)
+  // Time spent on the rest-timer screen (the "resting" slice of the session),
+  // alongside the rest that was prescribed and how many intervals were taken —
+  // the estimator learns the ratio between taken and prescribed, not a flat
+  // average (see lib/estimate: one pooled average can't span a 150s bench rest
+  // and a 30s circuit station change).
+  //
+  // Mirrored to storage on every change, because the session's *total* length is
+  // derived from its persisted `startedAt`: an hour-long workout outlives more
+  // than one page load on a phone (a tab discard, a service-worker update), and a
+  // tally that restarted at zero left all the rest before it counted as work.
+  const [savedTally] = useState(() => resumeRestTally(storage.loadRestTally(), session.sessionId))
+  const tally = useRef(savedTally)
+  // When the rest on screen opened — for a resumed one that's before the reload,
+  // so it's credited from its real start.
   const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)
   // Per-exercise active-time learning: activeStartRef marks when the current set
-  // screen became active; accumulators sum active seconds + set counts per
-  // exercise, and restCount tracks how many rest intervals were taken.
+  // screen became active; the accumulators sum active seconds + set counts per
+  // exercise.
   const activeStartRef = useRef(Date.now())
   const activeAccum = useRef(new Map<string, number>())
   const activeSets = useRef(new Map<string, number>())
-  const restCount = useRef(0)
-  // Total rest this session was *prescribed*, alongside how much was actually
-  // taken: the estimator learns the ratio between the two, not a flat average (see
-  // lib/estimate — one pooled average can't span a 150s bench rest and a 30s
-  // circuit station change).
-  const restPrescribedSec = useRef(0)
 
   const day = plan[session.dayType]
   // The day as this session is actually performing it: the A/B variant's set
@@ -283,11 +295,22 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     activeSets.current.set(exerciseKey, (activeSets.current.get(exerciseKey) ?? 0) + 1)
   }
 
+  /** Update the rest tally and mirror it, so a reload resumes it rather than restarting. */
+  const commitTally = (next: RestTally) => {
+    tally.current = next
+    storage.saveRestTally(next)
+  }
+
   const finish = () => {
     const totalSec = session.startedAt
       ? (Date.now() - new Date(session.startedAt).getTime()) / 1000
       : 0
-    const restSec = restAccumSec.current
+    // The rest screen's own menu can finish the workout, so bank whatever rest is
+    // still on the clock before reading the total off the tally.
+    const rested = bankRest(tally.current, restStartRef.current, Date.now())
+    commitTally(rested)
+    restStartRef.current = 0
+    const restSec = rested.takenSec
     if (session.startedAt) {
       void logSessionDuration({
         date: toISODate(new Date()),
@@ -306,8 +329,8 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     void logExerciseTimes({
       exercises,
       restTotalSec: restSec,
-      restPrescribedSec: restPrescribedSec.current,
-      restCount: restCount.current,
+      restPrescribedSec: rested.prescribedSec,
+      restCount: rested.count,
     })
 
     const cleaned: WorkoutSession = {
@@ -322,7 +345,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // Accumulate the just-ended rest slice, then dismiss the overlay. The next set
   // screen is now active, so start its active-time clock.
   const closeRest = () => {
-    if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
+    commitTally(bankRest(tally.current, restStartRef.current, Date.now()))
     restStartRef.current = 0
     activeStartRef.current = Date.now()
     setRest(null)
@@ -366,8 +389,9 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       return
     }
     restStartRef.current = Date.now()
-    restCount.current += 1
-    restPrescribedSec.current += restSec
+    // Banked as the rest opens, not when it closes: a reload mid-rest recovers the
+    // seconds from the saved `endsAt`, but not that the interval ever happened.
+    commitTally(openRest(tally.current, restSec))
     setRest({
       seconds: restSec,
       endsAt: Date.now() + restSec * 1000,
