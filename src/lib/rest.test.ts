@@ -182,3 +182,42 @@ describe('canResumeRest', () => {
     expect(canResumeRest(now - sec(8 * 60 * 60), now)).toBe(false)
   })
 })
+
+describe('rest tally', () => {
+  const t0 = 1_700_000_000_000
+
+  it('counts an interval as it opens and its seconds as it closes', () => {
+    let tally = emptyRestTally('s1')
+    tally = openRest(tally, 90)
+    expect(tally).toEqual({ sessionId: 's1', takenSec: 0, prescribedSec: 90, count: 1 })
+    tally = bankRest(tally, t0, t0 + 95_000)
+    expect(tally.takenSec).toBe(95)
+    expect(tally.count).toBe(1)
+  })
+
+  it('banks nothing when no rest is on the clock', () => {
+    const tally = openRest(emptyRestTally('s1'), 60)
+    expect(bankRest(tally, 0, t0)).toEqual(tally)
+  })
+
+  it('accumulates across intervals', () => {
+    let tally = emptyRestTally('s1')
+    tally = bankRest(openRest(tally, 120), t0, t0 + 120_000)
+    tally = bankRest(openRest(tally, 60), t0 + 200_000, t0 + 275_000)
+    expect(tally).toEqual({ sessionId: 's1', takenSec: 195, prescribedSec: 180, count: 2 })
+  })
+
+  it('resumes the tally saved by the same session', () => {
+    // Why this is persisted at all: a session's total length comes from its stored
+    // startedAt, so rest banked before a reload has to survive alongside it or an
+    // hour of gym time reads as an hour of working out with three minutes of rest.
+    const saved = { sessionId: 's1', takenSec: 1800, prescribedSec: 2000, count: 20 }
+    expect(resumeRestTally(saved, 's1')).toEqual(saved)
+  })
+
+  it('ignores a tally left behind by another session', () => {
+    const saved = { sessionId: 's1', takenSec: 1800, prescribedSec: 2000, count: 20 }
+    expect(resumeRestTally(saved, 's2')).toEqual(emptyRestTally('s2'))
+    expect(resumeRestTally(null, 's2')).toEqual(emptyRestTally('s2'))
+  })
+})
