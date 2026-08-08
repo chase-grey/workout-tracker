@@ -98,6 +98,33 @@ export function exerciseSeries(
 }
 
 /**
+ * One point per session for "reps held across `sets` sets": the reps of that
+ * session's `sets`-th best set, which is the number every one of those sets
+ * cleared. It's what a "4 sets of 10" standard actually asks for — not one hard
+ * set and three easy ones, but ten reps four times over.
+ *
+ * Sessions that logged fewer than `sets` sets are left out rather than scored
+ * zero. A three-set day doesn't say the four-set standard was missed, it says it
+ * wasn't attempted, and a zero in the series would read as a collapse and drag
+ * the fitted pace down with it. The same reason `topreps` exists: a rep figure
+ * shouldn't move because the day prescribed three sets instead of four.
+ */
+export function sustainedRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets: number): Point[] {
+  const bySession = new Map<string, { date: string; reps: number[] }>()
+  for (const r of rows) {
+    if (r.exercise !== exerciseKey) continue
+    const key = r.session_id || r.date
+    const g = bySession.get(key) ?? { date: r.date, reps: [] }
+    g.reps.push(r.reps)
+    bySession.set(key, g)
+  }
+  return [...bySession.values()]
+    .filter((g) => g.reps.length >= sets)
+    .map((g) => ({ date: g.date, value: [...g.reps].sort((a, b) => b - a)[sets - 1] }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
  * One point per session summing total reps across a *set* of exercise keys —
  * e.g. all core moves combined, so ab work shows up regardless of which ab
  * exercise (cable crunch, hanging leg raise, deadbug) was logged that session.

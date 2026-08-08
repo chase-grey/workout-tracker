@@ -57,6 +57,22 @@ describe('goalCueForExercise', () => {
     expect(goalCueForExercise(locked, [goal()], 'flat_bench', 5, TODAY)).toBeNull()
   })
 
+  it('leaves a goal counted in reps alone — there is no weight to prescribe', () => {
+    const rungs = goal({
+      id: 'pullups_4x10',
+      title: '4×10 pull-ups',
+      unit: 'reps',
+      exerciseKey: 'weighted_pullups',
+      measure: 'reps',
+      points: [{ date: '2026-02-15', value: 7 }],
+      target: 10,
+    })
+    const locked: LockedProjections = {
+      pullups_4x10: lock({ goalId: 'pullups_4x10', startValue: 5, target: 10 }),
+    }
+    expect(goalCueForExercise(locked, [rungs], 'weighted_pullups', 8, TODAY)).toBeNull()
+  })
+
   it('skips a goal already reached and picks the nearest un-reached one', () => {
     const reached = goal({
       id: 'squat_bodyweight',

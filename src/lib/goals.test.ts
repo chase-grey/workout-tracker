@@ -7,6 +7,10 @@ import {
   GOAL_IDS,
   isReached,
   projectGoal,
+  PULLUP_GAIN_CAP,
+  PULLUP_GOAL_REPS,
+  PULLUP_GOAL_SETS,
+  PULLUP_KEY,
   reachedDate,
   SQUAT_GAIN_CAP,
   STRENGTH_GAIN_DECAY,
@@ -109,6 +113,79 @@ describe('lift goals cap the pace they project against', () => {
       capPerWeek: g.capPerWeek,
     })
     expect(isPaceCapped(p)).toBe(true)
+  })
+})
+
+describe('the pull-up ladder', () => {
+  /** One session of `reps.length` pull-up sets. */
+  const pullups = (date: string, reps: number[]): WorkoutRow[] =>
+    reps.map((n, i) => ({
+      session_id: date,
+      date,
+      day_type: 'pull' as const,
+      exercise: PULLUP_KEY,
+      set_number: i + 1,
+      weight_lbs: null,
+      reps: n,
+      notes: '',
+      is_historical: false,
+    }))
+
+  const ladder = (workouts: WorkoutRow[]) =>
+    buildGoals({ ...inputs(HOT_FORTNIGHT), workouts }).filter((g) =>
+      g.id.startsWith(`pullups_${PULLUP_GOAL_SETS}x`),
+    )
+
+  it('lists a rung per rep target, ascending', () => {
+    expect(ladder([]).map((g) => g.target)).toEqual([...PULLUP_GOAL_REPS])
+    expect(ladder([]).map((g) => g.title)).toEqual([
+      '4×5 pull-ups',
+      '4×10 pull-ups',
+      '4×15 pull-ups',
+      '4×20 pull-ups',
+    ])
+  })
+
+  it('measures a rung on the reps every one of the four sets made', () => {
+    // Twelve on the first set doesn't make it a 4×12 day — the fourth set had 7.
+    const goals = ladder(pullups('2026-02-01', [12, 10, 9, 7]))
+    expect(goals[0].points).toEqual([{ date: '2026-02-01', value: 7 }])
+    expect(isReached(goals[0])).toBe(true) // 4×5
+    expect(isReached(goals[1])).toBe(false) // 4×10
+  })
+
+  it('ignores a session that stopped short of four sets', () => {
+    expect(ladder(pullups('2026-02-01', [20, 20, 20]))[0].points).toEqual([])
+  })
+
+  it('counts a rung done with added weight', () => {
+    const weighted = pullups('2026-02-01', [10, 10, 10, 10]).map((r) => ({ ...r, weight_lbs: 45 }))
+    expect(isReached(ladder(weighted)[1])).toBe(true)
+  })
+
+  it('keeps a cleared rung cleared after a tired session', () => {
+    const goals = ladder([...pullups('2026-02-01', [10, 10, 10, 10]), ...pullups('2026-02-08', [8, 7, 6, 6])])
+    expect(isReached(goals[1])).toBe(true)
+    expect(reachedDate(goals[1])).toBe('2026-02-01')
+  })
+
+  it('caps the pace at a rep a week, so a hot pair of sessions is not a ladder', () => {
+    // 6 → 9 → 12 across a fortnight fits three reps a week; straight off that,
+    // 4×20 lands inside a couple of months.
+    const hot = [
+      ...pullups('2026-02-01', [6, 6, 6, 6]),
+      ...pullups('2026-02-08', [9, 9, 9, 9]),
+      ...pullups('2026-02-15', [12, 12, 12, 12]),
+    ]
+    const twenty = ladder(hot).find((g) => g.target === 20)!
+    expect(twenty.capPerWeek).toBe(PULLUP_GAIN_CAP)
+    expect(twenty.decayPerWeek).toBe(STRENGTH_GAIN_DECAY)
+
+    const p = projectGoal(twenty, new Date(2026, 1, 15))
+    expect(p.observedSlopePerWeek).toBe(3)
+    expect(p.slopePerWeek).toBe(PULLUP_GAIN_CAP)
+    expect(isPaceCapped(p)).toBe(true)
+    expect(p.etaWeeks).toBeGreaterThan(8)
   })
 })
 

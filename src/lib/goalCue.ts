@@ -41,6 +41,11 @@ function weightForE1RM(e1rm: number, reps: number): number {
  * target for a set of `reps` reps. Nearest so the milestone you're actually
  * working toward wins when a lift carries two (squat bodyweight before 1.5×).
  * null when no locked goal rides on this exercise, or they're all already met.
+ *
+ * Only goals measured in estimated 1RM are cued. The whole cue is "load the bar
+ * to this and the line is met", and a goal counted in reps — the pull-up ladder
+ * — has no weight to name: what it wants is another rep on every set, which the
+ * rep target on screen already says.
  */
 export function goalCueForExercise(
   locked: LockedProjections,
@@ -52,6 +57,7 @@ export function goalCueForExercise(
   let best: { goal: GoalSpec; remaining: number } | null = null
   for (const goal of goals) {
     if (goal.exerciseKey !== exerciseKey || !locked[goal.id] || goal.points.length === 0) continue
+    if ((goal.measure ?? 'e1rm') !== 'e1rm') continue
     const latest = goal.points[goal.points.length - 1].value
     const toward = goal.direction === 'up' ? 1 : -1
     const remaining = (goal.target - latest) * toward

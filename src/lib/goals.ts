@@ -10,7 +10,7 @@
  */
 
 import type { BodyWeightEntry, WorkoutRow } from '../types'
-import { exerciseSeries, type Point } from './progress'
+import { exerciseSeries, sustainedRepsSeries, type Point } from './progress'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
@@ -102,6 +102,32 @@ export const BODYWEIGHT_GAIN_CAP = 1
 export const SQUAT_GAIN_CAP = 5
 export const BENCH_GAIN_CAP = 3
 
+/** The exercise the pull-up ladder is measured on. */
+export const PULLUP_KEY = 'weighted_pullups'
+
+/** Sets every rung of the pull-up ladder asks for. */
+export const PULLUP_GOAL_SETS = 4
+
+/**
+ * The pull-up ladder's rungs, in reps per set, ascending — so the nearer
+ * milestone is listed (and reached) before the harder one, the way the squat
+ * multiples and the flexibility ladders are.
+ */
+export const PULLUP_GOAL_REPS = [5, 10, 15, 20] as const
+
+/**
+ * The fastest weekly gain the pull-up ladder projects against, in reps.
+ *
+ * A rung is measured on the reps the fourth set still had in it, and that number
+ * moves in whole reps on a lift trained twice a week — so two sessions that go
+ * 6 then 9 fit +3 reps/week, and a straight line off that puts 4×20 inside two
+ * months. Adding a rep to every one of four sets in a week is what a very good
+ * week looks like; holding the projected pace there (see predictions.capSlope)
+ * keeps the direction those sessions show without promising a ladder that only
+ * a hot fortnight could climb.
+ */
+export const PULLUP_GAIN_CAP = 1
+
 /** Stable ids, used as the keys locked projections are stored under. */
 export const GOAL_IDS = {
   weight180: 'bodyweight_180',
@@ -121,6 +147,14 @@ export type GoalSpec = {
    * have none — nothing you do in a session changes them on the spot.
    */
   exerciseKey: string | null
+  /**
+   * What an exercise-driven goal's series counts, for the caller that has to
+   * know which language it's in: the in-session cue turns the e1RM its locked
+   * line calls for into a weight for the reps you're about to do (see
+   * goalCue), which is nonsense for a goal counted in reps. Omitted means
+   * estimated 1RM — every lift goal but the pull-up ladder.
+   */
+  measure?: 'e1rm' | 'reps'
   /** The series the goal is measured on, oldest → newest. */
   points: Point[]
   target: number
@@ -274,8 +308,9 @@ export function bodyWeightPoints(bodyWeights: BodyWeightEntry[]): Point[] {
 /**
  * Every goal, in the order they should be shown. Strength goals expressed as a
  * multiple of bodyweight come in ascending order, so the nearer milestone is
- * always listed (and reached) before the harder one. The flexibility ladders
- * (side split, then tailor's pose) come last, each ascending for the same reason.
+ * always listed (and reached) before the harder one — as does the pull-up
+ * ladder after them. The flexibility ladders (side split, then tailor's pose)
+ * come last, each ascending for the same reason.
  */
 export function buildGoals({
   workouts,
@@ -322,6 +357,30 @@ export function buildGoals({
     decayPerWeek: FLEX_GAIN_DECAY,
     window: FLEX_TREND_WINDOW,
     taperFromHistory: true,
+  }))
+
+  // The pull-up ladder. Each rung is four sets at a rep count, measured on the
+  // reps the fourth set of a session still had in it — so a rung is cleared only
+  // when every one of the four sets made the number, which is what "4 sets of
+  // 10" means. Milestones, like the flexibility rungs: a day that hit 4×10
+  // doesn't stop having happened because the next session came in tired.
+  //
+  // Any pull-up set counts, added weight or not. A rung done with a belt on is
+  // the harder version of the same thing, and refusing it would mean the ladder
+  // stalled on the days the plan calls for weight.
+  const pullupPoints = sustainedRepsSeries(workouts, PULLUP_KEY, PULLUP_GOAL_SETS)
+  const pullupGoals: GoalSpec[] = PULLUP_GOAL_REPS.map((reps): GoalSpec => ({
+    id: `pullups_${PULLUP_GOAL_SETS}x${reps}`,
+    title: `${PULLUP_GOAL_SETS}×${reps} pull-ups`,
+    unit: 'reps',
+    exerciseKey: PULLUP_KEY,
+    measure: 'reps',
+    points: pullupPoints,
+    target: reps,
+    direction: 'up',
+    milestone: true,
+    decayPerWeek: STRENGTH_GAIN_DECAY,
+    capPerWeek: PULLUP_GAIN_CAP,
   }))
 
   // 999 stands in for "no bodyweight logged yet", so a moving target can't be 0
@@ -385,6 +444,7 @@ export function buildGoals({
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: SQUAT_GAIN_CAP,
     },
+    ...pullupGoals,
     {
       id: GOAL_IDS.sixPack,
       title: 'visible 6-pack abs',

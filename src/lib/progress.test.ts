@@ -6,6 +6,7 @@ import {
   exercisesByFrequency,
   filterRange,
   sessionCount,
+  sustainedRepsSeries,
 } from './progress'
 import { ALL_EXERCISES, DEFAULT_PLAN, absExerciseKeys } from '../config/plan'
 import type { WorkoutRow } from '../types'
@@ -45,6 +46,39 @@ describe('exerciseSeries', () => {
 
   it('ignores other exercises', () => {
     expect(exerciseSeries(rows, 'squat', 'weight')).toEqual([])
+  })
+})
+
+describe('sustainedRepsSeries', () => {
+  const pullup = (session: string, date: string, reps: number[]): WorkoutRow[] =>
+    reps.map((n, i) => ({ ...r(session, date, null, n), exercise: 'weighted_pullups', set_number: i + 1 }))
+
+  it('reports the reps every one of the sets cleared, not the best set', () => {
+    const s = sustainedRepsSeries(pullup('a', '2026-01-05', [12, 9, 8, 10]), 'weighted_pullups', 4)
+    expect(s).toEqual([{ date: '2026-01-05', value: 8 }])
+  })
+
+  it('reads the nth-best set when more than n were logged', () => {
+    // Five sets of 10/9/8/7/6: four of them made 7, so 4×7 is what was held.
+    const s = sustainedRepsSeries(pullup('a', '2026-01-05', [10, 9, 8, 7, 6]), 'weighted_pullups', 4)
+    expect(s[0].value).toBe(7)
+  })
+
+  it('leaves out a session short of the set count rather than scoring it zero', () => {
+    const rows = [...pullup('a', '2026-01-05', [10, 10, 10]), ...pullup('b', '2026-01-12', [9, 9, 9, 9])]
+    expect(sustainedRepsSeries(rows, 'weighted_pullups', 4)).toEqual([{ date: '2026-01-12', value: 9 }])
+  })
+
+  it('sorts oldest → newest and ignores other exercises', () => {
+    const rows = [
+      ...pullup('b', '2026-02-01', [8, 8, 8, 8]),
+      ...pullup('a', '2026-01-01', [5, 6, 7, 8]),
+      r('c', '2026-03-01', 100, 20),
+    ]
+    expect(sustainedRepsSeries(rows, 'weighted_pullups', 4)).toEqual([
+      { date: '2026-01-01', value: 5 },
+      { date: '2026-02-01', value: 8 },
+    ])
   })
 })
 

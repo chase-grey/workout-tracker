@@ -11,7 +11,6 @@
  */
 
 import type { WorkoutRow } from '../types'
-import { exerciseSeries } from './progress'
 import { paceAgainstLock, type LockedProjections } from './goalLock'
 import { project } from './predictions'
 import { buildGoals, type GoalInputs } from './goals'
@@ -46,6 +45,11 @@ export function goalPaceNotes(
 ): GoalPaceNote[] {
   const trained = new Set(added.map((r) => r.exercise))
   const goalsAfter = buildGoals({ ...inputs, workouts: [...prev, ...added] })
+  // The same goals off the history alone, so "before" is read on whatever series
+  // each goal is actually measured on — an estimated 1RM for the lift goals, the
+  // reps held across four sets for the pull-up ladder. Rebuilding them is what
+  // keeps the two halves of the comparison in the same units.
+  const goalsBefore = new Map(buildGoals({ ...inputs, workouts: prev }).map((g) => [g.id, g]))
   const notes: GoalPaceNote[] = []
 
   for (const goal of goalsAfter) {
@@ -55,7 +59,7 @@ export function goalPaceNotes(
     const after = latest(goal.points)
     if (after == null) continue
     const afterDate = goal.points[goal.points.length - 1].date
-    const before = latest(exerciseSeries(prev, goal.exerciseKey, '1rm'))
+    const before = latest(goalsBefore.get(goal.id)?.points ?? [])
 
     const { slopePerWeek } = project(goal.points, lock.target, today, {
       decayPerWeek: goal.decayPerWeek,
