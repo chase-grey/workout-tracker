@@ -125,7 +125,7 @@ input[type='number'] {
 }
 
 /* Tide, the ones that make it: a riser column spans the liquid's full height, so
-   translating it -96% carries its bubble from the floor right through the
+   translating it -94% carries its bubble from the floor right up through the
    surface line however far the water has drained. The bubble bursts as it breaks
    through and the splash pieces below fire at the same point in the cycle —
    riser, burst and splash all share one duration and one delay, so the splash
@@ -134,9 +134,9 @@ input[type='number'] {
   0% {
     transform: translateY(0);
   }
-  86%,
+  84%,
   100% {
-    transform: translateY(-96%);
+    transform: translateY(-94%);
   }
 }
 .rest-riser {
@@ -153,12 +153,12 @@ input[type='number'] {
     opacity: 0.85;
     transform: scale(1);
   }
-  78% {
+  74% {
     opacity: 0.85;
     transform: scale(1.05);
   }
   /* Breaking the surface: the bubble stretches thin and is gone. */
-  88% {
+  86% {
     opacity: 0;
     transform: scale(1.9);
   }

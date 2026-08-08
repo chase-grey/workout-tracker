@@ -243,14 +243,20 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
  * the liquid's height, which is what keeps a bubble surfacing exactly at the
  * line however far the water has drained.
  */
+// Kept off the far edges: the vessel is round, so near the top of a full one the
+// water is only a narrow chord and a bubble out at 20% would surface into glass.
 const SURFACING_BUBBLES = [
-  { left: 20, size: 6, delay: '0s' },
-  { left: 52, size: 4.5, delay: '1.5s' },
-  { left: 76, size: 5, delay: '2.9s' },
+  { left: 26, size: 6, delay: '0s' },
+  { left: 47, size: 4.5, delay: '1.5s' },
+  { left: 66, size: 5, delay: '2.9s' },
 ] as const
 
-/** Below this much rest left, the water is too shallow to surface through. */
-const TIDE_SURFACING_MIN = 0.08
+/**
+ * Below this much rest left, the water is too shallow to surface through: a
+ * bubble is a fixed size while the liquid is not, so down here it would be about
+ * as tall as the water it's meant to rise through.
+ */
+const TIDE_SURFACING_MIN = 0.15
 
 /** Droplets thrown by one splash: position across the crown and how far out each flies. */
 const SPLASH_DROPS = [
@@ -326,9 +332,8 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
               className="rest-bubble absolute bottom-[8%] left-[62%] h-[4%] w-[4%] rounded-full bg-accent-bright/70"
               style={{ animationDelay: '1.6s' }}
             />
-            {/* Dropped once the water is too shallow to rise through: down there a
-                bubble would be taller than the liquid and would just sit on the
-                floor pulsing, with nothing left to break the surface of. */}
+            {/* Dropped once the water is too shallow to rise through, leaving the
+                small drifting bubbles above to carry the last of the rest. */}
             {fraction > TIDE_SURFACING_MIN &&
               SURFACING_BUBBLES.map((b) => <SurfacingBubble key={b.left} {...b} />)}
           </div>
