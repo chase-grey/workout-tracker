@@ -230,6 +230,78 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
   )
 }
 
+/**
+ * The 'tide' bubbles that make it all the way up. Each rides the full height of
+ * the liquid, bursts as it breaks the line and throws a splash across the
+ * surface — a crown of water, droplets arcing out and a ripple spreading behind
+ * them. Rise, burst and splash share one cycle length and one delay (see the
+ * `rest-riser`/`rest-splash-*` keyframes), so a splash always lands on its own
+ * bubble's pop.
+ *
+ * `left`/`size` are percentages of the *vessel's width*, never its height, so
+ * the bubbles stay round as the level drops; only the rise is measured against
+ * the liquid's height, which is what keeps a bubble surfacing exactly at the
+ * line however far the water has drained.
+ */
+const SURFACING_BUBBLES = [
+  { left: 20, size: 6, delay: '0s' },
+  { left: 52, size: 4.5, delay: '1.5s' },
+  { left: 76, size: 5, delay: '2.9s' },
+] as const
+
+/** Droplets thrown by one splash: position across the crown and how far out each flies. */
+const SPLASH_DROPS = [
+  { left: 34, size: 7, dx: '-300%' },
+  { left: 50, size: 8, dx: '30%' },
+  { left: 66, size: 6, dx: '340%' },
+] as const
+
+function SurfacingBubble({ left, size, delay }: { left: number; size: number; delay: string }) {
+  return (
+    <>
+      {/* The riser is the travel: a full-height column carrying one bubble at its foot. */}
+      <div
+        className="rest-riser absolute inset-y-0"
+        style={{ left: `${left}%`, width: `${size}%`, animationDelay: delay }}
+      >
+        <div
+          className="rest-riser-bubble absolute bottom-0 aspect-square w-full rounded-full bg-accent-bright/70"
+          style={{ animationDelay: delay }}
+        />
+      </div>
+      {/* The splash, pinned to the surface line right where that bubble breaks it.
+          Zero height, so its children hang off the line itself. */}
+      <div
+        className="absolute top-0 h-0 w-[44%] -translate-x-1/2"
+        style={{ left: `${left + size / 2}%` }}
+      >
+        <div
+          className="rest-splash-ripple absolute inset-x-0 top-0 h-[2px] -translate-y-1/2 rounded-full bg-accent-bright"
+          style={{ animationDelay: delay }}
+        />
+        <div
+          className="rest-splash-crown absolute bottom-0 left-1/2 aspect-square w-[26%] -translate-x-1/2 rounded-t-full bg-accent-bright/60"
+          style={{ animationDelay: delay }}
+        />
+        {SPLASH_DROPS.map((drop) => (
+          <div
+            key={drop.left}
+            className="rest-splash-drop absolute bottom-0 aspect-square -translate-x-1/2 rounded-full bg-accent-bright"
+            style={
+              {
+                left: `${drop.left}%`,
+                width: `${drop.size}%`,
+                '--dx': drop.dx,
+                animationDelay: delay,
+              } as React.CSSProperties
+            }
+          />
+        ))}
+      </div>
+    </>
+  )
+}
+
 function RestShape({ variant, fraction }: { variant: Variant; fraction: number }) {
   const level = `${fraction * 100}%`
   const filled = `${(1 - fraction) * 100}%`
