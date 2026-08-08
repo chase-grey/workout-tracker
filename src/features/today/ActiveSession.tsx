@@ -10,8 +10,13 @@ import {
 } from 'react-icons/md'
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
-import { repRangeLabel, variantExercises, type PlannedExercise } from '../../config/plan'
-import { nextTarget, type Target } from '../../lib/progression'
+import {
+  repRangeLabel,
+  sideOrderedExercises,
+  variantExercises,
+  type PlannedExercise,
+} from '../../config/plan'
+import { nextTargets, type Target } from '../../lib/progression'
 import { buildGoals } from '../../lib/goals'
 import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
@@ -118,10 +123,11 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
 
   const day = plan[session.dayType]
   // The day as this session is actually performing it: the A/B variant's set
-  // counts and press order, pinned when the session started.
+  // counts and press order, and which arm leads the one-arm-at-a-time work —
+  // both pinned when the session started.
   const exercises = useMemo(
-    () => variantExercises(day, session.variant ?? null),
-    [day, session.variant],
+    () => sideOrderedExercises(variantExercises(day, session.variant ?? null), session.startSide),
+    [day, session.variant, session.startSide],
   )
 
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
@@ -184,17 +190,17 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     [planned.key, session.variant],
   )
 
-  const target: Target | undefined = useMemo(
+  // The whole day's targets in one read, so the exercises that share a load (the
+  // tricep pair) show the one weight between them that the prefill computed.
+  const targets = useMemo(
     () =>
-      nextTarget(workouts, planned.key, {
-        repMin: planned.repMin,
-        repMax: planned.repMax,
-        bodyweight: planned.bodyweight,
-        increment: planned.increment,
-        variant: slot,
+      nextTargets(workouts, exercises, {
+        variantFor: (key) => progressionVariant(key, session.variant),
       }),
-    [planned, workouts, slot],
+    [workouts, exercises, session.variant],
   )
+
+  const target: Target | undefined = targets.get(planned.key)
 
   // A "challenge" set: the prefilled target is a genuine step up from last time.
   const challenging = useMemo(
@@ -251,6 +257,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           nextRestSec: next ? next.ex.restSec : null,
           sameCircuit,
           newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
+          circuitRestSec: s.ex.circuitRestSec,
         }),
       }
     })

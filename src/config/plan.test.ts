@@ -25,18 +25,18 @@ describe('withPlanDefaults', () => {
     const defaultKeys = DEFAULT_PLAN.push.exercises.map((e) => e.key)
     // Derived rather than hard-coded, so reordering the day doesn't fail this test
     // for a reason that has nothing to do with the merge.
-    const predecessor = defaultKeys[defaultKeys.indexOf('lateral_raise') - 1]
+    const predecessor = defaultKeys[defaultKeys.indexOf('lateral_raise_l') - 1]
     const storedPush = {
       ...DEFAULT_PLAN.push,
       exercises: DEFAULT_PLAN.push.exercises
-        .filter((e) => e.key !== 'lateral_raise')
+        .filter((e) => e.key !== 'lateral_raise_l')
         .map((e) => (e.key === 'flat_bench' ? { ...e, sets: 5 } : e)),
     }
     const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush }, PLAN_REVISION)
     const keys = merged.push.exercises.map((e) => e.key)
-    expect(keys).toContain('lateral_raise')
+    expect(keys).toContain('lateral_raise_l')
     // Inserted right after the default exercise it follows in the shipped day.
-    expect(keys.indexOf('lateral_raise')).toBe(keys.indexOf(predecessor) + 1)
+    expect(keys.indexOf('lateral_raise_l')).toBe(keys.indexOf(predecessor) + 1)
   })
 
   it('drops a retired default exercise from a stored day', () => {

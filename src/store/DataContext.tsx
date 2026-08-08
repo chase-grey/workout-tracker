@@ -434,7 +434,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const m = new Map<string, ChallengeOpts>()
     for (const day of Object.values(plan)) {
       for (const e of day.exercises) {
-        m.set(e.key, { repMin: e.repMin, repMax: e.repMax, bodyweight: e.bodyweight, increment: e.increment })
+        m.set(e.key, { repMin: e.repMin, repMax: e.repMax, bodyweight: e.bodyweight, increment: e.increment, sharedLoad: e.sharedLoad })
       }
     }
     return m

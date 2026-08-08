@@ -1,5 +1,8 @@
 export type DayType = 'push' | 'pull' | 'fullbody'
 
+/** Which arm/leg a one-limb-at-a-time exercise trains (see PlannedExercise.side). */
+export type Side = 'left' | 'right'
+
 export type SetLog = {
   setNumber: number
   weightLbs: number | null
@@ -28,6 +31,14 @@ export type WorkoutSession = {
    * session resumed after logging another one keeps the variant it began with.
    */
   variant?: 'A' | 'B'
+  /**
+   * Which side leads this session's one-limb-at-a-time exercises — it flips every
+   * session so neither arm is always the tired one (see lib/pushSide). Pinned at
+   * start for the same reason as `variant`: a resumed session keeps the order it
+   * began with. Not stored per row; the two sides are separate exercise keys, so
+   * the history already knows which arm did what.
+   */
+  startSide?: Side
 }
 
 export type BodyWeightEntry = {

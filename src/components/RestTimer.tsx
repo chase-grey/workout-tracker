@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { KebabMenu, type MenuItem } from './KebabMenu'
 import { SessionProgress } from './SessionProgress'
+import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } from '../lib/tide'
 
 // Time-telling shapes made for rest: each one encodes the remaining fraction
 // directly in its dominant dimension — a sand level, a liquid line, a candle's
@@ -231,32 +232,37 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
 }
 
 /**
- * The 'tide' bubbles that make it all the way up. Each rides the full height of
- * the liquid, bursts as it breaks the line and throws a splash across the
- * surface — a crown of water, droplets arcing out and a ripple spreading behind
- * them. Rise, burst and splash share one cycle length and one delay (see the
- * `rest-riser`/`rest-splash-*` keyframes), so a splash always lands on its own
- * bubble's pop.
- *
- * `left`/`size` are percentages of the *vessel's width*, never its height, so
- * the bubbles stay round as the level drops; only the rise is measured against
- * the liquid's height, which is what keeps a bubble surfacing exactly at the
- * line however far the water has drained.
- */
-// Kept off the far edges: the vessel is round, so near the top of a full one the
-// water is only a narrow chord and a bubble out at 20% would surface into glass.
-const SURFACING_BUBBLES = [
-  { left: 26, size: 6, delay: '0s' },
-  { left: 47, size: 4.5, delay: '1.5s' },
-  { left: 66, size: 5, delay: '2.9s' },
-] as const
-
-/**
  * Below this much rest left, the water is too shallow to surface through: a
  * bubble is a fixed size while the liquid is not, so down here it would be about
  * as tall as the water it's meant to rise through.
  */
 const TIDE_SURFACING_MIN = 0.15
+
+/**
+ * How rare it is for a bubble to make it all the way up: the gap between one
+ * surfacing and the next, in ms. Most bubbles fade out mid-water (the
+ * `rest-bubble` ones, which drift constantly) — breaking the surface is an event
+ * you occasionally catch rather than the steady beat of the shape.
+ */
+const SURFACE_GAP_MS = { min: 5500, max: 14000 } as const
+
+/** The first surfacing comes sooner, so even a short rest shows one. */
+const FIRST_SURFACE_MS = { min: 1200, max: 4200 } as const
+
+/** How long a bubble takes to climb the water, whatever the level. */
+const RISE_MS = { min: 2200, max: 3400 } as const
+
+/** One splash's lifetime — keep in step with the `rest-splash-*` keyframes. */
+const SPLASH_MS = 720
+
+/**
+ * How far up a full-strength splash throws the surface, in the vessel's own
+ * hundredths (the SVG viewBox is 100 tall). A small one barely creases it.
+ */
+const WAVE_LIFT = 8
+
+/** Bubble diameter as a share of the vessel's width, smallest splash to largest. */
+const BUBBLE_SIZE = { min: 3.4, max: 7 } as const
 
 /** Droplets thrown by one splash: position across the crown and how far out each flies. */
 const SPLASH_DROPS = [
@@ -265,49 +271,193 @@ const SPLASH_DROPS = [
   { left: 66, size: 6, dx: '340%' },
 ] as const
 
-function SurfacingBubble({ left, size, delay }: { left: number; size: number; delay: string }) {
+const rand = (min: number, max: number) => min + Math.random() * (max - min)
+
+/** A bubble on its way up, alive only until it breaks the surface. */
+type Riser = { id: number; left: number; size: number; rise: number }
+/** The splash it left behind: `x` across the vessel, `strength` its size. */
+type Splash = { id: number; x: number; strength: number }
+
+/** Whether the OS asks for less motion — the splashing is dropped entirely if so. */
+function usePrefersReducedMotion(): boolean {
+  const query = '(prefers-reduced-motion: reduce)'
+  const [reduced, setReduced] = useState(() => window.matchMedia?.(query).matches ?? false)
+  useEffect(() => {
+    const mq = window.matchMedia?.(query)
+    if (!mq) return
+    const onChange = () => setReduced(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return reduced
+}
+
+/**
+ * The 'tide' shape: a vessel that empties, with a living water surface.
+ *
+ * The surface is a real wave (see lib/tide) rather than a straight line — a row
+ * of sprung nodes that gets thrown upward wherever a bubble bursts, spreads the
+ * bump outward, bounces it off the walls and rings down to flat. So the top of
+ * the water answers the bubbles instead of ignoring them, and goes still between
+ * them. The water *level* is still the countdown, exactly as before; the wave
+ * only ever rides on top of it.
+ *
+ * Bubbles that make it all the way up are spawned one at a time on a random gap,
+ * each with its own randomly drawn splash — mostly small dents, occasionally a
+ * full crown with droplets arcing out. Bubble size, splash size and the shove
+ * given to the wave all come from that one strength draw, so a big splash comes
+ * off a big bubble and hits the surface as hard as it looks like it should.
+ *
+ * `left`/`size` are percentages of the *vessel's width*, never its height, so the
+ * bubbles stay round as the level drops; the rise is a full-height column
+ * translated by a percentage, which is what keeps a bubble surfacing exactly at
+ * the line however far the water has drained.
+ */
+function TideVessel({ fraction }: { fraction: number }) {
+  const [wave] = useState(createWave)
+  const [risers, setRisers] = useState<Riser[]>([])
+  const [splashes, setSplashes] = useState<Splash[]>([])
+  const calm = usePrefersReducedMotion()
+  // The render loop and the bubble scheduler both run for the whole rest, so they
+  // read the countdown through a ref rather than restarting on every tick.
+  const fractionRef = useRef(fraction)
+  fractionRef.current = fraction
+  const fillRef = useRef<SVGPathElement>(null)
+  const lineRef = useRef<SVGPathElement>(null)
+  const layerRef = useRef<HTMLDivElement>(null)
+
+  // The surface is redrawn every frame, so it's written straight to the DOM: this
+  // is texture at 60fps and has no business re-rendering the tree that often. The
+  // water level follows the countdown here too — a CSS transition on the bubble
+  // layer would drift out of step with the path drawn from `level`.
+  useEffect(() => {
+    let raf = 0
+    let last = performance.now()
+    let level = fractionRef.current
+    const frame = (now: number) => {
+      const dt = Math.min(0.25, (now - last) / 1000)
+      last = now
+      // Smooths the countdown's 250ms steps into one continuous drain, the way the
+      // other shapes' `transition: height` does.
+      level += (fractionRef.current - level) * (1 - Math.exp(-dt / 0.09))
+      stepWave(wave, dt)
+      const surface = waveSurfacePath(wave, (1 - level) * 100)
+      fillRef.current?.setAttribute('d', `${surface} L 100 100 L 0 100 Z`)
+      lineRef.current?.setAttribute('d', surface)
+      if (layerRef.current) layerRef.current.style.height = `${level * 100}%`
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [wave])
+
+  // One bubble in flight at a time: spawn it, and when it reaches the top swap it
+  // for a splash and shove the wave where it broke through.
+  useEffect(() => {
+    if (calm) return
+    const timers = new Set<number>()
+    const after = (ms: number, fn: () => void) => {
+      const id = window.setTimeout(() => {
+        timers.delete(id)
+        fn()
+      }, ms)
+      timers.add(id)
+    }
+    let nextId = 0
+    const spawn = () => {
+      after(rand(SURFACE_GAP_MS.min, SURFACE_GAP_MS.max), spawn)
+      if (fractionRef.current <= TIDE_SURFACING_MIN) return
+      const strength = splashStrength(Math.random())
+      const size = BUBBLE_SIZE.min + strength * (BUBBLE_SIZE.max - BUBBLE_SIZE.min)
+      // Kept off the far edges: the vessel is round, so near the top of a full one
+      // the water is a narrow chord and a bubble at 20% would surface into glass.
+      const left = rand(24, 70 - size)
+      const rise = rand(RISE_MS.min, RISE_MS.max)
+      const id = nextId++
+      setRisers((r) => [...r, { id, left, size, rise }])
+      after(rise, () => {
+        setRisers((r) => r.filter((b) => b.id !== id))
+        const x = left + size / 2
+        impulseWave(wave, x / 100, strength * WAVE_LIFT)
+        setSplashes((s) => [...s, { id, x, strength }])
+        after(SPLASH_MS, () => setSplashes((s) => s.filter((p) => p.id !== id)))
+      })
+    }
+    after(rand(FIRST_SURFACE_MS.min, FIRST_SURFACE_MS.max), spawn)
+    return () => timers.forEach(clearTimeout)
+  }, [calm, wave])
+
   return (
-    <>
-      {/* The riser is the travel: a full-height column carrying one bubble at its foot. */}
-      <div
-        className="rest-riser absolute inset-y-0"
-        style={{ left: `${left}%`, width: `${size}%`, animationDelay: delay }}
+    <div className="absolute h-[74%] w-[74%] overflow-hidden rounded-full ring-1 ring-accent-bright/50">
+      <div className="absolute inset-0 bg-accent-bright/12" />
+      {/* The water is a path so its top edge can be the wave. */}
+      <svg
+        className="absolute inset-0 h-full w-full text-accent-bright"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        aria-hidden
       >
-        <div
-          className="rest-riser-bubble absolute bottom-0 aspect-square w-full rounded-full bg-accent-bright/70"
-          style={{ animationDelay: delay }}
+        <path ref={fillRef} fill="currentColor" fillOpacity={0.7} />
+        {/* The surface line is the reading; non-scaling so it stays 3px however
+            the viewBox is stretched onto the vessel. */}
+        <path
+          ref={lineRef}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={3}
+          vectorEffect="non-scaling-stroke"
         />
-      </div>
-      {/* The splash, pinned to the surface line right where that bubble breaks it.
-          Zero height, so its children hang off the line itself. */}
+      </svg>
+      {/* Everything that belongs *to* the water rides in a layer exactly as tall
+          as it, so `top: 0` is the surface and `bottom: 0` the floor. */}
       <div
-        className="absolute top-0 h-0 w-[44%] -translate-x-1/2"
-        style={{ left: `${left + size / 2}%` }}
+        ref={layerRef}
+        className="absolute inset-x-0 bottom-0"
+        style={{ height: `${fraction * 100}%` }}
       >
+        <div className="rest-bubble absolute bottom-[8%] left-[34%] h-[6%] w-[6%] rounded-full bg-accent-bright/70" />
         <div
-          className="rest-splash-ripple absolute inset-x-0 top-0 h-[2px] -translate-y-1/2 rounded-full bg-accent-bright"
-          style={{ animationDelay: delay }}
+          className="rest-bubble absolute bottom-[8%] left-[62%] h-[4%] w-[4%] rounded-full bg-accent-bright/70"
+          style={{ animationDelay: '1.6s' }}
         />
-        <div
-          className="rest-splash-crown absolute bottom-0 left-1/2 aspect-square w-[26%] -translate-x-1/2 rounded-t-full bg-accent-bright/60"
-          style={{ animationDelay: delay }}
-        />
-        {SPLASH_DROPS.map((drop) => (
+        {risers.map((b) => (
+          // The riser is the travel: a full-height column carrying one bubble at its foot.
           <div
-            key={drop.left}
-            className="rest-splash-drop absolute bottom-0 aspect-square -translate-x-1/2 rounded-full bg-accent-bright"
+            key={b.id}
+            className="rest-riser absolute inset-y-0"
             style={
-              {
-                left: `${drop.left}%`,
-                width: `${drop.size}%`,
-                '--dx': drop.dx,
-                animationDelay: delay,
-              } as CSSProperties
+              { left: `${b.left}%`, width: `${b.size}%`, '--rise': `${b.rise}ms` } as CSSProperties
             }
-          />
+          >
+            <div className="rest-riser-bubble absolute bottom-0 aspect-square w-full rounded-full bg-accent-bright/70" />
+          </div>
+        ))}
+        {splashes.map((s) => (
+          // Pinned to the surface line where its bubble broke through. Zero height,
+          // so its children hang off the line; one scale sizes the whole splash.
+          <div
+            key={s.id}
+            className="absolute top-0 h-0 w-[44%] -translate-x-1/2"
+            style={{
+              left: `${s.x}%`,
+              transform: `scale(${s.strength})`,
+              transformOrigin: '50% 100%',
+            }}
+          >
+            <div className="rest-splash-crown absolute bottom-0 left-1/2 aspect-square w-[26%] -translate-x-1/2 rounded-t-full bg-accent-bright/60" />
+            {SPLASH_DROPS.map((drop) => (
+              <div
+                key={drop.left}
+                className="rest-splash-drop absolute bottom-0 aspect-square -translate-x-1/2 rounded-full bg-accent-bright"
+                style={
+                  { left: `${drop.left}%`, width: `${drop.size}%`, '--dx': drop.dx } as CSSProperties
+                }
+              />
+            ))}
+          </div>
         ))}
       </div>
-    </>
+    </div>
   )
 }
 

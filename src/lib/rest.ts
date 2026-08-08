@@ -51,7 +51,11 @@ export const CIRCUIT_STATION_REST_SEC = 30
  * How long to rest after completing a set.
  *
  * - Between sets of the SAME exercise: the exercise's own prescribed `restSec`.
- * - Moving to the next STATION of a circuit: {@link CIRCUIT_STATION_REST_SEC}.
+ * - Moving on inside a CIRCUIT, when the station just finished carries a
+ *   `circuitRestSec`: that value, station change or new round alike. It's how a
+ *   circuit rests only where it needs to — `0` rolls straight on to the next
+ *   move, so a rest can sit after one station and nowhere else.
+ * - Moving to the next STATION of a circuit otherwise: {@link CIRCUIT_STATION_REST_SEC}.
  * - Starting a new ROUND of a circuit (back to the first station): the next
  *   exercise's own `restSec`, capped — you've now worked every station once.
  * - Transitioning to a DIFFERENT exercise: only what the NEXT exercise needs
@@ -67,10 +71,20 @@ export function restBeforeNextSet(params: {
   sameCircuit?: boolean
   /** That station starts a new round rather than continuing the current one. */
   newCircuitRound?: boolean
+  /**
+   * Per-station override from the exercise just finished (`PlannedExercise.
+   * circuitRestSec`). Only consulted inside a circuit; absent leaves the
+   * built-in station/round timing alone.
+   */
+  circuitRestSec?: number | null
 }): number {
-  const { currentRestSec, sameExercise, nextRestSec, sameCircuit, newCircuitRound } = params
+  const { currentRestSec, sameExercise, nextRestSec, sameCircuit, newCircuitRound, circuitRestSec } =
+    params
   if (sameExercise) return currentRestSec
   if (nextRestSec == null) return 0
-  if (sameCircuit && !newCircuitRound) return CIRCUIT_STATION_REST_SEC
+  if (sameCircuit) {
+    if (circuitRestSec != null) return circuitRestSec
+    if (!newCircuitRound) return CIRCUIT_STATION_REST_SEC
+  }
   return Math.min(nextRestSec, TRANSITION_REST_CAP_SEC)
 }

@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import type { WorkoutRow } from '../types'
-import { lastPerformance, nextTarget, STALE_HISTORY_DAYS } from './progression'
+import {
+  lastPerformance,
+  nextTarget,
+  nextTargets,
+  STALE_HISTORY_DAYS,
+  type TargetInputs,
+} from './progression'
 
 /**
  * Fixed "today", a few days after the fixture sessions. Without it these tests

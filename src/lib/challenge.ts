@@ -13,11 +13,18 @@
 
 import type { WorkoutRow } from '../types'
 import { exerciseName, type VariantKey } from '../config/plan'
-import { lastPerformance, nextTarget, type Target } from './progression'
+import { lastPerformance, nextTargets, type Target } from './progression'
 import { progressionVariant } from './pushVariant'
 
 /** Progression inputs for one exercise (the fields nextTarget needs). */
-export type ChallengeOpts = { repMin: number; repMax: number; bodyweight?: boolean; increment?: number }
+export type ChallengeOpts = {
+  repMin: number
+  repMax: number
+  bodyweight?: boolean
+  increment?: number
+  /** Load-sharing group id, so the target read here matches the one prefilled. */
+  sharedLoad?: string
+}
 
 /**
  * Is `target` a genuine step up from the most recent session for this exercise?
@@ -87,13 +94,26 @@ export function sessionChallenges(
   // trained under the same fatigue. Taken from the rows themselves rather than
   // passed in, since they carry it (see sessionToRows).
   const sessionVariant = added.find((r) => r.variant)?.variant ?? null
+  const variantFor = (key: string) => progressionVariant(key, sessionVariant)
+
+  // Read as a batch, the way the session prefilled them: exercises sharing a load
+  // were asked for one weight between them, so scoring either against its own solo
+  // target would judge it on a prescription it was never actually given.
+  const targets = nextTargets(
+    prev,
+    [...byKey.keys()].flatMap((key) => {
+      const opts = optsByKey.get(key)
+      return opts ? [{ key, ...opts }] : []
+    }),
+    { today, variantFor },
+  )
 
   const out: SessionChallenge[] = []
   for (const [key, rows] of byKey) {
     const opts = optsByKey.get(key)
-    if (!opts) continue
-    const variant = progressionVariant(key, sessionVariant)
-    const target = nextTarget(prev, key, { ...opts, variant, today })
+    const target = targets.get(key)
+    if (!opts || !target) continue
+    const variant = variantFor(key)
     if (!isChallenge(prev, key, target, opts.repMin, variant)) continue
     const met = rows.some((r) => setMeetsTarget(r.weight_lbs, r.reps, target))
     out.push({ exercise: exerciseName(key), target, met })

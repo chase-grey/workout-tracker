@@ -31,6 +31,25 @@ function weightForRepMin(
 }
 
 /**
+ * The same shared-1RM solve as {@link weightForRepMin}, run the other way: the
+ * reps that make `weight` about as hard as `topWeight`×`topReps` was.
+ *
+ * Held inside [repMin, repMax] — lighten a lift far enough and the honest answer
+ * is "more reps than this exercise is programmed for", which is repMax.
+ */
+function repsAtWeight(
+  topWeight: number,
+  topReps: number,
+  weight: number,
+  repMin: number,
+  repMax: number,
+): number {
+  if (weight <= 0) return repMin
+  const reps = Math.floor(30 * (epley1RM(topWeight, topReps) / weight - 1))
+  return Math.max(repMin, Math.min(repMax, reps))
+}
+
+/**
  * How long a gap makes the last session a poor basis for a step up. Come back
  * from a break, an illness or a holiday and the plan repeats what you last
  * actually did rather than demanding more on top of it — you re-pace upward from
@@ -283,4 +302,97 @@ export function nextTarget(
   }
 
   return { weightLbs: roundHalf(last.topWeight), reps: Math.max(1, reps) }
+}
+
+/** The plan fields a batch of targets is read from, per exercise. */
+export type TargetInputs = {
+  key: string
+  repMin: number
+  repMax: number
+  bodyweight?: boolean
+  increment?: number
+  /** Load-sharing group id — see {@link nextTargets}. */
+  sharedLoad?: string
+}
+
+/** The weighted members of each load-sharing group that has more than one. */
+function sharedLoadGroups(exercises: TargetInputs[]): TargetInputs[][] {
+  const byId = new Map<string, TargetInputs[]>()
+  for (const e of exercises) {
+    // A bodyweight move has no load to share, so it never joins a group.
+    if (!e.sharedLoad || e.bodyweight) continue
+    const members = byId.get(e.sharedLoad) ?? []
+    members.push(e)
+    byId.set(e.sharedLoad, members)
+  }
+  return [...byId.values()].filter((members) => members.length > 1)
+}
+
+/**
+ * Targets for a whole day at once, with load-sharing groups reconciled to a
+ * single weight (see PlannedExercise.sharedLoad). Every exercise outside a group
+ * gets exactly what {@link nextTarget} would give it on its own.
+ *
+ * A group loads to the LIGHTEST of its members' own suggestions. That's the only
+ * choice that keeps every member inside its rep range: the stronger movement's
+ * weight would leave the weaker one several reps short of repMin, and
+ * prescribing a set short of the range is precisely what nextTarget refuses to
+ * do. The stronger movement takes the difference in reps instead, up to the top
+ * of its range. From the next session on both are logged at the same load, so
+ * the pair climbs together once the weaker one earns the bump — which is the
+ * point of sharing: one weight to set, and it only moves when both movements are
+ * ready for it.
+ *
+ * A member with no history of its own joins at the group's weight rather than
+ * blank, since the stack is already pinned there.
+ */
+export function nextTargets(
+  workouts: WorkoutRow[],
+  exercises: TargetInputs[],
+  opts: {
+    today?: Date
+    /** The A/B slot to read each exercise's history in — see {@link nextTarget}. */
+    variantFor?: (key: string) => VariantKey | null | undefined
+  } = {},
+): Map<string, Target> {
+  const out = new Map<string, Target>()
+  for (const e of exercises) {
+    out.set(
+      e.key,
+      nextTarget(workouts, e.key, {
+        repMin: e.repMin,
+        repMax: e.repMax,
+        bodyweight: e.bodyweight,
+        increment: e.increment,
+        today: opts.today,
+        variant: opts.variantFor?.(e.key),
+      }),
+    )
+  }
+
+  for (const members of sharedLoadGroups(exercises)) {
+    const weights = members
+      .map((e) => out.get(e.key)?.weightLbs)
+      .filter((w): w is number => w != null)
+    // Nothing logged for any member yet: no weight to share, so all stay blank.
+    if (weights.length === 0) continue
+    const weight = Math.min(...weights)
+
+    for (const e of members) {
+      const own = out.get(e.key)
+      if (!own || own.weightLbs === weight) continue
+      // Reps are re-read from the last SESSION rather than scaled off this
+      // exercise's own (heavier) target: at an unchanged weight that hands back
+      // the reps already managed there, so holding the group down can never ask
+      // for fewer reps than the last time this exact load was lifted.
+      const last = lastPerformance(workouts, e.key, e.repMin, opts.variantFor?.(e.key))
+      const reps =
+        last?.topWeight == null
+          ? e.repMin
+          : repsAtWeight(last.topWeight, last.topReps, weight, e.repMin, e.repMax)
+      out.set(e.key, { weightLbs: weight, reps })
+    }
+  }
+
+  return out
 }

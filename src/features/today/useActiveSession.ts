@@ -4,9 +4,10 @@ import type { DayType, SetLog, WorkoutSession } from '../../types'
 import { storage } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { useData } from '../../store/DataContext'
-import { nextTarget } from '../../lib/progression'
-import { variantExercises, type VariantKey } from '../../config/plan'
+import { nextTargets } from '../../lib/progression'
+import { sideOrderedExercises, variantExercises, type VariantKey } from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
+import { nextStartSide } from '../../lib/pushSide'
 
 /**
  * Owns the in-progress workout session, mirrored to localStorage so a mid-gym
@@ -30,6 +31,20 @@ export function useActiveSession() {
       storage.saveActiveStepKey(null)
       storage.saveActiveRest(null)
       const chosen = variant ?? nextVariant(workouts, dayType) ?? undefined
+      // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
+      const startSide = nextStartSide(workouts, dayType)
+      const planned = sideOrderedExercises(
+        variantExercises(plan[dayType], chosen ?? null),
+        startSide,
+      )
+      // Read as a batch rather than one lift at a time, so the exercises that
+      // share a load (the tricep pair) prefill with one weight between them.
+      const targets = nextTargets(workouts, planned, {
+        // A press this variant trains under different fatigue climbs on its own
+        // ladder, so the prefill is read from the matching slot rather than from
+        // the day the lift led (or followed).
+        variantFor: (key) => progressionVariant(key, chosen),
+      })
       commit({
         sessionId: uuid(),
         date: toISODate(new Date()),
@@ -37,17 +52,9 @@ export function useActiveSession() {
         isHistorical: false,
         startedAt: new Date().toISOString(),
         variant: chosen,
-        exercises: variantExercises(plan[dayType], chosen ?? null).map((e) => {
-          const target = nextTarget(workouts, e.key, {
-            repMin: e.repMin,
-            repMax: e.repMax,
-            bodyweight: e.bodyweight,
-            increment: e.increment,
-            // A press this variant trains under different fatigue climbs on its
-            // own ladder, so the prefill is read from the matching slot rather
-            // than from the day the lift led (or followed).
-            variant: progressionVariant(e.key, chosen),
-          })
+        startSide,
+        exercises: planned.map((e) => {
+          const target = targets.get(e.key) ?? { weightLbs: null, reps: e.repMin }
           const sets: SetLog[] = Array.from({ length: e.sets }, (_, i) => ({
             setNumber: i + 1,
             weightLbs: target.weightLbs,

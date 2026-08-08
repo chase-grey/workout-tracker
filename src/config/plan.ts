@@ -1,4 +1,4 @@
-import type { DayType } from '../types'
+import type { DayType, Side } from '../types'
 
 /**
  * The workout plan model. DEFAULT_PLAN below is the seed; the live plan is
@@ -56,6 +56,35 @@ export type PlannedExercise = {
    * Keeps two same-muscle movements out of back-to-back sets.
    */
   circuit?: string
+  /**
+   * Rest taken after a set of THIS exercise while rotating through its circuit —
+   * both the change to the next station and, from the last station, the wrap into
+   * the next round. Set it per station so a circuit can rest only where it needs
+   * to: `0` rolls straight on to the next move, which is the point of the field.
+   *
+   * Absent means the built-in behaviour: a brief station change
+   * ({@link CIRCUIT_STATION_REST_SEC}) between stations, and the next exercise's
+   * own capped rest when a new round starts. Ignored outside a circuit.
+   */
+  circuitRestSec?: number
+  /**
+   * Exercises sharing a `sharedLoad` id are prescribed ONE weight, so a circuit
+   * you rotate through doesn't ask you to re-pin the stack between stations.
+   * The group loads to the lightest of its members' own suggestions — the only
+   * weight that keeps every one of them inside its rep range (see
+   * progression.nextTargets).
+   */
+  sharedLoad?: string
+  /**
+   * A movement trained one limb at a time. Each side is its own exercise — its own
+   * key, its own history, its own line on the chart — so an imbalance between them
+   * is visible instead of averaged away.
+   *
+   * The two sides sit next to each other in the day, and which one leads flips
+   * from session to session (see lib/pushSide + {@link sideOrderedExercises}), so
+   * the same arm isn't always the one working second.
+   */
+  side?: Side
   /** Per-variant deltas; absent means the exercise is identical in both. */
   byVariant?: Partial<Record<VariantKey, VariantOverride>>
   /**
@@ -95,8 +124,11 @@ export type Plan = Record<DayType, DayPlan>
  * 3 — pull + legs: calf raises added, a neck extension/flexion pair added as a
  *     circuit, and the hanging raise moved up to directly after pull-ups so it
  *     runs at the bar you're already hanging from.
+ *
+ * 4 — push + core: the lateral raise splits into a left and a right station, so
+ *     each arm is logged and charted on its own. The single-arm entry is retired.
  */
-export const PLAN_REVISION = 3
+export const PLAN_REVISION = 4
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -162,9 +194,19 @@ export const DEFAULT_PLAN: Plan = {
       // the two tricep movements out of back-to-back sets (the second one would
       // run pre-fatigued) and shortens the block, since the delts recover while
       // the triceps work and vice versa.
-      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms' },
-      { key: 'lateral_raise', name: 'lateral raise', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms' },
-      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms' },
+      //
+      // Both tricep moves work off the same cable stack, so they share one load —
+      // rotating through the circuit would otherwise mean re-pinning it twice a
+      // round.
+      //
+      // The raise runs one arm at a time, so each side is its own station and its
+      // own history: side-to-side differences in a delt are both common and worth
+      // seeing. They're one dumbbell between them, hence the shared load, and the
+      // leading arm alternates each session (see lib/pushSide).
+      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'triceps' },
+      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'lateral' },
+      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'lateral' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'triceps' },
     ],
   },
   pull: {
@@ -281,7 +323,6 @@ const LEGACY_EXERCISE_NAMES: Record<string, string[]> = {
 const LEGACY_EXERCISE_GROUPS: Record<string, string[]> = {
   db_overhead_press: ['shoulders & triceps'],
   iso_chest: ['chest'],
-  lateral_raise: ['shoulders & triceps'],
   tricep_pushdown: ['shoulders & triceps'],
   overhead_tricep_ext: ['shoulders & triceps'],
 }
@@ -293,8 +334,9 @@ const LEGACY_EXERCISE_GROUPS: Record<string, string[]> = {
  * Their logged history is untouched; only the plan entry goes away.
  */
 const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
-  // Superseded by the regular pull + legs day, which trains back properly.
-  push: ['pullups_or_pulldown'],
+  // Superseded by the regular pull + legs day, which trains back properly; and
+  // the both-arms lateral raise, now split into a left and a right station.
+  push: ['pullups_or_pulldown', 'lateral_raise'],
 }
 
 /**
@@ -330,10 +372,10 @@ function mergeDayExercises(
   // when it still matches a name/group the defaults used to ship with. A name the
   // user actually chose reads as neither and is left alone.
   //
-  // The structural fields (circuit, byVariant, repsOnly) are program design
-  // rather than user preference, and the plan editor doesn't expose them, so they
-  // always come from the defaults — otherwise a stored day would never pick up
-  // the arm circuit or the push A/B split.
+  // The structural fields (circuit, sharedLoad, byVariant, repsOnly) are program
+  // design rather than user preference, and the plan editor doesn't expose them,
+  // so they always come from the defaults — otherwise a stored day would never
+  // pick up the arm circuit, the shared tricep load or the push A/B split.
   const out = kept.map((e) => {
     const def = defaults.find((d) => d.key === e.key)
     if (!def) return e
@@ -348,6 +390,7 @@ function mergeDayExercises(
       name: wasDefaultName ? def.name : e.name,
       group: wasDefaultGroup ? def.group : e.group,
       circuit: def.circuit,
+      sharedLoad: def.sharedLoad,
       byVariant: def.byVariant,
       repsOnly: def.repsOnly,
     }
@@ -474,6 +517,36 @@ export function variantExercises(day: DayPlan, variant: VariantKey | null): Plan
     ;[out[i], out[j]] = [out[j], out[i]]
     done.add(ex.key)
     done.add(partnerKey)
+  }
+  return out
+}
+
+/**
+ * The same list with each one-limb-at-a-time pair ordered so `side` goes first.
+ *
+ * A sided movement ships as two consecutive entries — left then right — and the
+ * arm that leads is the one done fresh, before the other side (and, inside the
+ * arm circuit, before another trip round the stations). Flipping which of the two
+ * leads every session is what keeps that advantage from always landing on the
+ * same arm; the caller decides whose turn it is (see lib/pushSide).
+ *
+ * Only a *consecutive* left/right pair is swapped, the same rule circuits use, so
+ * two unrelated sided movements in one day can't reorder each other. `side` of
+ * null leaves the list exactly as the plan declares it.
+ */
+export function sideOrderedExercises(
+  exercises: PlannedExercise[],
+  side: Side | null | undefined,
+): PlannedExercise[] {
+  if (side == null) return exercises
+  const out = [...exercises]
+  for (let i = 0; i < out.length - 1; i++) {
+    const a = out[i]
+    const b = out[i + 1]
+    if (!a.side || !b.side || a.side === b.side) continue
+    if (a.side !== side) [out[i], out[i + 1]] = [b, a]
+    // Past the pair either way — its second half isn't the start of another one.
+    i += 1
   }
   return out
 }

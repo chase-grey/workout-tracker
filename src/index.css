@@ -124,23 +124,23 @@ input[type='number'] {
   will-change: transform, opacity;
 }
 
-/* Tide, the ones that make it: a riser column spans the liquid's full height, so
-   translating it -94% carries its bubble from the floor right up through the
-   surface line however far the water has drained. The bubble bursts as it breaks
-   through and the splash pieces below fire at the same point in the cycle —
-   riser, burst and splash all share one duration and one delay, so the splash
-   always lands on the pop. */
+/* Tide, the rare one that makes it: a riser column spans the liquid's full
+   height, so translating it -94% carries its bubble from the floor right up
+   through the surface line however far the water has drained. RestTimer spawns
+   one at a time on a random gap and unmounts it at the top, so these run once
+   rather than looping — `--rise` is that bubble's own climb time. Its splash is
+   mounted at the moment of the pop and runs once too; the surface it lands on is
+   a simulated wave (lib/tide), which is what carries the ripple now. */
 @keyframes rest-riser {
   0% {
     transform: translateY(0);
   }
-  84%,
   100% {
     transform: translateY(-94%);
   }
 }
 .rest-riser {
-  animation: rest-riser 4s ease-in infinite;
+  animation: rest-riser var(--rise, 2800ms) ease-in forwards;
   will-change: transform;
 }
 
@@ -153,33 +153,29 @@ input[type='number'] {
     opacity: 0.85;
     transform: scale(1);
   }
-  74% {
+  86% {
     opacity: 0.85;
     transform: scale(1.05);
   }
   /* Breaking the surface: the bubble stretches thin and is gone. */
-  86% {
-    opacity: 0;
-    transform: scale(1.9);
-  }
   100% {
     opacity: 0;
     transform: scale(1.9);
   }
 }
 .rest-riser-bubble {
-  animation: rest-riser-bubble 4s ease-in infinite;
+  animation: rest-riser-bubble var(--rise, 2800ms) ease-in forwards;
   will-change: transform, opacity;
 }
 
-/* The splash: a crown of water thrown up where the bubble burst. */
+/* The splash: a crown of water thrown up where the bubble burst. How big it is
+   overall comes from the wrapper's scale, drawn per bubble — most are small. */
 @keyframes rest-splash-crown {
-  0%,
-  80% {
+  0% {
     transform: scaleX(0.7) scaleY(0.1);
     opacity: 0;
   }
-  87% {
+  30% {
     transform: scaleX(1) scaleY(1);
     opacity: 0.8;
   }
@@ -190,7 +186,7 @@ input[type='number'] {
 }
 .rest-splash-crown {
   transform-origin: 50% 100%;
-  animation: rest-splash-crown 4s ease-out infinite;
+  animation: rest-splash-crown 720ms ease-out forwards;
   will-change: transform, opacity;
 }
 
@@ -198,21 +194,20 @@ input[type='number'] {
    travels sideways (in multiples of its own width) and the keyframes step the
    arc up and back down onto the surface. */
 @keyframes rest-splash-drop {
-  0%,
-  82% {
+  0% {
     transform: translate(0, 0) scale(0.5);
     opacity: 0;
   }
-  84% {
+  12% {
     opacity: 0.95;
   }
-  87% {
+  30% {
     transform: translate(calc(var(--dx) * 0.28), -320%) scale(1);
   }
-  91% {
+  55% {
     transform: translate(calc(var(--dx) * 0.55), -420%) scale(1);
   }
-  96% {
+  80% {
     transform: translate(calc(var(--dx) * 0.8), -280%) scale(0.9);
   }
   100% {
@@ -220,30 +215,10 @@ input[type='number'] {
     opacity: 0;
   }
 }
-/* No `will-change` here: there are nine of these on screen and they animate for
-   a fifth of the cycle, so a permanent layer each costs more than it buys. */
+/* No `will-change` here: these exist only for the 720ms the splash lasts, so a
+   promoted layer each costs more than it buys. */
 .rest-splash-drop {
-  animation: rest-splash-drop 4s linear infinite;
-}
-
-/* The ripple running out across the surface once the crown collapses. */
-@keyframes rest-splash-ripple {
-  0%,
-  82% {
-    transform: scaleX(0.1);
-    opacity: 0;
-  }
-  88% {
-    opacity: 0.9;
-  }
-  100% {
-    transform: scaleX(1.6);
-    opacity: 0;
-  }
-}
-.rest-splash-ripple {
-  animation: rest-splash-ripple 4s ease-out infinite;
-  will-change: transform, opacity;
+  animation: rest-splash-drop 720ms linear forwards;
 }
 
 /* Candle: the flame flickers from its base without shifting the wax level.
@@ -322,20 +297,16 @@ input[type='number'] {
 
 @media (prefers-reduced-motion: reduce) {
   .rest-bubble,
-  .rest-riser,
-  .rest-riser-bubble,
   .rest-flame,
   .rest-ember,
   .rest-pip,
   .rest-perimeter-glow {
     animation: none;
   }
-  /* No flying sparks or splashes for reduced motion — hide them rather than
-     freeze them mid-air. The bubbles themselves stay, resting in the liquid. */
-  .rest-ember,
-  .rest-splash-crown,
-  .rest-splash-drop,
-  .rest-splash-ripple {
+  /* No flying sparks for reduced motion — hide them rather than freeze them
+     mid-air. Surfacing bubbles and their splashes are never spawned at all under
+     reduced motion (see RestTimer), so the tide's surface simply stays flat. */
+  .rest-ember {
     display: none;
   }
   /* Keep a settled stream in the neck rather than animating the grains. */

@@ -16,8 +16,11 @@ function renderPlan(): string {
     lines.push(`${day.label} (${day.type}):`)
     for (const ex of day.exercises) {
       const optional = ex.optional ? ' [optional]' : ''
+      // Exercises sharing a load are prescribed one weight between them, so the
+      // coach shouldn't propose a number for either of them alone.
+      const shared = ex.sharedLoad ? ` [shares one weight with the other ${ex.sharedLoad} move]` : ''
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}${shared}`,
       )
     }
   }

@@ -366,7 +366,11 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   incline_bench: { lift: 'bench', muscles: ['chest'] },
   iso_chest: { muscles: ['chest'] }, // chest fly / pec deck — no standard
   db_overhead_press: { lift: 'ohp', muscles: ['shoulders'] },
-  lateral_raise: { muscles: ['shoulders'] }, // isolation — no standard
+  // Isolation — no standard. The single-arm key is retired from the plan but kept
+  // here so the sessions logged under it still count toward the delts.
+  lateral_raise: { muscles: ['shoulders'] },
+  lateral_raise_l: { muscles: ['shoulders'] },
+  lateral_raise_r: { muscles: ['shoulders'] },
   weighted_pullups: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
   pullups_or_pulldown: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
   cable_row: { lift: 'row', muscles: ['back'] },
