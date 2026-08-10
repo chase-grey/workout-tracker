@@ -16,6 +16,8 @@ export type FlexSetStep = {
   stepKey: string // unique id for done-tracking
   /** Saved default for rolling out of rest without a tap (see FlexExercise). */
   autoAdvance?: boolean
+  /** Saved default for rolling into rest on the last rep (see FlexExercise). */
+  autoIntoRest?: boolean
 }
 
 /**
@@ -61,6 +63,7 @@ export function buildFlexSteps(plan: FlexBlock[]): FlexSetStep[] {
       maxSets: ex.maxSets,
       stepKey: `${bi}:${ex.key}:${round}`,
       autoAdvance: ex.autoAdvance,
+      autoIntoRest: ex.autoIntoRest,
     })
 
     if (block.superset && block.exercises.length > 1) {

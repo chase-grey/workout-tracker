@@ -86,8 +86,11 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const [paused, setPaused] = useState(false)
   // Per-exercise auto-advance for this session only, keyed by exercise. An entry
   // overrides the saved `autoAdvance` default either way, so "auto just for now"
-  // and "not this time" are both possible without editing the routine.
+  // and "not this time" are both possible without editing the routine. One map per
+  // direction: rolling out of rest into the next set, and rolling out of a set
+  // into its rest.
   const [autoOverride, setAutoOverride] = useState<Map<string, boolean>>(new Map())
+  const [intoOverride, setIntoOverride] = useState<Map<string, boolean>>(new Map())
   // Photo screens already offered this session, so resuming doesn't re-ask.
   const [seenGates, setSeenGates] = useState<Set<string>>(() => new Set(saved?.photoGates ?? []))
   // The cold shots open the session, before anything has warmed up. A resume
@@ -319,36 +322,80 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const setAutoNow = (on: boolean) =>
     setAutoOverride((prev) => new Map(prev).set(step.exKey, on))
 
+  // And the other direction: whether finishing the set's target reps starts its
+  // rest on its own. Only the paced mobility sets can offer it — the rhythm guide
+  // is what knows when the set is over. A dead-bug set is a number you type, so
+  // it has no end the app can see and keeps waiting for a tap.
+  const paced = step.kind === 'flex'
+  const savedInto = step.kind === 'flex' && !!step.autoIntoRest
+  const intoNow = intoOverride.get(step.exKey) ?? savedInto
+  const setIntoNow = (on: boolean) =>
+    setIntoOverride((prev) => new Map(prev).set(step.exKey, on))
+
+  /** Write one auto-advance default onto every copy of this stretch in the routine. */
+  const saveFlexDefault = (fields: Partial<{ autoAdvance: boolean; autoIntoRest: boolean }>) =>
+    updateFlexPlan(
+      flexPlan.map((block) => ({
+        ...block,
+        exercises: block.exercises.map((e) => (e.key === step.exKey ? { ...e, ...fields } : e)),
+      })),
+    )
+
   // Saving the default takes effect for the rest of this session too. A stretch
   // carries the flag on its routine entry; the dead-bug block has no routine
   // entry to carry it, so it saves to settings (see Settings.coreAutoAdvance).
   const setAutoDefault = (on: boolean) => {
-    if (step.kind === 'flex') {
-      updateFlexPlan(
-        flexPlan.map((block) => ({
-          ...block,
-          exercises: block.exercises.map((e) =>
-            e.key === step.exKey ? { ...e, autoAdvance: on } : e,
-          ),
-        })),
-      )
-    } else {
-      updateSettings({ ...settings, coreAutoAdvance: on })
-    }
+    if (step.kind === 'flex') saveFlexDefault({ autoAdvance: on })
+    else updateSettings({ ...settings, coreAutoAdvance: on })
     setAutoNow(on)
+  }
+
+  // Only ever called from a mobility set, so this one has a routine entry to
+  // write to and needs no settings fallback.
+  const setIntoDefault = (on: boolean) => {
+    saveFlexDefault({ autoIntoRest: on })
+    setIntoNow(on)
+  }
+
+  // The set ending itself is worth a buzz: mid-stretch you're rarely looking at
+  // the screen, so rest starting would otherwise be silent (the rest timer buzzes
+  // when it runs out for the same reason).
+  const intoRestOnTarget = () => {
+    navigator.vibrate?.(200)
+    completeSetAndAdvance()
   }
 
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
+    // Both directions read the same way: the session-only toggles first, then the
+    // saved per-stretch defaults. The into-rest pair only shows on a paced set.
+    ...(paced
+      ? [
+          {
+            label: intoNow ? 'wait for my tap after the set' : 'auto-advance into rest',
+            onClick: () => setIntoNow(!intoNow),
+          },
+        ]
+      : []),
     {
       label: autoNow ? 'wait for my tap after rest' : 'auto-advance out of rest',
       onClick: () => setAutoNow(!autoNow),
     },
+    ...(paced
+      ? [
+          {
+            label: savedInto
+              ? `stop auto-advancing ${step.exName} into rest`
+              : `always auto-advance ${step.exName} into rest`,
+            onClick: () => setIntoDefault(!savedInto),
+          },
+        ]
+      : []),
     {
       label: savedAuto
-        ? `stop auto-advancing ${step.exName}`
-        : `always auto-advance ${step.exName}`,
+        ? `stop auto-advancing ${step.exName} out of rest`
+        : `always auto-advance ${step.exName} out of rest`,
       onClick: () => setAutoDefault(!savedAuto),
     },
     { label: 'back to app (keep going)', onClick: onMinimize },
@@ -407,6 +454,9 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
           running={rest == null && !preparing && !paused && photos == null}
           startRep={rep}
           onRep={setRep}
+          // On auto, the last rep is the tap. Not on the closing step — the core
+          // block ends the session, so nothing here logs a session on a timer.
+          onTargetHit={intoNow && !atLast ? intoRestOnTarget : undefined}
         />
       ) : (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">

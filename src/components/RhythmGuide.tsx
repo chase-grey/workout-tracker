@@ -271,6 +271,7 @@ export function RhythmGuide({
   running = true,
   startRep = 1,
   onRep,
+  onTargetHit,
 }: {
   tempo: string
   reps?: number
@@ -279,6 +280,13 @@ export function RhythmGuide({
   startRep?: number
   /** Fired as each rep completes, so the caller can persist the count. */
   onRep?: (rep: number) => void
+  /**
+   * Fired once, when the last target rep finishes and the count moves past it —
+   * the same instant the guide brightens. The guide keeps pacing either way; this
+   * only lets the caller act on the set being done (see the stretch session's
+   * auto-advance into rest). Never fired for a set resumed past its target.
+   */
+  onTargetHit?: () => void
 }) {
   const phases = useMemo(() => parseTempo(tempo), [tempo])
   const depths = useMemo(() => phaseDepths(phases), [phases])
@@ -296,6 +304,11 @@ export function RhythmGuide({
   // identity every render and restart the phase timer.
   const onRepRef = useRef(onRep)
   onRepRef.current = onRep
+  const onTargetRef = useRef(onTargetHit)
+  onTargetRef.current = onTargetHit
+  // The target is crossed once per set (the guide is remounted per set), so the
+  // reps that keep counting past it don't fire it again.
+  const hitOnce = useRef(false)
 
   useEffect(() => {
     // Hold at the very start of the first phase until the set actually begins,
@@ -312,12 +325,16 @@ export function RhythmGuide({
         setProgress(0)
         setIdx(next)
         // A full pass through every phase is one rep. Keep counting past the
-        // target — the goal is shown for reference, but reps continue until you
-        // tap done.
+        // target — the goal is shown for reference, and reps continue until the
+        // set is ended, by a tap or by `onTargetHit` rolling it into rest.
         if (next === 0) {
           repRef.current += 1
           setRep(repRef.current)
           onRepRef.current?.(repRef.current)
+          if (hitRepTarget(repRef.current, reps) && !hitOnce.current) {
+            hitOnce.current = true
+            onTargetRef.current?.()
+          }
         }
       } else {
         setProgress(elapsed / dur)
@@ -326,7 +343,7 @@ export function RhythmGuide({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [idx, phases, running])
+  }, [idx, phases, running, reps])
 
   if (phases.length === 0) return null
 

@@ -17,6 +17,13 @@ export type FlexExercise = {
    * other field).
    */
   autoAdvance?: boolean
+  /**
+   * The other direction: end this stretch's set and start its rest the moment the
+   * set's target reps are done, without waiting for a tap. The rhythm guide paces
+   * the reps, so the set has a real end the app can see — set from the same
+   * overflow menu and stored the same way as `autoAdvance`.
+   */
+  autoIntoRest?: boolean
 }
 
 export type FlexBlock = {
