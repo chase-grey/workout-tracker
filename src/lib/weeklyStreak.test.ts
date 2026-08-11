@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   classifyWeek,
   computeWeeklyStreak,
+  weeklyStreakHistory,
   DEFAULT_WEEKLY_GOALS,
 } from './weeklyStreak'
 
@@ -187,5 +188,101 @@ describe('computeWeeklyStreak', () => {
     })
     // Half week, 0 freezes -> streak resets to 0.
     expect(result).toEqual({ streak: 0, freezes: 0 })
+  })
+})
+
+describe('weeklyStreakHistory', () => {
+  it('returns no rows when there are no dates', () => {
+    expect(
+      weeklyStreakHistory({
+        workoutDates: [],
+        flexDates: [],
+        calorieHitDates: [],
+        today: TODAY,
+      }),
+    ).toEqual([])
+  })
+
+  it('reports the counts behind each week', () => {
+    const [wk1] = weeklyStreakHistory({
+      workoutDates: daysInWeek(WK1, 2),
+      flexDates: daysInWeek(WK1, 2),
+      calorieHitDates: daysInWeek(WK1, 6),
+      today: TODAY,
+    })
+    expect(wk1.week).toBe(WK1)
+    expect(wk1.counts).toEqual({ workouts: 2, flex: 2, calDays: 6 })
+    expect(wk1.tier).toBe('full')
+    expect(wk1.outcome).toBe('advanced')
+    expect(wk1.streakAfter).toBe(1)
+  })
+
+  it('names the week that broke the run', () => {
+    // WK1 full -> 1. WK2 misses calorie days (4) with no freezes -> reset. WK3 full -> 1.
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 4), ...daysInWeek(WK3, 6)],
+      today: TODAY,
+    })
+    expect(rows.map((r) => r.outcome)).toEqual(['advanced', 'reset', 'advanced'])
+    expect(rows[1].counts.calDays).toBe(4)
+    expect(rows[1].streakAfter).toBe(0)
+    expect(rows[2].streakAfter).toBe(1)
+  })
+
+  it('records a freeze being spent rather than the run ending', () => {
+    // WK2 exceeded -> streak 1, freeze 1. WK3 half -> spends the freeze.
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK2, 3), ...daysInWeek(WK3, 1)],
+      flexDates: [...daysInWeek(WK2, 2), ...daysInWeek(WK3, 1)],
+      calorieHitDates: [...daysInWeek(WK2, 6), ...daysInWeek(WK3, 5)],
+      today: TODAY,
+    })
+    expect(rows[0]).toMatchObject({ exceeded: true, outcome: 'advanced', freezesAfter: 1 })
+    expect(rows[1]).toMatchObject({
+      tier: 'half',
+      outcome: 'froze',
+      freezesSpent: 1,
+      streakAfter: 1,
+      freezesAfter: 0,
+    })
+  })
+
+  it('charges an under week two freezes', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 3), ...daysInWeek(WK2, 3)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6)],
+      today: TODAY,
+    })
+    // WK3 has no data at all but sits before the current week, so it's replayed.
+    const wk3 = rows.find((r) => r.week === WK3)!
+    expect(wk3).toMatchObject({ tier: 'under', outcome: 'froze', freezesSpent: 2, streakAfter: 2 })
+  })
+
+  it('excludes the current in-progress week', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK3, 2), ...daysInWeek('2026-07-06', 3)],
+      flexDates: [...daysInWeek(WK3, 2), ...daysInWeek('2026-07-06', 2)],
+      calorieHitDates: [...daysInWeek(WK3, 6), ...daysInWeek('2026-07-06', 6)],
+      today: TODAY,
+    })
+    expect(rows.every((r) => r.week < '2026-07-06')).toBe(true)
+  })
+
+  it('agrees with computeWeeklyStreak', () => {
+    const input = {
+      workoutDates: [...daysInWeek(WK1, 3), ...daysInWeek(WK2, 1), ...daysInWeek(WK3, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 1), ...daysInWeek(WK3, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 5), ...daysInWeek(WK3, 6)],
+      today: TODAY,
+    }
+    const rows = weeklyStreakHistory(input)
+    const last = rows[rows.length - 1]
+    expect(computeWeeklyStreak(input)).toEqual({
+      streak: last.streakAfter,
+      freezes: last.freezesAfter,
+    })
   })
 })

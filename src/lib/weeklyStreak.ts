@@ -22,7 +22,7 @@ export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig = {
 
 export type WeekTier = 'full' | 'half' | 'under'
 
-type WeekCounts = { workouts: number; flex: number; calDays: number }
+export type WeekCounts = { workouts: number; flex: number; calDays: number }
 
 /** Classify a single week's counts against the goal config. */
 export function classifyWeek(
@@ -56,6 +56,22 @@ export function classifyWeek(
 
 export type WeeklyStreak = { streak: number; freezes: number }
 
+/** What a week did to the running streak. */
+export type WeekOutcome = 'advanced' | 'froze' | 'reset'
+
+/** One completed week, with the counts behind it and its effect on the run. */
+export type WeekResult = {
+  /** Monday of the week, ISO. */
+  week: string
+  counts: WeekCounts
+  tier: WeekTier
+  exceeded: boolean
+  outcome: WeekOutcome
+  freezesSpent: number
+  streakAfter: number
+  freezesAfter: number
+}
+
 /** Increment a per-week count map keyed by the Monday of each date's week. */
 function bucketByWeek(dates: string[]): Map<string, number> {
   const map = new Map<string, number>()
@@ -66,14 +82,21 @@ function bucketByWeek(dates: string[]): Map<string, number> {
   return map
 }
 
-/** Compute the current weekly streak (and banked freezes) from date lists. */
-export function computeWeeklyStreak(input: {
+export type StreakInput = {
   workoutDates: string[]
   flexDates: string[]
   calorieHitDates: string[]
   today?: Date
   config?: WeeklyGoalConfig
-}): WeeklyStreak {
+}
+
+/**
+ * Replay every completed week in order, oldest first, reporting what each one
+ * did to the run. This is the whole streak calculation — `computeWeeklyStreak`
+ * is just its last row — so the history a user reads can't disagree with the
+ * number on the Today tab.
+ */
+export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   const config = input.config ?? DEFAULT_WEEKLY_GOALS
   const today = input.today ?? new Date()
 
@@ -84,25 +107,19 @@ export function computeWeeklyStreak(input: {
   // The current in-progress week is excluded: only weeks strictly before it count.
   const currentWeekStart = weekStartISO(toISODate(today))
 
-  // Earliest week appearing in any list.
   const allWeeks = [
     ...workoutByWeek.keys(),
     ...flexByWeek.keys(),
     ...calByWeek.keys(),
   ]
-  if (allWeeks.length === 0) {
-    return { streak: 0, freezes: 0 }
-  }
+  if (allWeeks.length === 0) return []
   const earliestWeek = allWeeks.reduce((min, w) => (w < min ? w : min), allWeeks[0])
 
-  // Last completed week is the week immediately before the current in-progress week.
   const completedWeeks = enumerateWeeks(earliestWeek, currentWeekStart).filter(
     (w) => w < currentWeekStart,
   )
-  if (completedWeeks.length === 0) {
-    return { streak: 0, freezes: 0 }
-  }
 
+  const out: WeekResult[] = []
   let streak = 0
   let freezes = 0
 
@@ -114,24 +131,47 @@ export function computeWeeklyStreak(input: {
     }
     const { tier, exceeded } = classifyWeek(counts, config)
 
+    let outcome: WeekOutcome
+    let freezesSpent = 0
+
     if (tier === 'full') {
       streak += 1
       if (exceeded) freezes += 1
-    } else if (tier === 'half') {
-      if (freezes >= 1) {
-        freezes -= 1
-      } else {
-        streak = 0
-      }
+      outcome = 'advanced'
     } else {
-      // under
-      if (freezes >= 2) {
-        freezes -= 2
+      // A half week costs one banked freeze, a washed-out week two. Short the
+      // bank and the run ends.
+      const cost = tier === 'half' ? 1 : 2
+      if (freezes >= cost) {
+        freezes -= cost
+        freezesSpent = cost
+        outcome = 'froze'
       } else {
         streak = 0
+        outcome = 'reset'
       }
     }
+
+    out.push({
+      week,
+      counts,
+      tier,
+      exceeded,
+      outcome,
+      freezesSpent,
+      streakAfter: streak,
+      freezesAfter: freezes,
+    })
   }
 
-  return { streak, freezes }
+  return out
+}
+
+/** Compute the current weekly streak (and banked freezes) from date lists. */
+export function computeWeeklyStreak(input: StreakInput): WeeklyStreak {
+  const history = weeklyStreakHistory(input)
+  const last = history[history.length - 1]
+  return last
+    ? { streak: last.streakAfter, freezes: last.freezesAfter }
+    : { streak: 0, freezes: 0 }
 }

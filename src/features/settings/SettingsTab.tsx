@@ -87,7 +87,7 @@ export function SettingsTab({
   /** Hand an issue the fixer is asking about to the coach tab to be answered. */
   onAnswer: (number: number) => void
 }) {
-  const { settings, updateSettings, sync, lastSync, pendingWrites, updateFlexPlan } = useData()
+  const { settings, updateSettings, sync, lastSync, pendingWrites, updateFlexPlan, refresh } = useData()
   // Two taps to restore the routine: it throws away every coach edit ever made
   // to it, which is the point after a bad one, but not something to do by brush.
   const [confirmRestore, setConfirmRestore] = useState(false)
@@ -223,6 +223,13 @@ export function SettingsTab({
         <p className="text-xs text-neutral-500">
           last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
         </p>
+        <button
+          onClick={() => void refresh()}
+          disabled={sync === 'syncing'}
+          className="min-h-[44px] rounded-xl bg-surface text-sm font-semibold active:bg-surface-2 disabled:text-neutral-600"
+        >
+          {sync === 'syncing' ? 'syncing…' : 'sync now'}
+        </button>
       </section>
 
       <section className="flex flex-col gap-2">

@@ -24,6 +24,7 @@ import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withT
 import { AxisBreak } from '../../components/AxisBreak'
 import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
+import { StreakHistory } from './StreakHistory'
 import { MetricChart } from './MetricChart'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
@@ -255,6 +256,8 @@ export function ProgressTab() {
       <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />
 
       <GoalsPanel months={months} />
+
+      <StreakHistory />
 
       <MuscleAvatar />
 

@@ -33,7 +33,12 @@ import {
 } from '../lib/estimate'
 import { sessionChallenges, metBaselines, type ChallengeOpts } from '../lib/challenge'
 import { MEASUREMENT_HISTORY } from '../config/body'
-import { computeWeeklyStreak, DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from '../lib/weeklyStreak'
+import {
+  weeklyStreakHistory,
+  DEFAULT_WEEKLY_GOALS,
+  type WeeklyGoalConfig,
+  type WeekResult,
+} from '../lib/weeklyStreak'
 import { useCelebrate } from './CelebrationContext'
 import {
   achievementCelebration,
@@ -126,6 +131,7 @@ type DataContextValue = {
   toast: Toast | null
   pendingWrites: number
   streaks: StreakState
+  streakHistory: WeekResult[]
   weekProgress: WeekProgress
   goals: WeeklyGoalConfig
   saveSession: (s: WorkoutSession, duration?: SessionDurationInput) => Promise<WorkoutFinishSummary>
@@ -144,6 +150,9 @@ type DataContextValue = {
   updateFlexPlan: (r: FlexBlock[]) => void
   refresh: () => Promise<void>
 }
+
+/** Shortest gap between full pulls triggered by resuming or reconnecting. */
+const PULL_COOLDOWN_MS = 5 * 60_000
 
 const Ctx = createContext<DataContextValue | null>(null)
 
@@ -328,9 +337,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // already has. Waiting for a *successful* fetch to spend the flag, rather
       // than clearing the cache at startup, keeps a tap made before the first
       // sync adding to a real total instead of restarting the day from zero.
+      //
+      // The server also wins whenever the outbox is empty: everything this
+      // device logged has been accepted, so any difference left is an edit made
+      // to the sheet directly, and local-wins would hide it forever. Checked
+      // after the fetch resolves, so a tap made mid-request still holds (its
+      // write is sitting in the queue at this moment).
       if (Array.isArray(c)) {
         const repaired = storage.caloriesRepaired()
-        persistCalories(mergeCaloriesByDate(storage.loadCalories(), c, { serverWins: !repaired }))
+        const settled = storage.loadQueue().length === 0
+        persistCalories(
+          mergeCaloriesByDate(storage.loadCalories(), c, { serverWins: !repaired || settled }),
+        )
         if (!repaired) storage.markCaloriesRepaired()
       }
     } catch {
@@ -410,15 +428,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations, persistExerciseAverages, persistSettings])
 
-  // Initial sync, then push the outbox whenever there's a fresh chance to: back
-  // online, or back in the foreground. A phone that logged something and got
-  // locked mid-request resumes without a remount, so visibility is the only
-  // moment that retry happens before the next cold start.
+  // Initial sync, then re-sync whenever there's a fresh chance to: back online,
+  // or back in the foreground. A phone that logged something and got locked
+  // mid-request resumes without a remount, so visibility is the only moment
+  // that retry happens before the next cold start.
+  //
+  // Resuming pulls as well as pushes. A row edited in the sheet by hand only
+  // reaches the app on a fetch, and an installed PWA can sit in the background
+  // for days without ever remounting — push-only meant those edits waited for a
+  // cold start. Throttled, since a pull is a fistful of Apps Script round-trips
+  // and app-switching shouldn't spend them.
+  const lastPullRef = useRef(0)
   useEffect(() => {
+    lastPullRef.current = Date.now()
     void refresh()
-    const onOnline = () => void flush()
+    const resync = () => {
+      if (Date.now() - lastPullRef.current < PULL_COOLDOWN_MS) {
+        void flush()
+        return
+      }
+      lastPullRef.current = Date.now()
+      void refresh()
+    }
+    const onOnline = () => resync()
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void flush()
+      if (document.visibilityState === 'visible') resync()
     }
     window.addEventListener('online', onOnline)
     document.addEventListener('visibilitychange', onVisible)
@@ -775,10 +809,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
   const calHitDates = useMemo(() => calorieHitDates(calorieEntries), [calorieEntries])
 
-  const streaks = useMemo(
-    () => computeWeeklyStreak({ workoutDates, flexDates, calorieHitDates: calHitDates }),
+  // Every completed week replayed, oldest first. The flame is this list's last
+  // row rather than a second calculation, so the Progress breakdown always
+  // explains the number the Today tab shows.
+  const streakHistory = useMemo(
+    () => weeklyStreakHistory({ workoutDates, flexDates, calorieHitDates: calHitDates }),
     [workoutDates, flexDates, calHitDates],
   )
+
+  const streaks = useMemo<StreakState>(() => {
+    const last = streakHistory[streakHistory.length - 1]
+    return last ? { streak: last.streakAfter, freezes: last.freezesAfter } : { streak: 0, freezes: 0 }
+  }, [streakHistory])
 
   const weekProgress = useMemo<WeekProgress>(() => {
     const wk = weekStartISO(toISODate(new Date()))
@@ -813,6 +855,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     toast,
     pendingWrites: queue.length,
     streaks,
+    streakHistory,
     weekProgress,
     goals: DEFAULT_WEEKLY_GOALS,
     saveSession,
