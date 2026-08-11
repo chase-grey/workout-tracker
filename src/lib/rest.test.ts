@@ -6,6 +6,7 @@ import {
   openRest,
   restBeforeNextSet,
   resumeRestTally,
+  staleRestSec,
   upNextTargetLabel,
   CIRCUIT_STATION_REST_SEC,
   RESUMABLE_REST_GRACE_SEC,
@@ -180,6 +181,43 @@ describe('canResumeRest', () => {
 
   it('drops a rest left over from a much earlier session', () => {
     expect(canResumeRest(now - sec(8 * 60 * 60), now)).toBe(false)
+  })
+})
+
+describe('staleRestSec', () => {
+  const now = 1_700_000_000_000
+  const sec = (n: number) => n * 1000
+  /** A 120s rest that started `agoSec` ago. */
+  const restStartedAgo = (agoSec: number) => ({ seconds: 120, endsAt: now - sec(agoSec - 120) })
+
+  it('credits nothing for a rest that is still resumable', () => {
+    // The live rest screen banks this one from its real start instead.
+    expect(staleRestSec(restStartedAgo(150), now)).toBe(0)
+  })
+
+  it('credits nothing when no rest was on the clock', () => {
+    expect(staleRestSec(null, now)).toBe(0)
+    expect(staleRestSec(undefined, now)).toBe(0)
+  })
+
+  it('credits a dropped rest with the rest it prescribed', () => {
+    // Phone locked mid-rest, picked up an hour later: the rest screen is gone,
+    // but those two minutes are still inside the session total and belong to
+    // resting rather than to working out.
+    expect(staleRestSec(restStartedAgo(60 * 60), now)).toBe(120)
+  })
+
+  it('credits no more than the rest was worth however long the app was away', () => {
+    // A phone left locked overnight didn't rest you for eight hours.
+    expect(staleRestSec(restStartedAgo(8 * 60 * 60), now)).toBe(120)
+  })
+
+  it('hands over from resuming to crediting at the grace period', () => {
+    // Either the rest screen reopens and banks it, or this does — the two meet
+    // exactly at the grace period, so no rest falls between them.
+    const endsAt = now - sec(RESUMABLE_REST_GRACE_SEC)
+    expect(staleRestSec({ seconds: 120, endsAt }, now)).toBe(0)
+    expect(staleRestSec({ seconds: 120, endsAt: endsAt - 1 }, now)).toBe(120)
   })
 })
 

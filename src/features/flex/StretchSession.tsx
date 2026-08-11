@@ -15,7 +15,7 @@ import { COLD_GATE, PHOTO_SHOT, gateAfterStep, type PhotoGate, type PhotoKind } 
 import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement } from '../../store/DataContext'
-import { canResumeRest } from '../../lib/rest'
+import { canResumeRest, staleRestSec } from '../../lib/rest'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { DEAD_BUG, repRangeLabel } from '../../config/plan'
@@ -106,7 +106,13 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // When the routine began (persisted so a resumed session still measures its
   // full length) and accumulated time spent on the rest screen.
   const [startedAt] = useState(saved?.startedAt)
-  const restAccumSec = useRef(Math.max(0, saved?.restSec ?? 0))
+  // A rest too stale to reopen is settled in as the session resumes: it never
+  // reaches the rest screen, so nothing else banks it, and its seconds are in the
+  // total either way. The snapshot effect below writes the result straight back.
+  const [resumedRestSec] = useState(
+    () => Math.max(0, saved?.restSec ?? 0) + staleRestSec(saved?.rest, Date.now()),
+  )
+  const restAccumSec = useRef(resumedRestSec)
   // Initial value only: a resumed rest began before the reload, so credit it from
   // its real start rather than from now.
   const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)

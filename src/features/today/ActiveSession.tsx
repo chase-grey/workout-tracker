@@ -28,6 +28,7 @@ import {
   openRest,
   restBeforeNextSet,
   resumeRestTally,
+  staleRestSec,
   upNextTargetLabel,
   type RestTally,
 } from '../../lib/rest'
@@ -121,7 +122,15 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // derived from its persisted `startedAt`: an hour-long workout outlives more
   // than one page load on a phone (a tab discard, a service-worker update), and a
   // tally that restarted at zero left all the rest before it counted as work.
-  const [savedTally] = useState(() => resumeRestTally(storage.loadRestTally(), session.sessionId))
+  //
+  // A rest that was running when the app went away and is too stale to reopen is
+  // settled into the tally on the way past: it never reaches the rest screen, so
+  // nothing else would ever bank it, and its seconds are already in the total.
+  const [savedTally] = useState(() => {
+    const resumed = resumeRestTally(storage.loadRestTally(), session.sessionId)
+    const stale = staleRestSec(storage.loadActiveRest(), Date.now())
+    return stale > 0 ? { ...resumed, takenSec: resumed.takenSec + stale } : resumed
+  })
   const tally = useRef(savedTally)
   // When the rest on screen opened — for a resumed one that's before the reload,
   // so it's credited from its real start.
@@ -193,6 +202,14 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   useEffect(() => {
     storage.saveActiveRest(rest)
   }, [rest])
+
+  // Mirror the tally the session resumed with. Ordinarily that's a no-op rewrite
+  // of what's already stored, but a stale rest settled into it above is banked
+  // nowhere else — and the effect above has just cleared the rest it came from,
+  // so without this the seconds are lost to the next reload.
+  useEffect(() => {
+    storage.saveRestTally(savedTally)
+  }, [savedTally])
 
   // The slot this lift is being trained in, for every read of its history: the
   // press that leads today is compared against the days it led, not against the

@@ -99,6 +99,30 @@ export function bankRest(tally: RestTally, startedAt: number, now: number): Rest
 }
 
 /**
+ * Rest to credit for an interval that was on the clock when the app went away
+ * and has come back too stale to reopen (see {@link canResumeRest}) — the phone
+ * locked mid-rest, or the tab was discarded and the session picked up later.
+ *
+ * Such a rest is dropped from the screen, but the seconds it ran are still
+ * inside the session total, which is measured from the persisted `startedAt`.
+ * Banking nothing for it left every one of them charged to working time: an
+ * hour of gym time reading as an hour of working out. It's credited at its
+ * nominal length and no further — the interval did rest you for as long as it
+ * prescribed, but the hours a phone spends locked afterwards are not rest.
+ *
+ * Returns 0 for a rest that is resuming normally (the live screen banks that
+ * one from its real start) and for no rest at all.
+ */
+export function staleRestSec(
+  rest: { seconds: number; endsAt: number } | null | undefined,
+  now: number,
+): number {
+  if (!rest || canResumeRest(rest.endsAt, now)) return 0
+  const startedAt = rest.endsAt - rest.seconds * 1000
+  return Math.max(0, Math.min(rest.seconds, (now - startedAt) / 1000))
+}
+
+/**
  * Moving between stations of a circuit: just long enough to walk over and set
  * up. The point of a circuit is that the muscle you just worked recovers while
  * you work the others, so a full rest here would throw that away.
