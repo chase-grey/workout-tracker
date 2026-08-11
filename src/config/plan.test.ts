@@ -5,7 +5,9 @@ import {
   PLAN_REVISION,
   exerciseName,
   unslugKey,
+  withCircuitRest,
   withPlanDefaults,
+  type DayPlan,
   type Plan,
   type PlannedExercise,
 } from './plan'
@@ -209,6 +211,56 @@ describe('withPlanDefaults', () => {
       const single = withPlanDefaults(storedWith(custom('shrugs', 'shrugs')), PLAN_REVISION)
       expect(nameOf(single, 'shrugs')).toBe('shrugs')
     })
+  })
+})
+
+describe('withCircuitRest', () => {
+  const day = DEFAULT_PLAN.push
+  const station = (d: DayPlan, key: string) => d.exercises.find((e) => e.key === key)
+
+  it('sets one station rest and leaves the rest of the day alone', () => {
+    const next = withCircuitRest(day, 'lateral_raise_l', 60)
+    expect(station(next, 'lateral_raise_l')?.circuitRestSec).toBe(60)
+    expect(next.exercises.map((e) => e.key)).toEqual(day.exercises.map((e) => e.key))
+    for (const e of next.exercises) {
+      if (e.key !== 'lateral_raise_l') expect(e.circuitRestSec).toBeUndefined()
+    }
+  })
+
+  it('keeps a zero, which is the whole point of the field', () => {
+    // "no rest after this move" has to survive as a real setting rather than
+    // reading as unset and falling back to the built-in station change.
+    expect(station(withCircuitRest(day, 'tricep_pushdown', 0), 'tricep_pushdown')?.circuitRestSec).toBe(0)
+  })
+
+  it('clears the field rather than storing a number for the default', () => {
+    const set = withCircuitRest(day, 'tricep_pushdown', 0)
+    const cleared = withCircuitRest(set, 'tricep_pushdown', null)
+    expect(station(cleared, 'tricep_pushdown')).not.toHaveProperty('circuitRestSec')
+  })
+
+  it('rests only after the stations asked for, across a whole circuit', () => {
+    // The reported case: rest after each lateral raise, roll straight on from the
+    // two tricep stations.
+    const wanted: Record<string, number> = {
+      tricep_pushdown: 0,
+      lateral_raise_l: 60,
+      overhead_tricep_ext: 0,
+      lateral_raise_r: 60,
+    }
+    const next = Object.entries(wanted).reduce((d, [key, sec]) => withCircuitRest(d, key, sec), day)
+    for (const [key, sec] of Object.entries(wanted)) {
+      expect(station(next, key)?.circuitRestSec).toBe(sec)
+    }
+  })
+
+  it('leaves the day untouched when no exercise matches', () => {
+    expect(withCircuitRest(day, 'not_an_exercise', 30)).toEqual(day)
+  })
+
+  it('does not mutate the day it was given', () => {
+    withCircuitRest(day, 'lateral_raise_l', 45)
+    expect(station(day, 'lateral_raise_l')?.circuitRestSec).toBeUndefined()
   })
 })
 

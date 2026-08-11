@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSetOrder } from './circuit'
+import { buildSetOrder, circuitStations } from './circuit'
 
 describe('buildSetOrder', () => {
   it('runs a non-circuit day one exercise at a time', () => {
@@ -60,5 +60,37 @@ describe('buildSetOrder', () => {
     const counts = [4, 3, 3]
     const order = buildSetOrder([{ circuit: 'a' }, { circuit: 'a' }, { circuit: 'a' }], counts)
     expect(order).toHaveLength(counts.reduce((a, b) => a + b, 0))
+  })
+})
+
+describe('circuitStations', () => {
+  const arms = [{ circuit: 'arms' }, { circuit: 'arms' }, { circuit: 'arms' }]
+
+  it('gives every station of the circuit, from any one of them', () => {
+    expect(circuitStations(arms, 0)).toEqual([0, 1, 2])
+    expect(circuitStations(arms, 1)).toEqual([0, 1, 2])
+    expect(circuitStations(arms, 2)).toEqual([0, 1, 2])
+  })
+
+  it('gives nothing for an exercise outside any circuit', () => {
+    expect(circuitStations([{}, { circuit: 'a' }], 0)).toEqual([])
+  })
+
+  it('stops at the ends of the consecutive run, like buildSetOrder', () => {
+    // Same id either side of an unrelated exercise: two separate circuits, and
+    // neither reaches through the one between them.
+    const day = [{ circuit: 'a' }, { circuit: 'a' }, {}, { circuit: 'a' }]
+    expect(circuitStations(day, 1)).toEqual([0, 1])
+    expect(circuitStations(day, 3)).toEqual([3])
+  })
+
+  it('does not mix two adjacent circuits together', () => {
+    const day = [{ circuit: 'a' }, { circuit: 'a' }, { circuit: 'b' }, { circuit: 'b' }]
+    expect(circuitStations(day, 0)).toEqual([0, 1])
+    expect(circuitStations(day, 3)).toEqual([2, 3])
+  })
+
+  it('gives nothing for an index off the end of the day', () => {
+    expect(circuitStations(arms, 9)).toEqual([])
   })
 })

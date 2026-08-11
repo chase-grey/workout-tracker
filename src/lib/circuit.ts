@@ -25,6 +25,26 @@ export type SetSlot = { exIndex: number; setIndex: number }
  * Uneven set counts inside a circuit are fine: a station that has run out of
  * sets is skipped, so the remaining stations finish their last rounds together.
  */
+/**
+ * The stations of the circuit the exercise at `index` belongs to, as indexes into
+ * the same list — by the same consecutive-run rule {@link buildSetOrder} rotates
+ * through them, so the answer is the circuit actually being performed rather than
+ * every exercise that happens to share the id.
+ *
+ * Empty when that exercise isn't in a circuit at all.
+ */
+export function circuitStations(exercises: { circuit?: string }[], index: number): number[] {
+  const id = exercises[index]?.circuit
+  if (!id) return []
+  let start = index
+  while (start > 0 && exercises[start - 1].circuit === id) start -= 1
+  let end = index
+  while (end + 1 < exercises.length && exercises[end + 1].circuit === id) end += 1
+  const out: number[] = []
+  for (let k = start; k <= end; k++) out.push(k)
+  return out
+}
+
 export function buildSetOrder(exercises: { circuit?: string }[], setCounts: number[]): SetSlot[] {
   const out: SetSlot[] = []
   let i = 0

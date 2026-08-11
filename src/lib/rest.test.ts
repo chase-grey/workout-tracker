@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest'
 import {
   bankRest,
   canResumeRest,
+  circuitRestLabel,
   emptyRestTally,
   openRest,
   restBeforeNextSet,
+  restLabel,
   resumeRestTally,
   staleRestSec,
   upNextTargetLabel,
+  CIRCUIT_REST_CHOICES,
   CIRCUIT_STATION_REST_SEC,
   RESUMABLE_REST_GRACE_SEC,
   TRANSITION_REST_CAP_SEC,
@@ -137,6 +140,37 @@ describe('restBeforeNextSet', () => {
         circuitRestSec: 0,
       }),
     ).toBe(60)
+  })
+})
+
+describe('restLabel', () => {
+  it('reads a station set to no rest as none rather than 0s', () => {
+    expect(restLabel(0)).toBe('none')
+  })
+
+  it('gives short rests in seconds and longer ones in minutes', () => {
+    expect(restLabel(30)).toBe('30s')
+    expect(restLabel(45)).toBe('45s')
+    expect(restLabel(60)).toBe('1 min')
+    expect(restLabel(120)).toBe('2 min')
+  })
+})
+
+describe('circuitRestLabel', () => {
+  it('names the unset choice rather than showing a number for it', () => {
+    // Distinct from "none": one leaves the circuit's own timing alone, the other
+    // rolls straight on to the next move.
+    expect(circuitRestLabel(null)).toBe('default')
+    expect(circuitRestLabel(0)).toBe('none')
+  })
+
+  it('offers both leaving it alone and turning it off', () => {
+    expect(CIRCUIT_REST_CHOICES).toContain(null)
+    expect(CIRCUIT_REST_CHOICES).toContain(0)
+  })
+
+  it('labels every choice it offers', () => {
+    for (const sec of CIRCUIT_REST_CHOICES) expect(circuitRestLabel(sec)).toBeTruthy()
   })
 })
 

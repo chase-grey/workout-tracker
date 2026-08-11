@@ -129,6 +129,25 @@ export function staleRestSec(
  */
 export const CIRCUIT_STATION_REST_SEC = 30
 
+/** A rest length as the workout flow shows it: "none", "45s", "2 min". */
+export function restLabel(sec: number): string {
+  if (sec <= 0) return 'none'
+  return sec >= 60 ? `${sec / 60} min` : `${sec}s`
+}
+
+/**
+ * The rests a circuit station can be set to from the session menu, in the order
+ * they're offered. `null` is "leave it to the circuit" — the built-in station
+ * timing, stored as no `circuitRestSec` at all — and is deliberately a separate
+ * choice from `0`, which is an explicit "roll straight on to the next move".
+ */
+export const CIRCUIT_REST_CHOICES: readonly (number | null)[] = [null, 0, 30, 45, 60, 90, 120]
+
+/** How one {@link CIRCUIT_REST_CHOICES} entry reads in the picker. */
+export function circuitRestLabel(sec: number | null): string {
+  return sec == null ? 'default' : restLabel(sec)
+}
+
 /**
  * How long to rest after completing a set.
  *

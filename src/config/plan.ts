@@ -281,6 +281,26 @@ export function repRangeLabel(e: Pick<PlannedExercise, 'repMin' | 'repMax'>): st
 }
 
 /**
+ * A copy of `day` with one exercise's {@link PlannedExercise.circuitRestSec} set.
+ *
+ * `null` clears the field rather than storing a number, which is the only way to
+ * get the built-in station timing back: `0` is a real setting ("no rest here"),
+ * so the two can't share a value.
+ */
+export function withCircuitRest(day: DayPlan, key: string, sec: number | null): DayPlan {
+  return {
+    ...day,
+    exercises: day.exercises.map((e) => {
+      if (e.key !== key) return e
+      if (sec != null) return { ...e, circuitRestSec: sec }
+      const cleared = { ...e }
+      delete cleared.circuitRestSec
+      return cleared
+    }),
+  }
+}
+
+/**
  * All exercises across every day of the DEFAULT plan, for import matching + name
  * fallback. Dead Bug is appended even though it's no longer a plan day, so its
  * key still resolves to "Dead Bug" in charts, the AI prompt, and records. Keys

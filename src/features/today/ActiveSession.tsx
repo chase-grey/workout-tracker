@@ -14,6 +14,7 @@ import {
   repRangeLabel,
   sideOrderedExercises,
   variantExercises,
+  withCircuitRest,
   type PlannedExercise,
 } from '../../config/plan'
 import { nextTargets, type Target } from '../../lib/progression'
@@ -21,12 +22,15 @@ import { buildGoals } from '../../lib/goals'
 import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { progressionVariant } from '../../lib/pushVariant'
-import { buildSetOrder } from '../../lib/circuit'
+import { buildSetOrder, circuitStations } from '../../lib/circuit'
 import {
   bankRest,
   canResumeRest,
+  circuitRestLabel,
+  CIRCUIT_REST_CHOICES,
   openRest,
   restBeforeNextSet,
+  restLabel,
   resumeRestTally,
   staleRestSec,
   upNextTargetLabel,
@@ -106,6 +110,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   const [showList, setShowList] = useState(false)
   const [paused, setPaused] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showCircuitRest, setShowCircuitRest] = useState(false)
   // The first set of a workout waits on a start press (see `awaitingStart`).
   const [started, setStarted] = useState(false)
   // Per-exercise auto-advance for this session only, keyed by exercise. An entry
@@ -454,6 +459,20 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     setAutoNow(on)
   }
 
+  // The stations of the circuit in play, in the order they're rotated through —
+  // the whole circuit rather than just the station on screen, because "rest only
+  // after the lateral raise" is a statement about all of them.
+  const stations = useMemo(
+    () => circuitStations(exercises, step.exIndex).map((i) => exercises[i]),
+    [exercises, step.exIndex],
+  )
+
+  // Per-station rest, saved to the plan like auto-advance: it's a property of how
+  // this circuit is run, not of today's session, so it holds for future ones too.
+  const setCircuitRest = (key: string, sec: number | null) => {
+    void updatePlan({ ...plan, [session.dayType]: withCircuitRest(day, key, sec) })
+  }
+
   const hint = targetLabel(target)
   const targetNumbers = target
     ? target.weightLbs == null
@@ -464,8 +483,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // of its sets is the rest that station prescribes — not its inter-set number.
   const restShownSec =
     planned.circuit && planned.circuitRestSec != null ? planned.circuitRestSec : planned.restSec
-  const restLabel =
-    restShownSec === 0 ? 'none' : restShownSec >= 60 ? `${restShownSec / 60} min` : `${restShownSec}s`
 
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
@@ -480,6 +497,11 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
         : `always auto-advance ${planned.name}`,
       onClick: () => setAutoDefault(!planned.autoAdvance),
     },
+    // Only inside a circuit: everywhere else the rest after a set is simply the
+    // exercise's own, and there's nothing per-station to choose between.
+    ...(stations.length > 0
+      ? [{ label: 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
+      : []),
     { label: 'add a set', onClick: addSet },
     { label: 'back to app (keep going)', onClick: onMinimize },
     { label: 'pause workout', onClick: () => setPaused(true) },
@@ -515,7 +537,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
 
       <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
         {planned.group} · set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
-        {repRangeLabel(planned)} reps · rest {restLabel}
+        {repRangeLabel(planned)} reps · rest {restLabel(restShownSec)}
       </p>
 
       {set && (
@@ -633,6 +655,44 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           repsOnly={!!planned.repsOnly}
           onClose={() => setShowHistory(false)}
         />
+      )}
+
+      {showCircuitRest && stations.length > 0 && (
+        // Above the rest overlay (z-50) — reachable from the rest screen's menu.
+        <div
+          className="fixed inset-0 z-60 flex items-end bg-black/60"
+          onClick={() => setShowCircuitRest(false)}
+        >
+          <div
+            className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+          >
+            <h3 className="mb-3 text-lg font-bold">rest between these moves</h3>
+            <div className="flex flex-col gap-1">
+              {/* One row per station, so a circuit that rests after only one of
+                  them is set in one place instead of a move at a time. */}
+              {stations.map((e) => (
+                <label key={e.key} className="flex items-center gap-3 rounded-xl px-2 py-1">
+                  <span className="min-w-0 flex-1 truncate font-medium">after {e.name}</span>
+                  <select
+                    value={e.circuitRestSec ?? ''}
+                    onChange={(ev) =>
+                      setCircuitRest(e.key, ev.target.value === '' ? null : Number(ev.target.value))
+                    }
+                    className="min-h-[44px] shrink-0 rounded-xl bg-surface-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                  >
+                    {CIRCUIT_REST_CHOICES.map((sec) => (
+                      <option key={sec ?? 'default'} value={sec ?? ''}>
+                        {circuitRestLabel(sec)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {showList && (
