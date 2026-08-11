@@ -53,7 +53,7 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
     // No bottom padding of its own: `main` already pads below the scroll area, and
     // stacking a second 1rem on top of it pushed the home page just past the
     // viewport — enough to make it scroll by a hair with nothing to scroll to.
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {photoDue && (
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
@@ -90,7 +90,10 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
 
       <WeightCard />
 
-      <div className="flex flex-col gap-2">
+      {/* Two across rather than four stacked rows: full-width buttons took a
+          third of the screen on their own, which is what pushed the rest of the
+          page into scrolling. */}
+      <div className="grid grid-cols-2 gap-2">
         <button
           onClick={onStartStretch}
           className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"

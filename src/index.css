@@ -19,6 +19,14 @@ body,
   height: 100%;
 }
 
+/* Everything sizes off the root — Tailwind's type scale and its rem spacing
+   both — so a notch under the browser's 16px default takes the whole app down
+   a step and buys back most of a screenful. Tap targets are sized in px
+   (min-h-[44px] and up) and stay thumb-sized through it. */
+html {
+  font-size: 15px;
+}
+
 /* The app shell fills the screen the keyboard leaves behind, so the chat input
    rides up with it instead of hiding underneath. Chrome/Android does this
    natively via `100dvh` + interactive-widget=resizes-content (index.html) — the
