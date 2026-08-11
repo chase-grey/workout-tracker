@@ -17,7 +17,10 @@ import {
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
   LINE_SECONDARY,
+  MARK_OFF_SLOT,
   niceScale,
+  offSlotDot,
+  OFF_SLOT_NAME,
   timeXAxis,
   withTime,
 } from '../../lib/chart'
@@ -42,14 +45,18 @@ export function SplitLegend({ payload }: { payload?: { value?: unknown; dataKey?
   )
 }
 
-/** One plotted row: the metric, the calorie surplus beside it, or either alone. */
-type Row = { date: string; t: number; value?: number; cal?: number }
+/** One plotted row: the metric, and whichever companions the chart was given. */
+type Row = { date: string; t: number; value?: number; cal?: number; off?: number }
 
-/** Merge a metric series with a calorie-surplus series into one row per date. */
-function mergeCalories(data: Point[], calories: Point[]) {
-  const m = new Map<string, { date: string; value?: number; cal?: number }>()
-  for (const p of data) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), value: p.value })
-  for (const p of calories) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), cal: p.value })
+/** Merge the metric series with its companions into one row per date. */
+function mergeSeries(data: Point[], calories: Point[], offSlot: Point[]) {
+  const m = new Map<string, Omit<Row, 't'>>()
+  const add = (points: Point[], key: 'value' | 'cal' | 'off') => {
+    for (const p of points) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), [key]: p.value })
+  }
+  add(data, 'value')
+  add(calories, 'cal')
+  add(offSlot, 'off')
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
@@ -58,36 +65,50 @@ export function MetricChart({
   unit,
   label,
   calories,
+  offSlot,
   goalLines,
   empty,
 }: {
   data: Point[]
   unit: string
-  /** Series name shown in the legend/tooltip when the calorie overlay is on. */
+  /** Series name for the legend/tooltip, wherever a second series makes one appear. */
   label?: string
   /** Optional weekly-avg calorie surplus (intake − goal) to overlay on a right axis. */
   calories?: Point[]
+  /**
+   * Sessions the line deliberately doesn't read — the day's second press (see
+   * progress.offSlotSeries) — drawn as rings beside it so a logged session isn't
+   * simply absent from the chart.
+   */
+  offSlot?: Point[]
   /** Targets of goals now close enough to be worth seeing on the chart. */
   goalLines?: { value: number; label: string }[]
   /** Placeholder text when there's nothing to plot. */
   empty?: string
 }) {
   const overlay = calories != null && calories.length > 0
-  // The left axis must also frame any goal line, or a target above the data
-  // would sit off the top of the chart.
+  const off = useMemo(() => offSlot ?? [], [offSlot])
+  // The left axis must also frame any goal line and the rings beside the line,
+  // or a target above the data would sit off the top of the chart and a heavy
+  // second press off the bottom.
   const yScale = useMemo(
-    () => niceScale([...data.map((p) => p.value), ...(goalLines?.map((g) => g.value) ?? [])]),
-    [data, goalLines],
+    () =>
+      niceScale([
+        ...data.map((p) => p.value),
+        ...off.map((p) => p.value),
+        ...(goalLines?.map((g) => g.value) ?? []),
+      ]),
+    [data, off, goalLines],
   )
   const calScale = useMemo(() => niceScale((calories ?? []).map((p) => p.value)), [calories])
-  // Annotated so both branches land on one row type — the chart infers its data
-  // type from whichever arm comes first otherwise, and rejects the other.
+  // Annotated so the chart can't infer its row type from whichever series
+  // happens to be non-empty and then reject the others.
   const rows: Row[] = useMemo(
-    () => (overlay ? withTime(mergeCalories(data, calories!)) : withTime(data)),
-    [overlay, data, calories],
+    () => withTime(mergeSeries(data, calories ?? [], off)),
+    [data, calories, off],
   )
 
-  if (data.length === 0) {
+  if (data.length === 0 && off.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
         {empty ?? 'no data in this range'}
@@ -126,7 +147,7 @@ export function MetricChart({
             formatter={(v, n) =>
               n === 'cal'
                 ? [`${Number(v) > 0 ? '+' : ''}${v} cal/day`, 'vs goal (weekly avg)']
-                : [`${v} ${unit}`, label ?? '']
+                : [`${v} ${unit}`, n === OFF_SLOT_NAME ? OFF_SLOT_NAME : (label ?? '')]
             }
           />
           {/* Goals whose projected finish is inside the lock-in horizon get a
@@ -157,6 +178,9 @@ export function MetricChart({
               />
             </>
           )}
+          {/* Without the overlay there's only one axis, so the legend is just a
+              key: what the line is, and what the rings beside it are. */}
+          {!overlay && off.length > 0 && <Legend wrapperStyle={{ fontSize: 12 }} />}
           <Line
             yAxisId="left"
             type="monotone"
@@ -167,6 +191,20 @@ export function MetricChart({
             dot={{ r: 2 }}
             connectNulls
           />
+          {/* Rings, no line: these sessions were logged and are worth seeing, but
+              joining them to the series would draw the sawtooth reading the lead
+              slot alone exists to avoid. */}
+          {off.length > 0 && (
+            <Line
+              yAxisId="left"
+              dataKey="off"
+              name={OFF_SLOT_NAME}
+              stroke={MARK_OFF_SLOT}
+              strokeWidth={0}
+              dot={offSlotDot('#171717')}
+              activeDot={{ r: 4 }}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

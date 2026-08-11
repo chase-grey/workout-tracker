@@ -2,7 +2,7 @@ import type { WorkoutRow } from '../types'
 import { ALL_EXERCISES, QUICK_LOG_KEY, type VariantKey } from '../config/plan'
 import { epley1RM } from './epley'
 import { parseISODate } from './dates'
-import { leadVariantForKey } from './pushVariant'
+import { leadVariantForKey, otherVariant } from './pushVariant'
 
 /**
  * `topreps` is the best single set's reps, as opposed to `reps`, which totals the
@@ -95,6 +95,36 @@ export function exerciseSeries(
   })
 
   return points.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
+ * The sessions a strength series leaves out because the lift was trained in the
+ * other A/B slot — the day's second press.
+ *
+ * {@link exerciseSeries} reads strength off the lead slot alone (see
+ * {@link SlotScope}): a press that follows the day's other press is necessarily
+ * lighter, and plotting both drew a sawtooth that looked like backsliding every
+ * other session. But that session was logged, and a chart that simply hasn't got
+ * it reads as the app having lost the workout — flat bench done on a variant-A
+ * push day appeared nowhere on the bench chart at all. So the dropped sessions
+ * are returned here, to be drawn beside the line rather than on it.
+ *
+ * Empty when nothing was left out: a workload metric already counts every
+ * session, and most of the plan is trained alike whichever variant the day ran.
+ *
+ * A date the lead-slot line already carries is left out too. Sessions with no
+ * slot recorded — imported history, a day that doesn't run variants — are kept
+ * under either scope, so they're on the line already and would otherwise be
+ * plotted a second time on top of themselves.
+ */
+export function offSlotSeries(rows: WorkoutRow[], exerciseKey: string, metric: Metric): Point[] {
+  if (defaultSlot(metric) !== 'lead') return []
+  const lead = leadVariantForKey(exerciseKey)
+  if (!lead) return []
+  const onLine = new Set(exerciseSeries(rows, exerciseKey, metric, lead).map((p) => p.date))
+  return exerciseSeries(rows, exerciseKey, metric, otherVariant(lead)).filter(
+    (p) => !onLine.has(p.date),
+  )
 }
 
 /**

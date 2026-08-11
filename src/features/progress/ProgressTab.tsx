@@ -14,13 +14,24 @@ import {
   exerciseSeries,
   exercisesByFrequency,
   filterRange,
+  offSlotSeries,
   sessionCount,
   type Metric,
   type Point,
 } from '../../lib/progress'
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
 import { buildGoals, GOAL_IDS } from '../../lib/goals'
-import { fmtDateLabel, LINE_PRIMARY, LINE_SECONDARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import {
+  fmtDateLabel,
+  LINE_PRIMARY,
+  LINE_SECONDARY,
+  MARK_OFF_SLOT,
+  niceScale,
+  offSlotDot,
+  OFF_SLOT_NAME,
+  timeXAxis,
+  withTime,
+} from '../../lib/chart'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
@@ -86,18 +97,30 @@ function Pills<T extends string | number | null>({
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
-function mergeSeries(flat: Point[], incline: Point[]) {
-  const m = new Map<string, { date: string; flat?: number; incline?: number }>()
+/**
+ * The two presses on one set of rows, plus the sessions neither line reads.
+ *
+ * The off-slot sessions share a column because they can't collide: incline leads
+ * variant A and flat leads variant B, so exactly one of the two presses is the
+ * day's second one, and a date never has an off-slot reading for both.
+ */
+function mergeSeries(flat: Point[], incline: Point[], offSlot: Point[] = []) {
+  const m = new Map<string, { date: string; flat?: number; incline?: number; off?: number }>()
   for (const p of flat) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), flat: p.value })
   for (const p of incline) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), incline: p.value })
+  for (const p of offSlot) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), off: p.value })
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
 function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit: string }) {
   const yScale = useMemo(
-    () => niceScale(data.flatMap((r) => [r.flat, r.incline]).filter((v): v is number => v != null)),
+    () =>
+      niceScale(
+        data.flatMap((r) => [r.flat, r.incline, r.off]).filter((v): v is number => v != null),
+      ),
     [data],
   )
+  const hasOff = data.some((r) => r.off != null)
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
@@ -122,6 +145,18 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Line type="monotone" dataKey="flat" name="flat" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
           <Line type="monotone" dataKey="incline" name="incline" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          {/* Whichever press followed the other that day. Rings rather than a
+              third line: it's a session, not a series of its own. */}
+          {hasOff && (
+            <Line
+              dataKey="off"
+              name={OFF_SLOT_NAME}
+              stroke={MARK_OFF_SLOT}
+              strokeWidth={0}
+              dot={offSlotDot('#171717')}
+              activeDot={{ r: 4 }}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -217,13 +252,34 @@ export function ProgressTab() {
     () => filterRange(exerciseSeries(workouts, exercise, metric), months),
     [workouts, exercise, metric, months],
   )
+  // The sessions that series leaves out because they trained the lift second (see
+  // progress.offSlotSeries) — drawn beside it, so a logged workout is never
+  // simply missing from the chart.
+  const offSeries = useMemo(
+    () => filterRange(offSlotSeries(workouts, exercise, metric), months),
+    [workouts, exercise, metric, months],
+  )
   const benchSeries = useMemo(
     () =>
       mergeSeries(
         filterRange(exerciseSeries(workouts, 'flat_bench', metric), months),
         filterRange(exerciseSeries(workouts, 'incline_bench', metric), months),
+        filterRange(
+          [
+            ...offSlotSeries(workouts, 'flat_bench', metric),
+            ...offSlotSeries(workouts, 'incline_bench', metric),
+          ],
+          months,
+        ),
       ),
     [workouts, metric, months],
+  )
+
+  // Names the line in the legend and the tooltip, which the rings beside it make
+  // worth saying out loud.
+  const exerciseLabel = useMemo(
+    () => exerciseOptions.find((o) => o.key === exercise)?.name,
+    [exerciseOptions, exercise],
   )
 
   const unit = metric === 'volume' ? 'vol' : metric === 'reps' ? 'reps' : 'lbs'
@@ -267,7 +323,7 @@ export function ProgressTab() {
       {exercise === BENCH_COMBO ? (
         <BenchChart data={benchSeries} unit={unit} />
       ) : (
-        <MetricChart data={series} unit={unit} />
+        <MetricChart data={series} unit={unit} label={exerciseLabel} offSlot={offSeries} />
       )}
 
       <div className="mt-2 flex items-center justify-between">

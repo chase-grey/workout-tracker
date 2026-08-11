@@ -36,6 +36,25 @@ export const LINE_GOAL = '#14532d'
 export const LINE_GOAL_LABEL = LINE_SECONDARY
 
 /**
+ * Sessions plotted beside a line rather than on it — the day's second press (see
+ * progress.offSlotSeries). Grey rather than a fourth green: it isn't another rung
+ * of the series ladder, it's a reading the series deliberately doesn't read, and
+ * a green ring would invite it to be compared with the line it sits next to.
+ */
+export const MARK_OFF_SLOT = '#737373'
+
+/** What those marks are called, in the legend and the tooltip. */
+export const OFF_SLOT_NAME = '2nd press'
+
+/**
+ * A hollow ring for one of them: unfilled so it reads as a mark beside the line
+ * rather than a point on it. `bg` is the card colour showing through the middle.
+ */
+export function offSlotDot(bg: string) {
+  return { r: 3, fill: bg, stroke: MARK_OFF_SLOT, strokeWidth: 2 }
+}
+
+/**
  * Cold stretch readings run cool against the warm ones' greens — blue for the
  * left (or only) reading, violet for the right.
  */

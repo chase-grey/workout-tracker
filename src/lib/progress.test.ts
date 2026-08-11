@@ -5,6 +5,7 @@ import {
   exerciseSeries,
   exercisesByFrequency,
   filterRange,
+  offSlotSeries,
   sessionCount,
   sustainedRepsSeries,
 } from './progress'
@@ -137,6 +138,49 @@ describe('exerciseSeries across A/B slots', () => {
       { ...bench('b1', '2026-01-07', 55, 'B'), exercise: 'cable_crunch' },
     ]
     expect(exerciseSeries(crunches, 'cable_crunch', 'weight')).toHaveLength(2)
+  })
+
+  describe('offSlotSeries hands back what the lead-slot line dropped', () => {
+    it('returns the second-press sessions, and only those', () => {
+      const off = offSlotSeries(bothSlots, 'flat_bench', 'weight')
+      expect(off).toEqual([{ date: '2026-01-07', value: 165 }])
+    })
+
+    it('accounts for every session between the line and the rings', () => {
+      const line = exerciseSeries(bothSlots, 'flat_bench', '1rm')
+      const off = offSlotSeries(bothSlots, 'flat_bench', '1rm')
+      expect([...line, ...off].map((p) => p.date).sort()).toEqual([
+        '2026-01-05',
+        '2026-01-07',
+        '2026-01-12',
+      ])
+    })
+
+    it('reads the other slot for the other press — incline leads variant A', () => {
+      const incline = bothSlots.map((row) => ({ ...row, exercise: 'incline_bench' }))
+      expect(offSlotSeries(incline, 'incline_bench', 'weight').map((p) => p.date)).toEqual([
+        '2026-01-05',
+        '2026-01-12',
+      ])
+    })
+
+    it('leaves out a session with no slot recorded — it is on the line already', () => {
+      const withLegacy = [...bothSlots, bench('old', '2025-12-01', 175)]
+      expect(offSlotSeries(withLegacy, 'flat_bench', 'weight').map((p) => p.date)).toEqual([
+        '2026-01-07',
+      ])
+    })
+
+    it('has nothing to say for a workload metric — those count every session', () => {
+      for (const metric of ['volume', 'reps'] as const) {
+        expect(offSlotSeries(bothSlots, 'flat_bench', metric)).toEqual([])
+      }
+    })
+
+    it('has nothing to say for a lift the variants train alike', () => {
+      const crunches = bothSlots.map((row) => ({ ...row, exercise: 'cable_crunch' }))
+      expect(offSlotSeries(crunches, 'cable_crunch', 'weight')).toEqual([])
+    })
   })
 })
 

@@ -10,13 +10,12 @@
  */
 
 import type { BodyWeightEntry, WorkoutRow } from '../types'
-import { exerciseSeries, sustainedRepsSeries, type Point } from './progress'
+import { exerciseSeries, offSlotSeries, sustainedRepsSeries, type Point } from './progress'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import { project, type Projection, type TrendWindow } from './predictions'
 import { parseISODate, toISODate, weekStartISO } from './dates'
-import { leadVariantForKey, otherVariant } from './pushVariant'
 
 /**
  * Weekly decay of the gain rate strength projections assume (see
@@ -365,16 +364,14 @@ export function projectGoal(goal: GoalSpec, today?: Date): Projection {
  * estimated 1RM: a rep-counted ladder leaves sessions out for a different reason —
  * too few sets to judge the standard (see progress.sustainedRepsSeries) — which
  * this wouldn't be describing.
+ *
+ * Just the newest one, because that's the one that reads as lost. The rest of
+ * them are drawn on the lifts chart, beside the line they're not on (see
+ * progress.offSlotSeries).
  */
 export function offSlotLatest(goal: GoalSpec, workouts: WorkoutRow[]): Point | null {
   if (!goal.exerciseKey || goal.measure === 'reps') return null
-  const lead = leadVariantForKey(goal.exerciseKey)
-  if (!lead) return null
-
-  // A session with no slot recorded — imported history, or a day that doesn't run
-  // variants — is kept under either scope, so if one of those were the newest it
-  // would be on the line already and fail the date test below.
-  const off = exerciseSeries(workouts, goal.exerciseKey, '1rm', otherVariant(lead))
+  const off = offSlotSeries(workouts, goal.exerciseKey, '1rm')
   const last = off.length ? off[off.length - 1] : null
   const plotted = goal.points.length ? goal.points[goal.points.length - 1].date : ''
   return last && last.date > plotted ? last : null
