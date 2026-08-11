@@ -1,15 +1,7 @@
 import { useEffect, useState } from 'react'
 import { MdCheckCircle } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import {
-  CALORIE_GOAL,
-  caloriePaceFraction,
-  formatElapsed,
-  isEmptyDayNagTime,
-  isFoodLogStale,
-  lastLoggedAt,
-  totalForDate,
-} from '../../lib/calories'
+import { CALORIE_GOAL, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
 import { mondayOf, toISODate } from '../../lib/dates'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
@@ -42,24 +34,7 @@ export function CalorieLogger() {
   const isToday = selDate === today
   const pace = isToday ? caloriePaceFraction(now) : null
 
-  // Today's label is how long it's been since the last log — more useful than
-  // the word "today", which the header position already implies. A day can have
-  // a total but no timestamp — logged before the field existed, or only ever
-  // backfilled — and then there's nothing honest to say, so it falls back to
-  // "today". An empty today is the one exception: no total AND no timestamp is
-  // itself the answer — but only once it's late enough for that to mean
-  // something, since every day starts out empty.
-  const loggedAt = lastLoggedAt(calorieEntries, selDate)
-  const untouchedToday = isToday && !loggedAt && selTotal === 0
-  const flagUntouched = untouchedToday && isEmptyDayNagTime(now)
-  const stale = isToday && (loggedAt != null || flagUntouched) && isFoodLogStale(loggedAt, now)
-  const selLabel = !isToday
-    ? selDate.slice(5)
-    : loggedAt
-      ? formatElapsed(loggedAt, now)
-      : flagUntouched
-        ? 'nothing logged yet'
-        : 'today'
+  const { label: selLabel, stale } = foodLogStatus(calorieEntries, selDate, now)
 
   const add = (cal: number) => {
     if (cal === 0) return

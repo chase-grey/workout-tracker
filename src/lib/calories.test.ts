@@ -9,6 +9,7 @@ import {
   caloriePR,
   setDayTotal,
   mergeCaloriesByDate,
+  foodLogStatus,
   formatClock,
   formatElapsed,
   isEmptyDayNagTime,
@@ -297,6 +298,47 @@ describe('isEmptyDayNagTime', () => {
     expect(isEmptyDayNagTime(at(17))).toBe(true)
     expect(isEmptyDayNagTime(at(21))).toBe(true)
     expect(isEmptyDayNagTime(at(22))).toBe(false)
+  })
+})
+
+describe('foodLogStatus', () => {
+  // Wednesday 2026-07-08, the same reference day the clock helpers above use.
+  const TODAY_ISO = '2026-07-08'
+  const at = (h: number, m = 0) => new Date(2026, 6, 8, h, m)
+  const logged = (h: number, calories = 800): CalorieEntry[] => [
+    { date: TODAY_ISO, calories, loggedAt: at(h).toISOString() },
+  ]
+
+  it('says nothing about an empty day through the morning', () => {
+    expect(foodLogStatus([], TODAY_ISO, at(7))).toEqual({ label: 'today', stale: false })
+    expect(foodLogStatus([], TODAY_ISO, at(9))).toEqual({ label: 'today', stale: false })
+    expect(foodLogStatus([], TODAY_ISO, at(10, 59))).toEqual({ label: 'today', stale: false })
+  })
+
+  it('flags an empty day from 11am', () => {
+    expect(foodLogStatus([], TODAY_ISO, at(11))).toEqual({ label: 'nothing logged yet', stale: true })
+    expect(foodLogStatus([], TODAY_ISO, at(15))).toEqual({ label: 'nothing logged yet', stale: true })
+  })
+
+  it('drops the empty-day flag once the eating window closes', () => {
+    expect(foodLogStatus([], TODAY_ISO, at(22))).toEqual({ label: 'today', stale: false })
+  })
+
+  it('counts a morning log, so the nag hour passes quietly', () => {
+    expect(foodLogStatus(logged(8), TODAY_ISO, at(11))).toEqual({ label: '3h ago', stale: false })
+  })
+
+  it('flags a real four-hour gap even before the nag hour', () => {
+    expect(foodLogStatus(logged(6), TODAY_ISO, at(10))).toEqual({ label: '4h ago', stale: true })
+  })
+
+  it('falls back to "today" for a day with a total but no timestamp', () => {
+    const untimed: CalorieEntry[] = [{ date: TODAY_ISO, calories: 1200 }]
+    expect(foodLogStatus(untimed, TODAY_ISO, at(15))).toEqual({ label: 'today', stale: false })
+  })
+
+  it('shows a past day as its date, never flagged', () => {
+    expect(foodLogStatus([], '2026-07-06', at(15))).toEqual({ label: '07-06', stale: false })
   })
 })
 
