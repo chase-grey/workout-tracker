@@ -22,6 +22,18 @@ describe('applyFlexEdits', () => {
     expect(errors.some((m) => m.includes('restSec'))).toBe(true)
   })
 
+  it('setExercise keeps the name when handed a blank one, but allows a blank tempo', () => {
+    const { routine, errors } = applyFlexEdits(FLEX_ROUTINE, [
+      { op: 'setExercise', block: 'pancake', key: 'pancake_hang', fields: { name: '  ', tempo: '' } },
+    ])
+    const ex = routine
+      .find((b) => b.label === 'pancake')!
+      .exercises.find((e) => e.key === 'pancake_hang')!
+    expect(ex.name).toBe('pancake hang')
+    expect(ex.tempo).toBe('')
+    expect(errors.some((m) => m.includes('name'))).toBe(true)
+  })
+
   it('setExercise errors when block or exercise missing', () => {
     const { errors: e1 } = applyFlexEdits(FLEX_ROUTINE, [
       { op: 'setExercise', block: 'Nope', key: 'x', fields: { reps: 5 } },
@@ -53,7 +65,7 @@ describe('applyFlexEdits', () => {
     expect(ex.reps).toBe(8)
     expect(ex.tempo).toBe('')
     expect(ex.restSec).toBe(90)
-    expect(applied.some((m) => m.includes('frog_stretch'))).toBe(true)
+    expect(applied.some((m) => m.includes('Frog Stretch!!'))).toBe(true)
   })
 
   it('addExercise appends _2 on key collision', () => {
@@ -65,13 +77,16 @@ describe('applyFlexEdits', () => {
     expect(block.exercises.map((e) => e.key)).toContain('pancake_hang_2')
   })
 
-  it('addExercise name falls back to key when name missing', () => {
+  it('addExercise names off the key when the name is missing or blank', () => {
     const { routine } = applyFlexEdits(FLEX_ROUTINE, [
       { op: 'addExercise', block: 'pancake', exercise: { key: 'butterfly' } as never },
+      { op: 'addExercise', block: 'pancake', exercise: { key: 'seated_straddle', name: ' ' } },
     ])
     const block = routine.find((b) => b.label === 'pancake')!
-    const ex = block.exercises.find((e) => e.key === 'butterfly')!
-    expect(ex.name).toBe('butterfly')
+    const named = (key: string) => block.exercises.find((e) => e.key === key)!.name
+    expect(named('butterfly')).toBe('butterfly')
+    // Spaced out rather than shown as the raw slug it's stored under.
+    expect(named('seated_straddle')).toBe('seated straddle')
   })
 
   it('addExercise errors when block missing', () => {
@@ -87,7 +102,7 @@ describe('applyFlexEdits', () => {
     ])
     const block = routine.find((b) => b.label === 'adductor superset')!
     expect(block.exercises.map((e) => e.key)).not.toContain('horse_squat')
-    expect(applied.some((m) => m.includes('horse_squat'))).toBe(true)
+    expect(applied.some((m) => m.includes('horse squat'))).toBe(true)
 
     const { errors } = applyFlexEdits(FLEX_ROUTINE, [
       { op: 'removeExercise', block: 'adductor superset', key: 'ghost' },

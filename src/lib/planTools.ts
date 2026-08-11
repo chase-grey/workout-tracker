@@ -1,5 +1,5 @@
 import type { DayType } from '../types'
-import { DAY_TYPES, type Plan, type PlannedExercise } from '../config/plan'
+import { DAY_TYPES, exerciseName, type Plan, type PlannedExercise } from '../config/plan'
 
 /**
  * Structured, serializable edits to a workout {@link Plan}. The AI chat assistant
@@ -124,7 +124,8 @@ export function applyPlanEdits(
             continue
           }
           if (field === 'name' || field === 'group') {
-            if (typeof value === 'string') exercise[field] = value
+            // A blank name would leave the row with nothing to show but its key.
+            if (typeof value === 'string' && value.trim()) exercise[field] = value
             continue
           }
           if (field === 'bodyweight') {
@@ -141,9 +142,14 @@ export function applyPlanEdits(
         const existingKeys = new Set(dayPlan.exercises.map((e) => e.key))
         const base = slug(src.key ?? src.name ?? '')
         const key = uniqueKey(base, existingKeys)
+        // Without a name of its own the exercise takes one read off the key rather
+        // than the key itself — the assistant usually names an exercise it's adding
+        // back by key alone, and a stored `lateral_raise` reads as a raw slug in the
+        // plan editor, the session and PRs alike.
+        const name = typeof src.name === 'string' && src.name.trim() ? src.name : exerciseName(key)
         const exercise: PlannedExercise = {
           key,
-          name: src.name ?? key,
+          name,
           sets: isValidNumber(src.sets) ? src.sets : 3,
           repMin: isValidNumber(src.repMin) ? src.repMin : 8,
           repMax: isValidNumber(src.repMax) ? src.repMax : 12,
@@ -164,8 +170,8 @@ export function applyPlanEdits(
           errors.push(`no exercise "${edit.key}" on ${edit.day}`)
           break
         }
-        dayPlan.exercises.splice(idx, 1)
-        applied.push(`removed ${edit.key} from ${edit.day}`)
+        const [removed] = dayPlan.exercises.splice(idx, 1)
+        applied.push(`removed ${removed.name || exerciseName(removed.key)} from ${edit.day}`)
         break
       }
 

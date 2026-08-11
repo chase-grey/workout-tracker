@@ -459,7 +459,13 @@ export function withPlanDefaults(
     // day whose contents have changed ("push" for what is now push + core).
     const label =
       restructure || LEGACY_LABELS[type].includes(day.label) ? DEFAULT_PLAN[type].label : day.label
-    merged[type] = { ...day, type, label, exercises }
+    // Repair slug-as-name entries on the way through, so a plan already saved with
+    // one stops showing the raw key everywhere it's read.
+    const named = exercises.map((e) => {
+      const name = displayName(e)
+      return name === e.name ? e : { ...e, name }
+    })
+    merged[type] = { ...day, type, label, exercises: named }
   }
   return merged
 }
@@ -486,6 +492,15 @@ const RETIRED_EXERCISE_NAMES: Record<string, string> = {
 }
 
 /**
+ * A key spaced back out into words: `lateral_raise` -> `lateral raise`. The
+ * last-resort display name for a movement nothing else knows, and the repair for
+ * a stored name that is really just a key (see {@link displayName}).
+ */
+export function unslugKey(key: string): string {
+  return key.replace(/[_-]+/g, ' ').trim()
+}
+
+/**
  * Lookup an exercise's display name by key: the plan defaults first, then the
  * retired movements above. A key that's in neither — one the user added, or one
  * that arrived from an import — has its separators spaced out rather than being
@@ -495,8 +510,21 @@ export function exerciseName(key: string): string {
   return (
     ALL_EXERCISES.find((e) => e.key === key)?.name ??
     RETIRED_EXERCISE_NAMES[key] ??
-    key.replace(/[_-]+/g, ' ').trim()
+    unslugKey(key)
   )
+}
+
+/**
+ * The name a stored plan exercise should show. An exercise added through the AI
+ * chat can land with its key as its name (`lateral_raise`), and once that's saved
+ * the key is what every screen reads — the plan editor, the session, PRs. A blank
+ * name or a name identical to a separator-bearing key is that mistake rather than
+ * a choice, so both are spaced back out; a name the user picked is left alone.
+ */
+function displayName(e: PlannedExercise): string {
+  const name = typeof e.name === 'string' ? e.name.trim() : ''
+  if (name && name !== e.key) return name
+  return exerciseName(e.key)
 }
 
 /**

@@ -4,8 +4,10 @@ import {
   DEFAULT_PLAN,
   PLAN_REVISION,
   exerciseName,
+  unslugKey,
   withPlanDefaults,
   type Plan,
+  type PlannedExercise,
 } from './plan'
 
 describe('withPlanDefaults', () => {
@@ -171,6 +173,43 @@ describe('withPlanDefaults', () => {
       DEFAULT_PLAN.push.exercises.map((e) => e.key),
     )
   })
+
+  describe('slug-as-name repair', () => {
+    const custom = (key: string, name: string): PlannedExercise => ({
+      key,
+      name,
+      sets: 3,
+      repMin: 12,
+      repMax: 20,
+      restSec: 60,
+      group: 'custom',
+    })
+    /** The stored plan that results from saving `extra` onto the pull day. */
+    const storedWith = (...extra: PlannedExercise[]) => ({
+      ...DEFAULT_PLAN,
+      pull: { ...DEFAULT_PLAN.pull, exercises: [...DEFAULT_PLAN.pull.exercises, ...extra] },
+    })
+    const nameOf = (plan: Plan, key: string) => plan.pull.exercises.find((e) => e.key === key)?.name
+
+    it('spaces out a stored name that is really just the key', () => {
+      // What the assistant saves when it's asked to add a lift by key alone.
+      const out = withPlanDefaults(storedWith(custom('lateral_raise', 'lateral_raise')), PLAN_REVISION)
+      expect(nameOf(out, 'lateral_raise')).toBe('lateral raise')
+    })
+
+    it('fills a blank stored name from the key', () => {
+      const out = withPlanDefaults(storedWith(custom('cable_crossover', '  ')), PLAN_REVISION)
+      expect(nameOf(out, 'cable_crossover')).toBe('cable crossover')
+    })
+
+    it('leaves a name the user chose alone', () => {
+      const out = withPlanDefaults(storedWith(custom('ex_custom', 'my funny raise')), PLAN_REVISION)
+      expect(nameOf(out, 'ex_custom')).toBe('my funny raise')
+      // A one-word key that matches its name has nothing to repair.
+      const single = withPlanDefaults(storedWith(custom('shrugs', 'shrugs')), PLAN_REVISION)
+      expect(nameOf(single, 'shrugs')).toBe('shrugs')
+    })
+  })
 })
 
 describe('exerciseName', () => {
@@ -187,5 +226,13 @@ describe('exerciseName', () => {
   it('never shows an unknown key with its underscores', () => {
     expect(exerciseName('face_pull')).toBe('face pull')
     expect(exerciseName('side-bend')).toBe('side bend')
+  })
+})
+
+describe('unslugKey', () => {
+  it('spaces a key back out into words', () => {
+    expect(unslugKey('lateral_raise')).toBe('lateral raise')
+    expect(unslugKey('overhead-tricep__ext')).toBe('overhead tricep ext')
+    expect(unslugKey('_squat_')).toBe('squat')
   })
 })

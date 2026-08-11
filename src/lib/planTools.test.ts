@@ -94,12 +94,35 @@ describe('applyPlanEdits', () => {
   })
 
   it('removeExercise removes by key', () => {
+    const curl = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'hammer_curl')
     const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
       { op: 'removeExercise', day: 'pull', key: 'hammer_curl' },
     ])
     expect(plan.pull.exercises.some((e) => e.key === 'hammer_curl')).toBe(false)
-    expect(applied[0]).toBe('removed hammer_curl from pull')
+    // Reported by name — the key is an implementation detail the chat shouldn't show.
+    expect(applied[0]).toBe(`removed ${curl?.name} from pull`)
     expect(errors).toHaveLength(0)
+  })
+
+  it('addExercise given only a key names the exercise off it, never with it', () => {
+    // How the assistant adds a lift it knows by key: no name field at all. Storing
+    // the key as the name is what put "lateral_raise" on screen in PRs.
+    const { plan, applied } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'addExercise', day: 'pull', exercise: { key: 'lateral_raise' } as never },
+      { op: 'addExercise', day: 'pull', exercise: { key: 'cable_crossover', name: '   ' } as never },
+    ])
+    const added = (key: string) => plan.pull.exercises.find((e) => e.key === key)
+    expect(added('lateral_raise')?.name).toBe('lateral raise')
+    expect(added('cable_crossover')?.name).toBe('cable crossover')
+    expect(applied[0]).toBe('added lateral raise to pull')
+  })
+
+  it('setExercise ignores a blank name rather than emptying the row', () => {
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'setExercise', day: 'push', key: 'flat_bench', fields: { name: '  ' } },
+    ])
+    const ex = plan.push.exercises.find((e) => e.key === 'flat_bench')
+    expect(ex?.name).toBe(DEFAULT_PLAN.push.exercises.find((e) => e.key === 'flat_bench')?.name)
   })
 
   it('removeExercise on a missing key records an error', () => {

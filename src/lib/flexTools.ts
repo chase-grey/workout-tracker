@@ -5,6 +5,7 @@
  * skipped and reported rather than throwing.
  */
 import type { FlexBlock, FlexExercise } from '../config/flexPlan'
+import { unslugKey } from '../config/plan'
 
 export type FlexEdit =
   | {
@@ -106,7 +107,9 @@ export function applyFlexEdits(
               ignored.push(field)
             }
           } else if (isStringField(field)) {
-            if (typeof value === 'string') {
+            // Blank is a real value for sets/tempo, but a blank name leaves the row
+            // with nothing to show but its key.
+            if (typeof value === 'string' && (field !== 'name' || value.trim())) {
               exercise[field] = value
               changed.push(field)
             } else {
@@ -141,7 +144,9 @@ export function applyFlexEdits(
         const key = uniqueKey(block, baseKey)
         const exercise: FlexExercise = {
           key,
-          name: typeof src.name === 'string' && src.name.length > 0 ? src.name : key,
+          // Named off the key, not with it: a key added bare would otherwise show
+          // up in the routine with its underscores intact.
+          name: typeof src.name === 'string' && src.name.trim() ? src.name : unslugKey(key),
           sets: typeof src.sets === 'string' ? src.sets : '3',
           maxSets: isValidNumber(src.maxSets) ? src.maxSets : 3,
           reps: isValidNumber(src.reps) ? src.reps : 8,
@@ -149,7 +154,7 @@ export function applyFlexEdits(
           restSec: isValidNumber(src.restSec) ? src.restSec : 90,
         }
         block.exercises.push(exercise)
-        applied.push(`addExercise: added "${key}" to "${block.label}"`)
+        applied.push(`addExercise: added "${exercise.name}" to "${block.label}"`)
         break
       }
 
@@ -164,8 +169,10 @@ export function applyFlexEdits(
           errors.push(`removeExercise: exercise "${edit.key}" not found in block "${block.label}"`)
           break
         }
-        block.exercises.splice(idx, 1)
-        applied.push(`removeExercise: removed "${edit.key}" from "${block.label}"`)
+        const [removed] = block.exercises.splice(idx, 1)
+        applied.push(
+          `removeExercise: removed "${removed.name || unslugKey(removed.key)}" from "${block.label}"`,
+        )
         break
       }
 
