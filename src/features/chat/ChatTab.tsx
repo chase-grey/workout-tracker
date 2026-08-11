@@ -612,7 +612,11 @@ export function ChatTab({
             // The keyboard opening shrinks the thread; keep its tail in view.
             onFocus={() => endRef.current?.scrollIntoView({ behavior: 'smooth' })}
             aria-label={answerTarget ? `answer #${answerTarget.number}` : 'message'}
-            placeholder={answerTarget ? `answer #${answerTarget.number}` : ''}
+            /* Ghost text only when the field is aimed somewhere other than the
+               coach: answering an issue is the one case where an empty box is
+               ambiguous. Plain chat gets none — the tab it lives on already
+               says what typing here does. */
+            placeholder={answerTarget ? `answer #${answerTarget.number}` : undefined}
             className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
           />
           <button
