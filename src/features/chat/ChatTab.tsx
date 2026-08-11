@@ -12,6 +12,8 @@ import {
   type IssueArea,
 } from '../../services/issues'
 import { refreshIssues } from '../../store/useTrackedIssues'
+import { useKeyboardOpen } from '../../lib/useKeyboardOpen'
+import { composerPad } from '../../lib/composerPad'
 import { repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
@@ -216,6 +218,9 @@ export function ChatTab({
     setTurnsState(next)
   }
   const [input, setInput] = useState('')
+  // Read here as well as in App: the nav below the composer stands down while
+  // the keyboard is up, and the bar's bottom padding stands in for it.
+  const keyboardOpen = useKeyboardOpen()
   const [loading, setLoading] = useState(false)
   // The reply as it streams in, before it becomes a turn.
   const [pending, setPending] = useState('')
@@ -566,13 +571,13 @@ export function ChatTab({
       </div>
 
       {/* Frosted glass, so the tail of the thread dissolves behind the input
-          instead of stopping at a hard edge. Equal padding above and below the
-          input, which is what squares the bottom of the tab with the top: the
-          bar's bottom edge is pinned to the bottom of the scroller, so what you
-          read as space under the field is this padding plus the nav's own room
-          around its icons — a bit over half of the 1.25rem the scroller leaves
-          above the thread on its own, and level with it once this is here. */}
-      <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 py-2 backdrop-blur-md">
+          instead of stopping at a hard edge. The bar's bottom edge is pinned to
+          the bottom of the scroller, so the space under the field is this
+          padding plus whatever sits below the bar — see composerPad, which is
+          what keeps that reading level with the space above. */}
+      <div
+        className={`sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 backdrop-blur-md ${composerPad(keyboardOpen)}`}
+      >
         {/* The question rides above the composer rather than sitting in the
             thread: it has to stay on screen while the answer is being typed. */}
         {(answerLoading || answerTarget || answerError) && (
