@@ -259,6 +259,31 @@ function reachedPoint(goal: GoalSpec): Point | undefined {
 export type GoalHit = { goal: GoalSpec; date: string }
 
 /**
+ * The day a non-milestone goal became reached and has been reached ever since —
+ * the first reading of the unbroken run of at-target readings that ends at the
+ * latest one, or null when the latest reading isn't at target.
+ *
+ * Not the same question {@link reachedDate} answers. That one reports the day the
+ * target was *first* met and keeps reporting it, which is what a goal's own row
+ * wants: the achievement keeps the date it was earned on. But a goal that is only
+ * reached while you're actually there can be earned more than once — a bodyweight
+ * that crossed 180 in January, spent February under it and crossed back this week
+ * is at 180 now, and it got there this week. Dating that by January would hide it
+ * from the week it happened in, which is the one week it's news.
+ *
+ * Reading the run backwards from the newest point is what makes it stop being news
+ * afterwards: a goal crossed in January and held since has a run that starts in
+ * January, so it's listed once, in January's week, and not again for as long as
+ * it holds.
+ */
+function heldSinceDate(goal: GoalSpec): string | null {
+  const meets = (p: Point) => (goal.direction === 'up' ? p.value >= goal.target : p.value <= goal.target)
+  let start: string | null = null
+  for (let i = goal.points.length - 1; i >= 0 && meets(goal.points[i]); i--) start = goal.points[i].date
+  return start
+}
+
+/**
  * The goals whose target was met inside the Mon–Sun week containing `today`,
  * earliest first — the week's finished goals, for the Today tab to show next to
  * the week's PRs.
@@ -270,6 +295,12 @@ export type GoalHit = { goal: GoalSpec; date: string }
  * milestone goals — the ladders — stay earned by their own rule, so they stay
  * listed for the rest of the week however the next session read.
  *
+ * Which day a goal landed on follows the same split. A milestone is earned once
+ * and keeps that date ({@link reachedDate}); every other goal is dated by the day
+ * the run it's currently on began ({@link heldSinceDate}), so a target crossed,
+ * lost and crossed again is reported in the week it was won back rather than
+ * being silently credited to the first time.
+ *
  * The six-pack goal is left out: it's called by eye rather than read off the
  * body-fat estimate (see the Goals panel's SixPackRow), so the day a tape
  * measure's estimate happened to cross its target isn't a day anything was
@@ -280,7 +311,7 @@ export function goalsHitInWeek(goals: GoalSpec[], today: Date = new Date()): Goa
   const hits: GoalHit[] = []
   for (const goal of goals) {
     if (goal.id === GOAL_IDS.sixPack || !isReached(goal)) continue
-    const date = reachedDate(goal)
+    const date = goal.milestone ? reachedDate(goal) : heldSinceDate(goal)
     if (date && weekStartISO(date) === week) hits.push({ goal, date })
   }
   return hits.sort((a, b) => a.date.localeCompare(b.date))

@@ -556,6 +556,41 @@ describe('goalsHitInWeek lists the goals that landed this week', () => {
     expect(goalsHitInWeek([g], thursday)).toEqual([])
   })
 
+  it('lists a target lost in an earlier week and won back in this one', () => {
+    const g = spec({
+      id: 'a',
+      points: [
+        { date: '2026-01-20', value: 101 },
+        { date: '2026-02-02', value: 96 },
+        { date: '2026-02-10', value: 102 },
+      ],
+    })
+    expect(goalsHitInWeek([g], thursday)).toEqual([{ goal: g, date: '2026-02-10' }])
+  })
+
+  it('leaves out a target crossed weeks ago and held ever since', () => {
+    const g = spec({
+      id: 'a',
+      points: [
+        { date: '2026-01-20', value: 101 },
+        { date: '2026-02-02', value: 103 },
+        { date: '2026-02-10', value: 104 },
+      ],
+    })
+    expect(goalsHitInWeek([g], thursday)).toEqual([])
+  })
+
+  it('dates a goal by the run it is on, not by a later reading in the same run', () => {
+    const g = spec({
+      id: 'a',
+      points: [
+        { date: '2026-02-09', value: 101 },
+        { date: '2026-02-11', value: 105 },
+      ],
+    })
+    expect(goalsHitInWeek([g], thursday)).toEqual([{ goal: g, date: '2026-02-09' }])
+  })
+
   it('reads the real goal set — a weigh-in that hit 180 this week', () => {
     const goals = buildGoals(
       inputs([
@@ -564,6 +599,19 @@ describe('goalsHitInWeek lists the goals that landed this week', () => {
       ]),
     )
     expect(goalsHitInWeek(goals, thursday).map((h) => h.goal.id)).toEqual([GOAL_IDS.weight180])
+  })
+
+  it('reads the real goal set — 180 lost in January and won back this week', () => {
+    const goals = buildGoals(
+      inputs([
+        { date: '2026-01-17', weightLbs: 181 },
+        { date: '2026-01-31', weightLbs: 178 },
+        { date: '2026-02-11', weightLbs: 180 },
+      ]),
+    )
+    expect(goalsHitInWeek(goals, thursday)).toEqual([
+      { goal: goals.find((g) => g.id === GOAL_IDS.weight180)!, date: '2026-02-11' },
+    ])
   })
 })
 
