@@ -32,7 +32,16 @@
  * is resumed from a stored session, so a fixer restart loses none of it.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import path from 'node:path'
 import { ASK_MARKER, parseAsk } from './parseAsk.mjs'
 
@@ -52,6 +61,18 @@ const PERMISSION = process.env.AUTOFIX_PERMISSION || 'acceptEdits' // 'acceptEdi
 const FIX_ATTEMPTS = 2
 const RUNNING_LABEL = 'autofix-running'
 const FAILED_LABEL = 'autofix-failed'
+// A failed issue is retried on a later tick rather than parked for good. Nearly
+// every failure so far was the harness's fault rather than the issue's, and a
+// permanent `autofix-failed` turned #13, #14, #22, #30, #31, #32, #34 and #35
+// into a graveyard no tick would ever look at again — eight reports that each
+// died on one bad run. The budget is counted from FAIL_MARKER comments already
+// in the thread, so it survives a watcher restart and a genuinely hopeless issue
+// still costs only this many runs before it stops and asks for a human.
+const MAX_FAILURES = 3
+// Invisible in the rendered issue, but countable here. Matching the human
+// sentence instead would silently reset every budget the next time the wording
+// changed.
+const FAIL_MARKER = '<!-- autofix:failed -->'
 // Parks an issue while the reporter answers. `auto-fix` comes off at the same
 // time, so this poll leaves it alone until the app hands it back.
 const ASK_LABEL = 'needs-input'
@@ -61,6 +82,10 @@ const WORKTREE = path.join(process.cwd(), '.autofix', 'worktree')
 // turned the push into a no-op that still reported success.
 const WORK_BRANCH = 'autofix-work'
 const LOCK = path.join(process.cwd(), '.autofix', 'watcher.lock')
+// Every `claude` run's output, kept per issue. Diagnosing the eight-issue stall
+// meant guessing at what the runs had said, because the only copy of it was the
+// scrollback of a terminal that had long since closed.
+const LOGS = path.join(process.cwd(), '.autofix', 'logs')
 
 if (!TOKEN) {
   console.error(
@@ -162,6 +187,40 @@ function claimWatcherLock() {
 
 /* --------------------------------------------------------------- worktree */
 
+/**
+ * Point the worktree's `node_modules` at the one the main checkout already has.
+ *
+ * A fresh worktree has no `node_modules` at all, so `npm test` there could only
+ * ever fail — which is how the prompt came to order a test run that was not
+ * physically possible. Installing a second copy per run would cost minutes and a
+ * few hundred megabytes for a tree that is reset every time, so borrow the real
+ * one: a junction on Windows, a directory symlink elsewhere, neither needing
+ * elevation. `node_modules` is gitignored, so the `git clean -fd` below leaves it
+ * alone (that clean has no `-x`, which is what makes this safe to do once).
+ */
+function linkNodeModules() {
+  const link = path.join(WORKTREE, 'node_modules')
+  const real = path.join(process.cwd(), 'node_modules')
+  if (!existsSync(real)) return
+  try {
+    if (existsSync(link)) {
+      // A link already in place is the state we want, and a genuine install that
+      // somebody made by hand is theirs to keep. What has to go is the third case:
+      // a bare directory holding nothing but the `.tmp` scratch folder vitest
+      // leaves behind, which is what the worktree was found in and what made every
+      // run's `npm test` impossible while still looking, to existsSync, like deps.
+      if (lstatSync(link).isSymbolicLink()) return
+      if (existsSync(path.join(link, '.bin'))) return
+      rmSync(link, { recursive: true, force: true })
+    }
+    symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir')
+  } catch (err) {
+    // Not fatal on its own: say so plainly and let runTests report the miss,
+    // rather than failing a fix that may be perfectly good.
+    console.error(`autofix: could not link node_modules into the worktree — ${err}`)
+  }
+}
+
 /** A clean checkout of the latest main, isolated from the user's working tree. */
 function prepareWorktree() {
   mkdirSync(path.dirname(WORKTREE), { recursive: true })
@@ -184,6 +243,31 @@ function prepareWorktree() {
   mustGit(['checkout', '-B', WORK_BRANCH, 'origin/main'], opts)
   mustGit(['reset', '--hard', 'origin/main'], opts)
   mustGit(['clean', '-fd'], opts)
+  linkNodeModules()
+}
+
+/**
+ * Run the suite in the worktree, and return what to tell the issue if it failed.
+ *
+ * The harness runs the tests, not `claude`: inside an autofix run every way of
+ * starting the suite (`npm test`, `npx vitest run`) is refused for want of anyone
+ * to approve it, so asking claude to prove the tests pass produced runs that
+ * either lied or, as here, gave up having changed nothing. Out here there is no
+ * approver in the way. Returning the failing tail rather than throwing lets the
+ * caller put it in the issue thread, where the next attempt's prompt will read it.
+ */
+function runTests() {
+  const r = spawnSync('npm', ['test'], {
+    cwd: WORKTREE,
+    encoding: 'utf8',
+    shell: true, // resolves npm.cmd on Windows; no untrusted text in the args
+  })
+  if (r.status === 0) return null
+  const out = `${r.stdout || ''}\n${r.stderr || ''}`.trim()
+  // The head carries the runner's own error (a missing binary, a config fault);
+  // the tail carries the failing assertions. Both matter, and the whole run is
+  // far too long to paste into a comment.
+  return out.length > 3000 ? `${out.slice(0, 800)}\n\n...\n\n${out.slice(-2000)}` : out
 }
 
 function worktreeGit(args) {
@@ -300,7 +384,12 @@ function buildPrompt(issue, comments) {
     '- Investigate and implement a focused change for this issue only. It may be a bug',
     '  report or a feature request — both are in scope, so do not refuse one for not',
     '  being a bug.',
-    '- Run `npm test` and make sure it passes before finishing.',
+    '- Do NOT try to run the test suite: `npm test` and `npx vitest` are both refused',
+    '  in this session, with nobody available to approve them. The surrounding script',
+    '  runs the suite for you the moment you finish, and if it fails you get another',
+    '  attempt with the failures quoted in the thread above. `npx tsc -b` does work,',
+    '  so use that if you want a typecheck. Write or update tests as usual — just do',
+    '  not try to execute them, and do not claim they pass.',
     '- Do NOT commit or push — the surrounding script handles git.',
     '- If you genuinely cannot act without more from the reporter, make NO changes and',
     `  reply with the single word ${ASK_MARKER} on its own first line, then your`,
@@ -329,9 +418,19 @@ function runClaude(issue, comments) {
     const child = spawn('claude', args, { cwd: WORKTREE, stdio: ['pipe', 'pipe', 'inherit'], shell: true })
     let out = ''
     child.stdout.setEncoding('utf8')
+    const log = (text) => {
+      try {
+        mkdirSync(LOGS, { recursive: true })
+        appendFileSync(path.join(LOGS, `issue-${issue.number}.log`), text)
+      } catch {
+        /* a log we can't write is not worth failing a fix over */
+      }
+    }
+    log(`\n===== run started for #${issue.number}: ${issue.title}\n`)
     child.stdout.on('data', (chunk) => {
       out += chunk
       process.stdout.write(chunk)
+      log(chunk)
     })
     // `close`, not `exit`: exit fires the moment the process ends, with the tail
     // of stdout still unread — which is exactly where the question would be.
@@ -351,6 +450,47 @@ function runClaude(issue, comments) {
 /* ------------------------------------------------------------- processing */
 
 const seen = new Set() // numbers handled this run, so a slow tick doesn't re-grab
+
+/** How many times this issue has already failed, read from its own thread. */
+const failuresSoFar = (comments) =>
+  comments.filter((c) => (c.body || '').includes(FAIL_MARKER)).length
+
+// The thread is the durable record, but listComments swallows its own errors and
+// returns [] — which reads as "never failed before" and would retry forever while
+// GitHub is unreachable. Counting here as well means the budget still holds when
+// the thread can't be read; the thread's higher count wins across restarts.
+const failuresThisRun = new Map()
+
+/**
+ * Record a failed run and decide whether the issue gets another go.
+ *
+ * Under budget the issue keeps `auto-fix` and loses `autofix-running`, so a later
+ * tick picks it up again — with `why` now in the thread, which buildPrompt feeds
+ * to the next attempt. At the budget it takes `autofix-failed` and stops, which is
+ * the one case where that label is what it claims to be: a considered handover to
+ * a human rather than the first stumble.
+ */
+async function recordFailure(n, why) {
+  const priorComments = await listComments(n)
+  failuresThisRun.set(n, (failuresThisRun.get(n) || 0) + 1)
+  const failures = Math.max(failuresSoFar(priorComments) + 1, failuresThisRun.get(n))
+  const done = failures >= MAX_FAILURES
+  const note = done
+    ? `Giving up after ${failures} attempts — over to a human.`
+    : `Attempt ${failures} of ${MAX_FAILURES}. Will try again on the next pass.`
+  await comment(n, `${FAIL_MARKER}\n**Auto-fix run failed.** ${note}\n\n\`\`\`\n${why.slice(0, 1500)}\n\`\`\``).catch(
+    () => {},
+  )
+  await removeLabel(n, RUNNING_LABEL)
+  if (done) {
+    await addLabels(n, [FAILED_LABEL]).catch(() => {})
+    console.log(`autofix: #${n} failed ${failures} times — parked for a human.`)
+    return
+  }
+  // Forget it so a later tick can retry. `auto-fix` is deliberately left on.
+  seen.delete(n)
+  console.log(`autofix: #${n} failed (${failures}/${MAX_FAILURES}) — will retry.`)
+}
 
 async function processIssue(issue) {
   const n = issue.number
@@ -385,9 +525,15 @@ async function processIssue(issue) {
           console.log(`autofix: #${n} is waiting on an answer.`)
           return
         }
-        await comment(n, `Auto-fix ran but made no changes (${res.detail}). Leaving open for a human.`)
-        await removeLabel(n, RUNNING_LABEL)
-        await addLabels(n, [FAILED_LABEL])
+        await recordFailure(n, `Ran but changed nothing, and asked nothing (${res.detail}).`)
+        return
+      }
+      // Tests before the commit, so a red suite never becomes a commit that has to
+      // be reverted off main. A failure here is the issue's next prompt, not the
+      // end of it: the tail goes in the thread and the retry reads it.
+      const failing = runTests()
+      if (failing) {
+        await recordFailure(n, `The change did not pass \`npm test\`:\n\n${failing}`)
         return
       }
       worktreeGit(['add', '-A'])
@@ -416,13 +562,58 @@ async function processIssue(issue) {
     }
   } catch (err) {
     console.error(`autofix: #${n} failed — ${err}`)
-    await comment(n, `Auto-fix failed:\n\n\`\`\`\n${String(err).slice(0, 1500)}\n\`\`\``).catch(() => {})
-    await removeLabel(n, RUNNING_LABEL)
-    await addLabels(n, [FAILED_LABEL]).catch(() => {})
+    await recordFailure(n, String(err))
   }
 }
 
+/**
+ * Reclaim issues left mid-run by a watcher that died.
+ *
+ * `autofix-running` is a claim with no expiry, and tick() skips it — so a watcher
+ * killed while claude was working leaves the issue marked as in progress by a
+ * process that no longer exists, and nothing ever looks at it again. We hold the
+ * lock by the time this runs, which means no other watcher is alive to own such a
+ * label, so every one of them is a corpse and safe to clear.
+ */
+async function reclaimRunningLabels() {
+  let stuck
+  try {
+    stuck = await gh(
+      'GET',
+      `/repos/${REPO}/issues?state=open&labels=${encodeURIComponent(RUNNING_LABEL)}&per_page=100`,
+    )
+  } catch (err) {
+    console.error(`autofix: could not check for interrupted runs — ${err}`)
+    return
+  }
+  for (const issue of stuck) {
+    if (issue.pull_request) continue
+    await removeLabel(issue.number, RUNNING_LABEL)
+    console.log(`autofix: #${issue.number} was left mid-run by a dead watcher — reclaimed.`)
+  }
+}
+
+// A tick can outlast the interval many times over: one issue is minutes of
+// `claude`, and the timer keeps firing throughout. Overlapping ticks pick up
+// DIFFERENT issues, so `seen` never stops them, and they then share the single
+// worktree — each one's prepareWorktree hard-resetting the others' edits, each
+// one's `git add -A` sweeping whatever the others had written into a commit under
+// its own issue number. That is what emptied the eight stalled issues: their work
+// was reset or committed under a neighbour, so hasChanges() found nothing left to
+// commit. One tick at a time, and the whole class of failure goes away.
+let ticking = false
+
 async function tick() {
+  if (ticking) return
+  ticking = true
+  try {
+    await pollOnce()
+  } finally {
+    ticking = false
+  }
+}
+
+async function pollOnce() {
   let issues
   try {
     issues = await listOpenIssues()
@@ -445,5 +636,6 @@ async function tick() {
 
 claimWatcherLock()
 console.log(`autofix: watching ${REPO} for "${LABEL}" issues every ${INTERVAL_MS / 1000}s.`)
+await reclaimRunningLabels()
 await tick()
 setInterval(() => void tick(), INTERVAL_MS)
