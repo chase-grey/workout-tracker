@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DAY_TYPES,
   DEFAULT_PLAN,
+  TODAY_DAY_ORDER,
   PLAN_REVISION,
   exerciseName,
   unslugKey,
@@ -11,6 +12,16 @@ import {
   type Plan,
   type PlannedExercise,
 } from './plan'
+
+describe('TODAY_DAY_ORDER', () => {
+  it('offers every day exactly once', () => {
+    expect([...TODAY_DAY_ORDER].sort()).toEqual([...DAY_TYPES].sort())
+  })
+
+  it('puts full body ahead of pull + legs', () => {
+    expect(TODAY_DAY_ORDER.indexOf('fullbody')).toBeLessThan(TODAY_DAY_ORDER.indexOf('pull'))
+  })
+})
 
 describe('withPlanDefaults', () => {
   it('keeps only the current day types and fills any missing one from the defaults', () => {

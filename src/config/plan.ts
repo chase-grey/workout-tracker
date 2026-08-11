@@ -137,6 +137,13 @@ export const PLAN_REVISION = 5
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
+/**
+ * The order the Today tab offers the days in. Separate from DAY_TYPES, which is
+ * the canonical set (merging, validation, chat tools) and shouldn't be reshuffled
+ * to serve one screen's layout.
+ */
+export const TODAY_DAY_ORDER: DayType[] = ['push', 'fullbody', 'pull']
+
 /** Day types that run as alternating A/B variants. */
 export const VARIANT_DAY_TYPES: DayType[] = ['push']
 
