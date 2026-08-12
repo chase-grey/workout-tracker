@@ -614,6 +614,31 @@ export function absExerciseKeys(plan: Plan): Set<string> {
   return keys
 }
 
+/** Display groups that name lower-body work, for {@link legExerciseKeys}. */
+const LEG_GROUP_RE = /^(legs?|quads?|hamstrings?|glutes?|calf|calves)$/i
+
+/**
+ * Keys of every exercise that trains the legs, matched by group the same way
+ * {@link absExerciseKeys} matches core work, so a lower-body movement the user
+ * adds is picked up automatically.
+ *
+ * The defaults' own leg movements are seeded regardless of how the live plan
+ * groups them: a squat filed under "compound" is still leg work, and the point of
+ * the set is to keep lower-body progress from standing in for what a progress
+ * photo actually shows (see lib/photoReminder).
+ */
+export function legExerciseKeys(plan: Plan): Set<string> {
+  const keys = new Set<string>(
+    DEFAULT_PLAN.pull.exercises.filter((e) => LEG_GROUP_RE.test(e.group)).map((e) => e.key),
+  )
+  for (const day of Object.values(plan)) {
+    for (const e of day.exercises) {
+      if (LEG_GROUP_RE.test(e.group)) keys.add(e.key)
+    }
+  }
+  return keys
+}
+
 /**
  * A day's exercise list as it should actually be performed, with the variant's
  * set counts and ordering applied. `variant` is null for days that don't run A/B

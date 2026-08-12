@@ -1,7 +1,7 @@
 import type { BodyWeightEntry, WorkoutRow } from '../types'
 import { epley1RM } from './epley'
 import { parseISODate } from './dates'
-import { exerciseName } from '../config/plan'
+import { DEFAULT_PLAN, exerciseName, legExerciseKeys, type Plan } from '../config/plan'
 
 export type PhotoReminder = { due: boolean; reason: string }
 
@@ -9,12 +9,18 @@ export type PhotoReminder = { due: boolean; reason: string }
  * Suggest a progress photo when EITHER ~a month has passed since the last one,
  * OR there's been a notable jump in body weight or in estimated strength on any
  * lift since the last photo.
+ *
+ * Leg work is left out of the strength trigger: a squat or a leg-machine PR
+ * doesn't change what a progress photo shows, so only upper-body and ab lifts
+ * get to call for the camera. Which movements count as legs comes from the live
+ * plan (see {@link legExerciseKeys}), falling back to the shipped one.
  */
 export function photoReminder(input: {
   lastPhoto: string | null
   bodyWeights: BodyWeightEntry[]
   workouts: WorkoutRow[]
   today?: Date
+  plan?: Plan
   cfg?: { days?: number; bwLbs?: number; strengthLbs?: number }
 }): PhotoReminder {
   const today = input.today ?? new Date()
@@ -39,11 +45,12 @@ export function photoReminder(input: {
     }
   }
 
-  // Strength: biggest per-exercise est-1RM gain since the last photo.
+  // Strength: biggest per-exercise est-1RM gain since the last photo, legs aside.
+  const legKeys = legExerciseKeys(input.plan ?? DEFAULT_PLAN)
   const preBest = new Map<string, number>()
   const postBest = new Map<string, number>()
   for (const r of input.workouts) {
-    if (r.weight_lbs == null) continue
+    if (r.weight_lbs == null || legKeys.has(r.exercise)) continue
     const est = epley1RM(r.weight_lbs, r.reps)
     const map = r.date <= lastPhoto ? preBest : postBest
     map.set(r.exercise, Math.max(map.get(r.exercise) ?? 0, est))

@@ -26,7 +26,7 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
       .filter((d): d is string => !!d)
       .sort()
       .at(-1) ?? null
-  const reminder = photoReminder({ lastPhoto, bodyWeights, workouts })
+  const reminder = photoReminder({ lastPhoto, bodyWeights, workouts, plan })
   const snoozed = !!settings.photoSnoozeUntil && toISODate(new Date()) < settings.photoSnoozeUntil
   const photoDue = !photoDismissed && !snoozed && reminder.due
 
