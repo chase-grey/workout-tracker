@@ -12,8 +12,6 @@ import {
   type IssueArea,
 } from '../../services/issues'
 import { refreshIssues } from '../../store/useTrackedIssues'
-import { useKeyboardOpen } from '../../lib/useKeyboardOpen'
-import { composerPad } from '../../lib/composerPad'
 import { dayOrder, exerciseName, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import {
@@ -304,9 +302,6 @@ export function ChatTab({
     setTurnsState(next)
   }
   const [input, setInput] = useState('')
-  // Read here as well as in App: the nav below the composer stands down while
-  // the keyboard is up, and the bar's bottom padding stands in for it.
-  const keyboardOpen = useKeyboardOpen()
   const [loading, setLoading] = useState(false)
   // The reply as it streams in, before it becomes a turn.
   const [pending, setPending] = useState('')
@@ -712,12 +707,10 @@ export function ChatTab({
           doesn't measure itself against the parent, it measures against the
           scrollport, so the same 1rem has to come off again here.
 
-          With the bar actually on the bottom edge, the space under the field is
-          this padding plus whatever sits below the bar — see composerPad, which
-          is what keeps that reading level with the space above. */}
-      <div
-        className={`sticky -bottom-4 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 backdrop-blur-md ${composerPad(keyboardOpen)}`}
-      >
+          The padding is even top and bottom: the bar's own border is the line
+          above the field and 0.5rem of its own is the gap below, whether or not
+          the nav is standing under it. */}
+      <div className="sticky -bottom-4 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 py-2 backdrop-blur-md">
         {/* The question rides above the composer rather than sitting in the
             thread: it has to stay on screen while the answer is being typed. */}
         {(answerLoading || answerTarget || answerError) && (
