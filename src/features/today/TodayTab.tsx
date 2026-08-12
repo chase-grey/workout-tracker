@@ -6,7 +6,7 @@ import { WeightCard } from './WeightCard'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
-import { TODAY_DAY_ORDER, type VariantKey } from '../../config/plan'
+import { dayOrder, type VariantKey } from '../../config/plan'
 import { lastTrainingSession } from '../../lib/session'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
@@ -100,7 +100,7 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
         >
           stretch + core
         </button>
-        {TODAY_DAY_ORDER.map((t) => (
+        {dayOrder(plan).map((t) => (
           <button
             key={t}
             onClick={() => onStart(t)}

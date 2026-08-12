@@ -4,9 +4,11 @@ import {
   DEFAULT_PLAN,
   TODAY_DAY_ORDER,
   PLAN_REVISION,
+  dayOrder,
   exerciseName,
   unslugKey,
   withCircuitRest,
+  withDayOrder,
   withPlanDefaults,
   type DayPlan,
   type Plan,
@@ -20,6 +22,51 @@ describe('TODAY_DAY_ORDER', () => {
 
   it('puts full body ahead of pull + legs', () => {
     expect(TODAY_DAY_ORDER.indexOf('fullbody')).toBeLessThan(TODAY_DAY_ORDER.indexOf('pull'))
+  })
+})
+
+describe('dayOrder', () => {
+  it('falls back to the shipped order for a plan nobody has reordered', () => {
+    expect(dayOrder(DEFAULT_PLAN)).toEqual(TODAY_DAY_ORDER)
+  })
+
+  it('follows the order the user saved', () => {
+    const reordered = withDayOrder(DEFAULT_PLAN, ['pull', 'fullbody', 'push'])
+    expect(dayOrder(reordered)).toEqual(['pull', 'fullbody', 'push'])
+  })
+
+  it('survives the round trip through storage', () => {
+    const reordered = withDayOrder(DEFAULT_PLAN, ['pull', 'push', 'fullbody'])
+    const loaded = withPlanDefaults(JSON.parse(JSON.stringify(reordered)) as Plan, PLAN_REVISION)
+    expect(dayOrder(loaded)).toEqual(['pull', 'push', 'fullbody'])
+  })
+
+  it('keeps a saved arrangement through a shipped restructure', () => {
+    // A revision bump re-adopts the shipped exercises; where the user put the days
+    // is their arrangement, not part of that programming change.
+    const reordered = withDayOrder(DEFAULT_PLAN, ['fullbody', 'pull', 'push'])
+    const loaded = withPlanDefaults(JSON.parse(JSON.stringify(reordered)) as Plan, 0)
+    expect(dayOrder(loaded)).toEqual(['fullbody', 'pull', 'push'])
+  })
+
+  it('offers every day exactly once even with duplicate or missing numbers', () => {
+    const messy = {
+      ...DEFAULT_PLAN,
+      push: { ...DEFAULT_PLAN.push, order: 5 },
+      pull: { ...DEFAULT_PLAN.pull, order: 5 },
+    }
+    const order = dayOrder(messy)
+    expect([...order].sort()).toEqual([...DAY_TYPES].sort())
+    // fullbody has no number, so it sorts by where it ships — ahead of both here.
+    expect(order[0]).toBe('fullbody')
+    // The tie between push and pull breaks the shipped way round.
+    expect(order.indexOf('push')).toBeLessThan(order.indexOf('pull'))
+  })
+
+  it('numbers every day, so no leftover position outranks the new one', () => {
+    const reordered = withDayOrder(DEFAULT_PLAN, ['pull'])
+    expect(DAY_TYPES.every((t) => typeof reordered[t].order === 'number')).toBe(true)
+    expect(dayOrder(reordered)[0]).toBe('pull')
   })
 })
 

@@ -101,6 +101,13 @@ export type DayPlan = {
   label: string
   required: boolean
   exercises: PlannedExercise[]
+  /**
+   * Where the day sits in the list the Today tab offers (see {@link dayOrder}),
+   * set by reordering the days in Settings. Absent on a day that has never been
+   * moved, which leaves it at its shipped position — so a plan saved before this
+   * existed still comes up in {@link TODAY_DAY_ORDER}.
+   */
+  order?: number
 }
 
 export type Plan = Record<DayType, DayPlan>
@@ -138,7 +145,8 @@ export const PLAN_REVISION = 5
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
 /**
- * The order the Today tab offers the days in. Separate from DAY_TYPES, which is
+ * The order the Today tab offers the days in until the user arranges them
+ * themselves in Settings (see {@link dayOrder}). Separate from DAY_TYPES, which is
  * the canonical set (merging, validation, chat tools) and shouldn't be reshuffled
  * to serve one screen's layout.
  */
@@ -280,6 +288,39 @@ export const DEFAULT_PLAN: Plan = {
       { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: 3, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
     ],
   },
+}
+
+/**
+ * The days in the order they're offered: a day the user has moved carries its own
+ * {@link DayPlan.order}, and one that has never been moved keeps its shipped
+ * {@link TODAY_DAY_ORDER} position. Ties — two days that
+ * have never been moved, or a hand-edited plan with duplicate numbers — fall back
+ * to the shipped order too, so the list is always all of DAY_TYPES exactly once.
+ */
+export function dayOrder(plan: Plan): DayType[] {
+  const shipped = (t: DayType) => {
+    const i = TODAY_DAY_ORDER.indexOf(t)
+    return i < 0 ? TODAY_DAY_ORDER.length : i
+  }
+  return [...DAY_TYPES].sort((a, b) => {
+    const oa = plan[a]?.order ?? shipped(a)
+    const ob = plan[b]?.order ?? shipped(b)
+    return oa === ob ? shipped(a) - shipped(b) : oa - ob
+  })
+}
+
+/**
+ * A copy of the plan with the days numbered into `order`. Every day is numbered,
+ * including ones that keep their place, so the arrangement can't be half-stated —
+ * a day left without a number would otherwise be sorted by where it once shipped.
+ */
+export function withDayOrder(plan: Plan, order: DayType[]): Plan {
+  const positions = [...order, ...DAY_TYPES.filter((t) => !order.includes(t))]
+  const next = { ...plan }
+  positions.forEach((type, i) => {
+    if (next[type]) next[type] = { ...next[type], order: i }
+  })
+  return next
 }
 
 /** Human-readable rep range, e.g. "6–10" or "12". */

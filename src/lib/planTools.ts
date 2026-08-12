@@ -34,6 +34,22 @@ export type PlanEdit =
       exercise: Omit<PlannedExercise, 'key'> & { key?: string }
     }
   | { op: 'removeExercise'; day: DayType; key: string }
+  | {
+      op: 'moveExercise'
+      day: DayType
+      key: string
+      /**
+       * Where it lands. An anchor key (`before`/`after`) says it in the terms the
+       * day is actually described in and survives a list that has shifted under an
+       * earlier edit; `toIndex` is the 0-based position, used when there's no
+       * neighbour to name. Anchors win if more than one is given.
+       */
+      before?: string
+      after?: string
+      toIndex?: number
+    }
+  /** The whole day reordered at once, listed front to back by key. */
+  | { op: 'reorderDay'; day: DayType; keys: string[] }
   | { op: 'setDayLabel'; day: DayType; label: string }
 
 /** The set of valid edit ops, exported for prompting the assistant. */
@@ -41,6 +57,8 @@ export const PLAN_EDIT_OPS = [
   'setExercise',
   'addExercise',
   'removeExercise',
+  'moveExercise',
+  'reorderDay',
   'setDayLabel',
 ] as const
 
@@ -172,6 +190,75 @@ export function applyPlanEdits(
         }
         const [removed] = dayPlan.exercises.splice(idx, 1)
         applied.push(`removed ${removed.name || exerciseName(removed.key)} from ${edit.day}`)
+        break
+      }
+
+      case 'moveExercise': {
+        const from = dayPlan.exercises.findIndex((e) => e.key === edit.key)
+        if (from === -1) {
+          errors.push(`no exercise "${edit.key}" on ${edit.day}`)
+          break
+        }
+        // Positions are resolved against the list with the exercise already lifted
+        // out of it, so "after the pushdown" means the same thing whether the move
+        // is forwards or backwards.
+        const rest = dayPlan.exercises.filter((_, i) => i !== from)
+        const anchor = edit.before ?? edit.after
+        let to: number
+        if (anchor != null) {
+          const at = rest.findIndex((e) => e.key === anchor)
+          if (at === -1) {
+            errors.push(`no exercise "${anchor}" on ${edit.day} to move "${edit.key}" next to`)
+            break
+          }
+          to = edit.before != null ? at : at + 1
+        } else if (isValidNumber(edit.toIndex)) {
+          to = Math.min(Math.round(edit.toIndex), rest.length)
+        } else {
+          errors.push(`moveExercise needs before, after or toIndex ("${edit.key}" on ${edit.day})`)
+          break
+        }
+        const moved = dayPlan.exercises[from]
+        rest.splice(to, 0, moved)
+        dayPlan.exercises = rest
+        applied.push(
+          `moved ${moved.name || exerciseName(moved.key)} to position ${to + 1} on ${edit.day}`,
+        )
+        break
+      }
+
+      case 'reorderDay': {
+        const keys = Array.isArray(edit.keys) ? edit.keys : []
+        const byKey = new Map(dayPlan.exercises.map((e) => [e.key, e]))
+        const ordered: PlannedExercise[] = []
+        const placed = new Set<string>()
+        for (const key of keys) {
+          if (placed.has(key)) continue
+          const exercise = byKey.get(key)
+          if (!exercise) {
+            errors.push(`no exercise "${key}" on ${edit.day}`)
+            continue
+          }
+          placed.add(key)
+          ordered.push(exercise)
+        }
+        if (placed.size === 0) {
+          // Nothing recognised: an empty list has said nothing yet, and a list of
+          // keys the day doesn't have has already reported each of them.
+          if (keys.length === 0) errors.push(`reorderDay needs the exercise keys for ${edit.day}`)
+          break
+        }
+        // A list that names only some of the day keeps the rest in their existing
+        // order behind it, so "put the squat first" doesn't drop everything else.
+        for (const exercise of dayPlan.exercises) {
+          if (!placed.has(exercise.key)) ordered.push(exercise)
+        }
+        dayPlan.exercises = ordered
+        // Spelled out rather than reported as "reordered pull": this line is the
+        // whole of what the approve button in the chat shows about the change.
+        applied.push(
+          `reordered ${edit.day}: ${ordered.map((e) => e.name || exerciseName(e.key)).join(' → ')}`,
+        )
         break
       }
 

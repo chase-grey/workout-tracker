@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_PLAN } from '../config/plan'
 import type { Plan } from '../config/plan'
-import { applyPlanEdits, PLAN_EDIT_OPS } from './planTools'
+import type { DayType } from '../types'
+import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from './planTools'
+
+/** A day's exercise keys in order — what the reordering ops are judged on. */
+const keys = (plan: Plan, day: DayType): string[] => plan[day].exercises.map((e) => e.key)
 
 describe('applyPlanEdits', () => {
   it('setExercise changes a field', () => {
@@ -132,6 +136,129 @@ describe('applyPlanEdits', () => {
     expect(errors).toHaveLength(1)
   })
 
+  it('moveExercise puts one exercise directly before another', () => {
+    const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'moveExercise', day: 'push', key: 'flat_bench', before: 'cable_crunch' },
+    ])
+    expect(keys(plan, 'push')[0]).toBe('flat_bench')
+    // Nothing else moves, and nothing is lost or duplicated on the way.
+    expect(keys(plan, 'push').slice(1)).toEqual(
+      keys(DEFAULT_PLAN, 'push').filter((k) => k !== 'flat_bench'),
+    )
+    expect(applied[0]).toBe('moved flat bench press to position 1 on push')
+    expect(errors).toHaveLength(0)
+  })
+
+  it('moveExercise puts one exercise directly after another, moving forwards', () => {
+    // Forwards is where an index would be off by one: the anchor sits a place
+    // earlier once the exercise being moved is lifted out.
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'moveExercise', day: 'push', key: 'cable_crunch', after: 'flat_bench' },
+    ])
+    const order = keys(plan, 'push')
+    expect(order.indexOf('cable_crunch')).toBe(order.indexOf('flat_bench') + 1)
+    expect(order).toHaveLength(DEFAULT_PLAN.push.exercises.length)
+  })
+
+  it('moveExercise moves to a position, clamping past the end', () => {
+    const { plan: toTop } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'moveExercise', day: 'push', key: 'lateral_raise_r', toIndex: 0 },
+    ])
+    expect(keys(toTop, 'push')[0]).toBe('lateral_raise_r')
+
+    const { plan: toEnd, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'moveExercise', day: 'push', key: 'cable_crunch', toIndex: 99 },
+    ])
+    expect(keys(toEnd, 'push').at(-1)).toBe('cable_crunch')
+    expect(errors).toHaveLength(0)
+  })
+
+  it('moveExercise one step at a time swaps neighbours, as the plan editor arrows do', () => {
+    // The editor sends the row's own index ± 1, counted in the list the exercise
+    // is still part of.
+    const before = keys(DEFAULT_PLAN, 'push')
+    const i = before.indexOf('iso_chest')
+    const { plan: down } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'moveExercise', day: 'push', key: 'iso_chest', toIndex: i + 1 },
+    ])
+    expect(keys(down, 'push')[i]).toBe(before[i + 1])
+    expect(keys(down, 'push')[i + 1]).toBe('iso_chest')
+
+    const { plan: up } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'moveExercise', day: 'push', key: 'iso_chest', toIndex: i - 1 },
+    ])
+    expect(keys(up, 'push')[i - 1]).toBe('iso_chest')
+    expect(keys(up, 'push')[i]).toBe(before[i - 1])
+  })
+
+  it('moveExercise records an error and moves nothing when it cannot place the exercise', () => {
+    const cases: PlanEdit[] = [
+      { op: 'moveExercise', day: 'push', key: 'nope', toIndex: 0 },
+      { op: 'moveExercise', day: 'push', key: 'flat_bench', after: 'nope' },
+      // No destination at all.
+      { op: 'moveExercise', day: 'push', key: 'flat_bench' },
+    ]
+    for (const edit of cases) {
+      const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [edit])
+      expect(errors).toHaveLength(1)
+      expect(applied).toHaveLength(0)
+      expect(keys(plan, 'push')).toEqual(keys(DEFAULT_PLAN, 'push'))
+    }
+  })
+
+  it('reorderDay sets the whole order at once', () => {
+    const reversed = [...keys(DEFAULT_PLAN, 'pull')].reverse()
+    const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDay', day: 'pull', keys: reversed },
+    ])
+    expect(keys(plan, 'pull')).toEqual(reversed)
+    // The resulting order is spelled out — it's all the approve button shows.
+    expect(applied[0]).toBe(
+      `reordered pull: ${plan.pull.exercises.map((e) => e.name).join(' → ')}`,
+    )
+    expect(errors).toHaveLength(0)
+  })
+
+  it('reorderDay leaves the exercises it does not name behind the ones it does', () => {
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDay', day: 'pull', keys: ['cable_row', 'weighted_pullups'] },
+    ])
+    const rest = keys(DEFAULT_PLAN, 'pull').filter(
+      (k) => k !== 'cable_row' && k !== 'weighted_pullups',
+    )
+    expect(keys(plan, 'pull')).toEqual(['cable_row', 'weighted_pullups', ...rest])
+  })
+
+  it('reorderDay skips a key the day does not have and keeps the rest', () => {
+    const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDay', day: 'pull', keys: ['nope', 'cable_row'] },
+    ])
+    expect(keys(plan, 'pull')[0]).toBe('cable_row')
+    expect(keys(plan, 'pull')).toHaveLength(DEFAULT_PLAN.pull.exercises.length)
+    expect(applied).toHaveLength(1)
+    expect(errors).toEqual(['no exercise "nope" on pull'])
+  })
+
+  it('reorderDay recognising nothing leaves the day alone', () => {
+    const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDay', day: 'pull', keys: [] },
+      { op: 'reorderDay', day: 'push', keys: ['nope'] },
+    ])
+    expect(keys(plan, 'pull')).toEqual(keys(DEFAULT_PLAN, 'pull'))
+    expect(keys(plan, 'push')).toEqual(keys(DEFAULT_PLAN, 'push'))
+    expect(applied).toHaveLength(0)
+    expect(errors).toHaveLength(2)
+  })
+
+  it('reordering does not mutate the input plan', () => {
+    const before = keys(DEFAULT_PLAN, 'push')
+    applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'moveExercise', day: 'push', key: 'flat_bench', toIndex: 0 },
+      { op: 'reorderDay', day: 'push', keys: ['iso_chest'] },
+    ])
+    expect(keys(DEFAULT_PLAN, 'push')).toEqual(before)
+  })
+
   it('setDayLabel updates the label', () => {
     const { plan, applied } = applyPlanEdits(DEFAULT_PLAN, [
       { op: 'setDayLabel', day: 'push', label: 'Heavy Push' },
@@ -168,7 +295,14 @@ describe('applyPlanEdits', () => {
   })
 
   it('exposes the valid ops for prompting', () => {
-    expect(PLAN_EDIT_OPS).toEqual(['setExercise', 'addExercise', 'removeExercise', 'setDayLabel'])
+    expect(PLAN_EDIT_OPS).toEqual([
+      'setExercise',
+      'addExercise',
+      'removeExercise',
+      'moveExercise',
+      'reorderDay',
+      'setDayLabel',
+    ])
   })
 
   // Ensure the value is typed as Plan for consumers (compile-time smoke check).

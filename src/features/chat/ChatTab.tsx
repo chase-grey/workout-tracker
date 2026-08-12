@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { buildSystemPrompt } from '../../lib/chatPrompt'
 import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/openai'
-import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
+import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
 import { applyFlexEdits, type FlexEdit } from '../../lib/flexTools'
 import {
   answerIssue,
@@ -56,7 +56,8 @@ const UPDATE_PLAN_TOOL: Tool = {
   function: {
     name: 'update_plan',
     description:
-      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those. " +
+      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, reorder the exercises in a day, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those. " +
+      'The order of a day is the order it is performed in, and you can change it: moveExercise puts one exercise before/after another (or at toIndex, the 1-based positions shown in the snapshot minus one), and reorderDay takes the whole day as a list of keys front to back. Reordering is never a reason to remove and re-add an exercise — that would lose its history. ' +
       'Exercises marked circuit=<id> in the snapshot are performed as a rotation, one set at each station in turn, and their rest is per station: circuitRestSec on an exercise is the rest taken AFTER each of its sets in the rotation, where 0 rolls straight on to the next station and null hands the station back to the default timing. restSec is not what the user feels inside a circuit — to rest only after one station, set circuitRestSec on every station of that circuit, 0 on the ones to roll through.',
     parameters: {
       type: 'object',
@@ -67,9 +68,29 @@ const UPDATE_PLAN_TOOL: Tool = {
           items: {
             type: 'object',
             properties: {
-              op: { type: 'string', enum: ['setExercise', 'addExercise', 'removeExercise', 'setDayLabel'] },
+              op: { type: 'string', enum: [...PLAN_EDIT_OPS] },
               day: { type: 'string', enum: [...DAY_TYPES] },
-              key: { type: 'string', description: 'exercise key (setExercise / removeExercise)' },
+              key: {
+                type: 'string',
+                description: 'exercise key (setExercise / removeExercise / moveExercise)',
+              },
+              before: {
+                type: 'string',
+                description: 'move it directly before this exercise key (moveExercise)',
+              },
+              after: {
+                type: 'string',
+                description: 'move it directly after this exercise key (moveExercise)',
+              },
+              toIndex: {
+                type: 'number',
+                description: '0-based destination position, when no neighbour is named (moveExercise)',
+              },
+              keys: {
+                type: 'array',
+                items: { type: 'string' },
+                description: "the day's exercise keys in the order to perform them (reorderDay)",
+              },
               label: { type: 'string', description: 'new day label (setDayLabel)' },
               fields: {
                 type: 'object',
@@ -171,12 +192,12 @@ function circuitNote(e: PlannedExercise): string {
 function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
   const lines = ['CURRENT WORKOUT PLAN (use these exact keys with update_plan):']
   for (const d of DAY_TYPES) {
-    lines.push(`${plan[d].label} (${d}):`)
-    for (const e of plan[d].exercises) {
+    lines.push(`${plan[d].label} (${d}), listed in the order it is performed:`)
+    plan[d].exercises.forEach((e, i) => {
       lines.push(
-        `  key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s${circuitNote(e)}`,
+        `  ${i + 1}. key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s${circuitNote(e)}`,
       )
-    }
+    })
   }
   lines.push('', 'CURRENT STRETCH ROUTINE (use block label + stretch key with update_flex_routine):')
   for (const b of flexPlan) {

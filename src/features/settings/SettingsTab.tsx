@@ -9,6 +9,7 @@ import {
   type TrackedIssue,
 } from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
+import { PlanEditor } from './PlanEditor'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { stashResumeTab } from '../../lib/resumeTab'
@@ -231,6 +232,8 @@ export function SettingsTab({
           {sync === 'syncing' ? 'syncing…' : 'sync now'}
         </button>
       </section>
+
+      <PlanEditor />
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">stretch routine</label>
