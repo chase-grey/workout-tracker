@@ -16,7 +16,7 @@ import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } fr
 const BOX_VARIANTS = ['sandglass', 'tide', 'candle', 'pips'] as const
 // 'perimeter' frames the screen edge; the other two fill it, so they sit below the
 // up-next block rather than behind it.
-const FILL_VARIANTS = ['curtain', 'dune', 'hourglass'] as const
+const FILL_VARIANTS = ['curtain', 'hourglass'] as const
 const FULL_VARIANTS = ['perimeter', ...FILL_VARIANTS] as const
 const VARIANTS = [...BOX_VARIANTS, ...FULL_VARIANTS] as const
 type Variant = (typeof VARIANTS)[number]
@@ -164,13 +164,6 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
     </div>
   )
 }
-
-/**
- * Width-to-height ratio of the 'dune' pile, held constant as it grows so the
- * slope never changes. Sand rests at about 34° from horizontal, which puts the
- * base at 2 / tan(34°) ≈ 3 times the height.
- */
-const DUNE_ASPECT = 3
 
 /**
  * The 'hourglass' shape's geometry, in its own SVG user units — a 100 × 164 box,
@@ -398,56 +391,18 @@ function Hourglass({ fraction }: { fraction: number }) {
  * readable while the shape runs.
  */
 function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction: number }) {
-  const drain = { transition: 'height 260ms linear, width 260ms linear' } as const
-
   if (variant === 'hourglass') return <Hourglass fraction={fraction} />
 
-  if (variant === 'curtain') {
-    // The whole viewport is the vessel: the level falls from the top of the
-    // screen to the bottom over the rest.
-    return (
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-        <div
-          className="absolute inset-x-0 top-0 bg-accent-bright/20"
-          style={{ height: `${fraction * 100}%`, ...drain }}
-        >
-          {/* The surface line is the reading; everything else is texture. */}
-          <div className="absolute inset-x-0 bottom-0 h-[3px] bg-accent-bright" />
-        </div>
-      </div>
-    )
-  }
-
-  // 'dune': sand falls from the top of the screen and piles into a mound on the
-  // floor. The mound grows taller *and* wider as it fills — the way real sand
-  // spreads at its angle of repose — so its size is the time already spent, and
-  // the falling stream always lands on the growing peak.
-  //
-  // Width comes from the height through the fixed aspect ratio rather than from
-  // its own percentage of the viewport, so the pile keeps one slope the whole way
-  // up. Past roughly a third of its growth that makes it wider than the screen;
-  // the overflow is clipped, which is exactly how a real pile taller than the
-  // frame would look — a broad slope running off both edges, not a narrow cone
-  // squeezed to fit.
-  const grow = 1 - fraction
-  const moundH = grow * 52 // capped so the pile never climbs the whole screen
+  // 'curtain': the whole viewport is the vessel, and the level falls from the top
+  // of the screen to the bottom over the rest.
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      {/* The stream runs from the top of the screen down to the mound's peak. */}
-      {fraction > 0 && (
-        <div
-          className="rest-stream absolute left-1/2 top-0 w-[3px] -translate-x-1/2"
-          style={{ height: `${100 - moundH}%`, transition: 'height 260ms linear' }}
-        />
-      )}
-      {/* The mound: two stacked domes give it a brighter, denser center ridge
-          and a soft rounded peak — no straight edges to read as a seam. */}
       <div
-        className="absolute bottom-0 left-1/2 w-auto -translate-x-1/2"
-        style={{ height: `${moundH}%`, aspectRatio: DUNE_ASPECT, ...drain }}
+        className="absolute inset-x-0 top-0 bg-accent-bright/20"
+        style={{ height: `${fraction * 100}%`, transition: 'height 260ms linear' }}
       >
-        <div className="absolute inset-0 rounded-t-[50%] bg-accent-bright/25" />
-        <div className="absolute inset-x-[20%] bottom-0 h-[66%] rounded-t-[50%] bg-accent-bright/30" />
+        {/* The surface line is the reading; everything else is texture. */}
+        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-accent-bright" />
       </div>
     </div>
   )
