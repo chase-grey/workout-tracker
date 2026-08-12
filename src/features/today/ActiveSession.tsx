@@ -487,6 +487,9 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
+    // First in the list: leaving the session screen without ending it is the
+    // reach-for-the-menu reason often enough that it shouldn't be scrolled to.
+    { label: 'back', onClick: onMinimize },
     {
       label: autoNow ? 'wait for my tap after rest' : 'auto-advance out of rest',
       onClick: () => setAutoNow(!autoNow),
@@ -503,7 +506,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       ? [{ label: 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
     { label: 'add a set', onClick: addSet },
-    { label: 'back to app (keep going)', onClick: onMinimize },
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'workout checklist', onClick: () => setShowList(true) },
     { label: 'skip logging details (mark done)', onClick: onSkip },

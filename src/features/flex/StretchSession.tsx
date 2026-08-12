@@ -374,6 +374,9 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
+    // First in the list: leaving the session screen without ending it is the
+    // reach-for-the-menu reason often enough that it shouldn't be scrolled to.
+    { label: 'back', onClick: onMinimize },
     // Both directions read the same way: the session-only toggles first, then the
     // saved per-stretch defaults. The into-rest pair only shows on a paced set.
     ...(paced
@@ -404,7 +407,6 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         : `always auto-advance ${step.exName} out of rest`,
       onClick: () => setAutoDefault(!savedAuto),
     },
-    { label: 'back to app (keep going)', onClick: onMinimize },
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'log measurement', onClick: () => setShowMeasure(true) },
     { label: 'routine checklist', onClick: () => setShowList(true) },
