@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_PLAN } from '../config/plan'
+import { DEFAULT_PLAN, dayOrder } from '../config/plan'
 import type { Plan } from '../config/plan'
 import type { DayType } from '../types'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from './planTools'
@@ -259,6 +259,63 @@ describe('applyPlanEdits', () => {
     expect(keys(DEFAULT_PLAN, 'push')).toEqual(before)
   })
 
+  it('reorderDays puts the days themselves in a new order', () => {
+    const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDays', days: ['pull', 'fullbody', 'push'] },
+    ])
+    expect(dayOrder(plan)).toEqual(['pull', 'fullbody', 'push'])
+    // Spelled out by label — it's all the approve button shows of the change.
+    expect(applied[0]).toBe(
+      `reordered the days: ${plan.pull.label} → ${plan.fullbody.label} → ${plan.push.label}`,
+    )
+    expect(errors).toHaveLength(0)
+  })
+
+  it('reorderDays leaves the days it does not name behind the ones it does', () => {
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [{ op: 'reorderDays', days: ['fullbody'] }])
+    const rest = dayOrder(DEFAULT_PLAN).filter((d) => d !== 'fullbody')
+    expect(dayOrder(plan)).toEqual(['fullbody', ...rest])
+  })
+
+  it('reorderDays skips a day the plan does not have and keeps the rest', () => {
+    const badDay = 'legs' as unknown as DayType
+    const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDays', days: [badDay, 'pull'] },
+    ])
+    expect(dayOrder(plan)[0]).toBe('pull')
+    expect(dayOrder(plan)).toHaveLength(dayOrder(DEFAULT_PLAN).length)
+    expect(applied).toHaveLength(1)
+    expect(errors).toEqual(['invalid day "legs" for op "reorderDays"'])
+  })
+
+  it('reorderDays recognising nothing leaves the order alone', () => {
+    const badDay = 'legs' as unknown as DayType
+    const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDays', days: [] },
+      { op: 'reorderDays', days: [badDay] },
+    ])
+    expect(dayOrder(plan)).toEqual(dayOrder(DEFAULT_PLAN))
+    expect(applied).toHaveLength(0)
+    expect(errors).toHaveLength(2)
+  })
+
+  it('reorderDays does not disturb the exercises or the other edits in the batch', () => {
+    const { plan, errors } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'reorderDays', days: ['fullbody', 'push', 'pull'] },
+      { op: 'setExercise', day: 'push', key: 'flat_bench', fields: { sets: 5 } },
+    ])
+    expect(dayOrder(plan)).toEqual(['fullbody', 'push', 'pull'])
+    expect(keys(plan, 'push')).toEqual(keys(DEFAULT_PLAN, 'push'))
+    expect(plan.push.exercises.find((e) => e.key === 'flat_bench')?.sets).toBe(5)
+    expect(errors).toHaveLength(0)
+  })
+
+  it('reorderDays does not mutate the input plan', () => {
+    const before = dayOrder(DEFAULT_PLAN)
+    applyPlanEdits(DEFAULT_PLAN, [{ op: 'reorderDays', days: [...before].reverse() }])
+    expect(dayOrder(DEFAULT_PLAN)).toEqual(before)
+  })
+
   it('setDayLabel updates the label', () => {
     const { plan, applied } = applyPlanEdits(DEFAULT_PLAN, [
       { op: 'setDayLabel', day: 'push', label: 'Heavy Push' },
@@ -302,6 +359,7 @@ describe('applyPlanEdits', () => {
       'moveExercise',
       'reorderDay',
       'setDayLabel',
+      'reorderDays',
     ])
   })
 

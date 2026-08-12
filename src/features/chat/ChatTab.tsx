@@ -14,7 +14,7 @@ import {
 import { refreshIssues } from '../../store/useTrackedIssues'
 import { useKeyboardOpen } from '../../lib/useKeyboardOpen'
 import { composerPad } from '../../lib/composerPad'
-import { repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
+import { dayOrder, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
 import type { FlexBlock } from '../../config/flexPlan'
 import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
@@ -56,8 +56,9 @@ const UPDATE_PLAN_TOOL: Tool = {
   function: {
     name: 'update_plan',
     description:
-      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, reorder the exercises in a day, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those. " +
+      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, reorder the exercises in a day, reorder the days themselves, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those. " +
       'The order of a day is the order it is performed in, and you can change it: moveExercise puts one exercise before/after another (or at toIndex, the 1-based positions shown in the snapshot minus one), and reorderDay takes the whole day as a list of keys front to back. Reordering is never a reason to remove and re-add an exercise — that would lose its history. ' +
+      'The days have an order of their own — the order the app offers them in, shown in the snapshot — and reorderDays sets it, listing the day types front to back. It takes `days` and no `day`; every other op needs `day`. ' +
       'Exercises marked circuit=<id> in the snapshot are performed as a rotation, one set at each station in turn, and their rest is per station: circuitRestSec on an exercise is the rest taken AFTER each of its sets in the rotation, where 0 rolls straight on to the next station and null hands the station back to the default timing. restSec is not what the user feels inside a circuit — to rest only after one station, set circuitRestSec on every station of that circuit, 0 on the ones to roll through.',
     parameters: {
       type: 'object',
@@ -69,7 +70,11 @@ const UPDATE_PLAN_TOOL: Tool = {
             type: 'object',
             properties: {
               op: { type: 'string', enum: [...PLAN_EDIT_OPS] },
-              day: { type: 'string', enum: [...DAY_TYPES] },
+              day: {
+                type: 'string',
+                enum: [...DAY_TYPES],
+                description: 'the day to edit — required by every op except reorderDays',
+              },
               key: {
                 type: 'string',
                 description: 'exercise key (setExercise / removeExercise / moveExercise)',
@@ -91,6 +96,11 @@ const UPDATE_PLAN_TOOL: Tool = {
                 items: { type: 'string' },
                 description: "the day's exercise keys in the order to perform them (reorderDay)",
               },
+              days: {
+                type: 'array',
+                items: { type: 'string', enum: [...DAY_TYPES] },
+                description: 'the day types in the order to offer them (reorderDays)',
+              },
               label: { type: 'string', description: 'new day label (setDayLabel)' },
               fields: {
                 type: 'object',
@@ -102,7 +112,7 @@ const UPDATE_PLAN_TOOL: Tool = {
                 description: 'new exercise (addExercise): name, sets, repMin, repMax, restSec, group, bodyweight, increment',
               },
             },
-            required: ['op', 'day'],
+            required: ['op'],
           },
         },
       },
@@ -191,7 +201,11 @@ function circuitNote(e: PlannedExercise): string {
 /** A compact snapshot of the current plans so the assistant knows exact keys. */
 function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
   const lines = ['CURRENT WORKOUT PLAN (use these exact keys with update_plan):']
-  for (const d of DAY_TYPES) {
+  // Listed in the order the app offers the days, and numbered, so the coach can
+  // both read the current day order and be asked to change it (reorderDays).
+  const days = dayOrder(plan)
+  lines.push(`day order: ${days.map((d, i) => `${i + 1}. ${d}`).join(', ')}`)
+  for (const d of days) {
     lines.push(`${plan[d].label} (${d}), listed in the order it is performed:`)
     plan[d].exercises.forEach((e, i) => {
       lines.push(

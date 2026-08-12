@@ -4,7 +4,6 @@ import { useData } from '../../store/DataContext'
 import {
   dayOrder,
   repRangeLabel,
-  withDayOrder,
   type DayPlan,
   type Plan,
   type PlannedExercise,
@@ -262,7 +261,7 @@ export function PlanEditor() {
     if (to < 0 || to >= days.length) return
     const next = [...days]
     ;[next[from], next[to]] = [next[to], next[from]]
-    setDraft(withDayOrder(current, next))
+    edit({ op: 'reorderDays', days: next })
   }
 
   const dayRow = (day: DayType, dayPlan: DayPlan, index: number) => {

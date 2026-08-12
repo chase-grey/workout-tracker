@@ -1,5 +1,12 @@
 import type { DayType } from '../types'
-import { DAY_TYPES, exerciseName, type Plan, type PlannedExercise } from '../config/plan'
+import {
+  DAY_TYPES,
+  dayOrder,
+  exerciseName,
+  withDayOrder,
+  type Plan,
+  type PlannedExercise,
+} from '../config/plan'
 
 /**
  * Structured, serializable edits to a workout {@link Plan}. The AI chat assistant
@@ -51,6 +58,12 @@ export type PlanEdit =
   /** The whole day reordered at once, listed front to back by key. */
   | { op: 'reorderDay'; day: DayType; keys: string[] }
   | { op: 'setDayLabel'; day: DayType; label: string }
+  /**
+   * The days themselves put in a new order — the order the Today tab offers them
+   * in. The only op that isn't about one day, so it carries `days` instead of
+   * `day`.
+   */
+  | { op: 'reorderDays'; days: DayType[] }
 
 /** The set of valid edit ops, exported for prompting the assistant. */
 export const PLAN_EDIT_OPS = [
@@ -60,6 +73,7 @@ export const PLAN_EDIT_OPS = [
   'moveExercise',
   'reorderDay',
   'setDayLabel',
+  'reorderDays',
 ] as const
 
 /** Numeric fields on a PlannedExercise that must be finite and >= 0. */
@@ -113,6 +127,38 @@ export function applyPlanEdits(
   const errors: string[] = []
 
   for (const edit of edits) {
+    // The one op that isn't scoped to a day, so it's settled before the day check
+    // below — and narrowing it out here keeps `edit.day` sound for the rest.
+    if (edit.op === 'reorderDays') {
+      const requested = Array.isArray(edit.days) ? edit.days : []
+      const ordered: DayType[] = []
+      for (const day of requested) {
+        if (!isValidDay(next, day)) {
+          errors.push(`invalid day "${String(day)}" for op "reorderDays"`)
+          continue
+        }
+        if (!ordered.includes(day)) ordered.push(day)
+      }
+      if (ordered.length === 0) {
+        // Nothing recognised: an empty list has said nothing yet, and a list of
+        // days the plan doesn't have has already reported each of them.
+        if (requested.length === 0) errors.push('reorderDays needs the day types to order')
+        continue
+      }
+      // Naming only some of the days puts those first and leaves the rest in their
+      // current order behind them, so "run full body first" doesn't disturb the
+      // two days it says nothing about.
+      for (const day of dayOrder(next)) {
+        if (!ordered.includes(day)) ordered.push(day)
+      }
+      const reordered = withDayOrder(next, ordered)
+      for (const day of DAY_TYPES) next[day] = reordered[day]
+      // Spelled out by label, like reorderDay: this line is the whole of what the
+      // approve button in the chat shows about the change.
+      applied.push(`reordered the days: ${ordered.map((d) => next[d].label || d).join(' → ')}`)
+      continue
+    }
+
     if (!isValidDay(next, edit.day)) {
       errors.push(`invalid day "${String(edit.day)}" for op "${edit.op}"`)
       continue
