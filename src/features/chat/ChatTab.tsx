@@ -601,11 +601,10 @@ export function ChatTab({
   return (
     /* A screenful plus the scroller's own bottom padding, then pulled back by the
        same amount: the tab reaches the very bottom of the screen without adding
-       anything to scroll. The composer below can then sit flush there as an
-       ordinary last child, rather than reaching down with a negative margin of
-       its own — a sticky box is held inside its containing block, so a bottom
-       margin that hangs past it just parks the bar that far short of the bottom
-       once the thread is long enough to scroll. */
+       anything to scroll. This is half of what puts the composer on the bottom
+       edge — it gives the bar room to reach, since a sticky box is held inside
+       its containing block. The other half is the bar's own -bottom-4 (see
+       below), which is what actually sends it down there. */
     <div className="-mb-4 flex min-h-[calc(100%+1rem)] flex-col">
       <div className="flex items-center justify-end pb-2">
         <button
@@ -703,12 +702,21 @@ export function ChatTab({
       </div>
 
       {/* Frosted glass, so the tail of the thread dissolves behind the input
-          instead of stopping at a hard edge. The bar's bottom edge is pinned to
-          the bottom of the scroller, so the space under the field is this
-          padding plus whatever sits below the bar — see composerPad, which is
-          what keeps that reading level with the space above. */}
+          instead of stopping at a hard edge.
+
+          -bottom-4, not bottom-0, and it is the same 1rem the row above cancels
+          with its margin: a sticky box comes to rest against the *content* box
+          of the scroller, so AppShell's pb-4 on main parks this bar a padding's
+          width short of the bottom no matter how far its parent reaches. The
+          negative margin up there only fixes where the parent ends; sticky
+          doesn't measure itself against the parent, it measures against the
+          scrollport, so the same 1rem has to come off again here.
+
+          With the bar actually on the bottom edge, the space under the field is
+          this padding plus whatever sits below the bar — see composerPad, which
+          is what keeps that reading level with the space above. */}
       <div
-        className={`sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 backdrop-blur-md ${composerPad(keyboardOpen)}`}
+        className={`sticky -bottom-4 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 backdrop-blur-md ${composerPad(keyboardOpen)}`}
       >
         {/* The question rides above the composer rather than sitting in the
             thread: it has to stay on screen while the answer is being typed. */}
