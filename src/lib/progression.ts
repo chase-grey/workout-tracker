@@ -57,6 +57,27 @@ function repsAtWeight(
  */
 export const STALE_HISTORY_DAYS = 21
 
+/**
+ * The reps a session actually SUSTAINED: the lowest of its sets once the single
+ * worst one is set aside.
+ *
+ * A target is a prescription for EVERY set, so reading a session by its best set
+ * asks the next one to repeat, four times over, a number it managed once. Pull-ups
+ * of 8, 6, 5, 5 read as "8" and get told to go for 9 — a 50% jump in volume wearing
+ * the costume of one more rep. Read as "5", the same session gets told to go for 6
+ * across the board, which is the set of four it was actually close to.
+ *
+ * The worst set is dropped so one collapsed set can't erase a good day: 8, 8, 8, 3
+ * sustained 8, and the 3 was a set taken past the point of usefulness rather than
+ * the story of the session. Below three sets there's nothing to drop and still have
+ * a reading left, so the best set stands.
+ */
+function sustainedReps(reps: number[]): number {
+  if (reps.length === 0) return 0
+  const sorted = [...reps].sort((a, b) => a - b)
+  return sorted[reps.length > 1 ? 1 : 0]
+}
+
 type SessionGroup = {
   date: string
   /** The A/B slot the session trained in, or undefined when none was recorded. */
@@ -70,8 +91,9 @@ function daysBetween(a: string, b: string): number {
 }
 
 /**
- * The WORKING set of a session: the weight you actually trained at, and the best
- * reps you managed at it.
+ * The WORKING set of a session: the weight you actually trained at, and the reps
+ * you sustained at it (see sustainedReps — not the best single set, which is a
+ * number the next session would then be asked to hit on every set).
  *
  * Deliberately not simply the heaviest set. A session of 135×8, 135×8, 135×7,
  * 150×1 has a top set of 150×1, and building the next target off that asks for
@@ -96,14 +118,14 @@ function workingSet(
   const weighted = sets.filter((s): s is { weight: number; reps: number } => s.weight != null)
   if (weighted.length === 0) return null
 
-  const bestRepsAt = (weight: number): number =>
-    weighted.reduce((best, s) => (s.weight === weight ? Math.max(best, s.reps) : best), 0)
+  const repsAt = (weight: number): number =>
+    sustainedReps(weighted.filter((s) => s.weight === weight).map((s) => s.reps))
 
   // Heaviest weight that carried a set into the prescribed range.
   const inRange = weighted.filter((s) => s.reps >= repMin)
   if (inRange.length > 0) {
     const weight = Math.max(...inRange.map((s) => s.weight))
-    return { weight, reps: bestRepsAt(weight) }
+    return { weight, reps: repsAt(weight) }
   }
 
   // Nothing reached the range: fall back to the weight most sets used.
@@ -117,7 +139,7 @@ function workingSet(
       weight = w
     }
   }
-  return { weight, reps: bestRepsAt(weight) }
+  return { weight, reps: repsAt(weight) }
 }
 
 /**
@@ -152,9 +174,10 @@ export type LastPerformance = {
  *
  * Rows are grouped by session (session_id, falling back to date), and the group
  * with the latest date wins. `topWeight`/`topReps` describe that session's
- * WORKING set — the modal weight and the best reps at it (see workingSet), not
- * its single heaviest set. For a bodyweight exercise (every set has a null
- * weight) topWeight is null and topReps is the max reps in the session.
+ * WORKING set — the weight it genuinely trained at and the reps it sustained
+ * there (see workingSet), rather than its single heaviest or best set. For a
+ * bodyweight exercise (every set has a null weight) topWeight is null and
+ * topReps is the reps the session sustained.
  */
 export function lastPerformance(
   workouts: WorkoutRow[],
@@ -204,9 +227,8 @@ export function lastPerformance(
 
   const working = workingSet(latest.sets, repMin)
   if (working === null) {
-    // Bodyweight session: no weight anywhere, so the top set is simply most reps.
-    let topReps = 0
-    for (const s of latest.sets) topReps = Math.max(topReps, s.reps)
+    // Bodyweight session: no weight anywhere, so the reading is the reps alone.
+    const topReps = sustainedReps(latest.sets.map((s) => s.reps))
     return { date: latest.date, topWeight: null, topReps, sameSlot }
   }
   return { date: latest.date, topWeight: working.weight, topReps: working.reps, sameSlot }
@@ -215,6 +237,12 @@ export function lastPerformance(
 /**
  * Suggest the next target for an exercise using double progression within
  * [repMin, repMax].
+ *
+ * The target is one prescription for every set of the exercise, so it steps up
+ * from the reps the last session SUSTAINED across its sets rather than from its
+ * best single set (see sustainedReps). Read the best set instead and a session
+ * that drops off — 8, 6, 5, 5 — is credited with an 8 it hit once and asked for
+ * four sets of 9.
  *
  * Re-pacing note: the target is always derived from the MOST RECENT session, so
  * if the user logs below target one week, next week's target is computed from that

@@ -167,6 +167,68 @@ describe('nextTarget', () => {
     })
   })
 
+  it('steps up from the reps a session held, not its one best set', () => {
+    // The reported case: 8, 6, 5, 5 pull-ups was asked for 9 across all four sets —
+    // a 50% jump in volume off a single set that happened to open strong. The
+    // session held 5, so the honest ask is the bottom of the range, four times.
+    const rows = [
+      row({ exercise: 'pullup', set_number: 1, weight_lbs: null, reps: 8 }),
+      row({ exercise: 'pullup', set_number: 2, weight_lbs: null, reps: 6 }),
+      row({ exercise: 'pullup', set_number: 3, weight_lbs: null, reps: 5 }),
+      row({ exercise: 'pullup', set_number: 4, weight_lbs: null, reps: 5 }),
+    ]
+    expect(nextTarget(rows, 'pullup', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
+      weightLbs: null,
+      reps: 6,
+    })
+  })
+
+  it('does not let one collapsed set erase a session that held its reps', () => {
+    // Three clean sets and a fourth taken past the point of usefulness. Reading the
+    // worst set would prescribe 4 for a session that plainly trained at 8.
+    const rows = [
+      row({ exercise: 'pullup', set_number: 1, weight_lbs: null, reps: 8 }),
+      row({ exercise: 'pullup', set_number: 2, weight_lbs: null, reps: 8 }),
+      row({ exercise: 'pullup', set_number: 3, weight_lbs: null, reps: 8 }),
+      row({ exercise: 'pullup', set_number: 4, weight_lbs: null, reps: 3 }),
+    ]
+    expect(nextTarget(rows, 'pullup', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
+      weightLbs: null,
+      reps: 9,
+    })
+  })
+
+  it('waits for the whole session to reach repMax before bumping the weight', () => {
+    // One set at the top of the range isn't the range conquered — 12, 9, 8, 8 is a
+    // lift still mid-range, and bumping it here is how a weight gets set that the
+    // next session can only hit once.
+    const rows = [
+      row({ set_number: 1, weight_lbs: 135, reps: 12 }),
+      row({ set_number: 2, weight_lbs: 135, reps: 9 }),
+      row({ set_number: 3, weight_lbs: 135, reps: 8 }),
+      row({ set_number: 4, weight_lbs: 135, reps: 8 }),
+    ]
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, increment: 5, today: TODAY })).toEqual({
+      weightLbs: 135,
+      reps: 9,
+    })
+  })
+
+  it('lightens a weight the session could not hold for the range', () => {
+    // 155 carried one set to 8 and then fell apart. That's a load being trained
+    // above its range, so it drops rather than being asked for 9.
+    const rows = [
+      row({ set_number: 1, weight_lbs: 155, reps: 8 }),
+      row({ set_number: 2, weight_lbs: 155, reps: 5 }),
+      row({ set_number: 3, weight_lbs: 155, reps: 5 }),
+    ]
+    // 155x5 estimates a 180.8 e1RM, which carries 8 reps at ~142.8 -> the 140 step.
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, increment: 5, today: TODAY })).toEqual({
+      weightLbs: 140,
+      reps: 8,
+    })
+  })
+
   it('does not let back-off sets ratchet the target downward', () => {
     // Two heavy working sets then three light back-off sets. The light weight is
     // the most common, but the heavy one is where sets reached the rep range, so
