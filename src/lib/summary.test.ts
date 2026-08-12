@@ -44,7 +44,8 @@ describe('weeklySummary', () => {
 
   it('detects a PR when this week beats all prior weeks', () => {
     const workouts: WorkoutRow[] = [
-      // prior week best: 100 x 5 => 100 * (1 + 5/30) ≈ 116.7
+      // prior weeks best: 100 x 5 => 100 * (1 + 5/30) ≈ 116.7, over two days
+      row({ session_id: 'O', date: '2026-06-22', exercise: 'incline_bench', weight_lbs: 95, reps: 5 }),
       row({ session_id: 'P', date: '2026-06-29', exercise: 'incline_bench', weight_lbs: 100, reps: 5 }),
       // this week: 110 x 5 => 110 * (1 + 5/30) ≈ 128.3  -> PR
       row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_bench', weight_lbs: 110, reps: 5 }),
@@ -57,7 +58,8 @@ describe('weeklySummary', () => {
 
   it('does NOT report a PR when this week does not beat prior weeks', () => {
     const workouts: WorkoutRow[] = [
-      // prior week best: 120 x 5
+      // prior weeks best: 120 x 5, over two days
+      row({ session_id: 'O', date: '2026-06-22', exercise: 'incline_bench', weight_lbs: 115, reps: 5 }),
       row({ session_id: 'P', date: '2026-06-29', exercise: 'incline_bench', weight_lbs: 120, reps: 5 }),
       // this week: 110 x 5 -> not a PR
       row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_bench', weight_lbs: 110, reps: 5 }),
@@ -66,13 +68,28 @@ describe('weeklySummary', () => {
     expect(s.prs).toHaveLength(0)
   })
 
-  it('treats a first-ever lift (no prior data) as a PR', () => {
+  it('does NOT treat a first-ever lift (no prior data) as a PR', () => {
     const workouts: WorkoutRow[] = [
       row({ session_id: 'A', date: '2026-07-07', exercise: 'cable_row', weight_lbs: 90, reps: 10 }),
     ]
-    const s = weeklySummary(workouts, [], TODAY)
-    expect(s.prs).toHaveLength(1)
-    expect(s.prs[0].exercise).toBe('cable row (neutral grip)')
+    expect(weeklySummary(workouts, [], TODAY).prs).toHaveLength(0)
+  })
+
+  it('does NOT crown a PR off a single prior day of history', () => {
+    const workouts: WorkoutRow[] = [
+      row({ session_id: 'P', date: '2026-06-29', exercise: 'cable_row', weight_lbs: 80, reps: 10 }),
+      row({ session_id: 'A', date: '2026-07-07', exercise: 'cable_row', weight_lbs: 90, reps: 10 }),
+    ]
+    expect(weeklySummary(workouts, [], TODAY).prs).toHaveLength(0)
+  })
+
+  it('ignores same-week days when judging prior history', () => {
+    const workouts: WorkoutRow[] = [
+      // two days of this lift, but both this week -> no baseline to beat
+      row({ session_id: 'A', date: '2026-07-06', exercise: 'cable_row', weight_lbs: 80, reps: 10 }),
+      row({ session_id: 'B', date: '2026-07-08', exercise: 'cable_row', weight_lbs: 90, reps: 10 }),
+    ]
+    expect(weeklySummary(workouts, [], TODAY).prs).toHaveLength(0)
   })
 
   it('ignores null-weight rows for 1RM', () => {

@@ -1,12 +1,17 @@
 import type { BodyWeightEntry, WorkoutRow } from '../types'
 import { toISODate, weekStartISO } from './dates'
 import { epley1RM } from './epley'
+import { MIN_PR_HISTORY_DAYS } from './celebration'
 import { exerciseName } from '../config/plan'
 
 export type WeeklySummary = {
   /** Distinct sessions this week (Mon–Sun of `today`). */
   workoutCount: number
-  /** Exercises whose best est. 1RM this week beats their best est. 1RM in any prior week. */
+  /**
+   * Exercises whose best est. 1RM this week beats their best est. 1RM in any
+   * prior week — and that have enough prior history for "beat" to mean
+   * something (see MIN_PR_HISTORY_DAYS).
+   */
   prs: { exercise: string; est1RM: number }[]
   /**
    * Change in body weight (lbs) — latest this-week entry vs the latest entry
@@ -41,8 +46,12 @@ export function weeklySummary(
   const workoutCount = thisWeekSessions.size
 
   // --- PRs: best est. 1RM this week vs best in any prior week, per exercise. ---
+  // Prior weeks also supply the baseline test: a lift needs MIN_PR_HISTORY_DAYS
+  // distinct earlier days before this week's number counts as beating anything,
+  // so an exercise done for the first time isn't crowned a PR.
   const thisWeekBest = new Map<string, number>()
   const priorBest = new Map<string, number>()
+  const priorDays = new Map<string, Set<string>>()
   for (const r of workouts) {
     if (r.weight_lbs == null) continue
     const est = epley1RM(r.weight_lbs, r.reps)
@@ -51,13 +60,17 @@ export function weeklySummary(
       thisWeekBest.set(r.exercise, Math.max(thisWeekBest.get(r.exercise) ?? 0, est))
     } else if (week < thisWeekStart) {
       priorBest.set(r.exercise, Math.max(priorBest.get(r.exercise) ?? 0, est))
+      const days = priorDays.get(r.exercise) ?? new Set<string>()
+      days.add(r.date)
+      priorDays.set(r.exercise, days)
     }
   }
 
   const prs: { exercise: string; est1RM: number }[] = []
   for (const [key, best] of thisWeekBest) {
     const prior = priorBest.get(key) ?? 0
-    if (best > prior) {
+    const days = priorDays.get(key)?.size ?? 0
+    if (prior > 0 && days >= MIN_PR_HISTORY_DAYS && best > prior) {
       prs.push({ exercise: exerciseName(key), est1RM: round1(best) })
     }
   }
