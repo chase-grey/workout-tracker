@@ -50,6 +50,7 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | GET | `?route=bodyweight&since=YYYY-MM-DD` | — | `{date, weightLbs}[]` |
 | POST | `?route=session` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=import` | `{ rows: WorkoutRow[] }` | `{ saved }` |
+| POST | `?route=notes` | `{ session, exercise, notes }` | `{ saved }` |
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
 | GET | `?route=settings` | — | settings blob, or `null` |
 | POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
@@ -59,6 +60,15 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=report_issue` | `{ secret, title, body, area, context }` | `{ number, url }` |
 | GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |
 | POST | `?route=answer_issue` | `{ secret, number, answer }` | `{ answered }` |
+
+### Notes
+
+The one route that edits workout rows instead of appending them. A note belongs
+to the exercise log rather than to a set, so the app writes the same string onto
+every set row of that exercise and this rewrites them together — which is what
+lets a discomfort flag be added to a session that was already saved. `session` is
+the session id, or the date for rows written before ids existed. Matching no rows
+is an error, so the app keeps the write queued and retries.
 
 ### Settings
 

@@ -17,6 +17,10 @@
  * round-trips to the sheet on every set row (see sessionToRows), so recording one
  * asks nothing new of the backend. A note can hold other text alongside the flag;
  * segments are `; `-separated and everything that isn't the flag is preserved.
+ *
+ * A twinge is as often noticed on the way home as mid-set, so a flag can also be
+ * added to a session that's already saved — see {@link discomfortEdit}, which
+ * produces the note rewrite, and {@link applyNotesEdit}, which applies it.
  */
 
 import type { WorkoutRow } from '../types'
@@ -39,6 +43,24 @@ export const DISCOMFORT_SPOTS = [
 ] as const
 
 export type DiscomfortSpot = (typeof DISCOMFORT_SPOTS)[number]
+
+/**
+ * `spots` narrowed to the ones the app counts, in the order given.
+ *
+ * The tally only means anything if the same twinge is named the same way every
+ * time, so a spot outside the offered list is dropped rather than recorded —
+ * "left knee" and "knee" would never add up to two. The in-app picker can only
+ * produce valid spots; this guards the coach's tool call, which can name
+ * anything.
+ */
+export function knownSpots(spots: readonly string[]): DiscomfortSpot[] {
+  const out: DiscomfortSpot[] = []
+  for (const s of spots) {
+    const spot = DISCOMFORT_SPOTS.find((k) => k === s.trim().toLowerCase())
+    if (spot && !out.includes(spot)) out.push(spot)
+  }
+  return out
+}
 
 /** Opens the discomfort segment of a note. */
 const MARKER = 'discomfort:'
@@ -99,6 +121,74 @@ export function toggleDiscomfort(note: string | null | undefined, spot: string):
   return withDiscomfort(note, spots.includes(s) ? spots.filter((x) => x !== s) : [...spots, s])
 }
 
+/**
+ * The key a row's session is counted under — its id, or its date for rows saved
+ * without one (imported history, and anything logged before session ids).
+ */
+export function sessionKeyOf(row: WorkoutRow): string {
+  return row.session_id || row.date
+}
+
+/**
+ * A rewrite of one logged exercise's note, addressed by session and exercise
+ * rather than by row.
+ *
+ * The note belongs to the exercise log and `sessionToRows` copies it onto every
+ * one of that exercise's set rows, so they only ever move together — which is
+ * also why a flag added afterwards rewrites rows in place instead of appending:
+ * a second row for the same set would be counted as a set.
+ */
+export type NotesEdit = { session: string; exercise: string; notes: string }
+
+/**
+ * The edit that sets a logged exercise's discomfort flag to `spots` — or clears
+ * it, when `spots` is empty. Null when that session logged no such exercise.
+ *
+ * This is the path for a twinge noticed after the fact: the one during a session
+ * is written straight to the live log, but by the time you're driving home the
+ * session is saved and the note has to be edited where it landed.
+ */
+export function discomfortEdit(
+  rows: WorkoutRow[],
+  session: string,
+  exercise: string,
+  spots: readonly string[],
+): NotesEdit | null {
+  const logged = rows.find((r) => r.exercise === exercise && sessionKeyOf(r) === session)
+  if (!logged) return null
+  return { session, exercise, notes: withDiscomfort(logged.notes, spots) }
+}
+
+/** `rows` with `edit` applied to every set row of the exercise it addresses. */
+export function applyNotesEdit(rows: WorkoutRow[], edit: NotesEdit): WorkoutRow[] {
+  return rows.map((r) =>
+    r.exercise === edit.exercise && sessionKeyOf(r) === edit.session
+      ? { ...r, notes: edit.notes }
+      : r,
+  )
+}
+
+/**
+ * The session `exercise` was last logged in — on `date`, if one is named.
+ *
+ * What "today's leg press" resolves to when a flag arrives without a session to
+ * hang it on. Ties on a date go to the later-logged session, rows arriving in
+ * the order they were appended.
+ */
+export function lastSessionWith(
+  rows: WorkoutRow[],
+  exercise: string,
+  date?: string,
+): { session: string; date: string } | null {
+  let found: { session: string; date: string } | null = null
+  for (const r of rows) {
+    if (r.exercise !== exercise) continue
+    if (date && r.date !== date) continue
+    if (!found || r.date >= found.date) found = { session: sessionKeyOf(r), date: r.date }
+  }
+  return found
+}
+
 /** One session in which an exercise was flagged, and where it was felt. */
 export type DiscomfortReport = {
   /** The session id, or the date for rows saved without one. */
@@ -121,7 +211,7 @@ export function discomfortReports(rows: WorkoutRow[], exerciseKey: string): Disc
     if (r.exercise !== exerciseKey) continue
     const spots = parseDiscomfort(r.notes)
     if (spots.length === 0) continue
-    const sessionId = r.session_id || r.date
+    const sessionId = sessionKeyOf(r)
     const prev = bySession.get(sessionId)
     if (!prev) {
       bySession.set(sessionId, { sessionId, date: r.date, spots })

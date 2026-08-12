@@ -57,6 +57,7 @@ import { flexAngleCelebrations } from '../lib/flexCelebration'
 import { newRecords, type RecordSnapshot } from '../lib/records'
 import { goalPaceNotes, type GoalPaceNote } from '../lib/goalPace'
 import { graduationNote } from '../lib/graduation'
+import { applyNotesEdit, parseDiscomfort, type NotesEdit } from '../lib/discomfort'
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
 
@@ -135,6 +136,7 @@ type DataContextValue = {
   weekProgress: WeekProgress
   goals: WeeklyGoalConfig
   saveSession: (s: WorkoutSession, duration?: SessionDurationInput) => Promise<WorkoutFinishSummary>
+  flagDiscomfort: (edit: NotesEdit) => Promise<void>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
   logFlex: (measurement: FlexMeasurement) => Promise<void>
   logCalories: (calories: number, date?: string) => Promise<void>
@@ -236,6 +238,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     for (const w of storage.loadQueue()) {
       try {
         if (w.type === 'session') await api.postSession(w.rows)
+        else if (w.type === 'notes') await api.postNotes(w.edit)
         else if (w.type === 'bodyweight') await api.postBodyWeight(w.entry)
         else if (w.type === 'flex') await api.postFlex(w.entry)
         else if (w.type === 'calorie') await api.postCalorie(w.entry)
@@ -533,6 +536,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return { prs, baselines, totalSec, activeSec: totalSec - restSec, restSec, ambient, goalPace, notes }
     },
     [challengeOptsByKey, deliver, enqueue, notify, persistWorkouts, weeklyCelebrations],
+  )
+
+  /**
+   * Set (or clear) a discomfort flag on an exercise in a session that has
+   * already been saved — the knee you only notice on the drive home.
+   *
+   * The note is rewritten where it landed rather than logged again: it belongs
+   * to the exercise, all of its set rows carry the same copy, and a fresh row
+   * would read as a set that was never performed. Queued like every other write,
+   * so a flag added offline still reaches the sheet — and it has to reach it,
+   * since a refresh replaces this device's rows with the sheet's.
+   */
+  const flagDiscomfort = useCallback(
+    async (edit: NotesEdit) => {
+      persistWorkouts(applyNotesEdit(storage.loadWorkouts(), edit))
+      const ok = await deliver(enqueue({ type: 'notes', edit }))
+      const saved = parseDiscomfort(edit.notes).length > 0 ? 'discomfort noted' : 'flag cleared'
+      notify(ok ? saved : "couldn't save — queued to retry", ok)
+    },
+    [deliver, enqueue, notify, persistWorkouts],
   )
 
   const logBodyWeight = useCallback(
@@ -859,6 +882,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     weekProgress,
     goals: DEFAULT_WEEKLY_GOALS,
     saveSession,
+    flagDiscomfort,
     logBodyWeight,
     logFlex,
     logCalories,

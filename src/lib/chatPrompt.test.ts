@@ -100,6 +100,14 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Never propose a plan edit off one')
   })
 
+  // A twinge is usually mentioned hours later, by which point the in-session
+  // flag is out of reach — so the coach has to be the one to record it, and has
+  // to be told that rather than pointing at a control the user can't get to.
+  it('tells the coach to record a discomfort report itself, however late it comes', () => {
+    expect(prompt).toContain('flag_discomfort')
+    expect(prompt).toContain('long after the workout')
+  })
+
   it('marks a flagged exercise in the logged workouts', () => {
     const flagged = buildSystemPrompt({
       today,

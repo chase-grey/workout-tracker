@@ -1,10 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import type { WorkoutRow } from '../types'
 import {
+  applyNotesEdit,
   discomfortCounts,
+  discomfortEdit,
   discomfortReports,
   fmtDiscomfortCount,
+  knownSpots,
+  lastSessionWith,
   parseDiscomfort,
+  sessionKeyOf,
   toggleDiscomfort,
   withDiscomfort,
 } from './discomfort'
@@ -128,6 +133,146 @@ describe('discomfortReports', () => {
     expect(discomfortReports(rows, 'barbell_squat')).toEqual([
       { sessionId: '2026-08-11', date: '2026-08-11', spots: ['knee', 'hip'] },
     ])
+  })
+})
+
+describe('knownSpots', () => {
+  it('keeps the spots the app counts, normalizing case and space', () => {
+    expect(knownSpots([' Knee ', 'HIP'])).toEqual(['knee', 'hip'])
+  })
+
+  it('drops a spot the app does not count, so the tally stays addable', () => {
+    expect(knownSpots(['left knee', 'quad'])).toEqual([])
+    expect(knownSpots(['left knee', 'hip'])).toEqual(['hip'])
+  })
+
+  it('dedupes', () => {
+    expect(knownSpots(['knee', 'knee'])).toEqual(['knee'])
+  })
+})
+
+describe('sessionKeyOf', () => {
+  it('keys a row by its session id, falling back to its date', () => {
+    expect(sessionKeyOf(row({ session_id: 's1' }))).toBe('s1')
+    expect(sessionKeyOf(row({ session_id: '' }))).toBe('2026-08-11')
+  })
+})
+
+describe('discomfortEdit', () => {
+  it('produces the note that flags a session already saved', () => {
+    const rows = [row({ set_number: 1 }), row({ set_number: 2 })]
+    expect(discomfortEdit(rows, 's1', 'barbell_squat', ['knee'])).toEqual({
+      session: 's1',
+      exercise: 'barbell_squat',
+      notes: 'discomfort: knee',
+    })
+  })
+
+  it('keeps note text the session already carried', () => {
+    const rows = [row({ notes: 'belt on' })]
+    expect(discomfortEdit(rows, 's1', 'barbell_squat', ['knee'])?.notes).toBe(
+      'belt on; discomfort: knee',
+    )
+  })
+
+  it('clears the flag when given no spots', () => {
+    const rows = [row({ notes: 'discomfort: knee' })]
+    expect(discomfortEdit(rows, 's1', 'barbell_squat', [])?.notes).toBe('')
+  })
+
+  it('replaces the existing flag rather than adding to it', () => {
+    const rows = [row({ notes: 'discomfort: knee' })]
+    expect(discomfortEdit(rows, 's1', 'barbell_squat', ['hip'])?.notes).toBe('discomfort: hip')
+  })
+
+  it('is null when that session logged no such exercise', () => {
+    const rows = [row({ session_id: 's1', exercise: 'flat_bench' })]
+    expect(discomfortEdit(rows, 's1', 'barbell_squat', ['knee'])).toBeNull()
+    expect(discomfortEdit(rows, 's2', 'flat_bench', ['knee'])).toBeNull()
+  })
+
+  it('addresses a row saved without a session id by its date', () => {
+    const rows = [row({ session_id: '' })]
+    expect(discomfortEdit(rows, '2026-08-11', 'barbell_squat', ['knee'])?.session).toBe(
+      '2026-08-11',
+    )
+  })
+})
+
+describe('applyNotesEdit', () => {
+  it('rewrites every set row of the exercise, and nothing else', () => {
+    const rows = [
+      row({ set_number: 1 }),
+      row({ set_number: 2 }),
+      row({ set_number: 1, exercise: 'flat_bench' }),
+      row({ session_id: 's2', date: '2026-08-04' }),
+    ]
+    const edit = { session: 's1', exercise: 'barbell_squat', notes: 'discomfort: knee' }
+    expect(applyNotesEdit(rows, edit).map((r) => r.notes)).toEqual([
+      'discomfort: knee',
+      'discomfort: knee',
+      '',
+      '',
+    ])
+  })
+
+  it('leaves the rows it edits otherwise untouched', () => {
+    const rows = [row({ weight_lbs: 225, reps: 8 })]
+    const [edited] = applyNotesEdit(rows, {
+      session: 's1',
+      exercise: 'barbell_squat',
+      notes: 'discomfort: knee',
+    })
+    expect(edited).toEqual({ ...rows[0], notes: 'discomfort: knee' })
+  })
+
+  it('reads back as a report once applied', () => {
+    const logged = [row({ set_number: 1 }), row({ set_number: 2 })]
+    const edit = discomfortEdit(logged, 's1', 'barbell_squat', ['knee'])
+    if (!edit) throw new Error('expected an edit')
+    expect(discomfortReports(applyNotesEdit(logged, edit), 'barbell_squat')).toEqual([
+      { sessionId: 's1', date: '2026-08-11', spots: ['knee'] },
+    ])
+  })
+})
+
+describe('lastSessionWith', () => {
+  const rows = [
+    row({ session_id: 's1', date: '2026-07-14' }),
+    row({ session_id: 's2', date: '2026-08-11' }),
+    row({ session_id: 's3', date: '2026-08-04' }),
+    row({ session_id: 's4', date: '2026-08-18', exercise: 'flat_bench' }),
+  ]
+
+  it('finds the most recent session that logged the exercise', () => {
+    expect(lastSessionWith(rows, 'barbell_squat')).toEqual({ session: 's2', date: '2026-08-11' })
+  })
+
+  it('finds the session on a named date', () => {
+    expect(lastSessionWith(rows, 'barbell_squat', '2026-07-14')).toEqual({
+      session: 's1',
+      date: '2026-07-14',
+    })
+  })
+
+  it('is null when the exercise was never logged, or not on that date', () => {
+    expect(lastSessionWith(rows, 'leg_press')).toBeNull()
+    expect(lastSessionWith(rows, 'barbell_squat', '2026-08-18')).toBeNull()
+  })
+
+  it('takes the later-logged of two sessions sharing a date', () => {
+    const sameDay = [
+      row({ session_id: 'morning', date: '2026-08-11' }),
+      row({ session_id: 'evening', date: '2026-08-11' }),
+    ]
+    expect(lastSessionWith(sameDay, 'barbell_squat')?.session).toBe('evening')
+  })
+
+  it('keys a session saved without an id by its date', () => {
+    expect(lastSessionWith([row({ session_id: '' })], 'barbell_squat')).toEqual({
+      session: '2026-08-11',
+      date: '2026-08-11',
+    })
   })
 })
 

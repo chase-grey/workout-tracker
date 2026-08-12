@@ -14,8 +14,16 @@ import {
 import { refreshIssues } from '../../store/useTrackedIssues'
 import { useKeyboardOpen } from '../../lib/useKeyboardOpen'
 import { composerPad } from '../../lib/composerPad'
-import { dayOrder, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
+import { dayOrder, exerciseName, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
 import { DAY_TYPES } from '../../config/plan'
+import {
+  DISCOMFORT_SPOTS,
+  discomfortEdit,
+  knownSpots,
+  lastSessionWith,
+  type NotesEdit,
+} from '../../lib/discomfort'
+import { fmtSessionDate } from '../../lib/exerciseHistory'
 import type { FlexBlock } from '../../config/flexPlan'
 import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
 import { Markdown } from './Markdown'
@@ -30,13 +38,15 @@ import { Markdown } from './Markdown'
  * behind an approve button, and only a tap commits it.
  */
 type Proposal = {
-  kind: 'plan' | 'flex'
-  /** The full plan/routine the edits produce, saved verbatim on approval. */
-  next: Plan | FlexBlock[]
   /** What the edits do, one line each, as shown to the user. */
   changes: string[]
   status: 'pending' | 'approved' | 'rejected'
-}
+} & (
+  // The first two carry the whole plan/routine the edits produce, saved verbatim
+  // on approval; the third carries the finished note for one logged exercise
+  // (see lib/discomfort).
+  { kind: 'plan'; next: Plan } | { kind: 'flex'; next: FlexBlock[] } | { kind: 'discomfort'; edit: NotesEdit }
+)
 
 type Turn = {
   role: 'user' | 'assistant' | 'system'
@@ -156,6 +166,38 @@ const UPDATE_FLEX_TOOL: Tool = {
   },
 }
 
+const FLAG_DISCOMFORT_TOOL: Tool = {
+  type: 'function',
+  function: {
+    name: 'flag_discomfort',
+    description:
+      'Record on a workout the user has already logged that a joint felt off during one of its exercises — a knee that felt weird on leg press, a shoulder that pinched on overhead press. ' +
+      'Call whenever they mention pain, a twinge or an odd sensation and it is clear which movement it came from, including — especially — when they only bring it up hours afterwards: the flag they can tap themselves is only reachable while the workout is still running, so if you do not record it here it does not get recorded at all. ' +
+      'The flag is filed against that exercise so a repeat on the same movement shows up beside it next time. It changes nothing about their plan, their weights or their rest, and it is not a step towards changing them — do not follow it with update_plan. ' +
+      'Pass every spot they name in one call: it replaces that exercise\'s flags for that session, so an empty list clears them. Nothing is saved until the user approves it in the app.',
+    parameters: {
+      type: 'object',
+      properties: {
+        exercise: {
+          type: 'string',
+          description: 'exercise key, exactly as listed in the plan snapshot',
+        },
+        spots: {
+          type: 'array',
+          items: { type: 'string', enum: [...DISCOMFORT_SPOTS] },
+          description: "where it felt off — empty to clear that exercise's flags for the session",
+        },
+        date: {
+          type: 'string',
+          description:
+            'YYYY-MM-DD of the session it happened in; omit for the most recent session that logged the exercise',
+        },
+      },
+      required: ['exercise', 'spots'],
+    },
+  },
+}
+
 const REPORT_ISSUE_TOOL: Tool = {
   type: 'function',
   function: {
@@ -240,8 +282,17 @@ export function ChatTab({
   /** Called once the question is answered or dismissed, so it isn't re-opened. */
   onAnsweringDone?: () => void
 }) {
-  const { workouts, bodyWeights, streaks, settings, plan, updatePlan, flexPlan, updateFlexPlan } =
-    useData()
+  const {
+    workouts,
+    bodyWeights,
+    streaks,
+    settings,
+    plan,
+    updatePlan,
+    flexPlan,
+    updateFlexPlan,
+    flagDiscomfort,
+  } = useData()
   // Only a kept thread comes back: with the toggle off, what's on screen has to
   // match what the coach was given, which is nothing yet.
   const [turns, setTurnsState] = useState<Turn[]>(() => {
@@ -336,16 +387,18 @@ export function ChatTab({
 
   /**
    * Commit or discard a proposed edit. The proposal carries the whole resulting
-   * plan, so approving is a straight save of that snapshot — no replaying edits
-   * against a plan that may have moved on since.
+   * plan (or, for a discomfort flag, the finished note), so approving is a
+   * straight save of that snapshot — no replaying edits against a plan that may
+   * have moved on since.
    */
   const resolveProposal = (index: number, approve: boolean) => {
     const turn = turns[index]
     const proposal = turn?.proposal
     if (!proposal || proposal.status !== 'pending') return
     if (approve) {
-      if (proposal.kind === 'plan') updatePlan(proposal.next as Plan)
-      else updateFlexPlan(proposal.next as FlexBlock[])
+      if (proposal.kind === 'plan') updatePlan(proposal.next)
+      else if (proposal.kind === 'flex') updateFlexPlan(proposal.next)
+      else void flagDiscomfort(proposal.edit)
     }
     const next = [...turns]
     next[index] = { ...turn, proposal: { ...proposal, status: approve ? 'approved' : 'rejected' } }
@@ -399,7 +452,7 @@ export function ChatTab({
       // Tool loop: let the model call a tool, apply it, feed results back.
       for (let i = 0; i < 4; i++) {
         const turn = await chatCompleteRaw(settings.openAiKey, messages, {
-          tools: [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL, REPORT_ISSUE_TOOL],
+          tools: [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL, FLAG_DISCOMFORT_TOOL, REPORT_ISSUE_TOOL],
           model: settings.openAiModel,
           onText: setPending,
         })
@@ -452,6 +505,50 @@ export function ChatTab({
                 errors: res.errors,
                 note: 'Nothing has been saved. The user must tap approve. Tell them what you proposed and that it is waiting on them.',
               })
+            } else if (call.name === 'flag_discomfort') {
+              const parsed = JSON.parse(call.arguments) as {
+                exercise: string
+                spots?: string[]
+                date?: string
+              }
+              const asked = parsed.spots ?? []
+              const spots = knownSpots(asked)
+              // The coach names the movement and (sometimes) the day; which
+              // session that is, is ours to resolve — asking a model for a
+              // session id it has never been shown only invites an invented one.
+              const found = lastSessionWith(workouts, parsed.exercise, parsed.date)
+              const edit = found && discomfortEdit(workouts, found.session, parsed.exercise, spots)
+              if (asked.length > 0 && spots.length === 0) {
+                // Every spot it named was one the app doesn't count. Saying so
+                // beats writing the empty list it narrowed down to, which would
+                // clear the exercise's flags instead of adding one.
+                resultMsg = JSON.stringify({
+                  error: `not spots this app records: ${asked.join(', ')}`,
+                  spots: DISCOMFORT_SPOTS,
+                })
+              } else if (!found || !edit) {
+                resultMsg = JSON.stringify({
+                  error: parsed.date
+                    ? `no ${parsed.exercise} logged on ${parsed.date}`
+                    : `no ${parsed.exercise} logged yet`,
+                })
+              } else {
+                const name = exerciseName(parsed.exercise)
+                const when = fmtSessionDate(found.date)
+                const change = spots.length
+                  ? `note ${spots.join(', ')} discomfort on ${name} — ${when}`
+                  : `clear the discomfort noted on ${name} — ${when}`
+                newTurns.push({
+                  role: 'system',
+                  content: 'the coach wants to note how that felt',
+                  proposal: { kind: 'discomfort', edit, changes: [change], status: 'pending' },
+                })
+                resultMsg = JSON.stringify({
+                  status: 'awaiting_approval',
+                  proposed: [change],
+                  note: 'Nothing has been saved. The user must tap approve. Tell them what you proposed and that it is waiting on them.',
+                })
+              }
             } else if (call.name === 'report_issue') {
               const parsed = JSON.parse(call.arguments) as {
                 title: string

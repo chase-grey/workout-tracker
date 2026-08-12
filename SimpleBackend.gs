@@ -49,6 +49,8 @@
  *                 to the auto-fixer; see answerIssue)
  *   POST ?route=session       body: { rows: WorkoutRow[] }
  *   POST ?route=import        body: { rows: WorkoutRow[] }   (historical)
+ *   POST ?route=notes         body: { session, exercise, notes }
+ *                 (rewrites the note on every set row of one logged exercise; see updateWorkoutNotes)
  *   POST ?route=bodyweight    body: { date, weightLbs }
  *   POST ?route=calories      body: { date, calories, label, loggedAt } (upsert by date; calories = running daily total,
  *                 loggedAt = ISO time of the last tap made ON that date; omitted on a backfill, which keeps the stored one)
@@ -166,6 +168,8 @@ function doPost(e) {
       case 'session':
       case 'import':
         return json(withLock(function () { return appendWorkoutRows(body.rows) }))
+      case 'notes':
+        return json(withLock(function () { return updateWorkoutNotes(body) }))
       case 'bodyweight':
         return json(withLock(function () { return appendBodyWeight(body) }))
       case 'flexibility':
@@ -266,6 +270,43 @@ function appendWorkoutRows(rows) {
   ])
   sh.getRange(sh.getLastRow() + 1, 1, values.length, WORKOUT_HEADERS.length).setValues(values)
   return { saved: values.length }
+}
+
+/**
+ * Rewrite the note on every set row of one already-logged exercise.
+ *
+ * The one place workout rows are edited rather than appended. A note belongs to
+ * the exercise log — the client writes the same string onto all of that
+ * exercise's rows — so a discomfort flag added after the session was saved has
+ * to move them together, and appending instead would invent a set that was never
+ * performed.
+ *
+ * Rows are addressed by the same session key the client uses: the session id, or
+ * the date for rows written before ids existed.
+ *
+ * Nothing matching is an error, not a quiet {saved: 0} — the client keeps the
+ * write queued and retries, which is what should happen when the session's own
+ * rows haven't reached the sheet yet.
+ */
+function updateWorkoutNotes(body) {
+  const session = String(body.session || '')
+  const exercise = String(body.exercise || '')
+  if (!session || !exercise) throw new Error('session and exercise are required')
+  const notes = body.notes == null ? '' : String(body.notes)
+  const sh = sheet('workouts', WORKOUT_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const notesCol = WORKOUT_HEADERS.indexOf('notes') + 1
+  let saved = 0
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0] && !r[1]) continue
+    const key = r[0] ? String(r[0]) : isoDate(r[1])
+    if (key !== session || String(r[3]) !== exercise) continue
+    sh.getRange(i + 1, notesCol).setValue(notes)
+    saved++
+  }
+  if (saved === 0) throw new Error('No rows for ' + exercise + ' in that session')
+  return { saved: saved }
 }
 
 function appendBodyWeight(body) {

@@ -5,6 +5,7 @@ import type { CalorieEntry } from './calories'
 import type { MeasurementEntry } from './bodyComp'
 import type { SessionDuration, SessionTimeSamples } from './estimate'
 import type { SyncedSettings } from './settingsSync'
+import type { NotesEdit } from './discomfort'
 
 /**
  * The durable outbox: writes recorded on disk *before* the network is touched,
@@ -20,6 +21,7 @@ import type { SyncedSettings } from './settingsSync'
 /** A write to the backend, without the identity the outbox gives it. */
 export type WritePayload =
   | { type: 'session'; rows: WorkoutRow[] }
+  | { type: 'notes'; edit: NotesEdit }
   | { type: 'bodyweight'; entry: BodyWeightEntry }
   | { type: 'flex'; entry: FlexEntry }
   | { type: 'calorie'; entry: CalorieEntry }
@@ -47,11 +49,14 @@ export function newWrite(payload: WritePayload, id: string): QueuedWrite {
  * A calorie entry carries a date's whole running total, so an older pending
  * total for that date is not just redundant, it's actively wrong: delivering it
  * after the newer one would roll the sheet back. Same for the plan and the
- * settings, both always sent whole. Everything else appends a row and has to be
- * kept.
+ * settings, both always sent whole, and for a note rewrite, which carries the
+ * exercise's whole note — flag a knee and then a hip and the second write says
+ * "knee, hip", so landing the first afterwards would drop the hip again.
+ * Everything else appends a row and has to be kept.
  */
 export function supersedes(w: WritePayload): string | null {
   if (w.type === 'calorie') return `calorie:${w.entry.date}`
+  if (w.type === 'notes') return `notes:${w.edit.session}:${w.edit.exercise}`
   if (w.type === 'plan') return 'plan'
   if (w.type === 'settings') return 'settings'
   return null

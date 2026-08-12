@@ -7,11 +7,23 @@ const cal = (date: string, calories: number, id: string): QueuedWrite =>
 const weigh = (date: string, id: string): QueuedWrite =>
   newWrite({ type: 'bodyweight', entry: { date, weightLbs: 170 } }, id)
 
+const note = (exercise: string, notes: string, id: string): QueuedWrite =>
+  newWrite({ type: 'notes', edit: { session: 's1', exercise, notes } }, id)
+
 describe('supersedes', () => {
   it('keys a calorie write by its date, so only same-day totals collapse', () => {
     expect(supersedes({ type: 'calorie', entry: { date: '2026-08-07', calories: 500 } })).toBe(
       'calorie:2026-08-07',
     )
+  })
+
+  it('keys a note rewrite by the exercise log it rewrites', () => {
+    expect(
+      supersedes({
+        type: 'notes',
+        edit: { session: 's1', exercise: 'leg_press', notes: 'discomfort: knee' },
+      }),
+    ).toBe('notes:s1:leg_press')
   })
 
   it('leaves appends standing on their own', () => {
@@ -28,6 +40,23 @@ describe('enqueued', () => {
 
   it('keeps a different date pending alongside', () => {
     const q = enqueued(enqueued([], cal('2026-08-06', 4000, 'a')), cal('2026-08-07', 500, 'b'))
+    expect(q.map((w) => w.id)).toEqual(['a', 'b'])
+  })
+
+  it('keeps only the newest note for an exercise log, which carries the whole note', () => {
+    const q = enqueued(
+      enqueued([], note('leg_press', 'discomfort: knee', 'a')),
+      note('leg_press', 'discomfort: knee, hip', 'b'),
+    )
+    expect(q).toHaveLength(1)
+    expect(q[0]).toMatchObject({ id: 'b', edit: { notes: 'discomfort: knee, hip' } })
+  })
+
+  it('keeps a note on a different exercise pending alongside', () => {
+    const q = enqueued(
+      enqueued([], note('leg_press', 'discomfort: knee', 'a')),
+      note('barbell_squat', 'discomfort: knee', 'b'),
+    )
     expect(q.map((w) => w.id)).toEqual(['a', 'b'])
   })
 

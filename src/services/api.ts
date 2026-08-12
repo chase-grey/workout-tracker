@@ -5,6 +5,7 @@ import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { ExerciseAverages, SessionDuration, SessionTimeSamples } from '../lib/estimate'
 import type { SyncedSettings } from '../lib/settingsSync'
+import type { NotesEdit } from '../lib/discomfort'
 import type { IssueThread, TrackedIssue } from './issues'
 import { storage } from './storage'
 import { DEFAULT_API_URL } from '../config/backend'
@@ -74,6 +75,7 @@ export const api = {
   fetchWorkouts: (since?: string) => get<WorkoutRow[]>('workouts', since ? { since } : {}),
   fetchBodyWeight: (since?: string) => get<BodyWeightEntry[]>('bodyweight', since ? { since } : {}),
   postSession: (rows: WorkoutRow[]) => post<{ saved: number }>('session', { rows }),
+  postNotes: (edit: NotesEdit) => post<{ saved: number }>('notes', edit),
   postBodyWeight: (entry: BodyWeightEntry) => post<{ saved: number }>('bodyweight', entry),
   postBodyWeightBulk: (entries: BodyWeightEntry[]) =>
     post<{ saved: number }>('bodyweight', { entries }),
