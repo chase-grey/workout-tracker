@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { KebabMenu, type MenuItem } from './KebabMenu'
 import { SessionProgress } from './SessionProgress'
+import { createFlame, flameLook, stepFlame } from '../lib/flame'
 import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } from '../lib/tide'
 
 // Time-telling shapes made for rest: each one encodes the remaining fraction
@@ -682,6 +683,92 @@ function TideVessel({ fraction }: { fraction: number }) {
   )
 }
 
+/**
+ * The 'candle' shape: a wax column whose height is the time left, with a flame
+ * riding its top down.
+ *
+ * The flame is simulated rather than keyframed (see lib/flame). A CSS loop can
+ * only do the same thing over and over, and the eye picks that up in a second or
+ * two — the flame stops reading as a flame and starts reading as a bobbing
+ * teardrop. Instead its lean, its height and its brightness each wander on their
+ * own beat off their own randomness, and a draught catches it every few seconds,
+ * so it never quite does the same thing twice.
+ *
+ * Like the tide's surface, this is texture at 60fps and is written straight to
+ * the DOM — it has no business re-rendering the tree that often. The wax level
+ * is still plain React state driven by the countdown; the flicker never touches
+ * it, so the time reading stays honest.
+ */
+function CandleColumn({ fraction }: { fraction: number }) {
+  const level = `${fraction * 100}%`
+  const flameRef = useRef<SVGSVGElement>(null)
+  const calm = usePrefersReducedMotion()
+
+  useEffect(() => {
+    // Reduced motion gets a steady flame: no loop at all, so the element keeps
+    // the resting look CSS gives it rather than being frozen mid-flicker.
+    if (calm) return
+    const flame = createFlame()
+    let raf = 0
+    let last = performance.now()
+    const frame = (now: number) => {
+      const dt = (now - last) / 1000
+      last = now
+      stepFlame(flame, dt)
+      const el = flameRef.current
+      if (el) {
+        const look = flameLook(flame)
+        el.style.transform = look.transform
+        el.style.opacity = String(look.opacity)
+      }
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [calm])
+
+  return (
+    <div className="absolute bottom-[12%] left-1/2 h-[74%] w-[24%] -translate-x-1/2">
+      <div
+        className="absolute inset-x-0 bottom-0 rounded-t-[16%] rounded-b-[8%] bg-accent-deep/70"
+        style={{ height: level, transition: 'height 260ms linear' }}
+      >
+        {/* Melted rim across the wax top, so it reads as a candle's flat top. */}
+        <div className="absolute inset-x-[10%] top-0 h-[9%] -translate-y-1/2 rounded-[50%] bg-accent-deep" />
+      </div>
+      {fraction > 0 && (
+        <div
+          className="pointer-events-none absolute left-1/2 h-[30%] w-[64%] -translate-x-1/2"
+          style={{ bottom: level, marginBottom: '-4%', transition: 'bottom 260ms linear' }}
+        >
+          {/* Flame: a pointed teardrop with a denser inner core for depth. The
+              wide, faint outer body reads as the flame's glow. */}
+          <svg
+            ref={flameRef}
+            className="rest-flame absolute bottom-0 left-1/2 h-[66%] w-[88%] -translate-x-1/2 text-accent-bright"
+            viewBox="0 0 100 100"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path d="M50 4 C 70 30 84 44 74 68 C 68 84 60 92 50 96 C 40 92 32 84 26 68 C 16 44 30 30 50 4 Z" opacity="0.4" />
+            <path d="M50 34 C 60 46 66 54 61 68 C 58 80 54 86 50 91 C 46 86 42 80 39 68 C 34 54 40 46 50 34 Z" />
+          </svg>
+          {/* Embers lifting off the flame's tip and winking out. */}
+          <span className="rest-ember absolute bottom-[56%] left-[42%] h-[8%] w-[8%] rounded-full bg-accent-bright" />
+          <span
+            className="rest-ember absolute bottom-[62%] left-[56%] h-[6%] w-[6%] rounded-full bg-accent-bright"
+            style={{ animationDelay: '0.7s' }}
+          />
+          <span
+            className="rest-ember absolute bottom-[58%] left-[50%] h-[5%] w-[5%] rounded-full bg-accent-bright"
+            style={{ animationDelay: '1.3s' }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RestShape({ variant, fraction }: { variant: Variant; fraction: number }) {
   const level = `${fraction * 100}%`
   const filled = `${(1 - fraction) * 100}%`
@@ -697,45 +784,7 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
       // A candle burning down: the wax column (darker green) is squared off like
       // a real candle and its height is the time left; the flame (brighter green)
       // rides its top downward, shedding embers, and gutters out at the base.
-      return (
-        <div className="absolute bottom-[12%] left-1/2 h-[74%] w-[24%] -translate-x-1/2">
-          <div
-            className="absolute inset-x-0 bottom-0 rounded-t-[16%] rounded-b-[8%] bg-accent-deep/70"
-            style={{ height: level, ...drain }}
-          >
-            {/* Melted rim across the wax top, so it reads as a candle's flat top. */}
-            <div className="absolute inset-x-[10%] top-0 h-[9%] -translate-y-1/2 rounded-[50%] bg-accent-deep" />
-          </div>
-          {fraction > 0 && (
-            <div
-              className="pointer-events-none absolute left-1/2 h-[30%] w-[64%] -translate-x-1/2"
-              style={{ bottom: level, marginBottom: '-4%', transition: 'bottom 260ms linear' }}
-            >
-              {/* Flame: a pointed teardrop with a denser inner core for depth. The
-                  wide, faint outer body reads as the flame's glow. */}
-              <svg
-                className="rest-flame absolute bottom-0 left-1/2 h-[66%] w-[88%] -translate-x-1/2 text-accent-bright"
-                viewBox="0 0 100 100"
-                fill="currentColor"
-                aria-hidden
-              >
-                <path d="M50 4 C 70 30 84 44 74 68 C 68 84 60 92 50 96 C 40 92 32 84 26 68 C 16 44 30 30 50 4 Z" opacity="0.4" />
-                <path d="M50 34 C 60 46 66 54 61 68 C 58 80 54 86 50 91 C 46 86 42 80 39 68 C 34 54 40 46 50 34 Z" />
-              </svg>
-              {/* Embers lifting off the flame's tip and winking out. */}
-              <span className="rest-ember absolute bottom-[56%] left-[42%] h-[8%] w-[8%] rounded-full bg-accent-bright" />
-              <span
-                className="rest-ember absolute bottom-[62%] left-[56%] h-[6%] w-[6%] rounded-full bg-accent-bright"
-                style={{ animationDelay: '0.7s' }}
-              />
-              <span
-                className="rest-ember absolute bottom-[58%] left-[50%] h-[5%] w-[5%] rounded-full bg-accent-bright"
-                style={{ animationDelay: '1.3s' }}
-              />
-            </div>
-          )}
-        </div>
-      )
+      return <CandleColumn fraction={fraction} />
     case 'pips': {
       // A meter that empties bottom-up: lit segments are the time left, and the
       // leading one breathes so the boundary is easy to find at a glance.

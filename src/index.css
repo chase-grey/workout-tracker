@@ -245,23 +245,19 @@ input[type='number'] {
 }
 
 /* Candle: the flame flickers from its base without shifting the wax level.
-   Horizontal centering is left to the element's `-translate-x-1/2` (Tailwind's
-   `translate` property); the keyframes touch only `transform` so the two don't
-   stack into a double leftward shift. */
-@keyframes rest-flame {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: scaleY(1.16) scaleX(0.92);
-    opacity: 1;
-  }
-}
+   There are no keyframes here on purpose — a loop repeats, and the eye reads a
+   repeating flame as a bob. The lean, height and brightness are simulated and
+   written to `transform`/`opacity` every frame instead (see lib/flame); what's
+   left here is the resting look, which is what shows under reduced motion.
+
+   The origin pins the flame to the wick, so it shears and stretches from its
+   base rather than about its middle. Horizontal centering is left to the
+   element's `-translate-x-1/2` (Tailwind's `translate` property), which is a
+   separate property from `transform` — so the per-frame writes can own
+   `transform` outright without stacking into a double leftward shift. */
 .rest-flame {
   transform-origin: 50% 100%;
-  animation: rest-flame 1.1s ease-in-out infinite;
+  opacity: 0.86;
   will-change: transform, opacity;
 }
 
@@ -319,8 +315,9 @@ input[type='number'] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* The flame isn't listed: it has no animation to switch off. RestTimer skips
+     its simulation loop entirely under reduced motion, so it just sits still. */
   .rest-bubble,
-  .rest-flame,
   .rest-ember,
   .rest-pip,
   .rest-perimeter-glow {
