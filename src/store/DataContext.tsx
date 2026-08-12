@@ -6,7 +6,7 @@ import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
-import { sessionToRows, trainingSessions } from '../lib/session'
+import { sessionToRows, trainingDates } from '../lib/session'
 import { DEAD_BUG } from '../config/plan'
 import { toISODate, weekStartISO } from '../lib/dates'
 import { QUICK_LOG_KEY, withPlanDefaults, type Plan } from '../config/plan'
@@ -825,10 +825,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     storage.saveFlexPlan(r)
   }, [])
 
-  // Distinct workout-session dates (one per session_id). Supplemental core-only
-  // sessions (dead bugs done with a stretch) are excluded so they don't inflate
-  // the weekly workout goal.
-  const workoutDates = useMemo(() => trainingSessions(workouts).map((s) => s.date), [workouts])
+  // Distinct dates trained — two sessions in a day count once. Supplemental
+  // core-only sessions (dead bugs done with a stretch) are excluded too, so
+  // neither inflates the weekly workout goal.
+  const workoutDates = useMemo(() => trainingDates(workouts), [workouts])
   const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
   const calHitDates = useMemo(() => calorieHitDates(calorieEntries), [calorieEntries])
 

@@ -72,10 +72,14 @@ export type WeekResult = {
   freezesAfter: number
 }
 
-/** Increment a per-week count map keyed by the Monday of each date's week. */
+/**
+ * Count the distinct dates in each Mon–Sun week, keyed by that week's Monday.
+ * Distinct, so two workouts (or two stretches) in a day count as one day toward
+ * the week's goal.
+ */
 function bucketByWeek(dates: string[]): Map<string, number> {
   const map = new Map<string, number>()
-  for (const d of dates) {
+  for (const d of new Set(dates)) {
     const wk = weekStartISO(d)
     map.set(wk, (map.get(wk) ?? 0) + 1)
   }

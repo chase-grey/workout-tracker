@@ -217,6 +217,19 @@ describe('weeklyStreakHistory', () => {
     expect(wk1.streakAfter).toBe(1)
   })
 
+  it('counts a day trained twice as one day', () => {
+    // Two workouts and two stretches crammed into Monday is one of each, so the
+    // week lands half rather than full.
+    const [wk1] = weeklyStreakHistory({
+      workoutDates: [WK1, WK1],
+      flexDates: [WK1, WK1],
+      calorieHitDates: daysInWeek(WK1, 6),
+      today: TODAY,
+    })
+    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6 })
+    expect(wk1.tier).toBe('half')
+  })
+
   it('names the week that broke the run', () => {
     // WK1 full -> 1. WK2 misses calorie days (4) with no freezes -> reset. WK3 full -> 1.
     const rows = weeklyStreakHistory({

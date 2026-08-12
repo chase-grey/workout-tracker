@@ -63,6 +63,16 @@ describe('newRecords — weekly session counts', () => {
     expect(recs.some((r) => r.title === 'most push sessions in a week')).toBe(false)
   })
 
+  it('does not cheer a week whose extra session was a second workout that same day', () => {
+    // Prior best: 2 days. This week has 2 days; a second session on Tuesday is
+    // still 2 days trained, so nothing was beaten.
+    const prior = [session('2026-07-06'), session('2026-07-07')]
+    const thisWeek = [session('2026-07-20'), session('2026-07-21')]
+    const before = snap({ workouts: [...prior, ...thisWeek] })
+    const after = snap({ workouts: [...prior, ...thisWeek, session('2026-07-21')] })
+    expect(newRecords(before, after, TODAY).some((r) => r.title === 'most workouts in a week')).toBe(false)
+  })
+
   it('cheers a most-stretches-in-a-week record', () => {
     const before = snap({ flexDates: ['2026-07-06', '2026-07-20'] })
     const after = snap({ flexDates: ['2026-07-06', '2026-07-20', '2026-07-21'] })

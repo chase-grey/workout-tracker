@@ -105,7 +105,7 @@ describe('baselineCelebration', () => {
 })
 
 describe('currentWeekCounts', () => {
-  it('counts distinct training sessions, stretch days, and calorie-goal days this week', () => {
+  it('counts distinct training days, stretch days, and calorie-goal days this week', () => {
     const workouts = [
       row({ session_id: 'a', date: '2026-07-20' }),
       row({ session_id: 'a', date: '2026-07-20' }), // same session — counts once
@@ -120,6 +120,14 @@ describe('currentWeekCounts', () => {
     ]
     const counts = currentWeekCounts(workouts, flexDates, cals, TODAY)
     expect(counts).toEqual({ workouts: 2, flex: 1, calDays: 1 })
+  })
+
+  it('counts two workouts in one day as one', () => {
+    const workouts = [
+      row({ session_id: 'am', date: '2026-07-21', day_type: 'push' }),
+      row({ session_id: 'pm', date: '2026-07-21', day_type: 'pull' }),
+    ]
+    expect(currentWeekCounts(workouts, [], [], TODAY).workouts).toBe(1)
   })
 })
 

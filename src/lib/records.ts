@@ -68,18 +68,13 @@ function crossedRecord(before: PeriodValue, after: PeriodValue): boolean {
 }
 
 /**
- * Distinct training sessions per Mon–Sun week, keeping only day types `keep`
- * allows. Supplemental core-only sessions (dead bugs done with a stretch) are
- * already excluded by trainingSessions.
+ * Distinct days trained per Mon–Sun week, keeping only day types `keep` allows.
+ * Two sessions on one day count once, matching the weekly goal. Supplemental
+ * core-only sessions (dead bugs done with a stretch) are already excluded by
+ * trainingSessions.
  */
 function sessionsByWeek(workouts: WorkoutRow[], keep: (d: DayType) => boolean): Map<string, number> {
-  const byWeek = new Map<string, number>()
-  for (const { date, dayType } of trainingSessions(workouts)) {
-    if (!keep(dayType)) continue
-    const wk = weekStartISO(date)
-    byWeek.set(wk, (byWeek.get(wk) ?? 0) + 1)
-  }
-  return byWeek
+  return datesByWeek(trainingSessions(workouts).filter((s) => keep(s.dayType)).map((s) => s.date))
 }
 
 /** Distinct dates per Mon–Sun week. */

@@ -12,7 +12,7 @@ import { calorieHitDates } from './calories'
 import { epley1RM } from './epley'
 import { toISODate, weekStartISO } from './dates'
 import { exerciseName } from '../config/plan'
-import { trainingSessions } from './session'
+import { trainingDates } from './session'
 import type { WeeklyGoalConfig } from './weeklyStreak'
 
 /** Energy level, quietest → loudest. PRs are the loudest thing there is. */
@@ -133,9 +133,9 @@ export function prCelebration(prs: PR[]): Celebration | null {
 export type WeekCounts = { workouts: number; flex: number; calDays: number }
 
 /**
- * This-week counts, mirroring DataContext's derivation exactly: distinct
- * training workout-session dates (supplemental core-only sessions excluded),
- * distinct stretch dates, and calorie-goal days.
+ * This-week counts, mirroring DataContext's derivation exactly: distinct dates
+ * trained (supplemental core-only sessions excluded), distinct stretch dates,
+ * and calorie-goal days.
  */
 export function currentWeekCounts(
   workouts: WorkoutRow[],
@@ -147,7 +147,7 @@ export function currentWeekCounts(
   const inWeek = (d: string) => weekStartISO(d) === wk
 
   return {
-    workouts: trainingSessions(workouts).filter((s) => inWeek(s.date)).length,
+    workouts: trainingDates(workouts).filter(inWeek).length,
     flex: new Set(flexDates.filter(inWeek)).size,
     calDays: calorieHitDates(calorieEntries).filter(inWeek).length,
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkoutRow } from '../types'
-import { hasLoggedSets, sessionToRows, trainingSessions } from './session'
+import { hasLoggedSets, sessionToRows, trainingDates, trainingSessions } from './session'
 import { discomfortReports } from './discomfort'
 
 function row(p: Partial<WorkoutRow> = {}): WorkoutRow {
@@ -50,6 +50,30 @@ describe('trainingSessions', () => {
 
   it('ignores rows without a session_id', () => {
     expect(trainingSessions([row({ session_id: '' })])).toEqual([])
+  })
+})
+
+describe('trainingDates', () => {
+  it('counts two workouts in a day once', () => {
+    const rows = [
+      row({ session_id: 'am', date: '2026-07-20', day_type: 'push' }),
+      row({ session_id: 'pm', date: '2026-07-20', day_type: 'pull' }),
+      row({ session_id: 'b', date: '2026-07-22' }),
+    ]
+    expect(trainingDates(rows)).toEqual(['2026-07-20', '2026-07-22'])
+  })
+
+  it('leaves out a day that was only supplemental core work', () => {
+    const rows = [
+      row({ session_id: 'core', date: '2026-07-20', exercise: 'deadbug' }),
+      row({ session_id: 'b', date: '2026-07-22' }),
+    ]
+    expect(trainingDates(rows)).toEqual(['2026-07-22'])
+  })
+
+  it('sorts oldest first', () => {
+    const rows = [row({ session_id: 'b', date: '2026-07-22' }), row({ session_id: 'a', date: '2026-07-20' })]
+    expect(trainingDates(rows)).toEqual(['2026-07-20', '2026-07-22'])
   })
 })
 

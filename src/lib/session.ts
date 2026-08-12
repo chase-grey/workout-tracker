@@ -34,6 +34,16 @@ export function trainingSessions(rows: WorkoutRow[]): TrainingSession[] {
   return out
 }
 
+/**
+ * The distinct dates training happened on, oldest first. Two sessions in one day
+ * count once: the weekly goal, the streak and the week records are all counting
+ * days trained, not sessions logged, so splitting an afternoon into a push and a
+ * pull doesn't bank a whole week's worth of workouts in one day.
+ */
+export function trainingDates(rows: WorkoutRow[]): string[] {
+  return [...new Set(trainingSessions(rows).map((s) => s.date))].sort()
+}
+
 /** Flatten a session into the per-set rows stored in the sheet. */
 export function sessionToRows(s: WorkoutSession): WorkoutRow[] {
   const rows: WorkoutRow[] = []

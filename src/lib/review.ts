@@ -12,7 +12,7 @@ import type { BodyWeightEntry, WorkoutRow } from '../types'
 import type { CalorieEntry } from './calories'
 import { calorieHitDates, dayTotals } from './calories'
 import { epley1RM } from './epley'
-import { trainingSessions } from './session'
+import { trainingDates } from './session'
 
 export type ReviewData = {
   workouts: WorkoutRow[]
@@ -96,9 +96,9 @@ function periodLabel(kind: ReviewKind, periodKey: string): string {
 // Stats.
 // ---------------------------------------------------------------------------
 
-/** Distinct training sessions (supplemental core-only sessions excluded) in the period. */
-function sessionCounts(workouts: WorkoutRow[], inPeriod: InPeriod): number {
-  return trainingSessions(workouts).filter((s) => inPeriod(s.date)).length
+/** Distinct days trained (supplemental core-only sessions excluded) in the period. */
+function trainingDayCount(workouts: WorkoutRow[], inPeriod: InPeriod): number {
+  return trainingDates(workouts).filter(inPeriod).length
 }
 
 /** Count of exercises whose all-time best est-1RM was achieved inside the period. */
@@ -121,7 +121,7 @@ function prsInPeriod(workouts: WorkoutRow[], inPeriod: InPeriod): number {
 }
 
 export function periodStats(data: ReviewData, inPeriod: InPeriod): PeriodStats {
-  const training = sessionCounts(data.workouts, inPeriod)
+  const training = trainingDayCount(data.workouts, inPeriod)
   const stretches = new Set(data.flexDates.filter(inPeriod)).size
   const calorieDays = calorieHitDates(data.calorieEntries).filter(inPeriod).length
 
