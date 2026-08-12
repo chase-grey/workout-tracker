@@ -97,36 +97,10 @@ input[type='number'] {
    Each shape's *level* encodes the time left; these loops are texture only and
    never touch that level, so the time reading stays honest. */
 
-/* Sandglass: grains falling through the neck while sand is still draining. */
-@keyframes rest-stream {
-  to {
-    background-position-y: 8px;
-  }
-}
-.rest-stream {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    var(--color-accent-bright) 0 2px,
-    transparent 2px 4px
-  );
-  animation: rest-stream 0.4s linear infinite;
-  will-change: background-position;
-}
-
-/* Hourglass: grains falling through the throat. The dash pattern *is* the
-   grains, and sliding it one whole period per cycle keeps the fall seamless. How
-   long the run is comes from the gap between the throat and the pile, so this
-   never touches the reading. */
-@keyframes rest-grain-fall {
-  to {
-    stroke-dashoffset: -6;
-  }
-}
-.rest-grain-fall {
-  stroke-dasharray: 2.5 3.5;
-  animation: rest-grain-fall 0.35s linear infinite;
-  will-change: stroke-dashoffset;
-}
+/* Neither sand shape animates a stream through its neck: the draining charge and
+   the rising pile are the whole reading, and grains crossing the gap pulled the
+   eye to the one part of the glass that tells no time. Both levels move on their
+   own transitions, so nothing here is needed to sell the flow. */
 
 /* Tide: bubbles drifting up through the draining liquid. */
 @keyframes rest-bubble {
@@ -328,17 +302,6 @@ input[type='number'] {
      reduced motion (see RestTimer), so the tide's surface simply stays flat. */
   .rest-ember {
     display: none;
-  }
-  /* Keep a settled stream in the neck rather than animating the grains. */
-  .rest-stream {
-    animation: none;
-    background-image: none;
-    background-color: var(--color-accent-bright);
-  }
-  /* Likewise the hourglass: a settled column of sand in the throat, not grains. */
-  .rest-grain-fall {
-    animation: none;
-    stroke-dasharray: none;
   }
 }
 

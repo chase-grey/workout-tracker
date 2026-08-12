@@ -7,8 +7,8 @@ import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } fr
 // Time-telling shapes made for rest: each one encodes the remaining fraction
 // directly in its dominant dimension — a sand level, a liquid line, a candle's
 // height, a stack of lit segments — so a glance reads how much rest is left.
-// Any looping motion (falling sand, rising bubbles, a flickering flame) is
-// texture only and never drives that level, so the time reading stays honest.
+// Any looping motion (rising bubbles, a flickering flame) is texture only and
+// never drives that level, so the time reading stays honest.
 //
 // Boxed shapes live in a square in the middle of the screen. Full-bleed ones use
 // the entire viewport instead, sitting behind the readout — a rest you can read
@@ -274,33 +274,33 @@ const BOTTOM_BULB_PATH = [
 
 /**
  * Where the sand sits with `fraction` of the rest left (1 at the start, 0 when
- * it's up): how far the upper charge has sunk, how far the pile has risen, and
- * the peak of that pile — which is where the falling grains land.
+ * it's up): how far the upper charge has sunk, and how far the pile has risen.
  */
 function hourglassLevels(fraction: number) {
   const spent = 1 - clamp01(fraction)
-  const rise = SAND_FALL * spent
-  return { drop: SAND_DRAIN * spent, rise, peakY: GLASS.floor - rise }
+  return { drop: SAND_DRAIN * spent, rise: SAND_FALL * spent }
 }
 
 /**
  * The 'hourglass' shape: a whole hourglass — frame, glass and all — standing the
  * full height of the rest screen. The upper bulb's sand sinks down its funnel as
- * the rest runs out, a stream of grains falls through the throat, and the pile in
- * the lower bulb rises to meet it, so either half alone says how much rest is
- * left.
+ * the rest runs out and the pile in the lower bulb rises by exactly as much, so
+ * either half alone says how much rest is left.
+ *
+ * No stream through the throat: watching grains fall pulled the eye to the neck,
+ * which is the one part of the glass that says nothing about the time. Both
+ * levels move continuously on their own, so the sand still reads as flowing
+ * without anything crossing the gap.
  *
  * One SVG, letterboxed into whatever space the rest screen has: the glass keeps
  * its proportions on any display instead of being stretched to the viewport, and
- * sand, grains and frame all live in the one coordinate system — which is what
- * keeps the falling grains landing exactly on the peak of the pile at every
- * level.
+ * sand and frame live in the one coordinate system.
  */
 function Hourglass({ fraction }: { fraction: number }) {
   // The bulbs clip their sand, and a clip path is referenced by id. Stripped to
   // word characters: useId's own punctuation has no business inside a url(#…).
   const id = useId().replace(/\W/g, '')
-  const { drop, rise, peakY } = hourglassLevels(fraction)
+  const { drop, rise } = hourglassLevels(fraction)
   const slide = (dy: number): CSSProperties => ({
     transform: `translateY(${dy}px)`,
     transition: 'transform 260ms linear',
@@ -333,21 +333,6 @@ function Hourglass({ fraction }: { fraction: number }) {
             <path d={LOWER_SAND_PATH} fillOpacity={0.85} style={slide(-rise)} />
           </g>
         </g>
-        {/* Grains falling through the throat onto the peak of the pile: the dash
-            pattern is the grains, and the run shortens as the pile climbs to meet
-            it. Nothing before the first grain leaves or after the last lands. */}
-        {fraction > 0 && fraction < 1 && (
-          <line
-            className="rest-grain-fall"
-            x1={GLASS.width / 2}
-            y1={GLASS.neckBottom}
-            x2={GLASS.width / 2}
-            y2={peakY}
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-          />
-        )}
         {/* The glass itself, over the sand so its walls stay crisp, and a highlight
             down each bulb so it reads as glass rather than as an outline. */}
         <g fill="none" stroke="currentColor" vectorEffect="non-scaling-stroke">
@@ -769,7 +754,10 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
     case 'sandglass':
     default:
       // An hourglass: the top chamber's sand drains out the neck (its surface
-      // descending as time runs out) and piles up in the bottom chamber.
+      // descending as time runs out) and piles up in the bottom chamber. Nothing
+      // is drawn crossing the neck — the two levels moving together carry the
+      // flow, and a stream there only drew the eye to the part of the shape that
+      // says nothing about the time.
       return (
         <div className="absolute inset-[8%]">
           {/* Caps frame the glass as a timer object. */}
@@ -789,10 +777,6 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
             <div className="absolute inset-0 bg-accent-bright/12" />
             <div className="absolute inset-x-0 bottom-0 bg-accent-bright/80" style={{ height: filled, ...drain }} />
           </div>
-          {/* A thin stream through the neck while sand is still falling. */}
-          {fraction > 0 && fraction < 1 && (
-            <div className="rest-stream absolute left-1/2 top-1/2 h-[12%] w-[2.5%] -translate-x-1/2 -translate-y-1/2 rounded-full" />
-          )}
         </div>
       )
   }
