@@ -7,6 +7,7 @@ import {
   MdRadioButtonUnchecked,
   MdShowChart,
   MdTrackChanges,
+  MdWarningAmber,
 } from 'react-icons/md'
 import type { WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
@@ -23,6 +24,7 @@ import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder, circuitStations } from '../../lib/circuit'
+import { DISCOMFORT_SPOTS, parseDiscomfort, toggleDiscomfort } from '../../lib/discomfort'
 import {
   bankRest,
   canResumeRest,
@@ -111,6 +113,7 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   const [paused, setPaused] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
+  const [showDiscomfort, setShowDiscomfort] = useState(false)
   // The first set of a workout waits on a start press (see `awaitingStart`).
   const [started, setStarted] = useState(false)
   // Per-exercise auto-advance for this session only, keyed by exercise. An entry
@@ -484,6 +487,20 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   const restShownSec =
     planned.circuit && planned.circuitRestSec != null ? planned.circuitRestSec : planned.restSec
 
+  // The exercise a discomfort flag belongs to. While resting that's the move just
+  // finished, not `planned` — the flow advances before it rests, so `planned` is
+  // already the set the rest leads into, and a twinge is noticed on the way out of
+  // the set that caused it. Same reasoning as addSet's use of `rest.exKey`.
+  const flagKey = rest?.exKey ?? planned.key
+  const flagName = exercises.find((e) => e.key === flagKey)?.name ?? flagKey
+  const flagNotes = logFor(flagKey)?.notes
+  // Where it felt off today, if anywhere. Recorded on the log and nowhere else:
+  // the flag exists so a repeat on the same movement shows up next time (see
+  // lib/discomfort), and it changes nothing about today's prescription.
+  const flagged = parseDiscomfort(flagNotes)
+  const toggleSpot = (spot: string) =>
+    controls.setNotes(flagKey, toggleDiscomfort(flagNotes, spot))
+
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
@@ -506,6 +523,10 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
       ? [{ label: 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
     { label: 'add a set', onClick: addSet },
+    {
+      label: flagged.length > 0 ? `discomfort on ${flagName}` : `flag discomfort on ${flagName}`,
+      onClick: () => setShowDiscomfort(true),
+    },
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'workout checklist', onClick: () => setShowList(true) },
     { label: 'skip logging details (mark done)', onClick: onSkip },
@@ -541,6 +562,18 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
         {planned.group} · set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
         {repRangeLabel(planned)} reps · rest {restLabel(restShownSec)}
       </p>
+
+      {flagged.length > 0 && (
+        // Tapping it reopens the picker, so a flag can be corrected or cleared
+        // from the same place it shows up.
+        <button
+          onClick={() => setShowDiscomfort(true)}
+          className="flex items-center gap-1.5 self-start rounded-full bg-surface-2 px-3 py-1 text-xs font-semibold text-amber-400 active:opacity-70"
+        >
+          <MdWarningAmber aria-hidden />
+          discomfort: {flagged.join(', ')}
+        </button>
+      )}
 
       {set && (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
@@ -657,6 +690,51 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           repsOnly={!!planned.repsOnly}
           onClose={() => setShowHistory(false)}
         />
+      )}
+
+      {showDiscomfort && (
+        // Above the rest overlay (z-50) — a twinge is usually noticed on the way
+        // out of the set, which is the rest screen.
+        <div
+          className="fixed inset-0 z-60 flex items-end bg-black/60"
+          onClick={() => setShowDiscomfort(false)}
+        >
+          <div
+            className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+          >
+            <h3 className="mb-3 text-lg font-bold">discomfort on {flagName}</h3>
+            <div className="flex flex-col gap-1">
+              {DISCOMFORT_SPOTS.map((spot) => {
+                const on = flagged.includes(spot)
+                return (
+                  <button
+                    key={spot}
+                    onClick={() => toggleSpot(spot)}
+                    aria-pressed={on}
+                    className={`flex min-h-[48px] items-center gap-3 rounded-xl px-2 text-left font-medium active:opacity-70 ${
+                      on ? 'bg-surface-2' : ''
+                    }`}
+                  >
+                    {on ? (
+                      <MdCheckCircle className="text-2xl text-amber-400" aria-hidden />
+                    ) : (
+                      <MdRadioButtonUnchecked className="text-2xl text-neutral-600" aria-hidden />
+                    )}
+                    {spot}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              onClick={() => setShowDiscomfort(false)}
+              className="mt-4 min-h-[48px] w-full rounded-2xl bg-surface-2 font-semibold text-neutral-200 active:opacity-80"
+            >
+              done
+            </button>
+          </div>
+        </div>
       )}
 
       {showCircuitRest && stations.length > 0 && (

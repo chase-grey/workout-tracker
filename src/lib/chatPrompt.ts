@@ -1,6 +1,7 @@
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types'
 import { PLAN, DAY_TYPES, exerciseName, repRangeLabel } from '../config/plan'
 import { toISODate, parseISODate } from './dates'
+import { parseDiscomfort } from './discomfort'
 
 /** Format one set as "weightxreps" (e.g. "135x8"), or "BWxreps" when weight is blank. */
 function formatSet(row: WorkoutRow): string {
@@ -59,7 +60,14 @@ function renderWorkouts(rows: WorkoutRow[]): string {
     const parts: string[] = []
     for (const [exercise, sets] of entry.exercises) {
       const ordered = [...sets].sort((a, b) => a.set_number - b.set_number)
-      parts.push(`${exerciseName(exercise)} ${ordered.map(formatSet).join(', ')}`)
+      // A discomfort flag sits on the exercise log, so every set row of that
+      // exercise carries it — read as one note for the movement, not per set.
+      const spots: string[] = []
+      for (const row of ordered) {
+        for (const spot of parseDiscomfort(row.notes)) if (!spots.includes(spot)) spots.push(spot)
+      }
+      const flagged = spots.length > 0 ? ` [discomfort: ${spots.join(', ')}]` : ''
+      parts.push(`${exerciseName(exercise)} ${ordered.map(formatSet).join(', ')}${flagged}`)
     }
     lines.push(`${date} [${entry.dayType}]: ${parts.join('; ')}`)
   }
@@ -106,6 +114,8 @@ export function buildSystemPrompt(input: {
     "Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. When the user asks for one of those, call report_issue so it reaches the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, file it rather than doing something adjacent.",
     ``,
     "update_plan and update_flex_routine only propose a change. The user has to approve it in the app before anything is saved, so say what you have proposed and that it is waiting on them — never report an edit as done.",
+    ``,
+    "Pain or discomfort is not a request to change the program. Never propose a plan edit off one, and do not advise dropping the weight or dropping the movement unless the user asks you what to change — a twinge is a data point, and deciding what it means about a lift is theirs (or a physio's) to make. Tell them they can flag it on the exercise from the workout menu, which records it against that movement so a repeat shows up; a flag already on a logged session appears as `[discomfort: knee]` next to that exercise below. If the same spot keeps coming up on the same lift, say so plainly — that pattern is worth naming.",
     ``,
     `Current date: ${todayISO}`,
     ``,

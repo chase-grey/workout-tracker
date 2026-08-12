@@ -91,4 +91,33 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('only propose a change')
     expect(prompt).toContain('never report an edit as done')
   })
+
+  // The coach answered a sore-knee report by telling the user to reduce the
+  // weight, and the user's next message was "don't make a change based on this".
+  // A twinge gets recorded, not programmed around.
+  it('tells the coach not to change the program over a discomfort report', () => {
+    expect(prompt).toContain('Pain or discomfort is not a request to change the program')
+    expect(prompt).toContain('Never propose a plan edit off one')
+  })
+
+  it('marks a flagged exercise in the logged workouts', () => {
+    const flagged = buildSystemPrompt({
+      today,
+      workouts: workouts.map((w) =>
+        w.exercise === 'incline_bench' ? { ...w, notes: 'discomfort: shoulder' } : w,
+      ),
+      bodyWeights,
+      streaks,
+    })
+    // Once for the movement, not once per set row carrying the note.
+    expect(flagged).toContain('135x8, 140x6 [discomfort: shoulder]')
+  })
+
+  it('leaves an unflagged exercise line alone', () => {
+    // Scoped to the workouts section: the instructions above it name the flag
+    // format, so a bare search for it would match them instead.
+    const logged = prompt.slice(prompt.indexOf('## Logged workouts'))
+    expect(logged).toContain('135x8, 140x6')
+    expect(logged).not.toContain('discomfort')
+  })
 })

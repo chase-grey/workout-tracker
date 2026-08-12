@@ -11,6 +11,7 @@ import {
   sessionsAtTargetLabel,
   targetDeltaLabel,
 } from '../lib/exerciseHistory'
+import { discomfortCounts, discomfortReports, fmtDiscomfortCount } from '../lib/discomfort'
 
 /**
  * Recent-performance sheet for one exercise, opened from the target row
@@ -63,6 +64,14 @@ export function ExerciseHistorySheet({
     [workouts, exerciseKey, slot],
   )
 
+  // Every session this lift was flagged in, not just the ones in `slot`: which
+  // press led that day has nothing to do with a knee, and scoping it would hide
+  // half the repeats the tally exists to show (see lib/discomfort).
+  const flags = useMemo(
+    () => discomfortCounts(discomfortReports(workouts, exerciseKey)),
+    [workouts, exerciseKey],
+  )
+
   const delta = targetDeltaLabel(target, last, repsOnly)
   const atTarget = sessionsAtTargetLabel(history, target, repsOnly)
 
@@ -81,6 +90,17 @@ export function ExerciseHistorySheet({
             <div className="text-xs text-neutral-500">today</div>
             <div className="text-2xl font-bold tabular-nums">{fmtTarget(target, repsOnly)}</div>
             {delta && <div className="text-sm text-neutral-400">{delta}</div>}
+          </div>
+        )}
+
+        {flags.length > 0 && (
+          <div className="mb-3 rounded-2xl bg-surface-2 p-3">
+            <div className="text-xs text-neutral-500">discomfort flagged</div>
+            <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-amber-400">
+              {flags.map((c) => (
+                <span key={c.spot}>{fmtDiscomfortCount(c)}</span>
+              ))}
+            </div>
           </div>
         )}
 

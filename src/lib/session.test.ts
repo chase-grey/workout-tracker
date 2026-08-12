@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkoutRow } from '../types'
 import { hasLoggedSets, sessionToRows, trainingSessions } from './session'
+import { discomfortReports } from './discomfort'
 
 function row(p: Partial<WorkoutRow> = {}): WorkoutRow {
   return {
@@ -97,6 +98,31 @@ describe('sessionToRows', () => {
       exercises: [{ exercise: 'barbell_squat', sets: [{ setNumber: 1, weightLbs: 225, reps: 5 }] }],
     })
     expect(rows[0].variant).toBeUndefined()
+  })
+
+  it("carries an exercise's discomfort flag onto its rows, readable again", () => {
+    // The flag has no column of its own; it rides the free-text notes the sheet
+    // already stores per set, so this is the whole of how it reaches history.
+    const rows = sessionToRows({
+      sessionId: 's',
+      date: '2026-07-21',
+      dayType: 'pull',
+      isHistorical: false,
+      exercises: [
+        {
+          exercise: 'barbell_squat',
+          notes: 'discomfort: knee',
+          sets: [
+            { setNumber: 1, weightLbs: 225, reps: 8 },
+            { setNumber: 2, weightLbs: 225, reps: 7 },
+          ],
+        },
+      ],
+    })
+    expect(rows.map((r) => r.notes)).toEqual(['discomfort: knee', 'discomfort: knee'])
+    expect(discomfortReports(rows, 'barbell_squat')).toEqual([
+      { sessionId: 's', date: '2026-07-21', spots: ['knee'] },
+    ])
   })
 })
 
