@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { DayType, SetLog, WorkoutSession } from '../../types'
 import { storage } from '../../services/storage'
@@ -18,10 +18,14 @@ export function useActiveSession() {
   const { plan, workouts } = useData()
   const [session, setSession] = useState<WorkoutSession | null>(() => storage.loadActiveSession())
 
-  const commit = useCallback((next: WorkoutSession | null) => {
-    setSession(next)
-    storage.saveActiveSession(next)
-  }, [])
+  // Mirror the session from here rather than from inside the state updaters.
+  // Finishing the last set marks it done and finishes in the same tick, so the
+  // clear landed in storage first and React then replayed the queued set update
+  // over it — writing a finished workout back and reopening the app into it.
+  // Whatever state the queue settles on is what gets written.
+  useEffect(() => {
+    storage.saveActiveSession(session)
+  }, [session])
 
   const start = useCallback(
     // `variant` overrides the automatic A/B choice (Push + Core only); omit it to
@@ -46,7 +50,7 @@ export function useActiveSession() {
         // the day the lift led (or followed).
         variantFor: (key) => progressionVariant(key, chosen),
       })
-      commit({
+      setSession({
         sessionId: uuid(),
         date: toISODate(new Date()),
         dayType,
@@ -66,35 +70,33 @@ export function useActiveSession() {
         }),
       })
     },
-    [commit, plan, workouts],
+    [plan, workouts],
   )
 
   const mutateExercise = useCallback((exKey: string, fn: (sets: SetLog[]) => SetLog[]) => {
-    setSession((prev) => {
-      if (!prev) return prev
-      const next: WorkoutSession = {
-        ...prev,
-        exercises: prev.exercises.map((ex) =>
-          ex.exercise === exKey
-            ? { ...ex, sets: fn(ex.sets).map((s, i) => ({ ...s, setNumber: i + 1 })) }
-            : ex,
-        ),
-      }
-      storage.saveActiveSession(next)
-      return next
-    })
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            exercises: prev.exercises.map((ex) =>
+              ex.exercise === exKey
+                ? { ...ex, sets: fn(ex.sets).map((s, i) => ({ ...s, setNumber: i + 1 })) }
+                : ex,
+            ),
+          }
+        : prev,
+    )
   }, [])
 
   const setNotes = useCallback((exKey: string, notes: string) => {
-    setSession((prev) => {
-      if (!prev) return prev
-      const next: WorkoutSession = {
-        ...prev,
-        exercises: prev.exercises.map((ex) => (ex.exercise === exKey ? { ...ex, notes } : ex)),
-      }
-      storage.saveActiveSession(next)
-      return next
-    })
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            exercises: prev.exercises.map((ex) => (ex.exercise === exKey ? { ...ex, notes } : ex)),
+          }
+        : prev,
+    )
   }, [])
 
   const addSet = useCallback(
@@ -131,8 +133,8 @@ export function useActiveSession() {
     storage.saveActiveStepKey(null)
     storage.saveActiveRest(null)
     storage.saveRestTally(null)
-    commit(null)
-  }, [commit])
+    setSession(null)
+  }, [])
 
   return { session, start, addSet, updateSet, removeSet, setNotes, clear }
 }
