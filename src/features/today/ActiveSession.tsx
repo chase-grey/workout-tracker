@@ -120,6 +120,9 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // overrides the saved `autoAdvance` default either way, so "auto just for now"
   // and "not this time" are both possible without editing the plan.
   const [autoOverride, setAutoOverride] = useState<Map<string, boolean>>(new Map())
+  // The same thing across the whole session: every exercise rolls out of rest for
+  // the rest of this workout, with nothing written to the plan.
+  const [autoAll, setAutoAll] = useState(false)
   // Time spent on the rest-timer screen (the "resting" slice of the session),
   // alongside the rest that was prescribed and how many intervals were taken —
   // the estimator learns the ratio between taken and prescribed, not a flat
@@ -443,9 +446,18 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // Whether rest rolls straight into this exercise's next set. During rest `planned`
   // is already the exercise the rest is leading into, so this reads the same from
   // the exercise screen and from the rest screen before it.
-  const autoNow = autoOverride.get(planned.key) ?? !!planned.autoAdvance
+  // The session-wide switch stands in for the saved default; a per-exercise
+  // choice still beats both.
+  const autoNow = autoOverride.get(planned.key) ?? (autoAll || !!planned.autoAdvance)
   const setAutoNow = (on: boolean) =>
     setAutoOverride((prev) => new Map(prev).set(planned.key, on))
+
+  // Flipping the session-wide switch drops the per-exercise choices made before
+  // it, so it means "all of them, from here" rather than layering over them.
+  const setAutoAllNow = (on: boolean) => {
+    setAutoAll(on)
+    setAutoOverride(new Map())
+  }
 
   // Saving the default writes to the day's stored exercise list (not the
   // variant-resolved copy), and takes effect for the rest of this session too.
@@ -510,6 +522,10 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     {
       label: autoNow ? 'wait for my tap after rest' : 'auto-advance out of rest',
       onClick: () => setAutoNow(!autoNow),
+    },
+    {
+      label: autoAll ? 'stop auto-advancing this workout' : 'auto-advance the rest of this workout',
+      onClick: () => setAutoAllNow(!autoAll),
     },
     {
       label: planned.autoAdvance
