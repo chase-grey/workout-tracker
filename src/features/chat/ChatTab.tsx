@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useData } from '../../store/DataContext'
-import { buildSystemPrompt } from '../../lib/chatPrompt'
+import { buildSystemPrompt, type CoachSkills } from '../../lib/chatPrompt'
 import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/openai'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
 import { applyFlexEdits, type FlexEdit } from '../../lib/flexTools'
@@ -55,9 +55,17 @@ type Turn = {
 }
 
 // ChatTab unmounts whenever you leave the coach tab or start a workout, so the
-// toggle and the thread outlive the component — otherwise "keep context" would
+// toggles and the thread outlive the component — otherwise "keep context" would
 // forget itself the moment you looked at anything else.
-const session: { keepContext: boolean; turns: Turn[] } = { keepContext: false, turns: [] }
+//
+// Plan editing starts off and issue filing starts on: most days nothing about
+// the plan changes, and the two plan tools are by far the largest schemas we
+// send, so they are worth their weight only when they're wanted.
+const session: { keepContext: boolean; skills: CoachSkills; turns: Turn[] } = {
+  keepContext: false,
+  skills: { planEdits: false, issues: true },
+  turns: [],
+}
 
 const UPDATE_PLAN_TOOL: Tool = {
   type: 'function',
@@ -238,9 +246,16 @@ function circuitNote(e: PlannedExercise): string {
   return `, circuit=${e.circuit}, ${rest}`
 }
 
-/** A compact snapshot of the current plans so the assistant knows exact keys. */
-function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
-  const lines = ['CURRENT WORKOUT PLAN (use these exact keys with update_plan):']
+/**
+ * A compact snapshot of the current plans so the assistant knows exact keys.
+ *
+ * It goes even with plan editing switched off: flag_discomfort takes a key from
+ * here too, and the stretch routine appears nowhere else in the context.
+ */
+function planSnapshot(plan: Plan, flexPlan: FlexBlock[], planEdits: boolean): string {
+  const lines = [
+    `CURRENT WORKOUT PLAN (use these exact keys${planEdits ? ' with update_plan' : ''}):`,
+  ]
   // Listed in the order the app offers the days, and numbered, so the coach can
   // both read the current day order and be asked to change it (reorderDays).
   const days = dayOrder(plan)
@@ -253,7 +268,12 @@ function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
       )
     })
   }
-  lines.push('', 'CURRENT STRETCH ROUTINE (use block label + stretch key with update_flex_routine):')
+  lines.push(
+    '',
+    planEdits
+      ? 'CURRENT STRETCH ROUTINE (use block label + stretch key with update_flex_routine):'
+      : 'CURRENT STRETCH ROUTINE:',
+  )
   for (const b of flexPlan) {
     lines.push(`${b.label}:`)
     for (const e of b.exercises) {
@@ -265,6 +285,21 @@ function planSnapshot(plan: Plan, flexPlan: FlexBlock[]): string {
 
 /** A question the auto-fixer left on an issue, waiting on a reply here. */
 type AnswerTarget = { number: number; title: string; question: string }
+
+/** One of the on/off switches sitting above the thread. */
+function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: string }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={on}
+      className={`min-h-[44px] rounded-xl px-3 text-sm font-medium active:opacity-80 ${
+        on ? 'bg-accent text-black' : 'bg-surface text-neutral-300'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
 
 export function ChatTab({
   answering,
@@ -312,6 +347,13 @@ export function ChatTab({
   const toggleKeepContext = () => {
     session.keepContext = !keepContext
     setKeepContext(!keepContext)
+  }
+  // Which tool sets this conversation gets. Same deal as the toggle above: the
+  // choice is the session's, not this mount's.
+  const [skills, setSkillsState] = useState(session.skills)
+  const toggleSkill = (name: keyof CoachSkills) => {
+    session.skills = { ...session.skills, [name]: !session.skills[name] }
+    setSkillsState(session.skills)
   }
   const endRef = useRef<HTMLDivElement>(null)
   // Answering an issue takes over the composer: what you type goes to the fixer
@@ -431,12 +473,23 @@ export function ChatTab({
 
     // Build the raw message history (system context + visible turns + new user).
     const messages: RawMessage[] = [
-      { role: 'system', content: buildSystemPrompt({ today: new Date(), workouts, bodyWeights, streaks }) },
-      { role: 'system', content: planSnapshot(plan, flexPlan) },
+      {
+        role: 'system',
+        content: buildSystemPrompt({ today: new Date(), workouts, bodyWeights, streaks, skills }),
+      },
+      { role: 'system', content: planSnapshot(plan, flexPlan, skills.planEdits) },
       ...priorTurns
         .filter((t) => t.role !== 'system')
         .map((t) => ({ role: t.role, content: t.content }) as RawMessage),
       { role: 'user', content: text },
+    ]
+
+    // A switched-off tool set isn't offered at all, so the coach can't reach for
+    // it — the prompt tells it what's missing and which button turns it back on.
+    const tools: Tool[] = [
+      ...(skills.planEdits ? [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL] : []),
+      FLAG_DISCOMFORT_TOOL,
+      ...(skills.issues ? [REPORT_ISSUE_TOOL] : []),
     ]
 
     let workingPlan = plan
@@ -447,7 +500,7 @@ export function ChatTab({
       // Tool loop: let the model call a tool, apply it, feed results back.
       for (let i = 0; i < 4; i++) {
         const turn = await chatCompleteRaw(settings.openAiKey, messages, {
-          tools: [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL, FLAG_DISCOMFORT_TOOL, REPORT_ISSUE_TOOL],
+          tools,
           model: settings.openAiModel,
           onText: setPending,
         })
@@ -601,16 +654,16 @@ export function ChatTab({
        its containing block. The other half is the bar's own -bottom-4 (see
        below), which is what actually sends it down there. */
     <div className="-mb-4 flex min-h-[calc(100%+1rem)] flex-col">
-      <div className="flex items-center justify-end pb-2">
-        <button
-          onClick={toggleKeepContext}
-          aria-pressed={keepContext}
-          className={`min-h-[44px] rounded-xl px-3 text-sm font-medium active:opacity-80 ${
-            keepContext ? 'bg-accent text-black' : 'bg-surface text-neutral-300'
-          }`}
-        >
+      <div className="flex flex-wrap items-center justify-end gap-2 pb-2">
+        <Toggle on={skills.planEdits} onClick={() => toggleSkill('planEdits')}>
+          edit plan
+        </Toggle>
+        <Toggle on={skills.issues} onClick={() => toggleSkill('issues')}>
+          report issues
+        </Toggle>
+        <Toggle on={keepContext} onClick={toggleKeepContext}>
           keep context
-        </button>
+        </Toggle>
       </div>
 
       {/* pb-5 matches the scroller's own top padding (see AppShell's main), so

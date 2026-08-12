@@ -48,8 +48,11 @@ const bodyWeights: BodyWeightEntry[] = [
 
 const streaks: StreakState = { streak: 7, freezes: 2 }
 
+/** Everything switched on, which is what most of these assertions are about. */
+const allSkills = { planEdits: true, issues: true }
+
 describe('buildSystemPrompt', () => {
-  const prompt = buildSystemPrompt({ today, workouts, bodyWeights, streaks })
+  const prompt = buildSystemPrompt({ today, workouts, bodyWeights, streaks, skills: allSkills })
 
   it('includes the current date', () => {
     expect(prompt).toContain('2026-07-01')
@@ -88,7 +91,7 @@ describe('buildSystemPrompt', () => {
   })
 
   it('tells the coach its edits are proposals awaiting approval', () => {
-    expect(prompt).toContain('only propose a change')
+    expect(prompt).toContain('only proposes a change')
     expect(prompt).toContain('never report an edit as done')
   })
 
@@ -116,6 +119,7 @@ describe('buildSystemPrompt', () => {
       ),
       bodyWeights,
       streaks,
+      skills: allSkills,
     })
     // Once for the movement, not once per set row carrying the note.
     expect(flagged).toContain('135x8, 140x6 [discomfort: shoulder]')
@@ -127,5 +131,49 @@ describe('buildSystemPrompt', () => {
     const logged = prompt.slice(prompt.indexOf('## Logged workouts'))
     expect(logged).toContain('135x8, 140x6')
     expect(logged).not.toContain('discomfort')
+  })
+})
+
+// A tool set is left out of the request when its button is off, so the prompt
+// has to stop advertising it — a coach told to "call report_issue" with no such
+// tool on its belt reaches for whatever is left, which is how a request for a
+// goal became two invented stretches in the first place.
+describe('buildSystemPrompt with a tool set switched off', () => {
+  const build = (skills: { planEdits: boolean; issues: boolean }) =>
+    buildSystemPrompt({ today, workouts, bodyWeights, streaks, skills })
+
+  it('drops the plan tools and points at the button that brings them back', () => {
+    const p = build({ planEdits: false, issues: true })
+    expect(p).not.toContain('update_plan')
+    expect(p).not.toContain('update_flex_routine')
+    expect(p).toContain('Plan editing is switched off')
+    expect(p).toContain('"edit plan" button')
+  })
+
+  it('drops report_issue and points at the button that brings it back', () => {
+    const p = build({ planEdits: true, issues: false })
+    expect(p).not.toContain('report_issue')
+    expect(p).toContain('Issue filing is switched off')
+    expect(p).toContain('"report issues" button')
+  })
+
+  // flag_discomfort has no button: it is the only way a twinge mentioned after
+  // the workout gets recorded at all, so it is always on the belt.
+  it('keeps flag_discomfort whatever the buttons say', () => {
+    for (const skills of [
+      { planEdits: false, issues: false },
+      { planEdits: false, issues: true },
+      { planEdits: true, issues: false },
+    ]) {
+      const p = build(skills)
+      expect(p).toContain('flag_discomfort')
+      expect(p).toContain('Pain or discomfort is not a request to change the program')
+    }
+  })
+
+  it('stops telling the coach not to propose a plan edit it cannot propose', () => {
+    const p = build({ planEdits: false, issues: true })
+    expect(p).not.toContain('Never propose a plan edit off one')
+    expect(p).toMatch(/do not advise dropping the weight/i)
   })
 })

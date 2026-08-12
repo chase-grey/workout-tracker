@@ -74,6 +74,96 @@ function renderWorkouts(rows: WorkoutRow[]): string {
   return lines.join('\n')
 }
 
+/**
+ * The optional tool sets the coach is given, switched from the chat UI.
+ *
+ * A tool set costs its schemas and its share of these instructions on every
+ * send, used or not, so the ones that only matter now and then are left out
+ * until they're switched on.
+ */
+export type CoachSkills = {
+  /** update_plan and update_flex_routine. Off by default — the plan rarely changes. */
+  planEdits: boolean
+  /** report_issue. On by default: anything the app can't do has to reach the developer. */
+  issues: boolean
+}
+
+/** Join a list as "a, b and c". */
+function andList(items: string[]): string {
+  if (items.length < 2) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+/**
+ * The paragraphs about whichever tools this conversation was actually given.
+ *
+ * A switched-off tool set is named as switched off rather than passed over in
+ * silence: with no update_plan to hand the coach reaches for the nearest thing
+ * still on its belt, so a request it can no longer serve has to come back as
+ * "that button is off", never as a near-miss from another tool.
+ */
+function renderTools(skills: CoachSkills): string[] {
+  const uses: string[] = []
+  if (skills.planEdits) {
+    uses.push(
+      'update_plan to edit the workout plan',
+      'update_flex_routine to edit the stretch routine',
+    )
+  }
+  uses.push('flag_discomfort to note that a joint felt off during a logged exercise')
+  if (skills.issues) {
+    uses.push(
+      'report_issue to file a bug or feature request about the app as a GitHub issue (call it whenever the user reports a problem or asks to file something, including test reports, then confirm the issue number back to them)',
+    )
+  }
+
+  const lines = [
+    `You have tools that act on the app itself, and you are authorized to use them whenever the user asks — never claim you lack permission or the ability. Use ${andList(uses)}.`,
+    ``,
+  ]
+
+  if (skills.planEdits) {
+    const elsewhere = skills.issues
+      ? 'When the user asks for one of those, call report_issue so it reaches the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, file it rather than doing something adjacent.'
+      : 'When the user asks for one of those, say plainly that it needs the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, say so rather than doing something adjacent.'
+    lines.push(
+      `Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. ${elsewhere}`,
+      ``,
+    )
+  } else {
+    lines.push(
+      'Plan editing is switched off in this conversation. You cannot change the workout plan or the stretch routine, and must not describe a change to either as made or proposed. If the user asks for one, tell them to turn on the "edit plan" button above the message box and ask again.',
+      ``,
+    )
+  }
+
+  if (!skills.issues) {
+    lines.push(
+      'Issue filing is switched off in this conversation, so nothing about the app itself can be written up from here. If the user reports a problem with the app or asks for a change the code would have to make, tell them to turn on the "report issues" button above the message box.',
+      ``,
+    )
+  }
+
+  const proposing = [
+    ...(skills.planEdits ? ['update_plan', 'update_flex_routine'] : []),
+    'flag_discomfort',
+  ]
+  lines.push(
+    `Calling ${andList(proposing)} only proposes a change. The user has to approve it in the app before anything is saved, so say what you have proposed and that it is waiting on them — never report an edit as done.`,
+    ``,
+  )
+
+  const noEdit = skills.planEdits
+    ? 'Never propose a plan edit off one, and do not'
+    : 'Do not'
+  lines.push(
+    `Pain or discomfort is not a request to change the program. ${noEdit} advise dropping the weight or dropping the movement unless the user asks you what to change — a twinge is a data point, and deciding what it means about a lift is theirs (or a physio's) to make. Record it with flag_discomfort instead, against the movement and the session it happened in, so a repeat on the same lift shows up beside it next time. Do that even when they mention it long after the workout, which is when it usually surfaces: the flag they can tap themselves only exists while the session is still running, so once it is saved this tool is the only way in. A flag already on a logged session appears as \`[discomfort: knee]\` next to that exercise below. If the same spot keeps coming up on the same lift, say so plainly — that pattern is worth naming.`,
+    ``,
+  )
+
+  return lines
+}
+
 /** Render body-weight entries within the window as a "date: weight" list. */
 function renderBodyWeights(entries: BodyWeightEntry[]): string {
   if (entries.length === 0) return '(no body weight entries in this window)'
@@ -93,8 +183,9 @@ export function buildSystemPrompt(input: {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
   streaks: StreakState
+  skills: CoachSkills
 }): string {
-  const { today, workouts, bodyWeights, streaks } = input
+  const { today, workouts, bodyWeights, streaks, skills } = input
   const todayISO = toISODate(today)
 
   const cutoff = new Date(today)
@@ -109,14 +200,7 @@ export function buildSystemPrompt(input: {
     ``,
     'Your replies are rendered as Markdown on a phone, so short bullet lists, bold, and inline code all display properly. Keep the formatting light — no tables, and no heading above a two-line answer.',
     ``,
-    "You have tools that act on the app itself, and you are authorized to use them whenever the user asks — never claim you lack permission or the ability. Use update_plan to edit the workout plan, update_flex_routine to edit the stretch routine, flag_discomfort to note that a joint felt off during a logged exercise, and report_issue to file a bug or feature request about the app as a GitHub issue (call it whenever the user reports a problem or asks to file something, including test reports, then confirm the issue number back to them).",
-    ``,
-    "Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. When the user asks for one of those, call report_issue so it reaches the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, file it rather than doing something adjacent.",
-    ``,
-    "update_plan, update_flex_routine and flag_discomfort only propose a change. The user has to approve it in the app before anything is saved, so say what you have proposed and that it is waiting on them — never report an edit as done.",
-    ``,
-    "Pain or discomfort is not a request to change the program. Never propose a plan edit off one, and do not advise dropping the weight or dropping the movement unless the user asks you what to change — a twinge is a data point, and deciding what it means about a lift is theirs (or a physio's) to make. Record it with flag_discomfort instead, against the movement and the session it happened in, so a repeat on the same lift shows up beside it next time. Do that even when they mention it long after the workout, which is when it usually surfaces: the flag they can tap themselves only exists while the session is still running, so once it is saved this tool is the only way in. A flag already on a logged session appears as `[discomfort: knee]` next to that exercise below. If the same spot keeps coming up on the same lift, say so plainly — that pattern is worth naming.",
-    ``,
+    ...renderTools(skills),
     `Current date: ${todayISO}`,
     ``,
     `## Workout plan`,
