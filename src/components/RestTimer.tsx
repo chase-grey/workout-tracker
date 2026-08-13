@@ -4,6 +4,9 @@ import { SessionProgress } from './SessionProgress'
 import { FastForwardToggle } from './FastForwardToggle'
 import { createFlame, flameLook, stepFlame } from '../lib/flame'
 import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } from '../lib/tide'
+import { EXTRA_BOX_VARIANTS, EXTRA_FILL_VARIANTS, isExtraVariant } from '../lib/restShapes'
+import { usePrefersReducedMotion } from '../lib/useReducedMotion'
+import { ExtraRestShape } from './RestShapes'
 
 // Time-telling shapes made for rest: each one encodes the remaining fraction
 // directly in its dominant dimension — a sand level, a liquid line, a candle's
@@ -11,13 +14,18 @@ import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } fr
 // Any looping motion (rising bubbles, a flickering flame) is texture only and
 // never drives that level, so the time reading stays honest.
 //
+// A shape may just as well *fill* as drain: `1 - fraction` is the same reading the
+// other way up, and rest is a recharge as much as it is a countdown. The rest of
+// the set lives in RestShapes, which is also where the mechanics that aren't a
+// falling level are — a closing gap, an angle, a width, a radius.
+//
 // Boxed shapes live in a square in the middle of the screen. Full-bleed ones use
 // the entire viewport instead, sitting behind the readout — a rest you can read
 // from across the gym without looking at the numbers.
-const BOX_VARIANTS = ['sandglass', 'tide', 'candle', 'pips'] as const
-// 'perimeter' frames the screen edge; the other two fill it, so they sit below the
+const BOX_VARIANTS = ['sandglass', 'tide', 'candle', 'pips', ...EXTRA_BOX_VARIANTS] as const
+// 'perimeter' frames the screen edge; the others fill it, so they sit below the
 // up-next block rather than behind it.
-const FILL_VARIANTS = ['curtain', 'hourglass'] as const
+const FILL_VARIANTS = ['curtain', 'hourglass', ...EXTRA_FILL_VARIANTS] as const
 const FULL_VARIANTS = ['perimeter', ...FILL_VARIANTS] as const
 const VARIANTS = [...BOX_VARIANTS, ...FULL_VARIANTS] as const
 type Variant = (typeof VARIANTS)[number]
@@ -167,139 +175,109 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
 }
 
 /**
- * The 'hourglass' shape's geometry, in its own SVG user units — a 100 × 164 box,
+ * The 'hourglass' shape's geometry, in its own SVG user units — a 100 × 150 box,
  * so every number here is also a percentage of the glass.
  *
- * The sand is two fixed shapes that *slide* rather than two shapes redrawn on
- * every tick: the upper charge is a block with a crater scooped out of its top
- * edge that sinks down the funnel, the pile is a block with a mound on top that
- * rises out of the floor, and each bulb clips whatever leaves it. Both surfaces
- * keep their own shape at every level that way, and the motion stays on
- * `transform`, so the countdown's 250ms steps smooth into one continuous fall the
- * way the other shapes' `height` transitions do.
+ * Straight lines only, and no depth of any kind: this is the *sign* for an
+ * hourglass rather than a drawing of one. Two trapezoids meeting at a waist, one
+ * stroke weight, flat fills — nothing that implies a lit surface, a thickness or
+ * a material.
+ *
+ * The sand is two flat-topped blocks that *slide* rather than shapes redrawn on
+ * every tick, each clipped by the half it lives in: the upper one sinks toward
+ * the waist, the lower one rises off the base. The motion stays on `transform`,
+ * so the countdown's 250ms steps smooth into one continuous fall the way the
+ * other shapes' `height` transitions do.
  */
 const GLASS = {
   width: 100,
-  height: 164,
-  /** Inside face of the upper bulb's ceiling and of the lower bulb's floor. */
-  ceiling: 9,
-  floor: 155,
-  /** The waist: sand leaves the upper bulb here and lands in the lower one. */
-  neckTop: 79,
-  neckBottom: 85,
-  /** Half-width of the throat between them. */
-  neckHalf: 3.5,
-  /** How far the glass sits inside the frame's posts. */
-  wall: 13,
+  height: 150,
+  /** The upper half's top edge, and the lower half's bottom edge. */
+  top: 5,
+  bottom: 145,
+  /** The waist, where the two halves meet. */
+  waist: 75,
+  /** Half-width of the opening at that waist. */
+  waistHalf: 3,
+  /** How far the halves sit inside the box, leaving room for the stroke. */
+  wall: 8,
 } as const
 
-/**
- * Top of the upper sand in a glass that hasn't started draining — a touch above
- * the ceiling, so a full glass reads as packed rather than settled a hair short.
- */
-const UPPER_SAND_TOP = GLASS.ceiling - 2
+const HALF_L = GLASS.wall
+const HALF_R = GLASS.width - GLASS.wall
+const WAIST_L = GLASS.width / 2 - GLASS.waistHalf
+const WAIST_R = GLASS.width / 2 + GLASS.waistHalf
 
-/** How deep the crater in the draining sand's surface runs at its centre. */
-const CRATER = 7
-
-/**
- * How high the pile's peak stands over its own skirt. Sand piles at roughly 34°
- * from horizontal, which across the width of this glass is about this much.
- */
-const MOUND = 18
-
-/** How far the sand travels: the full height of either bulb. */
-const SAND_FALL = GLASS.floor - GLASS.neckBottom
-const SAND_DRAIN = GLASS.neckTop - UPPER_SAND_TOP
+/** How far each block travels: the full height of its half. */
+const UPPER_SPAN = GLASS.waist - GLASS.top
+const LOWER_SPAN = GLASS.bottom - GLASS.waist
 
 /**
- * A body of sand with a shaped top: a flat edge at `y` bulging `depth` at its
- * centre — positive digs a bowl, negative heaps a mound — filled down to `bottom`
- * and run wider than the glass so a clipped edge never shows. The control point
- * is twice that depth, since a quadratic only reaches halfway toward it.
+ * The two halves: a flat edge tapering in straight lines to the waist. Mirrored
+ * about it, so the empty lower half is the full upper one upside down.
  */
-function sandBody(y: number, depth: number, bottom: number): string {
-  const right = GLASS.width + 12
-  return [
-    `M -12 ${y}`,
-    `Q ${GLASS.width / 2} ${y + 2 * depth} ${right} ${y}`,
-    `L ${right} ${bottom}`,
-    `L -12 ${bottom}`,
-    'Z',
-  ].join(' ')
+const UPPER_PATH = [
+  `M ${HALF_L} ${GLASS.top}`,
+  `L ${HALF_R} ${GLASS.top}`,
+  `L ${WAIST_R} ${GLASS.waist}`,
+  `L ${WAIST_L} ${GLASS.waist}`,
+  'Z',
+].join(' ')
+
+const LOWER_PATH = [
+  `M ${WAIST_L} ${GLASS.waist}`,
+  `L ${WAIST_R} ${GLASS.waist}`,
+  `L ${HALF_R} ${GLASS.bottom}`,
+  `L ${HALF_L} ${GLASS.bottom}`,
+  'Z',
+].join(' ')
+
+/**
+ * A block of sand with a flat top at `y`, filled down to `bottom` and run wider
+ * than the box so its clipped side edges never show.
+ */
+function sandBlock(y: number, bottom: number): string {
+  return `M -10 ${y} H ${GLASS.width + 10} V ${bottom} H -10 Z`
 }
 
-/** The charge still to fall, at rest in a full glass. */
-const UPPER_SAND_PATH = sandBody(UPPER_SAND_TOP, CRATER, GLASS.neckBottom)
+/** The charge still to fall, filling the upper half of a fresh glass. */
+const UPPER_SAND_PATH = sandBlock(GLASS.top, GLASS.waist)
 
-/**
- * The pile, parked with its peak exactly on the floor and its skirt below it: an
- * empty lower bulb shows nothing at all, and the first grains raise a small cone
- * rather than popping a whole mound into being.
- */
-const LOWER_SAND_PATH = sandBody(GLASS.floor + MOUND, -MOUND, GLASS.floor + MOUND + SAND_FALL)
-
-/** How far down a bulb's wall runs straight before it starts leaning in. */
-const SHOULDER = 44
-/** Where that lean tightens into the funnel feeding the throat. */
-const THROAT = { x: 62, y: 58 } as const
-/** The lower bulb is the upper one turned over about the waist. */
-const flipY = (y: number) => GLASS.floor - (y - GLASS.ceiling)
-const NECK_L = GLASS.width / 2 - GLASS.neckHalf
-const NECK_R = GLASS.width / 2 + GLASS.neckHalf
-const GLASS_L = GLASS.wall
-const GLASS_R = GLASS.width - GLASS.wall
-
-/**
- * The bulbs: each wall drops straight from its plate, takes a shoulder, then
- * sweeps into the throat. That line is what reads as an hourglass — two triangles
- * meeting at a point read as a diagram of one.
- */
-const TOP_BULB_PATH = [
-  `M ${GLASS_L} ${GLASS.ceiling}`,
-  `L ${GLASS_R} ${GLASS.ceiling}`,
-  `C ${GLASS_R} ${SHOULDER} ${THROAT.x} ${THROAT.y} ${NECK_R} ${GLASS.neckTop}`,
-  `L ${NECK_L} ${GLASS.neckTop}`,
-  `C ${GLASS.width - THROAT.x} ${THROAT.y} ${GLASS_L} ${SHOULDER} ${GLASS_L} ${GLASS.ceiling}`,
-  'Z',
-].join(' ')
-
-const BOTTOM_BULB_PATH = [
-  `M ${NECK_L} ${GLASS.neckBottom}`,
-  `L ${NECK_R} ${GLASS.neckBottom}`,
-  `C ${THROAT.x} ${flipY(THROAT.y)} ${GLASS_R} ${flipY(SHOULDER)} ${GLASS_R} ${GLASS.floor}`,
-  `L ${GLASS_L} ${GLASS.floor}`,
-  `C ${GLASS_L} ${flipY(SHOULDER)} ${GLASS.width - THROAT.x} ${flipY(THROAT.y)} ${NECK_L} ${GLASS.neckBottom}`,
-  'Z',
-].join(' ')
+/** The sand already fallen, parked just under the base until it starts rising. */
+const LOWER_SAND_PATH = sandBlock(GLASS.bottom, GLASS.bottom + LOWER_SPAN)
 
 /**
  * Where the sand sits with `fraction` of the rest left (1 at the start, 0 when
- * it's up): how far the upper charge has sunk, and how far the pile has risen.
+ * it's up): how far the upper block has sunk, and how far the lower has risen.
  */
 function hourglassLevels(fraction: number) {
   const spent = 1 - clamp01(fraction)
-  return { drop: SAND_DRAIN * spent, rise: SAND_FALL * spent }
+  return { drop: UPPER_SPAN * spent, rise: LOWER_SPAN * spent }
 }
 
 /**
- * The 'hourglass' shape: a whole hourglass — frame, glass and all — standing the
- * full height of the rest screen. The upper bulb's sand sinks down its funnel as
- * the rest runs out and the pile in the lower bulb rises by exactly as much, so
- * either half alone says how much rest is left.
+ * The 'hourglass' shape: a flat two-tone diagram of an hourglass standing the
+ * full height of the rest screen. The upper half's level sinks toward the waist
+ * as the rest runs out and the lower half's rises by exactly as much, so either
+ * half alone says how much rest is left.
  *
- * No stream through the throat: watching grains fall pulled the eye to the neck,
- * which is the one part of the glass that says nothing about the time. Both
- * levels move continuously on their own, so the sand still reads as flowing
- * without anything crossing the gap.
+ * Deliberately abstract: no frame, no glass, no highlights, no heaped or scooped
+ * sand — those all read as an illustration of an object, and the shape is meant
+ * to read as a gauge. What's left is two tapered blocks of colour and the line
+ * between full and empty.
  *
- * One SVG, letterboxed into whatever space the rest screen has: the glass keeps
- * its proportions on any display instead of being stretched to the viewport, and
- * sand and frame live in the one coordinate system.
+ * No stream through the waist either: watching grains fall pulled the eye to the
+ * one part of the shape that says nothing about the time. Both levels move
+ * continuously on their own, so the fall still reads without anything crossing
+ * the gap.
+ *
+ * One SVG, letterboxed into whatever space the rest screen has, so the shape
+ * keeps its proportions on any display instead of being stretched to the
+ * viewport.
  */
 function Hourglass({ fraction }: { fraction: number }) {
-  // The bulbs clip their sand, and a clip path is referenced by id. Stripped to
-  // word characters: useId's own punctuation has no business inside a url(#…).
+  // Each half clips its own sand, and a clip path is referenced by id. Stripped
+  // to word characters: useId's own punctuation has no business in a url(#…).
   const id = useId().replace(/\W/g, '')
   const { drop, rise } = hourglassLevels(fraction)
   const slide = (dy: number): CSSProperties => ({
@@ -316,16 +294,16 @@ function Hourglass({ fraction }: { fraction: number }) {
       >
         <defs>
           <clipPath id={`${id}-upper`}>
-            <path d={TOP_BULB_PATH} />
+            <path d={UPPER_PATH} />
           </clipPath>
           <clipPath id={`${id}-lower`}>
-            <path d={BOTTOM_BULB_PATH} />
+            <path d={LOWER_PATH} />
           </clipPath>
         </defs>
         <g fill="currentColor">
-          {/* Empty glass, so both bulbs are still there once their sand has gone. */}
-          <path d={TOP_BULB_PATH} fillOpacity={0.1} />
-          <path d={BOTTOM_BULB_PATH} fillOpacity={0.1} />
+          {/* The empty halves, so both are still there once their sand has gone. */}
+          <path d={UPPER_PATH} fillOpacity={0.1} />
+          <path d={LOWER_PATH} fillOpacity={0.1} />
           {/* The sand still to fall, and the sand already fallen. */}
           <g clipPath={`url(#${id}-upper)`}>
             <path d={UPPER_SAND_PATH} fillOpacity={0.85} style={slide(drop)} />
@@ -334,36 +312,11 @@ function Hourglass({ fraction }: { fraction: number }) {
             <path d={LOWER_SAND_PATH} fillOpacity={0.85} style={slide(-rise)} />
           </g>
         </g>
-        {/* The glass itself, over the sand so its walls stay crisp, and a highlight
-            down each bulb so it reads as glass rather than as an outline. */}
-        <g fill="none" stroke="currentColor" vectorEffect="non-scaling-stroke">
-          <path d={TOP_BULB_PATH} strokeWidth={3} strokeOpacity={0.5} />
-          <path d={BOTTOM_BULB_PATH} strokeWidth={3} strokeOpacity={0.5} />
-          <path
-            d="M 22 15 C 22 34 33 47 42 58"
-            strokeWidth={2}
-            strokeOpacity={0.3}
-            strokeLinecap="round"
-          />
-          <path
-            d="M 42 106 C 33 117 22 130 22 149"
-            strokeWidth={2}
-            strokeOpacity={0.3}
-            strokeLinecap="round"
-          />
-        </g>
-        {/* The frame: the plates the glass sits between, and the posts joining them. */}
-        <g fill="currentColor" fillOpacity={0.6}>
-          <rect x={2} y={0} width={GLASS.width - 4} height={GLASS.ceiling} rx={4} />
-          <rect
-            x={2}
-            y={GLASS.floor}
-            width={GLASS.width - 4}
-            height={GLASS.height - GLASS.floor}
-            rx={4}
-          />
-          <rect x={5} y={4} width={4} height={GLASS.height - 8} rx={2} fillOpacity={0.35} />
-          <rect x={91} y={4} width={4} height={GLASS.height - 8} rx={2} fillOpacity={0.35} />
+        {/* The outline, over the sand so the taper stays crisp. One weight, no
+            highlight — the line is the shape's edge and nothing more. */}
+        <g fill="none" stroke="currentColor" strokeOpacity={0.55} vectorEffect="non-scaling-stroke">
+          <path d={UPPER_PATH} strokeWidth={2} />
+          <path d={LOWER_PATH} strokeWidth={2} />
         </g>
       </svg>
     </div>
@@ -378,6 +331,7 @@ function Hourglass({ fraction }: { fraction: number }) {
  */
 function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction: number }) {
   if (variant === 'hourglass') return <Hourglass fraction={fraction} />
+  if (variant !== 'curtain') return <ExtraRestShape variant={variant} fraction={fraction} />
 
   // 'curtain': the whole viewport is the vessel, and the level falls from the top
   // of the screen to the bottom over the rest.
@@ -440,20 +394,6 @@ const rand = (min: number, max: number) => min + Math.random() * (max - min)
 type Riser = { id: number; left: number; size: number; rise: number }
 /** The splash it left behind: `x` across the vessel, `strength` its size. */
 type Splash = { id: number; x: number; strength: number }
-
-/** Whether the OS asks for less motion — the splashing is dropped entirely if so. */
-function usePrefersReducedMotion(): boolean {
-  const query = '(prefers-reduced-motion: reduce)'
-  const [reduced, setReduced] = useState(() => window.matchMedia?.(query).matches ?? false)
-  useEffect(() => {
-    const mq = window.matchMedia?.(query)
-    if (!mq) return
-    const onChange = () => setReduced(mq.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
-  return reduced
-}
 
 /**
  * The 'tide' shape: a vessel that empties, with a living water surface.
@@ -715,6 +655,11 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
   const filled = `${(1 - fraction) * 100}%`
   // Smooth the 250ms wall-clock steps into one continuous drain.
   const drain = { transition: 'height 260ms linear' } as const
+  // The shapes that live in RestShapes — a cell charging, a tap filling a glass, a
+  // bar loading, a balance tipping, a moon waning, a coil paying out, ice melting,
+  // a snow globe settling, an icicle closing on its stalagmite.
+  if (isExtraVariant(variant)) return <ExtraRestShape variant={variant} fraction={fraction} />
+
   switch (variant) {
     case 'tide':
       // A vessel that empties: the water line drops from full to nothing, and the

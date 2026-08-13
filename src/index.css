@@ -288,19 +288,287 @@ input[type='number'] {
   will-change: opacity;
 }
 
+/* A slow breathe, shared by the small bright marks that say "this is the edge of
+   the reading": the recharge cell's bolt, the plate arriving on the bar, the free
+   end of the spiral, the join where the icicle meets its stalagmite. Same shape as
+   `rest-pip` and for the same reason — it rests bright and dips, so a mark that has
+   only just become the leading one never starts out dim. */
+@keyframes rest-glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+.rest-glow {
+  animation: rest-glow 2.4s ease-in-out infinite;
+}
+
+/* Recharge: a band of charge travelling up the fill. Mounted *inside* the fill, so
+   it can never appear above the charge line and overstate the level. */
+@keyframes rest-charge-sweep {
+  0% {
+    transform: translateY(60%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translateY(-420%);
+    opacity: 0;
+  }
+}
+.rest-charge-sweep {
+  animation: rest-charge-sweep 2.6s ease-out infinite;
+  will-change: transform, opacity;
+}
+
+/* And the bolt going solid once the cell is full: one pulse, then it stays lit.
+   This is the shape's payoff — rest is over and you are charged. */
+@keyframes rest-charge-done {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.rest-charge-done {
+  animation: rest-charge-done 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Tap: a drop falling from the spout to the water. The column it rides spans the
+   air gap, so travelling its own height lands the drop exactly on the surface
+   however full the glass is — the same trick as the tide's risers. It stretches on
+   the way down and is gone on contact; the ring below answers it. */
+@keyframes rest-drip-fall {
+  0% {
+    transform: translateY(0) scaleY(0.6);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  85% {
+    transform: translateY(92%) scaleY(1.4);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%) scaleY(0.5);
+    opacity: 0;
+  }
+}
+.rest-drip-fall {
+  animation: rest-drip-fall 1900ms cubic-bezier(0.5, 0, 0.8, 0.4) infinite;
+  will-change: transform, opacity;
+}
+
+/* The ring the drop leaves, spreading out across the surface and fading. Its delay
+   is the drop's fall time, so the two stay in step for the whole rest. */
+@keyframes rest-drip-ring {
+  0% {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.rest-drip-ring {
+  animation: rest-drip-ring 1900ms ease-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Moon: stars twinkling around the disc, each on its own delay so they never blink
+   together. */
+@keyframes rest-star {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.rest-star {
+  animation: rest-star 3.4s ease-in-out infinite;
+}
+
+/* Scale: the pans swinging a little on their chains. Applied to a group nested
+   inside the one holding the counter-rotation, because a CSS transform beats the
+   `transform` attribute doing that counter-rotation and the pans would hang askew.
+   `fill-box` puts the origin at the top of the pan's own bounding box — which is
+   where it hangs from. */
+@keyframes rest-pan-sway {
+  0%,
+  100% {
+    transform: rotate(-1.6deg);
+  }
+  50% {
+    transform: rotate(1.6deg);
+  }
+}
+.rest-pan-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+  animation: rest-pan-sway 4.6s ease-in-out infinite;
+}
+
+/* Ice: a sheen crossing the cube, so it reads as ice rather than as a slab. */
+@keyframes rest-frost {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+.rest-frost {
+  background-image: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgb(255 255 255 / 0.22) 50%,
+    transparent 65%
+  );
+  animation: rest-frost 4.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Meltwater: a drop swelling on the cube's underside, letting go, and landing in
+   the puddle. */
+@keyframes rest-ice-drip {
+  0% {
+    transform: translateY(0) scale(0.2);
+    opacity: 0;
+  }
+  30% {
+    transform: translateY(0) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(100%) scale(0.7);
+    opacity: 0;
+  }
+}
+.rest-ice-drip {
+  animation: rest-ice-drip 2.3s ease-in infinite;
+  will-change: transform, opacity;
+}
+
+/* Icicle: the drip crossing whatever is left of the gap. Its column spans the gap,
+   so travelling its own height carries the drop from the tip onto the stalagmite. */
+@keyframes rest-icicle-drip {
+  0% {
+    transform: translateY(0) scale(0.3);
+    opacity: 0;
+  }
+  22% {
+    transform: translateY(0) scale(1);
+    opacity: 0.95;
+  }
+  92% {
+    transform: translateY(96%) scale(0.9);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translateY(100%) scale(0.4);
+    opacity: 0;
+  }
+}
+.rest-icicle-drip {
+  animation: rest-icicle-drip 2.8s ease-in infinite;
+  will-change: transform, opacity;
+}
+
+/* Fuse: the burning head, flickering the way a burn does — irregular, so it isn't
+   read as a pulse. The cord's length is the countdown; this is only the head. */
+@keyframes rest-fuse-head {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 10px 3px var(--color-accent-bright);
+  }
+  30% {
+    transform: scale(1.35);
+    box-shadow: 0 0 18px 6px var(--color-accent-bright);
+  }
+  55% {
+    transform: scale(0.9);
+    box-shadow: 0 0 8px 2px var(--color-accent-bright);
+  }
+  78% {
+    transform: scale(1.2);
+    box-shadow: 0 0 15px 5px var(--color-accent-bright);
+  }
+}
+/* The glow is declared here as well as in the keyframes, so the head still burns
+   under reduced motion once the flicker is switched off. */
+.rest-fuse-head {
+  box-shadow: 0 0 12px 4px var(--color-accent-bright);
+  animation: rest-fuse-head 900ms ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Sparks thrown off the head, each flying its own way: `--dx`/`--dy` are multiples
+   of the spark's own size, and they go outward from the middle — backward along the
+   cord the head has already burnt. */
+@keyframes rest-fuse-spark {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.3);
+    opacity: 0;
+  }
+}
+.rest-fuse-spark {
+  animation: rest-fuse-spark 1.1s ease-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* The flame isn't listed: it has no animation to switch off. RestTimer skips
-     its simulation loop entirely under reduced motion, so it just sits still. */
+     its simulation loop entirely under reduced motion, so it just sits still — and
+     so does the snow globe's snow (see RestShapes). */
   .rest-bubble,
   .rest-ember,
   .rest-pip,
-  .rest-perimeter-glow {
+  .rest-perimeter-glow,
+  .rest-glow,
+  .rest-charge-sweep,
+  .rest-charge-done,
+  .rest-drip-ring,
+  .rest-star,
+  .rest-pan-sway,
+  .rest-frost,
+  .rest-fuse-head {
     animation: none;
   }
-  /* No flying sparks for reduced motion — hide them rather than freeze them
-     mid-air. Surfacing bubbles and their splashes are never spawned at all under
+  /* Everything airborne is hidden rather than frozen: a spark or a drop parked
+     halfway across reads as a mistake, where its absence reads as nothing at all.
+     Surfacing bubbles and their splashes are never spawned in the first place under
      reduced motion (see RestTimer), so the tide's surface simply stays flat. */
-  .rest-ember {
+  .rest-ember,
+  .rest-drip-fall,
+  .rest-ice-drip,
+  .rest-icicle-drip,
+  .rest-fuse-spark {
     display: none;
   }
 }
