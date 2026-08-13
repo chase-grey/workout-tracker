@@ -1,6 +1,25 @@
 import { useEffect, useRef } from 'react'
 
 /**
+ * Stamped into each guard entry this page load pushes, so a guard of ours can be
+ * told from one restored by the browser.
+ *
+ * History state outlives the document: the service worker updates itself with a
+ * reload (registerType: 'autoUpdate'), and Android discards and restores a
+ * backgrounded app the same way. Either one hands the next load a current entry
+ * that still claims `backGuard` — but with no same-document entry left beneath
+ * it, so popping it re-navigates the document (or leaves the app) instead of
+ * firing popstate. An unrecognized stamp means "not mine": the stale marker is
+ * cleared and a live guard pushed over it.
+ */
+const PAGE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+
+/** Whether the entry on top of the stack is a guard this page load pushed. */
+function ownGuard(): boolean {
+  return window.history.state?.backGuard === PAGE_ID
+}
+
+/**
  * Turns the hardware/browser back button into an "leave this screen" gesture
  * instead of a "leave the app" one. While `active`, a guard entry sits on top of
  * the history stack; popping it (Android back, browser back, edge swipe) calls
@@ -27,10 +46,16 @@ export function useBackGuard(active: boolean, onBack: () => void) {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // A guard restored from a previous document can't be popped in place, so drop
+  // its marker rather than trust it — nothing else keeps history state.
+  useEffect(() => {
+    if (window.history.state?.backGuard && !ownGuard()) window.history.replaceState(null, '')
+  }, [])
+
   useEffect(() => {
     if (active) {
-      if (!window.history.state?.backGuard) window.history.pushState({ backGuard: true }, '')
-    } else if (window.history.state?.backGuard) {
+      if (!ownGuard()) window.history.pushState({ backGuard: PAGE_ID }, '')
+    } else if (ownGuard()) {
       window.history.back()
     }
   }, [active])
