@@ -50,7 +50,7 @@ function AppShell() {
   // tab; everything else starts on Today.
   const [tab, setTab] = useState<Tab>(() => takeResumeTab() ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
-  const { saveSession, quickLog, settings, updateSettings } = useData()
+  const { saveSession, settings, updateSettings } = useData()
   const showChat = chatEnabled(settings)
   const { celebrate } = useCelebrate()
   const controls = useActiveSession()
@@ -81,8 +81,10 @@ function AppShell() {
     if (!sessionActive) setMinimized(false)
   }, [sessionActive])
 
-  // Android back (and browser back) sets the session aside rather than leaving
-  // the app — the workout keeps running behind the tabs.
+  // Android back — the button or the edge swipe — sets the session aside rather
+  // than leaving the app, and the workout keeps running behind the tabs. It's the
+  // only way out of a session screen short of finishing one, so the overflow menu
+  // carries no "back" of its own; browser back does the same on a desktop.
   useBackGuard(sessionActive && !minimized, () => setMinimized(true))
 
   // Month/year in review, once per new period. On the feature's first run the
@@ -157,7 +159,6 @@ function AppShell() {
 
   let session = null
   if (controls.session) {
-    const { dayType } = controls.session
     session = (
       <ActiveSession
         session={controls.session}
@@ -167,12 +168,6 @@ function AppShell() {
           void saveSession(s, duration).then((summary) => setFinishSummary(summary))
           controls.clear()
         }}
-        onSkip={() => {
-          void quickLog(dayType)
-          controls.clear()
-          setTab('today')
-        }}
-        onMinimize={() => setMinimized(true)}
       />
     )
   } else if (stretching) {
@@ -184,7 +179,6 @@ function AppShell() {
           // A finished routine lands you home, under the celebration screen.
           setTab('today')
         }}
-        onMinimize={() => setMinimized(true)}
       />
     )
   }

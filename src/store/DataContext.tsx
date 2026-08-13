@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { v4 as uuid } from 'uuid'
-import type { BodyWeightEntry, DayType, StreakState, WorkoutRow, WorkoutSession } from '../types'
+import type { BodyWeightEntry, StreakState, WorkoutRow, WorkoutSession } from '../types'
 import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
@@ -9,7 +9,7 @@ import { api } from '../services/api'
 import { sessionToRows, trainingDates } from '../lib/session'
 import { DEAD_BUG } from '../config/plan'
 import { toISODate, weekStartISO } from '../lib/dates'
-import { QUICK_LOG_KEY, withPlanDefaults, type Plan } from '../config/plan'
+import { withPlanDefaults, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import {
@@ -48,7 +48,6 @@ import {
   detectPRs,
   newlyEarned,
   stretchDoneCelebration,
-  workoutDoneCelebration,
   type Celebration,
   type PR,
   type WeekCounts,
@@ -143,7 +142,6 @@ type DataContextValue = {
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   logExerciseTimes: (samples: SessionTimeSamples) => Promise<void>
-  quickLog: (dayType: DayType) => Promise<void>
   logCore: (reps: number[]) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
@@ -733,45 +731,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, flush, persistExerciseAverages],
   )
 
-  const quickLog = useCallback(
-    async (dayType: DayType) => {
-      const row: WorkoutRow = {
-        session_id: uuid(),
-        date: toISODate(new Date()),
-        day_type: dayType,
-        exercise: QUICK_LOG_KEY,
-        set_number: 1,
-        weight_lbs: null,
-        reps: 0,
-        notes: 'quick log (no details)',
-        is_historical: false,
-      }
-      const prev = storage.loadWorkouts()
-      const next = [...prev, row]
-      persistWorkouts(next)
-      const ok = await deliver(enqueue({ type: 'session', rows: [row] }))
-      notify(ok ? 'logged' : "couldn't save — queued to retry", ok)
-      try {
-        const flexDates = storage.loadFlex().map((f) => f.date)
-        const cals = storage.loadCalories()
-        const before = currentWeekCounts(prev, flexDates, cals)
-        const after = currentWeekCounts(next, flexDates, cals)
-        const beforeRec: RecordSnapshot = { workouts: prev, flexDates, calorieEntries: cals }
-        const afterRec: RecordSnapshot = { workouts: next, flexDates, calorieEntries: cals }
-        celebrate(
-          composeCelebration([
-            workoutDoneCelebration(dayType),
-            ...weeklyCelebrations(before, after),
-            ...newRecords(beforeRec, afterRec),
-          ]),
-        )
-      } catch {
-        /* a missed cheer must never break a save */
-      }
-    },
-    [celebrate, deliver, enqueue, notify, persistWorkouts, weeklyCelebrations],
-  )
-
   // Logs the dead-bug sets done during a Stretch + Core session as workout rows
   // (one shared session_id, reps per set) under the Dead Bug key, so they feed
   // the reps chart and core-progress series. Silent — the stretch save toasts —
@@ -889,7 +848,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logMeasurement,
     logSessionDuration,
     logExerciseTimes,
-    quickLog,
     logCore,
     logProgressPhoto,
     importData,

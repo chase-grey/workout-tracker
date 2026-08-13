@@ -88,12 +88,6 @@ export type PlannedExercise = {
   side?: Side
   /** Per-variant deltas; absent means the exercise is identical in both. */
   byVariant?: Partial<Record<VariantKey, VariantOverride>>
-  /**
-   * Roll straight from this exercise's rest into its next set without waiting for
-   * a tap. Set from the session's overflow menu, so it sticks for every set of the
-   * move and for future sessions (it's stored on the plan like any other field).
-   */
-  autoAdvance?: boolean
 }
 
 export type DayPlan = {

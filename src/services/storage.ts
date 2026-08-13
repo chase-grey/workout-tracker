@@ -39,6 +39,7 @@ const KEYS = {
   activeStepKey: 'wt.activeStepKey',
   activeRest: 'wt.activeRest',
   activeRestTally: 'wt.activeRestTally',
+  activeFastForward: 'wt.activeFastForward',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
 } as const
@@ -73,6 +74,12 @@ export type StretchState = {
   restSec?: number
   /** Ids of the photo screens already offered, so a reload doesn't re-ask. */
   photoGates?: string[]
+  /**
+   * Whether hands-free fast-forward was on (see components/FastForwardToggle).
+   * Persisted so a reload mid-routine doesn't quietly start waiting for taps
+   * again — it holds until it's switched off.
+   */
+  fast?: boolean
 }
 
 /**
@@ -131,14 +138,6 @@ export type Settings = {
    * avatar's ab lines. Unset means not yet.
    */
   sixPackStatus?: SixPackStatus
-  /**
-   * Whether the dead-bug sets roll out of rest without waiting for a tap. Every
-   * other exercise keeps this flag on its own plan entry (`autoAdvance`), but the
-   * core block folded into the stretch session isn't part of the editable stretch
-   * routine — it's a constant (see config/plan.DEAD_BUG) — so its default lives
-   * here instead.
-   */
-  coreAutoAdvance?: boolean
 }
 
 /** The three answers the six-pack goal accepts. */
@@ -265,6 +264,16 @@ export const storage = {
   loadRestTally: (): RestTally | null => read<RestTally | null>(KEYS.activeRestTally, null),
   saveRestTally: (t: RestTally | null) =>
     t ? write(KEYS.activeRestTally, t) : localStorage.removeItem(KEYS.activeRestTally),
+
+  /**
+   * Whether the workout in progress is running hands-free (see
+   * components/FastForwardToggle). Persisted so a reload mid-workout doesn't
+   * quietly start waiting for taps again; cleared when a workout starts or ends,
+   * because it's a choice about this session rather than a saved preference.
+   */
+  loadFastForward: (): boolean => read(KEYS.activeFastForward, false),
+  saveFastForward: (on: boolean) =>
+    on ? write(KEYS.activeFastForward, true) : localStorage.removeItem(KEYS.activeFastForward),
 
   loadStretch: (): StretchState | null => read(KEYS.stretch, null),
   saveStretch: (s: StretchState | null) =>

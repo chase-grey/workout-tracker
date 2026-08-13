@@ -35,6 +35,9 @@ export function useActiveSession() {
       storage.saveActiveStepKey(null)
       storage.saveActiveRest(null)
       storage.saveRestTally(null)
+      // Hands-free was a choice about the workout that just ended, so a new one
+      // opens waiting for taps again.
+      storage.saveFastForward(false)
       const chosen = variant ?? nextVariant(workouts, dayType) ?? undefined
       // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
       const startSide = nextStartSide(workouts, dayType)
@@ -133,6 +136,7 @@ export function useActiveSession() {
     storage.saveActiveStepKey(null)
     storage.saveActiveRest(null)
     storage.saveRestTally(null)
+    storage.saveFastForward(false)
     setSession(null)
   }, [])
 

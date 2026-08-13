@@ -44,24 +44,6 @@ describe('buildFlexSteps', () => {
     ])
   })
 
-  it('carries both auto-advance defaults onto every set of a stretch', () => {
-    const plan: FlexBlock[] = [
-      {
-        label: 'B',
-        exercises: [
-          { ...ex('a', 2), autoAdvance: true, autoIntoRest: true },
-          ex('b', 1),
-        ],
-      },
-    ]
-    const steps = buildFlexSteps(plan)
-    expect(steps.map((s) => [s.autoAdvance, s.autoIntoRest])).toEqual([
-      [true, true],
-      [true, true],
-      [undefined, undefined],
-    ])
-  })
-
   it('runs a non-superset block sequentially', () => {
     const plan: FlexBlock[] = [{ label: 'B', exercises: [ex('a', 2), ex('b', 2)] }]
     expect(buildFlexSteps(plan).map((s) => `${s.exKey}#${s.round}`)).toEqual([

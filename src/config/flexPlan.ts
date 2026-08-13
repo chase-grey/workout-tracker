@@ -10,20 +10,6 @@ export type FlexExercise = {
   reps: number
   tempo: string
   restSec: number
-  /**
-   * Roll straight from this stretch's rest into its next set without waiting for
-   * a tap. Set from the session's overflow menu, so it sticks for every set of
-   * the stretch and for future sessions (it's stored on the routine like any
-   * other field).
-   */
-  autoAdvance?: boolean
-  /**
-   * The other direction: end this stretch's set and start its rest the moment the
-   * set's target reps are done, without waiting for a tap. The rhythm guide paces
-   * the reps, so the set has a real end the app can see — set from the same
-   * overflow menu and stored the same way as `autoAdvance`.
-   */
-  autoIntoRest?: boolean
 }
 
 export type FlexBlock = {

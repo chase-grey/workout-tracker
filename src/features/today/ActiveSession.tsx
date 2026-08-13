@@ -53,14 +53,12 @@ import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
+import { FastForwardToggle } from '../../components/FastForwardToggle'
 
 type Props = {
   session: WorkoutSession
   controls: ReturnType<typeof useActiveSession>
   onFinish: (s: WorkoutSession, duration: { totalSec: number; restSec: number }) => void
-  onSkip: () => void
-  /** Drop back to the rest of the app with the workout still running. */
-  onMinimize: () => void
 }
 
 /** Reject per-set active times outside this range (app left open / mis-taps). */
@@ -90,7 +88,7 @@ function targetLabel(target: Target | undefined): string | null {
 }
 
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
-export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize }: Props) {
+export function ActiveSession({ session, controls, onFinish }: Props) {
   const {
     plan,
     workouts,
@@ -116,13 +114,11 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   const [showDiscomfort, setShowDiscomfort] = useState(false)
   // The first set of a workout waits on a start press (see `awaitingStart`).
   const [started, setStarted] = useState(false)
-  // Per-exercise auto-advance for this session only, keyed by exercise. An entry
-  // overrides the saved `autoAdvance` default either way, so "auto just for now"
-  // and "not this time" are both possible without editing the plan.
-  const [autoOverride, setAutoOverride] = useState<Map<string, boolean>>(new Map())
-  // The same thing across the whole session: every exercise rolls out of rest for
-  // the rest of this workout, with nothing written to the plan.
-  const [autoAll, setAutoAll] = useState(false)
+  // Hands-free: every rest from here rolls into the next set on its own, until the
+  // fast-forward toggle is switched back off. A property of this workout rather
+  // than of the plan, but mirrored to storage so a reload mid-workout doesn't
+  // quietly start waiting for taps again.
+  const [fast, setFast] = useState(() => storage.loadFastForward())
   // Time spent on the rest-timer screen (the "resting" slice of the session),
   // alongside the rest that was prescribed and how many intervals were taken —
   // the estimator learns the ratio between taken and prescribed, not a flat
@@ -213,6 +209,10 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   useEffect(() => {
     storage.saveActiveRest(rest)
   }, [rest])
+
+  useEffect(() => {
+    storage.saveFastForward(fast)
+  }, [fast])
 
   // Mirror the tally the session resumed with. Ordinarily that's a no-op rewrite
   // of what's already stored, but a stale rest settled into it above is banked
@@ -443,37 +443,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
 
   const advancePress = usePressAction(completeSetAndAdvance)
 
-  // Whether rest rolls straight into this exercise's next set. During rest `planned`
-  // is already the exercise the rest is leading into, so this reads the same from
-  // the exercise screen and from the rest screen before it.
-  // The session-wide switch stands in for the saved default; a per-exercise
-  // choice still beats both.
-  const autoNow = autoOverride.get(planned.key) ?? (autoAll || !!planned.autoAdvance)
-  const setAutoNow = (on: boolean) =>
-    setAutoOverride((prev) => new Map(prev).set(planned.key, on))
-
-  // Flipping the session-wide switch drops the per-exercise choices made before
-  // it, so it means "all of them, from here" rather than layering over them.
-  const setAutoAllNow = (on: boolean) => {
-    setAutoAll(on)
-    setAutoOverride(new Map())
-  }
-
-  // Saving the default writes to the day's stored exercise list (not the
-  // variant-resolved copy), and takes effect for the rest of this session too.
-  const setAutoDefault = (on: boolean) => {
-    void updatePlan({
-      ...plan,
-      [session.dayType]: {
-        ...day,
-        exercises: day.exercises.map((e) =>
-          e.key === planned.key ? { ...e, autoAdvance: on } : e,
-        ),
-      },
-    })
-    setAutoNow(on)
-  }
-
   // The stations of the circuit in play, in the order they're rotated through —
   // the whole circuit rather than just the station on screen, because "rest only
   // after the lateral raise" is a statement about all of them.
@@ -516,23 +485,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
-    // First in the list: leaving the session screen without ending it is the
-    // reach-for-the-menu reason often enough that it shouldn't be scrolled to.
-    { label: 'back', onClick: onMinimize },
-    {
-      label: autoNow ? 'wait for my tap after rest' : 'auto-advance out of rest',
-      onClick: () => setAutoNow(!autoNow),
-    },
-    {
-      label: autoAll ? 'stop auto-advancing this workout' : 'auto-advance the rest of this workout',
-      onClick: () => setAutoAllNow(!autoAll),
-    },
-    {
-      label: planned.autoAdvance
-        ? `stop auto-advancing ${planned.name}`
-        : `always auto-advance ${planned.name}`,
-      onClick: () => setAutoDefault(!planned.autoAdvance),
-    },
     // Only inside a circuit: everywhere else the rest after a set is simply the
     // exercise's own, and there's nothing per-station to choose between.
     ...(stations.length > 0
@@ -545,7 +497,6 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
     },
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'workout checklist', onClick: () => setShowList(true) },
-    { label: 'skip logging details (mark done)', onClick: onSkip },
     { label: 'finish workout now', onClick: finish },
     {
       label: 'discard workout',
@@ -571,7 +522,10 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
         <div>
           <h2 className="text-xl font-bold">{planned.name}</h2>
         </div>
-        <KebabMenu items={menuItems} />
+        <div className="flex shrink-0 items-start">
+          <FastForwardToggle on={fast} onToggle={() => setFast(!fast)} />
+          <KebabMenu items={menuItems} />
+        </div>
       </header>
 
       <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
@@ -684,7 +638,8 @@ export function ActiveSession({ session, controls, onFinish, onSkip, onMinimize 
           // rest leads into and `targetNumbers` is its target — the numbers to
           // walk back to the bar with, on the rests that should carry them.
           upNextTarget={upNextTargetLabel(step.setIndex, targetNumbers)}
-          autoAdvance={autoNow}
+          fastForward={fast}
+          onToggleFastForward={() => setFast(!fast)}
           menu={menuItems}
           progress={{ done: totals.done, total: totals.all, unit: 'sets' }}
           timeLeftLabel={`${formatDuration(timeLeft)} left`}

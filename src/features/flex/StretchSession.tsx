@@ -4,10 +4,10 @@ import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { GetReady } from '../../components/GetReady'
+import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
-import { MeasureSheet } from './MeasureSheet'
 import { PhotoStep } from './PhotoStep'
 import { formatDuration, remainingSecs } from '../../lib/estimate'
 import { buildSessionSteps, type CoreSetStep } from '../../lib/flexSteps'
@@ -48,12 +48,9 @@ type PendingPhotos = { gate: PhotoGate; resumeIndex: number | null }
  * tempo rhythm animation) followed by a dead-bug core block whose reps are
  * logged as workout rows. Finishing counts as a stretch/flex day.
  */
-export function StretchSession({ onClose, onMinimize }: { onClose: () => void; onMinimize: () => void }) {
+export function StretchSession({ onClose }: { onClose: () => void }) {
   const {
     flexPlan,
-    updateFlexPlan,
-    settings,
-    updateSettings,
     workouts,
     flexEntries,
     logFlex,
@@ -78,19 +75,17 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   const [rest, setRest] = useState<RestState | null>(() =>
     saved?.rest && canResumeRest(saved.rest.endsAt, Date.now()) ? saved.rest : null,
   )
+  // Hands-free: every rest rolls into the next set on its own, a paced set rolls
+  // into its rest on its last rep, and the get-into-position counts are skipped —
+  // until the fast-forward toggle is switched back off. Kept in the session's
+  // snapshot so a reload mid-routine doesn't quietly start waiting for taps again.
+  const [fast, setFast] = useState(!!saved?.fast)
   // True so the routine opens with the same "get into position" countdown that
-  // follows each rest — but not over a resumed rest, which owns the screen first.
-  const [preparing, setPreparing] = useState(rest == null)
+  // follows each rest — but not over a resumed rest, which owns the screen first,
+  // and not when the session is already running itself forward.
+  const [preparing, setPreparing] = useState(rest == null && !fast)
   const [showList, setShowList] = useState(false)
-  const [showMeasure, setShowMeasure] = useState(false)
   const [paused, setPaused] = useState(false)
-  // Per-exercise auto-advance for this session only, keyed by exercise. An entry
-  // overrides the saved `autoAdvance` default either way, so "auto just for now"
-  // and "not this time" are both possible without editing the routine. One map per
-  // direction: rolling out of rest into the next set, and rolling out of a set
-  // into its rest.
-  const [autoOverride, setAutoOverride] = useState<Map<string, boolean>>(new Map())
-  const [intoOverride, setIntoOverride] = useState<Map<string, boolean>>(new Map())
   // Photo screens already offered this session, so resuming doesn't re-ask.
   const [seenGates, setSeenGates] = useState<Set<string>>(() => new Set(saved?.photoGates ?? []))
   // The cold shots open the session, before anything has warmed up. A resume
@@ -152,8 +147,9 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
       // a rest was banked, so the two always go to storage together.
       restSec: restAccumSec.current,
       photoGates: [...seenGates],
+      fast,
     })
-  }, [safeCurrent, done, startedAt, coreReps, rep, rest, seenGates])
+  }, [safeCurrent, done, startedAt, coreReps, rep, rest, seenGates, fast])
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
@@ -262,12 +258,16 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   }
 
   // Bank the rest slice just spent, then hand the screen to the get-ready count.
-  const closeRest = () => {
+  // `expired` is a rest that ran itself out under fast-forward: you've had the
+  // whole rest, so the routine goes straight on to the set. Cutting a rest short
+  // with a tap still gets the count — you asked to move on early, not to be
+  // already in position.
+  const closeRest = (expired?: boolean) => {
     bankRest()
     setRest(null)
     // Hand off to the get-into-position count only when the upcoming set has one;
     // otherwise (a between-dead-bugs set) go straight to the set.
-    setPreparing(getReadySec > 0)
+    setPreparing(getReadySec > 0 && !(fast && expired))
   }
 
   // Start the finished set's rest and move on — or wrap up, on the last step.
@@ -277,10 +277,11 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
       return
     }
     // Crossing from the mobility routine into the core block skips the rest — the
-    // pancake hang leaves you rested, so go straight to a get-into-position count.
+    // pancake hang leaves you rested, so go straight to a get-into-position count
+    // (or, running hands-free, straight to the set).
     if (steps[index].kind === 'flex' && steps[index + 1].kind === 'core') {
       goToStep(index + 1)
-      setPreparing(true)
+      setPreparing(!fast)
       return
     }
     restStartRef.current = Date.now()
@@ -313,54 +314,11 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // the whole page is the target rather than one button. Controls (the kebab,
   // the core rep box) keep their own job, an overlay that owns the screen
   // swallows the tap, and the last set still needs its explicit finish button.
-  const overlayUp = rest != null || photos != null || paused || showMeasure || showList || preparing
+  const overlayUp = rest != null || photos != null || paused || showList || preparing
   const onScreenTap = (e: MouseEvent) => {
     if (atLast || overlayUp) return
     if ((e.target as HTMLElement).closest('button, input, label, a')) return
     completeSetAndAdvance()
-  }
-
-  // Whether rest rolls straight into this set. During rest `step` is already the
-  // set the rest is leading into, so this reads the same from the set screen and
-  // from the rest screen before it.
-  const savedAuto = step.kind === 'flex' ? !!step.autoAdvance : !!settings.coreAutoAdvance
-  const autoNow = autoOverride.get(step.exKey) ?? savedAuto
-  const setAutoNow = (on: boolean) =>
-    setAutoOverride((prev) => new Map(prev).set(step.exKey, on))
-
-  // And the other direction: whether finishing the set's target reps starts its
-  // rest on its own. Only the paced mobility sets can offer it — the rhythm guide
-  // is what knows when the set is over. A dead-bug set is a number you type, so
-  // it has no end the app can see and keeps waiting for a tap.
-  const paced = step.kind === 'flex'
-  const savedInto = step.kind === 'flex' && !!step.autoIntoRest
-  const intoNow = intoOverride.get(step.exKey) ?? savedInto
-  const setIntoNow = (on: boolean) =>
-    setIntoOverride((prev) => new Map(prev).set(step.exKey, on))
-
-  /** Write one auto-advance default onto every copy of this stretch in the routine. */
-  const saveFlexDefault = (fields: Partial<{ autoAdvance: boolean; autoIntoRest: boolean }>) =>
-    updateFlexPlan(
-      flexPlan.map((block) => ({
-        ...block,
-        exercises: block.exercises.map((e) => (e.key === step.exKey ? { ...e, ...fields } : e)),
-      })),
-    )
-
-  // Saving the default takes effect for the rest of this session too. A stretch
-  // carries the flag on its routine entry; the dead-bug block has no routine
-  // entry to carry it, so it saves to settings (see Settings.coreAutoAdvance).
-  const setAutoDefault = (on: boolean) => {
-    if (step.kind === 'flex') saveFlexDefault({ autoAdvance: on })
-    else updateSettings({ ...settings, coreAutoAdvance: on })
-    setAutoNow(on)
-  }
-
-  // Only ever called from a mobility set, so this one has a routine entry to
-  // write to and needs no settings fallback.
-  const setIntoDefault = (on: boolean) => {
-    saveFlexDefault({ autoIntoRest: on })
-    setIntoNow(on)
   }
 
   // The set ending itself is worth a buzz: mid-stretch you're rarely looking at
@@ -374,50 +332,8 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
-    // First in the list: leaving the session screen without ending it is the
-    // reach-for-the-menu reason often enough that it shouldn't be scrolled to.
-    { label: 'back', onClick: onMinimize },
-    // Both directions read the same way: the session-only toggles first, then the
-    // saved per-stretch defaults. The into-rest pair only shows on a paced set.
-    ...(paced
-      ? [
-          {
-            label: intoNow ? 'wait for my tap after the set' : 'auto-advance into rest',
-            onClick: () => setIntoNow(!intoNow),
-          },
-        ]
-      : []),
-    {
-      label: autoNow ? 'wait for my tap after rest' : 'auto-advance out of rest',
-      onClick: () => setAutoNow(!autoNow),
-    },
-    ...(paced
-      ? [
-          {
-            label: savedInto
-              ? `stop auto-advancing ${step.exName} into rest`
-              : `always auto-advance ${step.exName} into rest`,
-            onClick: () => setIntoDefault(!savedInto),
-          },
-        ]
-      : []),
-    {
-      label: savedAuto
-        ? `stop auto-advancing ${step.exName} out of rest`
-        : `always auto-advance ${step.exName} out of rest`,
-      onClick: () => setAutoDefault(!savedAuto),
-    },
     { label: 'pause routine', onClick: () => setPaused(true) },
-    { label: 'log measurement', onClick: () => setShowMeasure(true) },
     { label: 'routine checklist', onClick: () => setShowList(true) },
-    {
-      label: 'skip logging details (mark done)',
-      onClick: () => {
-        recordDuration()
-        void logFlex({ note: 'stretch + core' })
-        onClose()
-      },
-    },
     {
       label: 'finish & log session',
       onClick: () => finishWith(done),
@@ -443,7 +359,10 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
             set {step.round + 1} of {step.maxSets}
           </p>
         </div>
-        <KebabMenu items={menuItems} />
+        <div className="flex shrink-0 items-start">
+          <FastForwardToggle on={fast} onToggle={() => setFast(!fast)} />
+          <KebabMenu items={menuItems} />
+        </div>
       </header>
 
       {/* Flex sets show their rep count live in the rhythm guide, so only the
@@ -462,9 +381,9 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
           running={rest == null && !preparing && !paused && photos == null}
           startRep={rep}
           onRep={setRep}
-          // On auto, the last rep is the tap. Not on the closing step — the core
-          // block ends the session, so nothing here logs a session on a timer.
-          onTargetHit={intoNow && !atLast ? intoRestOnTarget : undefined}
+          // Under fast-forward the last rep is the tap. Not on the closing step —
+          // the core block ends the session, so nothing here logs one on a timer.
+          onTargetHit={fast && !atLast ? intoRestOnTarget : undefined}
         />
       ) : (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
@@ -508,7 +427,8 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         <RestTimer
           seconds={rest.seconds}
           endsAt={rest.endsAt}
-          autoAdvance={autoNow}
+          fastForward={fast}
+          onToggleFastForward={() => setFast(!fast)}
           menu={menuItems}
           progress={{ done: completed, total: N, unit: 'sets' }}
           timeLeftLabel={`${formatDuration(timeLeft)} left`}
@@ -522,7 +442,6 @@ export function StretchSession({ onClose, onMinimize }: { onClose: () => void; o
         <GetReady seconds={getReadySec} label={step.exName} onDone={() => setPreparing(false)} />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
-      {showMeasure && <MeasureSheet onClose={() => setShowMeasure(false)} />}
       {photos && <PhotoStep gate={photos.gate} onCapture={logMeasurement} onDone={closePhotos} />}
 
       {showList && (

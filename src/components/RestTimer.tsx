@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { KebabMenu, type MenuItem } from './KebabMenu'
 import { SessionProgress } from './SessionProgress'
+import { FastForwardToggle } from './FastForwardToggle'
 import { createFlame, flameLook, stepFlame } from '../lib/flame'
 import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } from '../lib/tide'
 
@@ -801,7 +802,8 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
  * how far in you are and not just how long is left. `upNextTarget` puts the load
  * and reps for the coming set alongside its name — see lib/rest for which rests
  * get it. `menu` keeps the session's overflow actions reachable without ending
- * rest first.
+ * rest first, and the fast-forward toggle beside it hands the rest of the session
+ * over to the clock.
  */
 export function RestTimer({
   seconds,
@@ -811,7 +813,8 @@ export function RestTimer({
   upNextTarget,
   progress,
   timeLeftLabel,
-  autoAdvance,
+  fastForward,
+  onToggleFastForward,
   menu,
 }: {
   seconds: number
@@ -821,7 +824,12 @@ export function RestTimer({
    * countdown starting now.
    */
   endsAt?: number
-  onClose: () => void
+  /**
+   * Rest is over. `expired` is true only when the countdown ran itself out under
+   * fast-forward, so a caller can tell that from a rest cut short by a tap — the
+   * one it hands a get-into-position count to.
+   */
+  onClose: (expired?: boolean) => void
   upNext?: string | null
   /** What to go for on the coming set, pre-formatted ("135 × 8", "12 reps"). */
   upNextTarget?: string | null
@@ -829,11 +837,13 @@ export function RestTimer({
   progress?: { done: number; total: number; unit?: string }
   timeLeftLabel?: string | null
   /**
-   * Roll into the next set the moment rest is up, with no tap. Set per exercise
-   * from the overflow menu; the countdown and shape are unchanged, they just stop
-   * waiting at zero.
+   * Hands-free mode: roll into the next set the moment rest is up, with no tap.
+   * The countdown and shape are unchanged, they just stop waiting at zero. Shown
+   * as a fast-forward toggle in the top row, so it's switchable from here as well
+   * as from the session header.
    */
-  autoAdvance?: boolean
+  fastForward?: boolean
+  onToggleFastForward?: () => void
   /** Overflow actions for the 3-dots menu, mirroring the session header's. */
   menu?: MenuItem[]
 }) {
@@ -852,8 +862,8 @@ export function RestTimer({
   const buzzed = useRef(false)
   // The ticker runs on a mount-only effect, so auto-advance reads its trigger and
   // its callback through refs rather than re-subscribing whenever either changes.
-  const autoRef = useRef(autoAdvance)
-  autoRef.current = autoAdvance
+  const autoRef = useRef(fastForward)
+  autoRef.current = fastForward
   const closeRef = useRef(onClose)
   closeRef.current = onClose
   const advanced = useRef(false)
@@ -866,10 +876,11 @@ export function RestTimer({
         buzzed.current = true
         navigator.vibrate?.(400)
       }
-      // On auto, zero is the tap: the buzz still fires, then rest ends itself.
+      // On fast-forward, zero is the tap: the buzz still fires, then rest ends
+      // itself — flagged as expired, so what follows knows the full rest was had.
       if (ms <= 0 && autoRef.current && !advanced.current) {
         advanced.current = true
-        closeRef.current()
+        closeRef.current(true)
       }
     }
     tick()
@@ -906,7 +917,8 @@ export function RestTimer({
     if (Date.now() - mountedAt.current < GHOST_CLICK_GRACE_MS) return
     fn()
   }
-  const dismiss = afterGrace(onClose)
+  // A tap ends rest early, so it never reports the rest as expired.
+  const dismiss = afterGrace(() => onClose())
 
   return (
     <div
@@ -931,13 +943,18 @@ export function RestTimer({
             className="w-full"
           />
         )}
-        {(upNext || menu) && (
-          // One row: the menu sits at the right with "up next" still centered
-          // between the edges, so a long exercise name can't run underneath it.
+        {(upNext || menu || onToggleFastForward) && (
+          // One row: fast-forward at the left, the menu at the right, "up next"
+          // still centered between them so a long exercise name can't run
+          // underneath either. Tapping the overlay ends rest, so both controls
+          // keep their taps to themselves.
           <div className="mt-3 flex w-full items-start gap-2">
-            <div className="w-11 shrink-0" aria-hidden />
+            <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {onToggleFastForward && (
+                <FastForwardToggle on={!!fastForward} onToggle={onToggleFastForward} />
+              )}
+            </div>
             <p className="flex-1 pt-2.5 text-center text-base font-semibold text-neutral-200">{upNext}</p>
-            {/* Tapping the overlay ends rest, so the menu keeps its taps to itself. */}
             <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
               {menu && <KebabMenu items={menu} />}
             </div>
