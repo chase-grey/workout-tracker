@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdKeyboardArrowDown } from 'react-icons/md'
 import { parseTempo } from '../lib/tempo'
 import {
+  cycleCloses,
   cycleProgress,
   hitRepTarget,
   loopFadeIn,
   motionForPhases,
   phaseDepths,
+  phaseEfforts,
+  strain,
   type MotionKind,
 } from '../lib/rhythmMotion'
 
@@ -14,8 +17,10 @@ import {
  * An abstract, nature-inspired rhythm animation that paces a stretch's tempo.
  * The shape family is chosen from the stretch's motion (see rhythmMotion):
  * - 'breathe' shapes expand/contract for down · hold · up reps (Tailor's Pose).
- * - 'descent' shapes fold/reach downward and settle deep for push-and-hang
- *   reps (Pancake Hang) rather than forcing a breathing shape to fit them.
+ * - 'descent' shapes drive downward and then release for push-and-rest reps
+ *   (Pancake Hang) rather than forcing a breathing shape to fit them. Their two
+ *   segments are told apart by more than position: working is bright, crisp and
+ *   faintly straining, resting is dim, soft and still.
  * A random variant within the family is chosen per mount, so it varies from one
  * set to the next, and a live rep counter tracks where you are in the set.
  */
@@ -264,6 +269,20 @@ function DescentShape({ variant, depth, bright }: { variant: Variant; depth: num
 
 /** Smooth ease-in-out so each phase accelerates then settles, like a breath. */
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
+/** Working: commit fast, then grind the last of the range out against resistance. */
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
+/** Resting: leave and arrive unhurried, like letting the tension bleed off. */
+const easeInOutSine = (t: number) => 0.5 - Math.cos(Math.PI * t) / 2
+
+/**
+ * How the descent family reads its two kinds of segment, on top of the depth it
+ * travels: working is bright, crisp and faintly shaky, resting is dim, soft and
+ * still. The floors matter — a rest segment has to stay clearly visible, since
+ * you're still holding the stretch through it.
+ */
+const REST_DIM = 0.55
+const REST_BLUR_PX = 1.5
+const STRAIN_PCT = 0.7
 
 export function RhythmGuide({
   tempo,
@@ -290,6 +309,8 @@ export function RhythmGuide({
 }) {
   const phases = useMemo(() => parseTempo(tempo), [tempo])
   const depths = useMemo(() => phaseDepths(phases), [phases])
+  const efforts = useMemo(() => phaseEfforts(phases), [phases])
+  const closes = useMemo(() => cycleCloses(phases), [phases])
   const motion = useMemo(() => motionForPhases(phases), [phases])
   const [variant] = useState<Variant>(() => pickVariant(motion))
   const [idx, setIdx] = useState(0)
@@ -348,22 +369,31 @@ export function RhythmGuide({
   if (phases.length === 0) return null
 
   const i = idx % phases.length
-  // Interpolate from the previous phase's depth to this phase's depth so the
-  // motion flows continuously. A breathe cycle ends back at the top (an "up"
-  // phase returns to 0), so resuming from the previous phase is right. A descent
-  // cycle ends deep (a passive hang holds at 1), so a NEW rep must restart from
-  // the top instead of resuming from the bottom — otherwise the shape sits frozen
-  // at full depth and never shows the push-down motion each rep.
-  const from =
-    motion === 'descent' && i === 0 ? 0 : depths[(i - 1 + depths.length) % depths.length]
-  const depth = from + (depths[i] - from) * easeInOut(progress)
+  const prev = (i - 1 + depths.length) % depths.length
+  // Interpolate from the previous phase's depth to this phase's depth so the motion
+  // flows continuously — and, because the previous phase of the first one is the
+  // last, continuously around the rep boundary too. A push · rest tempo therefore
+  // loops on itself with nothing to hide: it ends the rest segment at exactly the
+  // depth the next push starts from. Only a curve that never moves needs the reset
+  // below, and then the first phase has to restart from the top by hand.
+  const from = motion === 'descent' && i === 0 && !closes ? 0 : depths[prev]
+  // Each segment is eased in its own character: driving deeper commits fast and
+  // then grinds, releasing drifts off and settles. Half the work/rest read is here,
+  // in how the same travel is spent.
+  const ease =
+    motion !== 'descent' ? easeInOut : depths[i] > from ? easeOutCubic : easeInOutSine
+  const depth = from + (depths[i] - from) * ease(progress)
 
-  // That jump back to the top is what made the loop look choppy, so crossfade
-  // it: for the first moment of a descent rep the new shape fades in up top
-  // while the rep that just finished lingers at full depth and dissolves. The
-  // two overlap, so there's no frame where the shape teleports or blinks out.
-  // The first rep of a set has nothing behind it to dissolve.
-  const fadeIn = motion === 'descent' ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
+  // Effort crosses between segments on its own gentle curve, so the shape brightens
+  // and sharpens as you push and goes soft and still as you let go.
+  const effort = efforts[prev] + (efforts[i] - efforts[prev]) * easeInOut(progress)
+  const tremor = strain(effort, progress)
+
+  // Fallback for the frozen-curve case only: for the first moment of the new rep
+  // the shape fades in up top while the finished one lingers deep and dissolves, so
+  // there's no frame where it teleports. The first rep has nothing behind it.
+  const fadeIn =
+    motion === 'descent' && !closes ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
   const showPrevRep = fadeIn < 1 && rep > startRep
 
   // Once you've finished the target the count reads entirely in the accent colour
@@ -387,7 +417,11 @@ export function RhythmGuide({
             )}
             <div
               className="absolute inset-0 flex items-center justify-center"
-              style={{ opacity: fadeIn }}
+              style={{
+                opacity: fadeIn * (REST_DIM + effort * (1 - REST_DIM)),
+                filter: `blur(${(1 - effort) * REST_BLUR_PX}px)`,
+                transform: `translateY(${tremor * STRAIN_PCT}%)`,
+              }}
             >
               <DescentShape variant={variant} depth={depth} bright={hitTarget} />
             </div>

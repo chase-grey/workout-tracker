@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { parseTempo } from './tempo'
-import { cycleProgress, hitRepTarget, loopFadeIn, motionForPhases, phaseDepths } from './rhythmMotion'
+import {
+  cycleCloses,
+  cycleProgress,
+  hitRepTarget,
+  loopFadeIn,
+  motionForPhases,
+  phaseDepths,
+  phaseEfforts,
+  strain,
+  REST_DEPTH_KEPT,
+} from './rhythmMotion'
 
 describe('motionForPhases', () => {
   it('reads a down · hold · up rep as a breath', () => {
@@ -18,8 +28,52 @@ describe('phaseDepths', () => {
   it('sinks on down, holds, returns on up', () => {
     expect(phaseDepths(parseTempo('2s down · 3s hold at bottom · 1s up'))).toEqual([1, 1, 0])
   })
-  it('stays deep through a passive hang instead of springing back', () => {
-    expect(phaseDepths(parseTempo('5s pushing down · 5s passive hang'))).toEqual([1, 1])
+  it('gives back some depth on a passive hang without leaving the stretch', () => {
+    expect(phaseDepths(parseTempo('5s pushing down · 5s passive hang'))).toEqual([1, REST_DEPTH_KEPT])
+  })
+  it('keeps an isometric hold exactly where it is', () => {
+    expect(phaseDepths(parseTempo('5s pushing down · 5s hang'))).toEqual([1, 1])
+  })
+  it('has nothing to give back when a rest phase starts from neutral', () => {
+    expect(phaseDepths(parseTempo('2s relax · 2s down'))).toEqual([0, 1])
+  })
+})
+
+describe('phaseEfforts', () => {
+  it('reads a push as work and a passive hang as rest', () => {
+    expect(phaseEfforts(parseTempo('5s pushing down · 5s passive hang'))).toEqual([1, 0])
+  })
+  it('counts an isometric hold as work, since you are still holding tension', () => {
+    expect(phaseEfforts(parseTempo('2s down · 3s hold at bottom · 1s up'))).toEqual([1, 1, 1])
+  })
+})
+
+describe('cycleCloses', () => {
+  it('closes for a push · rest rep, which needs no reset at the loop point', () => {
+    expect(cycleCloses(parseTempo('5s pushing down · 5s passive hang'))).toBe(true)
+  })
+  it('does not close when the depth never moves', () => {
+    expect(cycleCloses(parseTempo('5s pushing down · 5s hang'))).toBe(false)
+  })
+  it('does not close for a tempo with no phases', () => {
+    expect(cycleCloses(parseTempo(''))).toBe(false)
+  })
+})
+
+describe('strain', () => {
+  it('is still at both ends of a phase, so it never jumps at a boundary', () => {
+    expect(strain(1, 0)).toBeCloseTo(0)
+    expect(strain(1, 1)).toBeCloseTo(0)
+  })
+  it('shakes under load and goes quiet as the effort drops off', () => {
+    const working = Math.abs(strain(1, 0.05))
+    const resting = Math.abs(strain(0.1, 0.05))
+    expect(working).toBeGreaterThan(0)
+    expect(resting).toBeLessThan(working)
+    expect(strain(0, 0.05)).toBe(0)
+  })
+  it('stays within a single unit of amplitude', () => {
+    for (let p = 0; p <= 1; p += 0.01) expect(Math.abs(strain(1, p))).toBeLessThanOrEqual(1)
   })
 })
 
@@ -66,16 +120,17 @@ describe('hitRepTarget', () => {
 })
 
 describe('loopFadeIn', () => {
-  const pancake = parseTempo('5s pushing down · 5s passive hang')
+  // The frozen-curve case — the only one that still resets at the loop point.
+  const frozen = parseTempo('5s pushing down · 5s hang')
 
   it('starts a rep fully transparent so the jump to the top is hidden', () => {
-    expect(loopFadeIn(pancake, 0)).toBe(0)
+    expect(loopFadeIn(frozen, 0)).toBe(0)
   })
 
   it('is fully opaque one second in, and stays there for the rest of the rep', () => {
-    expect(loopFadeIn(pancake, 1 / 10)).toBe(1)
-    expect(loopFadeIn(pancake, 0.5)).toBe(1)
-    expect(loopFadeIn(pancake, 1)).toBe(1)
+    expect(loopFadeIn(frozen, 1 / 10)).toBe(1)
+    expect(loopFadeIn(frozen, 0.5)).toBe(1)
+    expect(loopFadeIn(frozen, 1)).toBe(1)
   })
 
   it('never spends more than a third of a short rep fading', () => {
