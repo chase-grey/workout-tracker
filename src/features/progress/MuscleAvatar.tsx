@@ -335,7 +335,11 @@ export function MuscleAvatar() {
       // Reps ladders grow by reps, not load — a bodyweight hanging raise has no
       // est-1RM to read at all.
       const metric = EXERCISE_SOURCES[key].ladder === 'reps' ? 'topreps' : '1rm'
-      const series = exerciseSeries(workouts, key, metric)
+      // Every session, not just the slot that trains the lift freshest (see
+      // progress.SlotScope). The lead-slot read exists to stop a chart line
+      // sawtoothing; a best-ever is a maximum, and a press done second is still a
+      // press that was done — dropping it would understate a band the log earned.
+      const series = exerciseSeries(workouts, key, metric, 'all')
       if (series.length === 0) continue // not logged → "no data" for its muscle
       out[key] = {
         best: series.reduce((m, p) => Math.max(m, p.value), 0),

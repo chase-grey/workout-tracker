@@ -155,6 +155,40 @@ export function sustainedRepsSeries(rows: WorkoutRow[], exerciseKey: string, set
 }
 
 /**
+ * One point per session for the best estimated 1RM across several exercise keys —
+ * the strongest set of any of them that day.
+ *
+ * This is the honest strength reading for a movement the plan trains as two
+ * variations. Read one of them alone and the series has to pick a slot: flat bench
+ * leads variant B and follows incline in variant A, so a lead-slot line
+ * (see {@link SlotScope}) drops every other push day, and the newest session can
+ * read as though the lift wasn't trained at all. Both presses together always
+ * contain the day's fresh press — whichever of them led — so every session lands
+ * on the line, and none of them lands there on a fatigued reading alone.
+ *
+ * A day the harder variation wins is still a real reading rather than a discount:
+ * incline is the harder press, so an incline e1RM is a floor on the flat bench it
+ * implies.
+ *
+ * Sessions with no weight recorded at all are left out rather than scored zero — a
+ * blank isn't a collapse, and a zero on a strength line reads as one.
+ */
+export function combinedBest1RMSeries(rows: WorkoutRow[], keys: Iterable<string>): Point[] {
+  const wanted = new Set(keys)
+  const bySession = new Map<string, { date: string; best: number }>()
+  for (const r of rows) {
+    if (!wanted.has(r.exercise) || r.weight_lbs == null) continue
+    const key = r.session_id || r.date
+    const g = bySession.get(key) ?? { date: r.date, best: 0 }
+    g.best = Math.max(g.best, epley1RM(r.weight_lbs, r.reps))
+    bySession.set(key, g)
+  }
+  return [...bySession.values()]
+    .map((g) => ({ date: g.date, value: Math.round(g.best * 10) / 10 }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
  * One point per session summing total reps across a *set* of exercise keys —
  * e.g. all core moves combined, so ab work shows up regardless of which ab
  * exercise (cable crunch, hanging leg raise, deadbug) was logged that session.

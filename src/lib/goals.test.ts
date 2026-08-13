@@ -8,7 +8,6 @@ import {
   type GoalSpec,
   goalsHitInWeek,
   isReached,
-  offSlotLatest,
   projectGoal,
   PULLUP_GAIN_CAP,
   PULLUP_GOAL_REPS,
@@ -615,10 +614,11 @@ describe('goalsHitInWeek lists the goals that landed this week', () => {
   })
 })
 
-describe('offSlotLatest names the session a lift goal leaves off its line', () => {
-  const bench = (
+describe('the bench goal reads both presses', () => {
+  const press = (
     session: string,
     date: string,
+    exercise: string,
     weight: number,
     reps: number,
     variant?: 'A' | 'B',
@@ -626,7 +626,7 @@ describe('offSlotLatest names the session a lift goal leaves off its line', () =
     session_id: session,
     date,
     day_type: 'push',
-    exercise: 'flat_bench',
+    exercise,
     set_number: 1,
     weight_lbs: weight,
     reps,
@@ -641,42 +641,38 @@ describe('offSlotLatest names the session a lift goal leaves off its line', () =
     )!
 
   // Flat bench leads variant B — four sets, first press of the day — and follows
-  // incline in variant A, so A is the slot the goal's line doesn't read.
-  it('reports the variant-A session, with what it lifted, when it is the newest', () => {
-    const rows = [bench('lead', '2026-08-04', 155, 8, 'B'), bench('off', '2026-08-08', 145, 8, 'A')]
+  // incline in variant A. Reading flat alone left the variant-A day off the goal
+  // entirely, so a logged push day could leave the goal on a fortnight-old number.
+  it('counts the push day where incline led, not just the ones flat led', () => {
+    const rows = [
+      press('lead', '2026-08-04', 'flat_bench', 155, 8, 'B'),
+      press('off', '2026-08-08', 'incline_bench', 135, 8, 'A'),
+      press('off', '2026-08-08', 'flat_bench', 145, 8, 'A'),
+    ]
     const goal = benchGoal(rows)
 
-    // The line itself still stops at the fresh-slot session.
-    expect(goal.points.map((p) => p.date)).toEqual(['2026-08-04'])
-
-    const off = offSlotLatest(goal, rows)
-    expect(off?.date).toBe('2026-08-08')
-    expect(off?.value).toBeCloseTo(183.7, 1) // 145×8 through Epley
+    expect(goal.points.map((p) => p.date)).toEqual(['2026-08-04', '2026-08-08'])
+    // The day's best press, whichever of the two it was: flat 145×8 beats incline
+    // 135×8 even done second.
+    expect(goal.points[1].value).toBeCloseTo(183.7, 1)
   })
 
-  it('says nothing when the newest session is the one on the line', () => {
-    const rows = [bench('off', '2026-08-04', 145, 8, 'A'), bench('lead', '2026-08-08', 155, 8, 'B')]
-    expect(offSlotLatest(benchGoal(rows), rows)).toBeNull()
+  it('takes a reading from an incline-only session', () => {
+    const rows = [press('a', '2026-08-08', 'incline_bench', 135, 8, 'A')]
+    expect(benchGoal(rows).points).toEqual([{ date: '2026-08-08', value: 171 }]) // 135×8
   })
 
-  it('says nothing for a session with no slot recorded — it is plotted already', () => {
-    const rows = [bench('imported', '2026-08-08', 155, 8)]
-    const goal = benchGoal(rows)
-    expect(goal.points.map((p) => p.date)).toEqual(['2026-08-08'])
-    expect(offSlotLatest(goal, rows)).toBeNull()
+  it('names flat bench as the lift it is cued on, with incline counted alongside', () => {
+    const goal = benchGoal([press('a', '2026-08-08', 'flat_bench', 155, 8, 'B')])
+    expect(goal.exerciseKey).toBe('flat_bench')
+    expect(goal.alsoCounts).toEqual(['incline_bench'])
   })
 
-  it('leaves the rep-counted and body-composition goals alone', () => {
-    const rows = [bench('off', '2026-08-08', 145, 8, 'A')]
+  it('leaves the squat goals reading squat alone', () => {
+    const rows = [press('a', '2026-08-08', 'barbell_squat', 225, 5)]
     const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: rows })
-    for (const g of goals.filter((x) => x.measure === 'reps' || x.exerciseKey == null)) {
-      expect(offSlotLatest(g, rows)).toBeNull()
+    for (const id of [GOAL_IDS.squatBodyweight, GOAL_IDS.squatOneAndAHalf]) {
+      expect(goals.find((g) => g.id === id)!.alsoCounts).toBeUndefined()
     }
-  })
-
-  it('leaves squat alone — the variants train it alike', () => {
-    const rows = [{ ...bench('off', '2026-08-08', 225, 5, 'A'), exercise: 'barbell_squat' }]
-    const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: rows })
-    expect(offSlotLatest(goals.find((g) => g.id === GOAL_IDS.squatBodyweight)!, rows)).toBeNull()
   })
 })

@@ -19,7 +19,6 @@ import {
   buildGoals,
   GOAL_IDS,
   isReached,
-  offSlotLatest,
   projectGoal,
   reachedDate,
   type GoalSpec,
@@ -376,7 +375,6 @@ function GoalRow({
   proj,
   lock,
   months,
-  offSlot,
   onRecalculate,
   onLock,
   showData,
@@ -389,12 +387,6 @@ function GoalRow({
   lock?: LockedProjection
   /** The tab's range pill, handed to the commit chart's run-up. */
   months: number | null
-  /**
-   * The latest session of this lift the goal's line leaves out, if any (see
-   * goals.offSlotLatest) — named on the row so a logged session isn't simply
-   * missing.
-   */
-  offSlot?: Point | null
   onRecalculate: () => void
   /** Commit the goal to a target date once it's within reach. */
   onLock: (etaDate: string) => void
@@ -533,19 +525,6 @@ function GoalRow({
             : proj.basis.thin
               ? 'not enough recent data to project.'
               : 'not trending toward this yet — keep at it.'}
-        </p>
-      )}
-
-      {/* The session this goal's line doesn't read. It was logged, it counted for
-          volume and for its own ladder, and what it lifted is worth seeing — it
-          just isn't the fresh-slot reading the projection is measured on. A reached
-          goal skips it: that goal is done, so the second press changes nothing. */}
-      {!reached && offSlot && (
-        <p className="mt-1 text-xs text-neutral-500">
-          <span className="tabular-nums">
-            {fmtDate(offSlot.date)} · {offSlot.value} {goal.unit}
-          </span>{' '}
-          — second press that day, not counted here
         </p>
       )}
 
@@ -730,7 +709,6 @@ export function GoalsPanel({ months }: { months: number | null }) {
       proj={projections.get(g.id)!}
       lock={locked[g.id]}
       months={months}
-      offSlot={offSlotLatest(g, workouts)}
       onRecalculate={() => recalculate(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       showData={g.exerciseKey != null || g.milestone}

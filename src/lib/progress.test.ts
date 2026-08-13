@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableExercises,
+  combinedBest1RMSeries,
   combinedRepsSeries,
   exerciseSeries,
   exercisesByFrequency,
@@ -181,6 +182,69 @@ describe('exerciseSeries across A/B slots', () => {
       const crunches = bothSlots.map((row) => ({ ...row, exercise: 'cable_crunch' }))
       expect(offSlotSeries(crunches, 'cable_crunch', 'weight')).toEqual([])
     })
+  })
+})
+
+describe('combinedBest1RMSeries reads a movement trained as two variations', () => {
+  const PRESSES = ['flat_bench', 'incline_bench']
+
+  const press = (
+    session: string,
+    date: string,
+    exercise: string,
+    weight: number,
+    reps: number,
+    variant?: 'A' | 'B',
+  ): WorkoutRow => ({ ...r(session, date, weight, reps), exercise, variant })
+
+  // Two push days, opposite variants: incline leads the first, flat the second.
+  const week: WorkoutRow[] = [
+    press('a1', '2026-08-04', 'incline_bench', 135, 8, 'A'),
+    press('a1', '2026-08-04', 'flat_bench', 145, 8, 'A'),
+    press('b1', '2026-08-08', 'flat_bench', 155, 8, 'B'),
+    press('b1', '2026-08-08', 'incline_bench', 130, 8, 'B'),
+  ]
+
+  it('gives every session a reading, including the one a lead-slot line drops', () => {
+    // Flat bench alone reads variant B only, so the 4th is missing from it.
+    expect(exerciseSeries(week, 'flat_bench', '1rm').map((p) => p.date)).toEqual(['2026-08-08'])
+    expect(combinedBest1RMSeries(week, PRESSES).map((p) => p.date)).toEqual([
+      '2026-08-04',
+      '2026-08-08',
+    ])
+  })
+
+  it('takes the best set of either press that day', () => {
+    const s = combinedBest1RMSeries(week, PRESSES)
+    expect(s[0].value).toBeCloseTo(183.7, 1) // flat 145×8, the day's heavier press
+    expect(s[1].value).toBeCloseTo(196.3, 1) // flat 155×8
+  })
+
+  it('reads a session that trained only the other press', () => {
+    const inclineOnly = [press('a1', '2026-08-04', 'incline_bench', 135, 8, 'A')]
+    expect(combinedBest1RMSeries(inclineOnly, PRESSES)).toEqual([
+      { date: '2026-08-04', value: 171 }, // 135×8 through Epley
+    ])
+  })
+
+  it('ignores other exercises and sorts oldest → newest', () => {
+    const rows = [
+      press('b1', '2026-08-08', 'flat_bench', 155, 8, 'B'),
+      press('a1', '2026-08-04', 'flat_bench', 145, 8, 'A'),
+      press('c1', '2026-08-10', 'barbell_squat', 225, 5),
+    ]
+    expect(combinedBest1RMSeries(rows, PRESSES).map((p) => p.date)).toEqual([
+      '2026-08-04',
+      '2026-08-08',
+    ])
+  })
+
+  it('leaves out a session with no weight recorded rather than scoring it zero', () => {
+    const rows = [
+      { ...press('a1', '2026-08-04', 'flat_bench', 145, 8, 'A') },
+      { ...press('b1', '2026-08-08', 'flat_bench', 0, 8, 'B'), weight_lbs: null },
+    ]
+    expect(combinedBest1RMSeries(rows, PRESSES).map((p) => p.date)).toEqual(['2026-08-04'])
   })
 })
 

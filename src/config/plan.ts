@@ -198,9 +198,10 @@ export const DEFAULT_PLAN: Plan = {
       { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: GRADUATION_SETS, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'abs' },
 
       // Incline leads variant A (upper-chest emphasis is the aesthetic priority);
-      // flat leads variant B, which is also the lift the bench-bodyweight goal
-      // is measured on. The non-primary press drops to 3 sets that day, keeping
-      // weekly chest volume near 16 sets instead of an unproductive 20+.
+      // flat leads variant B. The non-primary press drops to 3 sets that day,
+      // keeping weekly chest volume near 16 sets instead of an unproductive 20+.
+      // Either press can carry the bench-bodyweight goal's reading, so whichever
+      // one leads, the day counts (see goals.BENCH_ALSO_KEYS).
       { key: 'incline_bench', name: 'incline bench press', sets: 4, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest', byVariant: { B: { sets: 3 } } },
       { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'chest', byVariant: { B: { sets: 4, swapWith: 'incline_bench' } } },
 

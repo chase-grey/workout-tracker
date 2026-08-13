@@ -10,7 +10,12 @@
  */
 
 import type { BodyWeightEntry, WorkoutRow } from '../types'
-import { exerciseSeries, offSlotSeries, sustainedRepsSeries, type Point } from './progress'
+import {
+  combinedBest1RMSeries,
+  exerciseSeries,
+  sustainedRepsSeries,
+  type Point,
+} from './progress'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
@@ -102,6 +107,24 @@ export const BODYWEIGHT_GAIN_CAP = 1
 export const SQUAT_GAIN_CAP = 5
 export const BENCH_GAIN_CAP = 3
 
+/**
+ * The lift the bench goal is named for and cued on, and the other press its
+ * reading also counts.
+ *
+ * Flat bench is what "bench my bodyweight" means, but reading flat alone means
+ * reading it only on the days it goes first: the plan alternates which press leads
+ * (see pushVariant), and a lead-slot series drops the sessions where flat followed
+ * incline — so a push day could be logged in full and still leave the goal sitting
+ * on a fortnight-old number. Counting the best set of either press gives every
+ * push day a reading, and can only ever give a conservative one: incline is the
+ * harder press, so an incline e1RM is a floor on the flat bench it implies.
+ *
+ * The cue stays on flat bench alone (see goalCue): what it hands back is a weight
+ * to load, and the line's weight is a flat-bench weight.
+ */
+export const BENCH_KEY = 'flat_bench'
+export const BENCH_ALSO_KEYS = ['incline_bench']
+
 /** The exercise the pull-up ladder is measured on. */
 export const PULLUP_KEY = 'weighted_pullups'
 
@@ -147,6 +170,13 @@ export type GoalSpec = {
    * have none — nothing you do in a session changes them on the spot.
    */
   exerciseKey: string | null
+  /**
+   * Other lifts whose sessions feed this goal's series, beyond `exerciseKey` — the
+   * bench goal counts both presses (see {@link BENCH_ALSO_KEYS}). `exerciseKey`
+   * stays the one the goal is named for and cued on, so a caller that needs a
+   * single lift still has one.
+   */
+  alsoCounts?: string[]
   /**
    * What an exercise-driven goal's series counts, for the caller that has to
    * know which language it's in: the in-session cue turns the e1RM its locked
@@ -348,35 +378,6 @@ export function projectGoal(goal: GoalSpec, today?: Date): Projection {
   })
 }
 
-/**
- * The most recent session that trained a goal's lift but isn't on the goal's line,
- * and what it read — or null when the newest session is already plotted.
- *
- * A strength goal is measured on the slot that trains the lift freshest (see
- * progress.SlotScope): a press that follows the day's other press is necessarily
- * lighter, and plotting both drew a sawtooth that looked like backsliding every
- * other session. The cost is that a whole session disappears — flat bench on a
- * variant-A push day is logged, and then shows up nowhere on the bench goal, which
- * reads as the app having lost it. So the row names that session and says what it
- * lifted, while the projection still runs off the fresh-slot line alone.
- *
- * Only for the lifts the variants train differently, and only for goals measured on
- * estimated 1RM: a rep-counted ladder leaves sessions out for a different reason —
- * too few sets to judge the standard (see progress.sustainedRepsSeries) — which
- * this wouldn't be describing.
- *
- * Just the newest one, because that's the one that reads as lost. The rest of
- * them are drawn on the lifts chart, beside the line they're not on (see
- * progress.offSlotSeries).
- */
-export function offSlotLatest(goal: GoalSpec, workouts: WorkoutRow[]): Point | null {
-  if (!goal.exerciseKey || goal.measure === 'reps') return null
-  const off = offSlotSeries(workouts, goal.exerciseKey, '1rm')
-  const last = off.length ? off[off.length - 1] : null
-  const plotted = goal.points.length ? goal.points[goal.points.length - 1].date : ''
-  return last && last.date > plotted ? last : null
-}
-
 export type GoalInputs = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
@@ -413,7 +414,7 @@ export function buildGoals({
   const bwPoints = bodyWeightPoints(bodyWeights)
   const currentBw = bwPoints.length ? bwPoints[bwPoints.length - 1].value : 0
 
-  const benchPoints = exerciseSeries(workouts, 'flat_bench', '1rm')
+  const benchPoints = combinedBest1RMSeries(workouts, [BENCH_KEY, ...BENCH_ALSO_KEYS])
   const squatPoints = exerciseSeries(workouts, 'barbell_squat', '1rm')
   const bfPoints = bodyFatSeries(measurements, heightIn)
   const { target: bfTarget } = personalSixPackTarget(measurements, heightIn)
@@ -503,7 +504,8 @@ export function buildGoals({
       id: GOAL_IDS.benchBodyweight,
       title: `bench my bodyweight (${currentBw || '—'} lbs)`,
       unit: 'lbs',
-      exerciseKey: 'flat_bench',
+      exerciseKey: BENCH_KEY,
+      alsoCounts: BENCH_ALSO_KEYS,
       points: benchPoints,
       target: bwTarget(1),
       direction: 'up',

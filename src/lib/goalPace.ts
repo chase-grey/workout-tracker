@@ -34,7 +34,8 @@ function latest(points: { value: number }[]): number | null {
  *
  * `prev` is the history from before the session and `added` the session's own
  * rows, so "this session" can be isolated: a goal only earns a note when one of
- * `added`'s exercises is the one that goal is measured on.
+ * `added`'s exercises is a lift that goal is measured on — either of the presses
+ * for the bench goal, which reads both (see goals.BENCH_ALSO_KEYS).
  */
 export function goalPaceNotes(
   prev: WorkoutRow[],
@@ -54,7 +55,9 @@ export function goalPaceNotes(
 
   for (const goal of goalsAfter) {
     const lock = locked[goal.id]
-    if (!lock || goal.exerciseKey == null || !trained.has(goal.exerciseKey)) continue
+    if (!lock || goal.exerciseKey == null) continue
+    const measuredOn = [goal.exerciseKey, ...(goal.alsoCounts ?? [])]
+    if (!measuredOn.some((key) => trained.has(key))) continue
 
     const after = latest(goal.points)
     if (after == null) continue
