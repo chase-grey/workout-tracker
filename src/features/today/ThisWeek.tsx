@@ -11,31 +11,52 @@ import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
-import { weekCompletedDaysFraction } from '../../lib/dates'
+import { weekPace, type MetricPace } from '../../lib/weekPace'
 
-function MetricBar({ label, value, goal, suffix }: { label: string; value: number; goal: number; suffix?: string }) {
-  const met = value >= goal
-  const over = value > goal
-  const pct = Math.min(value / goal, 1) * 100
+/**
+ * One metric's row: the fill is what's done, and the pale line is where the
+ * week's schedule expects it by now (see lib/weekPace). The numbers go amber
+ * either when that line has been passed by without the units banked, or when
+ * every remaining day has to land for the goal to still be met — a distinction
+ * the overall bar can't make, since it averages the three together.
+ */
+function MetricBar({ label, m, suffix }: { label: string; m: MetricPace; suffix?: string }) {
+  const over = m.done > m.goal
+  const pct = Math.min(m.done / m.goal, 1) * 100
+  const behind = m.done < m.required
+  const tight = !m.met && m.slack <= 0
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-sm">
         <span className="text-neutral-300">{label}</span>
-        <span className="tabular-nums text-neutral-400">
-          {value}/{goal}
+        <span className={`tabular-nums ${behind || tight ? 'text-amber-400' : 'text-neutral-400'}`}>
+          {m.done}/{m.goal}
           {suffix ?? ''}{' '}
           {over ? (
             <MdStar className="inline align-text-bottom text-accent-2" aria-hidden />
-          ) : met ? (
+          ) : m.met ? (
             <MdCheckCircle className="inline align-text-bottom text-accent-2" aria-hidden />
           ) : null}
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+      <div className="relative h-2 overflow-hidden rounded-full bg-surface-2">
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+        {m.required > 0 && (
+          <div
+            className={`absolute inset-y-0 w-0.5 -translate-x-1/2 ${behind ? 'bg-amber-400' : 'bg-white/70'}`}
+            style={{ left: `${(m.required / m.goal) * 100}%` }}
+          />
+        )}
       </div>
     </div>
   )
+}
+
+/** Short names for the buffer readout, which names the metric that's tightest. */
+const METRIC_SHORT: Record<MetricPace['key'], string> = {
+  workouts: 'workouts',
+  flex: 'flex',
+  calDays: 'cal days',
 }
 
 export function ThisWeek() {
@@ -62,13 +83,31 @@ export function ThisWeek() {
     3
   const checkpointFrac =
     (goals.halfWorkouts / goals.workouts + goals.halfFlex / goals.flex + goals.halfCalDays / goals.calDays) / 3
-  const pace = weekCompletedDaysFraction()
+
+  // The pace marker used to track elapsed time, which both demanded fractions of
+  // a workout mid-Monday and called a week "ahead" that had no days left to spare.
+  // It now follows the schedule in whole units, and the buffer beside the streak
+  // says whether the week is still comfortably finishable.
+  const pace = weekPace(wp, goals)
+  const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
+  const buffer = pace.binding
+    ? pace.buffer < 0
+      ? `${METRIC_SHORT[pace.binding.key]} missed`
+      : pace.buffer === 0
+        ? `${METRIC_SHORT[pace.binding.key]}: no room`
+        : `${pace.buffer} spare day${pace.buffer === 1 ? '' : 's'}`
+    : null
 
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-wide text-neutral-500">this week</h2>
         <div className="flex items-center gap-3 text-sm font-semibold">
+          {buffer && (
+            <span className={`text-xs ${pace.buffer <= 0 ? 'text-amber-400' : 'text-neutral-500'}`}>
+              {buffer}
+            </span>
+          )}
           <span className="flex items-center gap-1 text-accent">
             <MdLocalFireDepartment aria-hidden /> {streaks.streak}
           </span>
@@ -78,7 +117,7 @@ export function ThisWeek() {
         </div>
       </div>
 
-      {/* Milestone bar: fill = progress; white line = on-pace for now; markers for checkpoint & goal. */}
+      {/* Milestone bar: fill = progress; white line = where the schedule expects you; markers for checkpoint & goal. */}
       <div className="relative h-3 rounded-full bg-surface-2">
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-accent transition-all"
@@ -88,8 +127,8 @@ export function ThisWeek() {
         <div className="absolute inset-y-0 right-0 w-0.5 bg-accent-2" />
         <div
           className="absolute -top-0.5 h-4 w-0.5 -translate-x-1/2 rounded bg-white"
-          style={{ left: `${pace * 100}%` }}
-          title="on-pace for now"
+          style={{ left: `${pace.requiredFraction * 100}%` }}
+          title="where the week's schedule expects you"
         />
       </div>
       <div className="relative mt-1 h-3 text-[10px] tracking-wide text-neutral-500">
@@ -100,9 +139,9 @@ export function ThisWeek() {
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
-        <MetricBar label="workouts" value={wp.workouts} goal={goals.workouts} />
-        <MetricBar label="flex sessions" value={wp.flex} goal={goals.flex} />
-        <MetricBar label="calorie days" value={wp.calDays} goal={goals.calDays} suffix=" days" />
+        <MetricBar label="workouts" m={byKey.get('workouts')!} />
+        <MetricBar label="flex sessions" m={byKey.get('flex')!} />
+        <MetricBar label="calorie days" m={byKey.get('calDays')!} suffix=" days" />
       </div>
 
       {summary.weightTrend !== null && (

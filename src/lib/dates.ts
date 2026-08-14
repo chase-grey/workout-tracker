@@ -32,18 +32,6 @@ export function weekStartISO(dateStr: string): string {
   return toISODate(mondayOf(parseISODate(dateStr)))
 }
 
-/**
- * Fraction (0–1, in 1/7 steps) of the current Mon–Sun week whose days have
- * FULLY ENDED at `now`: (days completed so far this week) / 7. The in-progress
- * current day never counts, so Monday morning is 0/7 and the value steps
- * forward at each midnight boundary.
- */
-export function weekCompletedDaysFraction(now: Date = new Date()): number {
-  const ms = now.getTime() - mondayOf(now).getTime()
-  const completed = Math.floor(ms / 86400000)
-  return Math.min(7, Math.max(0, completed)) / 7
-}
-
 /** Every Monday ISO string from `startISO` through `endISO`, inclusive. */
 export function enumerateWeeks(startISO: string, endISO: string): string[] {
   const out: string[] = []
