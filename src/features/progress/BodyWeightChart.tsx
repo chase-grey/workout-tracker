@@ -6,6 +6,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
+  useXAxisScale,
   XAxis,
   YAxis,
 } from 'recharts'
@@ -13,14 +14,16 @@ import type { Point } from '../../lib/progress'
 import { projectedSeries, type LockedProjection } from '../../lib/goalLock'
 import { enumerateWeeks, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import {
+  calorieWeekMark,
   fmtDateLabel,
   fmtTick,
+  HIT_DAYS_DIM,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
-  LINE_SECONDARY,
   niceScale,
   timeXAxis,
+  WEEK_BAR_HEIGHT,
   withTime,
 } from '../../lib/chart'
 import { AxisBreak } from '../../components/AxisBreak'
@@ -29,9 +32,7 @@ import { ChartTag } from '../../components/ChartTag'
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
-/** Days at or above the calorie goal that light a week's Monday up, and how brightly. */
-const HIT_DAYS_BRIGHT = 6
-const HIT_DAYS_DIM = 5
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Roughly how many date labels fit across the axis before they collide. */
 const MAX_TICK_LABELS = 11
@@ -70,15 +71,21 @@ function mergeRows(points: Point[], goals: BodyWeightGoal[], from: string): Row[
 
 const msOf = (iso: string): number => parseISODate(iso).getTime()
 
-/** What a week's Monday tick is worth: a colour, and whether it carries its date. */
-type WeekTickMeta = { fill: string | null; labelled: boolean }
+/** What a week's Monday tick is worth: its calorie record, and whether it carries its date. */
+type WeekTickMeta = { hits: number; labelled: boolean }
 
 /**
- * One Monday on the axis, tinted by how well that week fed the goal — bright
- * green at {@link HIT_DAYS_BRIGHT} days on target, dark green at
- * {@link HIT_DAYS_DIM}. Long ranges hold more Mondays than there is room to
- * print, so the dates thin out; a week that loses its label keeps a coloured pip
- * in its place, and a good run still reads straight across the axis.
+ * One Monday on the axis, carrying how well that week fed the goal: a green bar
+ * ruled under the tick, as long as the week had days on target and as bright as
+ * {@link HIT_DAYS_DIM} days versus a near-perfect week (see
+ * {@link calorieWeekMark}). Consecutive good weeks butt up into one rule beneath
+ * the stretch of curve their eating produced.
+ *
+ * The bar is drawn whether or not the week keeps its date: long ranges hold more
+ * Mondays than there is room to print, so the labels thin out, but the record
+ * underneath them stays complete. The bar is measured off the axis scale rather
+ * than a fixed width, so it shrinks with the weeks as the range grows and never
+ * runs into its neighbour.
  */
 function WeekTick({
   x,
@@ -91,21 +98,44 @@ function WeekTick({
   payload?: { value: number }
   weeks: Map<number, WeekTickMeta>
 }) {
+  const scale = useXAxisScale()
   const ms = payload?.value ?? 0
   const meta = weeks.get(ms)
   if (!meta) return null
+  const pxPerWeek = scale ? Number(scale(ms + WEEK_MS)) - Number(scale(ms)) : 0
+  const mark = calorieWeekMark(meta.hits, pxPerWeek)
+  const top = (y ?? 0) + 3
   return (
     <g>
-      {meta.fill && !meta.labelled && <circle cx={x} cy={(y ?? 0) + 8} r={2.5} fill={meta.fill} />}
+      {mark?.shape === 'bar' && (
+        <rect
+          x={(x ?? 0) - mark.width / 2}
+          y={top}
+          width={mark.width}
+          height={WEEK_BAR_HEIGHT}
+          rx={WEEK_BAR_HEIGHT / 2}
+          fill={mark.color}
+          opacity={mark.opacity}
+        />
+      )}
+      {mark?.shape === 'pip' && (
+        <circle
+          cx={x}
+          cy={top + WEEK_BAR_HEIGHT / 2}
+          r={mark.r}
+          fill={mark.color}
+          opacity={mark.opacity}
+        />
+      )}
       {meta.labelled && (
         <text
           x={x}
           y={y}
-          dy={14}
+          dy={20}
           textAnchor="middle"
           fontSize={axisTick.fontSize}
-          fill={meta.fill ?? axisTick.fill}
-          fontWeight={meta.fill ? 600 : undefined}
+          fill={meta.hits >= HIT_DAYS_DIM ? LINE_PRIMARY : axisTick.fill}
+          fontWeight={meta.hits >= HIT_DAYS_DIM ? 600 : undefined}
         >
           {fmtTick(ms)}
         </text>
@@ -124,9 +154,9 @@ function WeekTick({
  * is that one line is climbing past 180 on its way to 190.
  *
  * The X axis is the calorie record. Weeks are what move body weight, so the ticks
- * are Mondays and each one is coloured by how many days that week hit the calorie
- * goal — the eating that produced the curve, read off the same axis as the curve,
- * rather than a second series crossing it on its own scale.
+ * are Mondays and each one is ruled with a bar for the days that week hit the
+ * calorie goal — the eating that produced the curve, read off the same axis as the
+ * curve, rather than a second series crossing it on its own scale.
  *
  * No dates are marked on the chart: the ETA dots multiplied by goal and by
  * revision until four of them sat on two target lines with nothing to say which
@@ -175,13 +205,24 @@ export function BodyWeightChart({
   const weekMeta = useMemo(() => {
     const stride = Math.ceil(weekTicks.length / MAX_TICK_LABELS) || 1
     return new Map<number, WeekTickMeta>(
-      weekTicks.map((ms, i) => {
-        const hits = calorieWeeks?.get(toISODate(new Date(ms))) ?? 0
-        const fill = hits >= HIT_DAYS_BRIGHT ? LINE_PRIMARY : hits >= HIT_DAYS_DIM ? LINE_SECONDARY : null
-        return [ms, { fill, labelled: i % stride === 0 }]
-      }),
+      weekTicks.map((ms, i) => [
+        ms,
+        { hits: calorieWeeks?.get(toISODate(new Date(ms))) ?? 0, labelled: i % stride === 0 },
+      ]),
     )
   }, [weekTicks, calorieWeeks])
+
+  // A weigh-in's tooltip names the week's calorie record too: the bar under the
+  // axis says a week went well without saying how many days it took, and this is
+  // where that number belongs — on the day being read, not printed under every
+  // Monday where it would crowd the dates.
+  const labelWithWeek = useMemo(
+    () => (ms: number) => {
+      const hits = calorieWeeks?.get(weekStartISO(toISODate(new Date(ms)))) ?? 0
+      return hits > 0 ? `${fmtDateLabel(ms)} · ${hits}/7 days on calories` : fmtDateLabel(ms)
+    },
+    [calorieWeeks],
+  )
 
   if (points.length === 0) {
     return (
@@ -208,7 +249,7 @@ export function BodyWeightChart({
           <Tooltip
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
-            labelFormatter={(ms) => fmtDateLabel(Number(ms))}
+            labelFormatter={(ms) => labelWithWeek(Number(ms))}
             formatter={(v, n) => [`${v} lbs`, n]}
           />
           {/* The targets themselves. Both climb away from the data, so the tags

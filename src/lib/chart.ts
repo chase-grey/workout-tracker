@@ -70,6 +70,45 @@ export const timeXAxis = {
   tickFormatter: fmtTick,
 }
 
+/** Days at or above the calorie goal that earn a week a bright mark, and a dim one. */
+export const HIT_DAYS_BRIGHT = 6
+export const HIT_DAYS_DIM = 5
+
+/** A week bar's thickness, and the longest one a seven-day week can draw. */
+export const WEEK_BAR_HEIGHT = 3
+const WEEK_BAR_MAX = 20
+/** Clear space left between neighbouring bars, so a run still reads week by week. */
+const WEEK_BAR_GAP = 3
+/** Under this much room a full week's bar is thinner than a pip, so draw the pip. */
+const WEEK_BAR_MIN = 5
+
+/** How a week's calorie record is drawn beneath its Monday on a date axis. */
+export type WeekMark =
+  | { shape: 'bar'; width: number; color: string; opacity: number }
+  | { shape: 'pip'; r: number; color: string; opacity: number }
+  | null
+
+/**
+ * The mark a week earns for `hits` days at the calorie goal, given `pxPerWeek` of
+ * axis to draw it in.
+ *
+ * A week that fed the goal gets a bar rather than a dot, because bar *length*
+ * carries the one number a dot can't: 5 days out of 7 reads as visibly short of
+ * 7 out of 7, and a run of full weeks lines up into a rule under the stretch of
+ * curve it produced. Weeks that logged something but fell short keep a faint pip
+ * — enough to tell a bad week from an unlogged one without competing with the
+ * good ones. A year-long range leaves only a few pixels per week, too little for
+ * any bar to be legible, so those ranges fall back to pips at full colour.
+ */
+export function calorieWeekMark(hits: number, pxPerWeek: number): WeekMark {
+  if (hits <= 0) return null
+  if (hits < HIT_DAYS_DIM) return { shape: 'pip', r: 2.5, color: LINE_SECONDARY, opacity: 0.55 }
+  const color = hits >= HIT_DAYS_BRIGHT ? LINE_PRIMARY : LINE_SECONDARY
+  const room = Math.min(pxPerWeek - WEEK_BAR_GAP, WEEK_BAR_MAX)
+  if (!(room >= WEEK_BAR_MIN)) return { shape: 'pip', r: 3, color, opacity: 1 }
+  return { shape: 'bar', width: (room * Math.min(hits, 7)) / 7, color, opacity: 1 }
+}
+
 /** Round `n` to a "nice" number (1/2/5 × 10ⁿ) — up for steps, either way otherwise. */
 function niceNum(n: number, roundUp: boolean): number {
   const exp = Math.floor(Math.log10(n))
