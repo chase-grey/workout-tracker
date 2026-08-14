@@ -15,14 +15,17 @@ import { isPaceCapped, type Projection } from '../../lib/predictions'
 import { filterRange, type Point } from '../../lib/progress'
 import { calorieHitsByWeek } from '../../lib/calories'
 import {
+  attemptWeight,
   bodyWeightPoints,
   buildGoals,
   GOAL_IDS,
   isReached,
+  isReadyToAttempt,
   projectGoal,
   reachedDate,
   type GoalSpec,
 } from '../../lib/goals'
+import { exerciseName } from '../../config/plan'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import type { SixPackStatus } from '../../services/storage'
 import {
@@ -354,13 +357,92 @@ function LockInPrompt({
  * Nothing else in the panel wears that green, so a cleared goal can't be mistaken
  * for one still being chased.
  *
+ * A goal one single away from finishing (see {@link AttemptPrompt}) wears the same
+ * bright green without the glow: it's the loudest thing in the panel short of a
+ * goal that's actually landed, which is what an attempt waiting to be taken should
+ * be.
+ *
  * Shared with the bodyweight block, which draws the box once around its whole
  * group rather than once per row — reached goals leave their block for the band
  * at the top of the panel, so a block never wears the reached ring.
  */
-function goalRing(lockable: boolean, committed: boolean, reached = false): string {
+function goalRing(lockable: boolean, committed: boolean, reached = false, ready = false): string {
   if (reached) return 'ring-2 ring-accent-bright shadow-[0_0_16px_-4px_var(--color-accent-bright)]'
+  if (ready) return 'ring-2 ring-accent-bright'
   return lockable ? 'ring-2 ring-accent' : committed ? 'ring-1 ring-accent-2/60' : ''
+}
+
+/**
+ * The ask a goal makes once its readings say the lift is in you: go and take the
+ * single. It replaces the pace line and the commitment chart, because neither is
+ * the question anymore — the goal isn't waiting on more sets, it's waiting on one
+ * rep at the weight (see goals.GoalSpec's `singles`).
+ *
+ * Tapping it opens the weight, prefilled with what the goal takes on the lift it's
+ * trained on — the plates, not the squat the target is written in (see
+ * goals.attemptWeight). It's editable because an attempt is a real event with a
+ * real number: going heavier than the goal asked deserves to be logged as what it
+ * was, and a miss logged honestly leaves the goal open, which is the point of
+ * settling it this way.
+ */
+function AttemptPrompt({
+  goal,
+  exerciseKey,
+  onLog,
+}: {
+  goal: GoalSpec
+  /** The lift the attempt is taken on — the goal's own (see GoalSpec.exerciseKey). */
+  exerciseKey: string
+  onLog: (weightLbs: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const needed = attemptWeight(goal, exerciseKey)
+  const [weight, setWeight] = useState(String(needed))
+  const entered = Number(weight)
+  const valid = Number.isFinite(entered) && entered > 0
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mt-2 w-full rounded-xl bg-accent-bright/10 p-3 text-left active:opacity-70"
+      >
+        <p className="text-sm font-medium text-accent-bright">
+          <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
+          ready to try it · {needed} × 1 {exerciseName(exerciseKey)}
+        </p>
+      </button>
+    )
+  }
+
+  return (
+    <div className="mt-2 rounded-xl bg-accent-bright/10 p-3">
+      <p className="text-sm font-medium text-accent-bright">
+        <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
+        {exerciseName(exerciseKey)} single
+      </p>
+      <div className="mt-3 flex items-center gap-2">
+        <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
+          lbs
+          <input
+            type="number"
+            inputMode="decimal"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            aria-label={`weight lifted for ${goal.title}`}
+            className="min-h-[36px] w-24 rounded-lg bg-surface-2 px-2 text-sm tabular-nums text-neutral-200"
+          />
+        </label>
+        <button
+          onClick={() => valid && onLog(entered)}
+          disabled={!valid}
+          className="min-h-[36px] shrink-0 rounded-lg bg-accent-bright px-3 text-sm font-medium text-black active:opacity-70 disabled:opacity-40"
+        >
+          log it
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -377,6 +459,7 @@ function GoalRow({
   months,
   onRecalculate,
   onLock,
+  onLogAttempt,
   showData,
   chartedAbove = false,
   grouped = false,
@@ -390,6 +473,8 @@ function GoalRow({
   onRecalculate: () => void
   /** Commit the goal to a target date once it's within reach. */
   onLock: (etaDate: string) => void
+  /** Log the single that settles the goal, once it's ready to be attempted. */
+  onLogAttempt: (weightLbs: number) => void
   /** Plot the goal's own series (with its target line) while it's unlocked. */
   showData?: boolean
   /**
@@ -419,9 +504,13 @@ function GoalRow({
       : earlyBy === 0
         ? 'right on schedule'
         : `${earlyBy} ${earlyBy === 1 ? 'day' : 'days'} early`
+  // The readings are there and the single isn't: what the row asks for is the
+  // attempt, not a commitment or a pace (see AttemptPrompt).
+  const ready = isReadyToAttempt(goal)
   // Within reach but not yet committed: the row lights up and offers a lock-in,
-  // rather than freezing the projection on its own.
-  const lockable = !lock && !reached && withinHorizon(proj)
+  // rather than freezing the projection on its own. A goal already at its target
+  // has nothing left to commit to.
+  const lockable = !lock && !reached && !ready && withinHorizon(proj)
   // A lock froze the target it committed to. Bench/squat targets track bodyweight,
   // so the live one can drift away from it — show the number the pace reading is
   // actually measured against, or the two would contradict each other. A reached
@@ -436,7 +525,7 @@ function GoalRow({
     lock && has && !reached && lastReadingDate
       ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek)
       : null
-  const ring = grouped ? '' : goalRing(lockable, !!lock && !reached, reached)
+  const ring = grouped ? '' : goalRing(lockable, !!lock && !reached, reached, ready)
 
   return (
     <div className={`rounded-2xl bg-surface p-4 ${ring}`}>
@@ -471,6 +560,8 @@ function GoalRow({
           {doneDate && <span className="tabular-nums"> · {fmtDate(doneDate)}</span>}
           {scheduleNote && ` · ${scheduleNote}`}
         </p>
+      ) : ready && goal.exerciseKey ? (
+        <AttemptPrompt goal={goal} exerciseKey={goal.exerciseKey} onLog={onLogAttempt} />
       ) : lock ? (
         <>
           {/* The row with its own chart puts both ETAs on it; a row charted above
@@ -606,7 +697,16 @@ function SixPackRow({
 }
 
 export function GoalsPanel({ months }: { months: number | null }) {
-  const { workouts, bodyWeights, measurements, flexEntries, settings, calorieEntries, updateSettings } = useData()
+  const {
+    workouts,
+    bodyWeights,
+    measurements,
+    flexEntries,
+    settings,
+    calorieEntries,
+    updateSettings,
+    logMaxAttempt,
+  } = useData()
   const heightIn = settings.heightIn ?? 0
 
   const goals = useMemo(
@@ -711,6 +811,9 @@ export function GoalsPanel({ months }: { months: number | null }) {
       months={months}
       onRecalculate={() => recalculate(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
+      onLogAttempt={(weightLbs) => {
+        if (g.exerciseKey) void logMaxAttempt(g.exerciseKey, weightLbs)
+      }}
       showData={g.exerciseKey != null || g.milestone}
       chartedAbove={inBlock}
       grouped={inBlock}
@@ -801,7 +904,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
   // Within reach and waiting on a commitment — the lit-up ask the row offers
   // (see LockInPrompt). Same test the bright ring uses.
   const isLockable = (g: GoalSpec): boolean => {
-    if (locked[g.id] || isReached(g)) return false
+    if (locked[g.id] || isReached(g) || isReadyToAttempt(g)) return false
     const proj = projections.get(g.id)
     return proj != null && withinHorizon(proj)
   }
@@ -852,6 +955,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           eta: null,
           projEta: null,
           lockable: false,
+          ready: false,
           family: goalFamily(g),
           last: true,
           node: (
@@ -880,6 +984,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           eta: soonest(open.map(committedEta)),
           projEta: soonest(open.map(projectedEta)),
           lockable: open.some(isLockable),
+          ready: open.some(isReadyToAttempt),
           family: goalFamily(g),
           node: block.node,
         })
@@ -892,6 +997,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           eta: null,
           projEta: null,
           lockable: false,
+          ready: false,
           family: goalFamily(g),
           node: goalRow(g),
         })
@@ -902,6 +1008,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
           eta: committedEta(g),
           projEta: projectedEta(g),
           lockable: isLockable(g),
+          ready: isReadyToAttempt(g),
           family: goalFamily(g),
           node: goalRow(g),
         })

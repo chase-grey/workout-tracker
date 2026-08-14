@@ -58,8 +58,8 @@ describe('photoReminder', () => {
       lastPhoto: '2026-07-01',
       bodyWeights: [],
       workouts: [
-        row('2026-06-20', 'barbell_squat', 185, 5),
-        row('2026-07-10', 'barbell_squat', 265, 5),
+        row('2026-06-20', 'leg_press', 185, 5),
+        row('2026-07-10', 'leg_press', 265, 5),
         row('2026-06-20', 'calf_raise', 90, 12),
         row('2026-07-10', 'calf_raise', 140, 12),
       ],
@@ -112,7 +112,7 @@ describe('photoReminder', () => {
       pull: {
         ...DEFAULT_PLAN.pull,
         exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
-          e.key === 'barbell_squat' ? { ...e, group: 'compound' } : e,
+          e.key === 'leg_press' ? { ...e, group: 'compound' } : e,
         ),
       },
     }
@@ -120,8 +120,8 @@ describe('photoReminder', () => {
       lastPhoto: '2026-07-01',
       bodyWeights: [],
       workouts: [
-        row('2026-06-20', 'barbell_squat', 185, 5),
-        row('2026-07-10', 'barbell_squat', 265, 5),
+        row('2026-06-20', 'leg_press', 185, 5),
+        row('2026-07-10', 'leg_press', 265, 5),
       ],
       plan,
       today: TODAY,

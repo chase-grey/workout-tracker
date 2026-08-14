@@ -440,3 +440,30 @@ describe('legsVsUpper', () => {
     expect(legsVsUpper(withNeck)!.legs).toBeGreaterThan(0.7) // an advanced calf raise
   })
 })
+
+describe('the leg press is ranked as the squat it implies', () => {
+  it('scores a press against the squat table through the conversion', () => {
+    // 600 pressed reads as 270 squatted, which at 180 lb bodyweight is a 1.5×
+    // squat — the Intermediate anchor. Scored raw it would read Elite.
+    const scores = muscleDevelopment(logs({ leg_press: 600 }), BW)
+    const quads = scores.quads
+    expect(quads.hasData).toBe(true)
+    if (!quads.hasData) return
+    expect(quads.basis).toBe('standard')
+    expect(quads.band).toBe('intermediate')
+    // It carries the glutes too, the way the squat did — nothing else in the plan
+    // scores them.
+    expect(scores.glutes).toEqual(quads)
+  })
+
+  it('reports the converted load on the squat row of the readout', () => {
+    const [row] = liftReadouts(logs({ leg_press: 600 }), BW)
+    expect(row.lift).toBe('squat')
+    expect(row.load).toBe(270)
+  })
+
+  it('takes the better of a real squat and a converted press', () => {
+    const rows = liftReadouts(logs({ leg_press: 600, barbell_squat: 300 }), BW)
+    expect(rows.find((r) => r.lift === 'squat')!.load).toBe(300)
+  })
+})

@@ -276,9 +276,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     [target, workouts, planned.key, planned.repMin, slot],
   )
 
-  // The nudge from a locked goal riding on this lift: the weight to hit at the
-  // reps you're about to do so this set lands on the goal's line. Only surfaced
-  // when you're not already ahead of it — hitting a lower number isn't the ask.
+  // The nudge from a goal riding on this lift: the weight to hit at the reps
+  // you're about to do so this set lands on the goal's line. Only surfaced when
+  // you're not already ahead of it — hitting a lower number isn't the ask — with
+  // the exception of a goal waiting on a single, which is surfaced precisely
+  // because the readings are already there (see goalCue's `ready`).
   const goalCue = useMemo(() => {
     const goals = buildGoals({ workouts, bodyWeights, measurements, heightIn: settings.heightIn ?? 0 })
     const reps = target?.reps ?? planned.repMin
@@ -610,10 +612,18 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               <MdShowChart aria-hidden />
             </button>
           </div>
-          {goalCue && goalCue.standing !== 'ahead' && (
-            <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-accent-2">
+          {/* A goal that's ready shows through even when the reading is past the
+              line — being ahead is exactly what makes the attempt the ask. */}
+          {goalCue && (goalCue.ready || goalCue.standing !== 'ahead') && (
+            <p
+              className={`flex items-center justify-center gap-1.5 text-xs font-medium ${
+                goalCue.ready ? 'text-accent-bright' : 'text-accent-2'
+              }`}
+            >
               <MdFlag aria-hidden />
-              {goalCue.goalTitle}: {goalCue.weightLbs} × {goalCue.reps}
+              {goalCue.goalTitle}
+              {goalCue.ready ? ' — ready: ' : ': '}
+              {goalCue.weightLbs} × {goalCue.reps}
             </p>
           )}
           <div className="flex items-end justify-center gap-3">

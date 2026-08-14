@@ -19,6 +19,12 @@ export type GoalUnit = {
   projEta: string | null
   /** Being asked to commit — the band just under the committed ones. */
   lockable: boolean
+  /**
+   * One single away from being finished (see goals.isReadyToAttempt) — the band
+   * directly under the reached ones, since it's the only thing in the panel that
+   * could be crossed off today.
+   */
+  ready?: boolean
   /** The family it clusters with inside a dated band. */
   family: string
   /** Sits at the back of whatever band it's in (the six-pack). */
@@ -27,11 +33,14 @@ export type GoalUnit = {
 
 /**
  * Which band a unit is in. This is the first-order rank, and it's about
- * standing, not dates: reached first, then committed, then the ones being asked
- * to commit, then everything else, with the six-pack last.
+ * standing, not dates: reached first, then the ones waiting on an attempt, then
+ * committed, then the ones being asked to commit, then everything else, with the
+ * six-pack last.
  */
 function band(u: GoalUnit): number {
-  return u.done ? 0 : u.eta ? 1 : u.lockable ? 2 : u.last ? 4 : 3
+  if (u.done) return 0
+  if (u.ready) return 1
+  return u.eta ? 2 : u.lockable ? 3 : u.last ? 5 : 4
 }
 
 /**

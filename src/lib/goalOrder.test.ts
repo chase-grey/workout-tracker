@@ -113,3 +113,25 @@ describe('the bands below reached', () => {
     ).toEqual(['squat-1x', 'squat-1.5x'])
   })
 })
+
+describe('the ready-to-attempt band', () => {
+  it('sits under the finished goals and above every committed one', () => {
+    expect(
+      order([
+        unit('committed', { eta: '2026-03-01' }),
+        unit('ready', { ready: true, projEta: '2026-09-01' }),
+        reached('done', '2026-02-20'),
+        unit('lockable', { lockable: true, projEta: '2026-02-25' }),
+      ]),
+    ).toEqual(['done', 'ready', 'committed', 'lockable'])
+  })
+
+  it('ranks two ready goals by the date they are headed for', () => {
+    expect(
+      order([
+        unit('later', { ready: true, projEta: '2026-06-01', family: 'lift:a' }),
+        unit('sooner', { ready: true, projEta: '2026-03-01', family: 'lift:b' }),
+      ]),
+    ).toEqual(['sooner', 'later'])
+  })
+})

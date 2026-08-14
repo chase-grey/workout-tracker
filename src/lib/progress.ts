@@ -172,15 +172,57 @@ export function sustainedRepsSeries(rows: WorkoutRow[], exerciseKey: string, set
  *
  * Sessions with no weight recorded at all are left out rather than scored zero — a
  * blank isn't a collapse, and a zero on a strength line reads as one.
+ *
+ * `scale` lets the keys read in a common unit when they don't share one: the squat
+ * goals are measured in squat pounds and trained on the leg press, so the press's
+ * readings enter the series multiplied by what they imply about a squat (see
+ * liftRatios.LEG_PRESS_TO_SQUAT). A key the map doesn't mention counts as itself.
  */
-export function combinedBest1RMSeries(rows: WorkoutRow[], keys: Iterable<string>): Point[] {
+export function combinedBest1RMSeries(
+  rows: WorkoutRow[],
+  keys: Iterable<string>,
+  scale: Record<string, number> = {},
+): Point[] {
   const wanted = new Set(keys)
   const bySession = new Map<string, { date: string; best: number }>()
   for (const r of rows) {
     if (!wanted.has(r.exercise) || r.weight_lbs == null) continue
     const key = r.session_id || r.date
     const g = bySession.get(key) ?? { date: r.date, best: 0 }
-    g.best = Math.max(g.best, epley1RM(r.weight_lbs, r.reps))
+    g.best = Math.max(g.best, epley1RM(r.weight_lbs, r.reps) * (scale[r.exercise] ?? 1))
+    bySession.set(key, g)
+  }
+  return [...bySession.values()]
+    .map((g) => ({ date: g.date, value: Math.round(g.best * 10) / 10 }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
+ * One point per session for the heaviest genuine SINGLE across several exercise
+ * keys — a set logged at one rep, which is a one-rep max as performed rather than
+ * one estimated off a set of eight.
+ *
+ * The weight itself is the reading, not its Epley e1RM: a single at 300 is a 300 lb
+ * max, where running it through the formula would claim 310 for a rep that wasn't
+ * done. That's the point of this series — it's the one the strength goals are
+ * actually settled on (see goals.GoalSpec's `singles`), so it may not credit an
+ * ounce more than was lifted.
+ *
+ * `scale` works exactly as it does in {@link combinedBest1RMSeries}: a leg-press
+ * single enters a squat goal's series as the squat it implies.
+ */
+export function bestSingleSeries(
+  rows: WorkoutRow[],
+  keys: Iterable<string>,
+  scale: Record<string, number> = {},
+): Point[] {
+  const wanted = new Set(keys)
+  const bySession = new Map<string, { date: string; best: number }>()
+  for (const r of rows) {
+    if (!wanted.has(r.exercise) || r.weight_lbs == null || r.reps !== 1) continue
+    const key = r.session_id || r.date
+    const g = bySession.get(key) ?? { date: r.date, best: 0 }
+    g.best = Math.max(g.best, r.weight_lbs * (scale[r.exercise] ?? 1))
     bySession.set(key, g)
   }
   return [...bySession.values()]

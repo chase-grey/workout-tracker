@@ -7,7 +7,8 @@ import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
 import { sessionToRows, trainingDates } from '../lib/session'
-import { DEAD_BUG } from '../config/plan'
+import { DAY_TYPES, DEAD_BUG } from '../config/plan'
+import { maxAttemptRow } from '../lib/maxAttempt'
 import { toISODate, weekStartISO } from '../lib/dates'
 import { withPlanDefaults, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
@@ -143,6 +144,8 @@ type DataContextValue = {
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   logExerciseTimes: (samples: SessionTimeSamples) => Promise<void>
   logCore: (reps: number[]) => Promise<void>
+  /** A single at `weightLbs` on `exerciseKey`, the way a strength goal is settled. */
+  logMaxAttempt: (exerciseKey: string, weightLbs: number) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
@@ -761,6 +764,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, flush, persistWorkouts],
   )
 
+  // Logs a one-rep max attempt as a workout row of its own: a real set on a real
+  // lift, so it lands in that lift's history and PRs rather than in a private
+  // ledger the charts can't see. It's what settles a strength goal (see
+  // goals.GoalSpec's `singles`), and the goal row it was logged from turns over to
+  // "goal reached!" as soon as this lands, which is feedback enough — hence no
+  // toast. The day type is the day the lift is programmed on, cosmetically: one
+  // single isn't a session, and the week's count leaves it out (see
+  // session.trainingSessions).
+  const logMaxAttempt = useCallback(
+    async (exerciseKey: string, weightLbs: number) => {
+      if (!(weightLbs > 0)) return
+      const day = DAY_TYPES.find((t) => plan[t].exercises.some((e) => e.key === exerciseKey))
+      const row = maxAttemptRow({
+        sessionId: uuid(),
+        date: toISODate(new Date()),
+        dayType: day ?? 'fullbody',
+        exercise: exerciseKey,
+        weightLbs,
+      })
+      persistWorkouts([...storage.loadWorkouts(), row])
+      enqueue({ type: 'session', rows: [row] })
+      await flush()
+    },
+    [enqueue, flush, persistWorkouts, plan],
+  )
+
   const logProgressPhoto = useCallback(() => {
     persistSettings({ ...storage.loadSettings(), lastProgressPhoto: toISODate(new Date()) })
   }, [persistSettings])
@@ -849,6 +878,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logSessionDuration,
     logExerciseTimes,
     logCore,
+    logMaxAttempt,
     logProgressPhoto,
     importData,
     updateSettings,

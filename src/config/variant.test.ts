@@ -94,10 +94,10 @@ describe('the push + core day', () => {
 })
 
 describe('the pull + legs day', () => {
-  it('runs the hanging raise straight off the pull-up bar, still after squats', () => {
+  it('runs the hanging raise straight off the pull-up bar, still after the leg press', () => {
     const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
     expect(keys.indexOf('hanging_leg_raise')).toBe(keys.indexOf('weighted_pullups') + 1)
-    expect(keys.indexOf('barbell_squat')).toBeLessThan(keys.indexOf('hanging_leg_raise'))
+    expect(keys.indexOf('leg_press')).toBeLessThan(keys.indexOf('hanging_leg_raise'))
   })
 
   it('does less core than a push day, keeping weekly volume in range', () => {
@@ -106,7 +106,7 @@ describe('the pull + legs day', () => {
     expect(pull!.sets).toBeLessThan(sets('A', 'hanging_leg_raise')!)
   })
 
-  it('trains calves directly, since squats never take them through range', () => {
+  it('trains calves directly, since pressing never takes them through range', () => {
     expect(DEFAULT_PLAN.pull.exercises.map((e) => e.key)).toContain('calf_raise')
   })
 
@@ -120,9 +120,9 @@ describe('the pull + legs day', () => {
 })
 
 describe('the full body day', () => {
-  it('covers squat, press, pull and overhead press', () => {
+  it('covers legs, press, pull and overhead press', () => {
     const keys = DEFAULT_PLAN.fullbody.exercises.map((e) => e.key)
-    for (const key of ['barbell_squat', 'flat_bench', 'weighted_pullups', 'db_overhead_press']) {
+    for (const key of ['leg_press', 'flat_bench', 'weighted_pullups', 'db_overhead_press']) {
       expect(keys).toContain(key)
     }
   })

@@ -11,11 +11,13 @@
 
 import type { BodyWeightEntry, WorkoutRow } from '../types'
 import {
+  bestSingleSeries,
   combinedBest1RMSeries,
-  exerciseSeries,
   sustainedRepsSeries,
   type Point,
 } from './progress'
+import { LEG_PRESS_TO_SQUAT } from './liftRatios'
+import { isMaxAttempt } from './maxAttempt'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
@@ -125,6 +127,34 @@ export const BENCH_GAIN_CAP = 3
 export const BENCH_KEY = 'flat_bench'
 export const BENCH_ALSO_KEYS = ['incline_bench']
 
+/**
+ * The lift the squat goals are trained and cued on, and the retired lift they're
+ * still named for.
+ *
+ * "Squat my bodyweight" is a squat goal trained on a leg press, because a leg press
+ * is what the gym has: the plan swapped the barbell squat out (see PLAN_REVISION
+ * 7). Dropping the goals along with the rack would have thrown away the thing being
+ * chased, so instead the press's readings are converted into the squat they imply
+ * (see {@link SQUAT_SCALE}) and the goals go on being counted in squat pounds.
+ *
+ * The barbell squat still counts at face value, so the history from when there was
+ * a rack stays in the series — and a squat done wherever one turns up lands there
+ * too, at full weight rather than through a conversion.
+ */
+export const LEG_PRESS_KEY = 'leg_press'
+export const BARBELL_SQUAT_KEY = 'barbell_squat'
+export const SQUAT_ALSO_KEYS = [BARBELL_SQUAT_KEY]
+
+/**
+ * What each of the squat goals' lifts is worth in squat pounds — the language
+ * their target (a multiple of bodyweight, squatted) is written in. See
+ * liftRatios.LEG_PRESS_TO_SQUAT for why the press converts at less than half.
+ */
+export const SQUAT_SCALE: Record<string, number> = {
+  [LEG_PRESS_KEY]: LEG_PRESS_TO_SQUAT,
+  [BARBELL_SQUAT_KEY]: 1,
+}
+
 /** The exercise the pull-up ladder is measured on. */
 export const PULLUP_KEY = 'weighted_pullups'
 
@@ -177,6 +207,31 @@ export type GoalSpec = {
    * single lift still has one.
    */
   alsoCounts?: string[]
+  /**
+   * What each counted lift is worth in the goal's own unit, when they don't all
+   * read in it directly — the squat goals count a leg press at a fraction of its
+   * weight (see {@link SQUAT_SCALE}). A lift the map doesn't mention counts as
+   * itself. The in-session cue reads it backwards, to turn the weight the line
+   * asks for into a weight to actually load (see goalCue).
+   */
+  scaleByKey?: Record<string, number>
+  /**
+   * Every real single logged on the counted lifts, in the goal's unit — set on the
+   * goals that a single is what settles (see {@link isReached}).
+   *
+   * An estimated 1RM says a lift is *in* you, off a set of six or eight and a
+   * formula. That's the right thing to track pace against and the wrong thing to
+   * hand the goal over for: nobody has squatted their bodyweight because Epley
+   * says they could. So a goal with this set has two states where it used to have
+   * one — ready to try it once the estimate arrives (see
+   * {@link isReadyToAttempt}), and reached once a single at the weight is in the
+   * log.
+   *
+   * Left off the goals where the reading already is the achievement: bodyweight is
+   * a weigh-in, a split is measured on the floor, and the pull-up ladder's rungs
+   * are reps that were actually performed.
+   */
+  singles?: Point[]
   /**
    * What an exercise-driven goal's series counts, for the caller that has to
    * know which language it's in: the in-session cue turns the e1RM its locked
@@ -253,20 +308,78 @@ function trainingAgeWeeks(points: Point[]): number {
 }
 
 /**
- * Whether the goal's target has been met. A milestone is judged on the best
- * reading ever taken and stays reached once hit (see GoalSpec.milestone); every
- * other goal is judged on the latest value, so a bodyweight that touched 180 and
- * slid back isn't at 180 now.
+ * The series a goal's target is settled on. For most goals that's the series
+ * they're tracked by; for one a real single has to close, it's the singles (see
+ * GoalSpec.singles) — the estimate is what says you're ready, not what says you
+ * did it.
+ */
+function judgedPoints(goal: GoalSpec): Point[] {
+  return goal.singles ?? goal.points
+}
+
+/** Whether a reading meets the target, whichever way the goal moves. */
+function meetsTarget(goal: GoalSpec, value: number): boolean {
+  return goal.direction === 'up' ? value >= goal.target : value <= goal.target
+}
+
+/**
+ * Whether the goal is judged on the best reading it ever took rather than the
+ * latest one — a milestone by declaration (see GoalSpec.milestone), and a goal
+ * settled by a single because a single that was lifted stays lifted.
+ *
+ * A goal whose target itself moves can still come back open: a single at 175 was
+ * bodyweight when it was lifted and isn't once bodyweight is 185, so "squat my
+ * bodyweight" asks again. That's the target moving, not the lift being taken away.
+ */
+function staysEarned(goal: GoalSpec): boolean {
+  return goal.milestone === true || goal.singles != null
+}
+
+/**
+ * Whether the goal's target has been met. A goal that stays earned is judged on
+ * the best reading ever taken (see {@link staysEarned}); every other goal is judged
+ * on the latest value, so a bodyweight that touched 180 and slid back isn't at 180
+ * now.
  */
 export function isReached(goal: GoalSpec): boolean {
-  if (goal.points.length === 0) return false
-  const values = goal.points.map((p) => p.value)
-  const measured = goal.milestone
+  const points = judgedPoints(goal)
+  if (points.length === 0) return false
+  const values = points.map((p) => p.value)
+  const measured = staysEarned(goal)
     ? goal.direction === 'up'
       ? Math.max(...values)
       : Math.min(...values)
     : values[values.length - 1]
-  return goal.direction === 'up' ? measured >= goal.target : measured <= goal.target
+  return meetsTarget(goal, measured)
+}
+
+/**
+ * Whether the goal is one attempt away: the readings say the target is in you, and
+ * no single at that weight is in the log yet (see GoalSpec.singles).
+ *
+ * This is the state that replaced "reached" for the lift goals. It's deliberately
+ * read off the same rule {@link isReached} used to apply to them — the latest
+ * estimate meeting the target — so the day the app would once have called the goal
+ * done is the day it now says go and earn it.
+ */
+export function isReadyToAttempt(goal: GoalSpec): boolean {
+  if (goal.singles == null || goal.points.length === 0 || isReached(goal)) return false
+  return meetsTarget(goal, goal.points[goal.points.length - 1].value)
+}
+
+/**
+ * The weight to load on `key` for a single that would settle the goal, rounded up
+ * to a whole 5 lbs — the plates or the pin, not the squat the goal is written in.
+ * A lift the goal counts at a fraction of its weight therefore asks for more of it
+ * than the target says (see GoalSpec.scaleByKey).
+ *
+ * Rounded up rather than to nearest, and up to something loadable rather than to
+ * the pound: an attempt at what the goal asks for has to clear it, and no machine
+ * or bar is set to 383.
+ */
+export function attemptWeight(goal: GoalSpec, key: string): number {
+  const scale = goal.scaleByKey?.[key] ?? 1
+  return Math.ceil(goal.target / scale / 5) * 5
 }
 
 /**
@@ -281,7 +394,7 @@ export function reachedDate(goal: GoalSpec): string | null {
 }
 
 function reachedPoint(goal: GoalSpec): Point | undefined {
-  return goal.points.find((p) => (goal.direction === 'up' ? p.value >= goal.target : p.value <= goal.target))
+  return judgedPoints(goal).find((p) => meetsTarget(goal, p.value))
 }
 
 /** A goal that landed, and the day it landed on. */
@@ -306,9 +419,9 @@ export type GoalHit = { goal: GoalSpec; date: string }
  * it holds.
  */
 function heldSinceDate(goal: GoalSpec): string | null {
-  const meets = (p: Point) => (goal.direction === 'up' ? p.value >= goal.target : p.value <= goal.target)
+  const points = judgedPoints(goal)
   let start: string | null = null
-  for (let i = goal.points.length - 1; i >= 0 && meets(goal.points[i]); i--) start = goal.points[i].date
+  for (let i = points.length - 1; i >= 0 && meetsTarget(goal, points[i].value); i--) start = points[i].date
   return start
 }
 
@@ -324,11 +437,12 @@ function heldSinceDate(goal: GoalSpec): string | null {
  * milestone goals — the ladders — stay earned by their own rule, so they stay
  * listed for the rest of the week however the next session read.
  *
- * Which day a goal landed on follows the same split. A milestone is earned once
- * and keeps that date ({@link reachedDate}); every other goal is dated by the day
- * the run it's currently on began ({@link heldSinceDate}), so a target crossed,
- * lost and crossed again is reported in the week it was won back rather than
- * being silently credited to the first time.
+ * Which day a goal landed on follows the same split. A goal that stays earned — a
+ * milestone, or one a single settled — keeps the date it was earned on
+ * ({@link reachedDate}); every other goal is dated by the day the run it's
+ * currently on began ({@link heldSinceDate}), so a target crossed, lost and crossed
+ * again is reported in the week it was won back rather than being silently credited
+ * to the first time.
  *
  * The six-pack goal is left out: it's called by eye rather than read off the
  * body-fat estimate (see the Goals panel's SixPackRow), so the day a tape
@@ -340,7 +454,7 @@ export function goalsHitInWeek(goals: GoalSpec[], today: Date = new Date()): Goa
   const hits: GoalHit[] = []
   for (const goal of goals) {
     if (goal.id === GOAL_IDS.sixPack || !isReached(goal)) continue
-    const date = goal.milestone ? reachedDate(goal) : heldSinceDate(goal)
+    const date = staysEarned(goal) ? reachedDate(goal) : heldSinceDate(goal)
     if (date && weekStartISO(date) === week) hits.push({ goal, date })
   }
   return hits.sort((a, b) => a.date.localeCompare(b.date))
@@ -414,8 +528,20 @@ export function buildGoals({
   const bwPoints = bodyWeightPoints(bodyWeights)
   const currentBw = bwPoints.length ? bwPoints[bwPoints.length - 1].value : 0
 
-  const benchPoints = combinedBest1RMSeries(workouts, [BENCH_KEY, ...BENCH_ALSO_KEYS])
-  const squatPoints = exerciseSeries(workouts, 'barbell_squat', '1rm')
+  // The estimate series read off working sets only. A max attempt is a measurement
+  // rather than an estimate, and it has its own series — left in this one, a missed
+  // single would come through as the lift getting weaker, dropping a goal out of
+  // "ready to try it" for having tried it.
+  const working = workouts.filter((r) => !isMaxAttempt(r))
+
+  const benchKeys = [BENCH_KEY, ...BENCH_ALSO_KEYS]
+  const benchPoints = combinedBest1RMSeries(working, benchKeys)
+  const benchSingles = bestSingleSeries(workouts, benchKeys)
+  // The squat goals, in squat pounds, off whichever leg movement was trained —
+  // the press converted, a barbell squat at face value (see SQUAT_SCALE).
+  const squatKeys = [LEG_PRESS_KEY, ...SQUAT_ALSO_KEYS]
+  const squatPoints = combinedBest1RMSeries(working, squatKeys, SQUAT_SCALE)
+  const squatSingles = bestSingleSeries(workouts, squatKeys, SQUAT_SCALE)
   const bfPoints = bodyFatSeries(measurements, heightIn)
   const { target: bfTarget } = personalSixPackTarget(measurements, heightIn)
 
@@ -507,6 +633,7 @@ export function buildGoals({
       exerciseKey: BENCH_KEY,
       alsoCounts: BENCH_ALSO_KEYS,
       points: benchPoints,
+      singles: benchSingles,
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
@@ -517,8 +644,11 @@ export function buildGoals({
       id: GOAL_IDS.squatBodyweight,
       title: 'squat my bodyweight',
       unit: 'lbs',
-      exerciseKey: 'barbell_squat',
+      exerciseKey: LEG_PRESS_KEY,
+      alsoCounts: SQUAT_ALSO_KEYS,
+      scaleByKey: SQUAT_SCALE,
       points: squatPoints,
+      singles: squatSingles,
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
@@ -529,8 +659,11 @@ export function buildGoals({
       id: GOAL_IDS.squatOneAndAHalf,
       title: 'squat 1.5× bodyweight',
       unit: 'lbs',
-      exerciseKey: 'barbell_squat',
+      exerciseKey: LEG_PRESS_KEY,
+      alsoCounts: SQUAT_ALSO_KEYS,
+      scaleByKey: SQUAT_SCALE,
       points: squatPoints,
+      singles: squatSingles,
       target: bwTarget(1.5),
       direction: 'up',
       movingTarget: true,

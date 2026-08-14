@@ -1,5 +1,6 @@
 import type { DayType, WorkoutRow, WorkoutSession } from '../types'
 import { DEAD_BUG } from '../config/plan'
+import { isMaxAttempt } from './maxAttempt'
 
 /**
  * Exercise keys that are supplemental core work (dead bugs, now folded into the
@@ -15,14 +16,20 @@ export type TrainingSession = { sessionId: string; date: string; dayType: DayTyp
 
 /**
  * One entry per distinct workout session that counts as training — i.e. sessions
- * with at least one non-supplemental exercise — keeping each session's first-seen
- * date and day type. Rows without a session_id are ignored.
+ * with at least one set that was neither supplemental nor a lone max attempt —
+ * keeping each session's first-seen date and day type. Rows without a session_id
+ * are ignored.
+ *
+ * A max attempt logged on its own is one rep (see maxAttempt): worth logging, and
+ * not a workout. Walking in to take a single and walking out shouldn't bank a day
+ * against the week's goal or hold the streak up. An attempt taken at the end of a
+ * real session is carried by that session's other sets, which is right.
  */
 export function trainingSessions(rows: WorkoutRow[]): TrainingSession[] {
   const meta = new Map<string, { date: string; dayType: DayType; real: boolean }>()
   for (const r of rows) {
     if (!r.session_id) continue
-    const isReal = !SUPPLEMENTAL_EXERCISE_KEYS.has(r.exercise)
+    const isReal = !SUPPLEMENTAL_EXERCISE_KEYS.has(r.exercise) && !isMaxAttempt(r)
     const prev = meta.get(r.session_id)
     if (!prev) meta.set(r.session_id, { date: r.date, dayType: r.day_type, real: isReal })
     else if (isReal) prev.real = true

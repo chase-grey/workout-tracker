@@ -396,7 +396,7 @@ export function MuscleAvatar() {
                 </ul>
               ) : (
                 <p className="text-sm text-neutral-500">
-                  log a weighted lift (squat, bench, press) to see my strength level.
+                  log a weighted lift (leg press, bench, press) to see my strength level.
                 </p>
               )}
 

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
+  attemptWeight,
+  BARBELL_SQUAT_KEY,
   BENCH_GAIN_CAP,
   BODYWEIGHT_GAIN_CAP,
   buildGoals,
@@ -8,6 +10,8 @@ import {
   type GoalSpec,
   goalsHitInWeek,
   isReached,
+  isReadyToAttempt,
+  LEG_PRESS_KEY,
   projectGoal,
   PULLUP_GAIN_CAP,
   PULLUP_GOAL_REPS,
@@ -17,6 +21,8 @@ import {
   SQUAT_GAIN_CAP,
   STRENGTH_GAIN_DECAY,
 } from './goals'
+import { LEG_PRESS_TO_SQUAT } from './liftRatios'
+import { MAX_ATTEMPT_NOTE } from './maxAttempt'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import type { FlexEntry } from './flex'
 import type { WorkoutRow } from '../types'
@@ -668,11 +674,147 @@ describe('the bench goal reads both presses', () => {
     expect(goal.alsoCounts).toEqual(['incline_bench'])
   })
 
-  it('leaves the squat goals reading squat alone', () => {
+  it('counts the squat goals on the leg press, with the barbell squat alongside', () => {
     const rows = [press('a', '2026-08-08', 'barbell_squat', 225, 5)]
     const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), workouts: rows })
     for (const id of [GOAL_IDS.squatBodyweight, GOAL_IDS.squatOneAndAHalf]) {
-      expect(goals.find((g) => g.id === id)!.alsoCounts).toBeUndefined()
+      const goal = goals.find((g) => g.id === id)!
+      expect(goal.exerciseKey).toBe(LEG_PRESS_KEY)
+      expect(goal.alsoCounts).toEqual([BARBELL_SQUAT_KEY])
     }
+  })
+})
+
+describe('the squat goals, trained on a leg press', () => {
+  const leg = (
+    date: string,
+    exercise: string,
+    weight: number,
+    reps: number,
+    notes = '',
+  ): WorkoutRow => ({
+    session_id: `${date}:${exercise}:${reps}`,
+    date,
+    day_type: 'pull',
+    exercise,
+    set_number: 1,
+    weight_lbs: weight,
+    reps,
+    notes,
+    is_historical: false,
+  })
+
+  /** Bodyweight ends at 170, so "squat my bodyweight" wants 170 squat pounds. */
+  const squatGoal = (workouts: WorkoutRow[], id: string = GOAL_IDS.squatBodyweight) =>
+    buildGoals({ ...inputs(HOT_FORTNIGHT), workouts }).find((g) => g.id === id)!
+
+  // 320×6 presses an estimated 384 lbs, which at the conversion is 172.8 squat
+  // pounds — over bodyweight, so the goal is ready to be attempted.
+  const READY = [leg('2026-08-08', 'leg_press', 320, 6)]
+
+  it('converts a leg press into the squat it implies', () => {
+    const goal = squatGoal(READY)
+    expect(goal.scaleByKey).toEqual({ leg_press: LEG_PRESS_TO_SQUAT, barbell_squat: 1 })
+    expect(goal.points).toEqual([{ date: '2026-08-08', value: 172.8 }])
+  })
+
+  it('still counts a barbell squat at face value', () => {
+    const goal = squatGoal([leg('2026-08-08', 'barbell_squat', 225, 5)])
+    expect(goal.points).toEqual([{ date: '2026-08-08', value: 262.5 }]) // 225×5, unconverted
+  })
+
+  it('takes the better of the two when a session held both', () => {
+    const rows = [
+      leg('2026-08-08', 'leg_press', 320, 6), // 172.8 converted
+      { ...leg('2026-08-08', 'barbell_squat', 185, 5), session_id: '2026-08-08:leg_press:6' },
+    ]
+    expect(squatGoal(rows).points).toEqual([{ date: '2026-08-08', value: 215.8 }]) // the squat
+  })
+
+  it('does not hand the goal over on the estimate alone', () => {
+    const goal = squatGoal(READY)
+    expect(isReached(goal)).toBe(false)
+    expect(isReadyToAttempt(goal)).toBe(true)
+    expect(reachedDate(goal)).toBeNull()
+  })
+
+  it('asks for the weight on the machine, not the squat it stands for', () => {
+    // 170 squat pounds ÷ 0.45 is 377.8 on the press, rounded up to a loadable 380.
+    expect(attemptWeight(squatGoal(READY), LEG_PRESS_KEY)).toBe(380)
+    // A barbell squat would just be the target, rounded the same way.
+    expect(attemptWeight(squatGoal(READY), BARBELL_SQUAT_KEY)).toBe(170)
+  })
+
+  it('is reached by a single that clears it, dated the day it was lifted', () => {
+    const goal = squatGoal([...READY, leg('2026-08-15', 'leg_press', 380, 1, MAX_ATTEMPT_NOTE)])
+    expect(isReached(goal)).toBe(true)
+    expect(isReadyToAttempt(goal)).toBe(false)
+    expect(reachedDate(goal)).toBe('2026-08-15')
+  })
+
+  it('stays open on a single that missed, and stays ready', () => {
+    const goal = squatGoal([...READY, leg('2026-08-15', 'leg_press', 350, 1, MAX_ATTEMPT_NOTE)])
+    expect(isReached(goal)).toBe(false)
+    // The miss doesn't read as the lift getting weaker: the estimate series is
+    // working sets only, so it still says the attempt is on.
+    expect(goal.points).toEqual([{ date: '2026-08-08', value: 172.8 }])
+    expect(isReadyToAttempt(goal)).toBe(true)
+  })
+
+  it('credits the single at one rep, not at what Epley would make of it', () => {
+    // A single at 380 is a 380 lb press — 171 squat pounds — where the formula
+    // would claim 392.7 for a rep that wasn't performed.
+    const goal = squatGoal([leg('2026-08-15', 'leg_press', 380, 1, MAX_ATTEMPT_NOTE)])
+    expect(goal.singles).toEqual([{ date: '2026-08-15', value: 171 }])
+  })
+
+  it('lets the harder target stay open while the nearer one is settled', () => {
+    const rows = [...READY, leg('2026-08-15', 'leg_press', 380, 1, MAX_ATTEMPT_NOTE)]
+    expect(isReached(squatGoal(rows, GOAL_IDS.squatOneAndAHalf))).toBe(false)
+    expect(isReached(squatGoal(rows, GOAL_IDS.squatBodyweight))).toBe(true)
+  })
+
+  it('counts a single lifted for real in the middle of a session', () => {
+    // Nothing about the goal prompt is what makes a single count — the reps are.
+    const goal = squatGoal([...READY, leg('2026-08-15', 'leg_press', 380, 1)])
+    expect(isReached(goal)).toBe(true)
+  })
+
+  it('keeps a landed goal landed when a later session comes in lighter', () => {
+    const goal = squatGoal([
+      ...READY,
+      leg('2026-08-15', 'leg_press', 380, 1, MAX_ATTEMPT_NOTE),
+      leg('2026-08-22', 'leg_press', 200, 6),
+    ])
+    expect(isReached(goal)).toBe(true)
+  })
+})
+
+describe('the bench goal is settled the same way', () => {
+  const bench = (date: string, weight: number, reps: number): WorkoutRow => ({
+    session_id: date,
+    date,
+    day_type: 'push',
+    exercise: 'flat_bench',
+    set_number: 1,
+    weight_lbs: weight,
+    reps,
+    notes: '',
+    is_historical: false,
+  })
+
+  const benchGoal = (workouts: WorkoutRow[]) =>
+    buildGoals({ ...inputs(HOT_FORTNIGHT), workouts }).find(
+      (g) => g.id === GOAL_IDS.benchBodyweight,
+    )!
+
+  it('reads ready on the estimate and reached on the single', () => {
+    const ready = benchGoal([bench('2026-08-08', 150, 8)]) // 190 estimated, bodyweight is 170
+    expect(isReached(ready)).toBe(false)
+    expect(isReadyToAttempt(ready)).toBe(true)
+    expect(attemptWeight(ready, 'flat_bench')).toBe(170)
+
+    const done = benchGoal([bench('2026-08-08', 150, 8), bench('2026-08-12', 175, 1)])
+    expect(isReached(done)).toBe(true)
   })
 })

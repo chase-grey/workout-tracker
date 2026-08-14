@@ -529,3 +529,25 @@ describe('nextTargets with a shared load', () => {
     expect(t.get('tricep_pushdown')).toEqual({ weightLbs: 42.5, reps: 10 })
   })
 })
+
+describe('a max attempt is not a working set', () => {
+  const rows = [
+    row({ session_id: 'a', date: '2026-01-05', exercise: 'leg_press', weight_lbs: 300, reps: 8 }),
+    row({ session_id: 'b', date: '2026-01-08', exercise: 'leg_press', weight_lbs: 380, reps: 1 }),
+  ]
+
+  it('reads the last session that trained the range, not the single after it', () => {
+    expect(lastPerformance(rows, 'leg_press', 6)).toEqual({
+      date: '2026-01-05',
+      topWeight: 300,
+      topReps: 8,
+      sameSlot: true,
+    })
+  })
+
+  it('prescribes off those working sets rather than off the max', () => {
+    const t = nextTarget(rows, 'leg_press', { repMin: 6, repMax: 10, increment: 10, today: TODAY })
+    expect(t.weightLbs).toBe(300)
+    expect(t.reps).toBe(9)
+  })
+})

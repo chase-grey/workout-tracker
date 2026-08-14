@@ -98,3 +98,45 @@ describe('goalCueForExercise', () => {
     expect(cue!.goalTitle).toBe('squat 1.5× bodyweight')
   })
 })
+
+describe('a goal waiting on a real single', () => {
+  /** Estimate past the target (190 vs 185), nothing lifted for a single yet. */
+  const ready = (over: Partial<GoalSpec> = {}): GoalSpec =>
+    goal({ target: 185, singles: [], ...over })
+
+  it('cues the attempt itself: the weight, for one rep', () => {
+    const locked: LockedProjections = { squat_bodyweight: lock({ target: 185 }) }
+    const cue = goalCueForExercise(locked, [ready()], 'barbell_squat', 8, TODAY)
+    expect(cue!.ready).toBe(true)
+    expect(cue!.reps).toBe(1)
+    expect(cue!.weightLbs).toBe(185)
+  })
+
+  it('asks for the weight on the lift being trained, converted back', () => {
+    const press = ready({ exerciseKey: 'leg_press', scaleByKey: { leg_press: 0.45 } })
+    const cue = goalCueForExercise({}, [press], 'leg_press', 8, TODAY)
+    expect(cue!.weightLbs).toBe(415) // 185 squat pounds ÷ 0.45, up to a loadable 415
+  })
+
+  it('says so without a commitment — the target is the whole prescription', () => {
+    const cue = goalCueForExercise({}, [ready()], 'barbell_squat', 8, TODAY)
+    expect(cue!.ready).toBe(true)
+    expect(cue!.lineE1RM).toBe(185)
+  })
+
+  it('outranks a goal still being worked toward on the same lift', () => {
+    const locked: LockedProjections = {
+      squat_bodyweight: lock({ target: 185 }),
+      squat_1_5x_bodyweight: lock({ goalId: 'squat_1_5x_bodyweight', target: 195 }),
+    }
+    const open = goal({ id: 'squat_1_5x_bodyweight', title: 'squat 1.5× bodyweight', target: 195 })
+    const cue = goalCueForExercise(locked, [open, ready()], 'barbell_squat', 8, TODAY)
+    expect(cue!.goalTitle).toBe('squat my bodyweight')
+    expect(cue!.ready).toBe(true)
+  })
+
+  it('goes quiet once the single is in the log', () => {
+    const done = ready({ singles: [{ date: '2026-02-20', value: 186 }] })
+    expect(goalCueForExercise({}, [done], 'barbell_squat', 8, TODAY)).toBeNull()
+  })
+})

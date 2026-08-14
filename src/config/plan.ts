@@ -136,8 +136,13 @@ export type Plan = Record<DayType, DayPlan>
  *
  * 6 — push + core: the arm circuit rests after the lateral raises only. Both
  *     tricep stations roll straight on to the next move.
+ *
+ * 7 — pull + legs and full body: the leg press replaces the barbell squat, which
+ *     is retired — there's no squat rack to train it in anymore. The squat's
+ *     logged history stays, and still counts toward the squat goals through a
+ *     conversion (see lib/liftRatios).
  */
-export const PLAN_REVISION = 6
+export const PLAN_REVISION = 7
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -240,11 +245,17 @@ export const DEFAULT_PLAN: Plan = {
     label: 'pull + legs',
     required: false,
     exercises: [
-      { key: 'barbell_squat', name: 'barbell squat', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 5, group: 'legs' },
+      // The day's heavy leg movement. It's the leg press rather than a barbell
+      // squat because there's no rack to squat in — the press is what's actually
+      // trainable, and the squat goals read it through a conversion rather than
+      // being abandoned (see lib/liftRatios). The load steps in 10s: a sled moves
+      // in bigger jumps than a bar, and 5 lbs on a press this strong is inside
+      // the noise of how the pad was set.
+      { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
       { key: 'hamstring_curl', name: 'hamstring curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'legs' },
       { key: 'leg_adductor', name: 'leg adductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
       { key: 'leg_abductor', name: 'leg abductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
-      // Squats never take the calves through range, so they get the only direct
+      // Pressing never takes the calves through range, so they get the only direct
       // work they see all week. A hard pause at the bottom is the point — bouncing
       // the stretch turns the whole set into tendon rebound.
       { key: 'calf_raise', name: 'calf raise (paused)', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
@@ -254,7 +265,7 @@ export const DEFAULT_PLAN: Plan = {
       // Straight off the pull-up bar and into the raises — same station, nothing
       // to walk to. Three sets, not the push day's four: it takes abs to 3× a week
       // without tipping weekly volume past the point where more sets stop paying.
-      // Still after squats, so nothing pre-fatigues the core under the bar.
+      // Still after the leg press, so nothing pre-fatigues the core under the bar.
       { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: 3, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
 
       { key: 'cable_row', name: 'cable row (neutral grip)', sets: 2, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'back' },
@@ -280,7 +291,7 @@ export const DEFAULT_PLAN: Plan = {
     // little arm and core work — ~20 sets, so it runs a touch longer than a
     // push + core day rather than shorter.
     exercises: [
-      { key: 'barbell_squat', name: 'barbell squat', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'legs' },
+      { key: 'leg_press', name: 'leg press', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 10, group: 'legs' },
       { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest' },
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
       { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders' },
@@ -356,7 +367,7 @@ export function withCircuitRest(day: DayPlan, key: string, sec: number | null): 
  * All exercises across every day of the DEFAULT plan, for import matching + name
  * fallback. Dead Bug is appended even though it's no longer a plan day, so its
  * key still resolves to "Dead Bug" in charts, the AI prompt, and records. Keys
- * repeat across days (squat and bench appear on Full Body too), so the first
+ * repeat across days (leg press and bench appear on Full Body too), so the first
  * occurrence of each key wins.
  */
 export const ALL_EXERCISES: PlannedExercise[] = (() => {
@@ -416,6 +427,11 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
   // Superseded by the regular pull + legs day, which trains back properly; and
   // the both-arms lateral raise, now split into a left and a right station.
   push: ['pullups_or_pulldown', 'lateral_raise'],
+  // The barbell squat, replaced by the leg press on both leg days: there's no
+  // rack to squat in. Retiring it rather than leaving it means a device that
+  // already saved a plan doesn't end up prescribing both.
+  pull: ['barbell_squat'],
+  fullbody: ['barbell_squat'],
 }
 
 /**
@@ -561,6 +577,7 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
 const RETIRED_EXERCISE_NAMES: Record<string, string> = {
   lateral_raise: 'lateral raise',
   pullups_or_pulldown: 'weighted pull-ups or lat pulldown',
+  barbell_squat: 'barbell squat',
 }
 
 /**

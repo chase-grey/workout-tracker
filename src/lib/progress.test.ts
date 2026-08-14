@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableExercises,
+  bestSingleSeries,
   combinedBest1RMSeries,
   combinedRepsSeries,
   exerciseSeries,
@@ -245,6 +246,49 @@ describe('combinedBest1RMSeries reads a movement trained as two variations', () 
       { ...press('b1', '2026-08-08', 'flat_bench', 0, 8, 'B'), weight_lbs: null },
     ]
     expect(combinedBest1RMSeries(rows, PRESSES).map((p) => p.date)).toEqual(['2026-08-04'])
+  })
+
+  it('converts a key that reads in another unit before comparing the two', () => {
+    const rows = [
+      { ...r('a', '2026-08-04', 300, 6), exercise: 'leg_press' }, // 360 estimated → 162
+      { ...r('a', '2026-08-04', 185, 5), exercise: 'barbell_squat' }, // 215.8, unconverted
+    ]
+    const scaled = combinedBest1RMSeries(rows, ['leg_press', 'barbell_squat'], { leg_press: 0.45 })
+    expect(scaled).toEqual([{ date: '2026-08-04', value: 215.8 }])
+  })
+})
+
+describe('bestSingleSeries', () => {
+  const single = (session: string, date: string, exercise: string, weight: number): WorkoutRow => ({
+    ...r(session, date, weight, 1),
+    exercise,
+  })
+
+  it('reads the weight lifted, not what Epley would make of one rep', () => {
+    expect(bestSingleSeries([single('a', '2026-08-15', 'leg_press', 380)], ['leg_press'])).toEqual([
+      { date: '2026-08-15', value: 380 },
+    ])
+  })
+
+  it('ignores everything that was not a single', () => {
+    const rows = [
+      { ...r('a', '2026-08-08', 300, 6), exercise: 'leg_press' },
+      single('b', '2026-08-15', 'leg_press', 380),
+      single('c', '2026-08-16', 'flat_bench', 200),
+    ]
+    expect(bestSingleSeries(rows, ['leg_press'])).toEqual([{ date: '2026-08-15', value: 380 }])
+  })
+
+  it('takes the heaviest single of a session and converts it like the estimates do', () => {
+    const rows = [single('a', '2026-08-15', 'leg_press', 340), single('a', '2026-08-15', 'leg_press', 380)]
+    expect(bestSingleSeries(rows, ['leg_press'], { leg_press: 0.45 })).toEqual([
+      { date: '2026-08-15', value: 171 },
+    ])
+  })
+
+  it('skips a single with no weight recorded — a bodyweight rep is not a max', () => {
+    const rows = [{ ...r('a', '2026-08-15', null, 1), exercise: 'weighted_pullups' }]
+    expect(bestSingleSeries(rows, ['weighted_pullups'])).toEqual([])
   })
 })
 

@@ -157,3 +157,25 @@ describe('hasLoggedSets', () => {
     expect(hasLoggedSets({ ...base, exercises: [{ exercise: 'x', sets: [{ setNumber: 1, weightLbs: null, reps: 10 }] }] })).toBe(true)
   })
 })
+
+describe('a max attempt is not a workout on its own', () => {
+  it('excludes a session that was nothing but a single', () => {
+    const rows = [row({ session_id: 'attempt', exercise: 'leg_press', weight_lbs: 380, reps: 1 })]
+    expect(trainingSessions(rows)).toEqual([])
+  })
+
+  it('keeps a real session that ended with one', () => {
+    const rows = [
+      row({ session_id: 'legs', exercise: 'leg_press', weight_lbs: 300, reps: 8 }),
+      row({ session_id: 'legs', exercise: 'leg_press', weight_lbs: 380, reps: 1, set_number: 2 }),
+    ]
+    expect(trainingSessions(rows)).toEqual([
+      { sessionId: 'legs', date: '2026-07-21', dayType: 'push' },
+    ])
+  })
+
+  it('still counts a bodyweight set logged as one rep — there is no weight to max', () => {
+    const rows = [row({ session_id: 'pull', exercise: 'weighted_pullups', weight_lbs: null, reps: 1 })]
+    expect(trainingSessions(rows)).toHaveLength(1)
+  })
+})

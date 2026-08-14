@@ -32,6 +32,7 @@
  */
 
 import { exerciseName } from '../config/plan'
+import { LEG_PRESS_TO_SQUAT } from './liftRatios'
 
 /** Standardized lift identifiers the population table is keyed by. */
 export type Lift =
@@ -332,8 +333,9 @@ type ExerciseSource = {
   ladder?: LadderKind
   /**
    * Convert a logged best est-1RM into the "load" the standard expects.
-   * Defaults to identity — only pull-ups override it, adding bodyweight to the
-   * added weight so the standard sees total load. (Incline bench is scored
+   * Defaults to identity. Pull-ups override it to add bodyweight to the added
+   * weight, so the standard sees total load; the leg press overrides it to read as
+   * the squat it implies, since that's the table it's ranked against. (Incline bench is scored
    * as-is against the bench standard: it reads a touch conservative since incline
    * is harder than flat, but the displayed number stays a real est-1RM.)
    */
@@ -362,6 +364,16 @@ type ExerciseSource = {
  */
 export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   barbell_squat: { lift: 'squat', muscles: ['quads', 'glutes'] },
+  // The plan's heavy leg movement, ranked against the squat table through the same
+  // conversion the squat goals use (see liftRatios.LEG_PRESS_TO_SQUAT) — a raw
+  // press number against squat standards would read Elite on ordinary legs. It
+  // colors the glutes as well as the quads for the reason the squat does: there's
+  // no separate glute lift in the plan to score them from.
+  leg_press: {
+    lift: 'squat',
+    muscles: ['quads', 'glutes'],
+    toLoad: (e) => e * LEG_PRESS_TO_SQUAT,
+  },
   flat_bench: { lift: 'bench', muscles: ['chest'] },
   incline_bench: { lift: 'bench', muscles: ['chest'] },
   iso_chest: { muscles: ['chest'] }, // chest fly / pec deck — no standard

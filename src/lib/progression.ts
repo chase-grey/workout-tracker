@@ -2,6 +2,7 @@ import type { WorkoutRow } from '../types'
 import type { VariantKey } from '../config/plan'
 import { parseISODate, toISODate } from './dates'
 import { epley1RM } from './epley'
+import { isMaxAttempt } from './maxAttempt'
 
 export type Target = { weightLbs: number | null; reps: number }
 
@@ -200,6 +201,11 @@ export function lastPerformance(
   const bySession = new Map<string, SessionGroup>()
   for (const r of workouts) {
     if (r.exercise !== exerciseKey) continue
+    // A max attempt is a single, not training (see maxAttempt). Left in, a session
+    // that was nothing but an attempt becomes the latest one and hands the next
+    // session its max weight to do six reps with; {@link workingSet} only sets a
+    // single aside when the same session held real sets to read instead.
+    if (isMaxAttempt(r)) continue
     const key = r.session_id || r.date
     const g = bySession.get(key) ?? { date: r.date, sets: [] }
     // A blank from the sheet or a CSV round-trip reads as "no slot recorded".
