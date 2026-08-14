@@ -5,6 +5,7 @@ import { storage } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { useData } from '../../store/DataContext'
 import { nextTargets } from '../../lib/progression'
+import { spreadSharedWeight } from '../../lib/sharedLoad'
 import { sideOrderedExercises, variantExercises, type VariantKey } from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
 import { nextStartSide } from '../../lib/pushSide'
@@ -120,9 +121,26 @@ export function useActiveSession() {
   )
 
   const updateSet = useCallback(
-    (exKey: string, index: number, patch: Partial<SetLog>) =>
-      mutateExercise(exKey, (sets) => sets.map((s, i) => (i === index ? { ...s, ...patch } : s))),
-    [mutateExercise],
+    (exKey: string, index: number, patch: Partial<SetLog>) => {
+      mutateExercise(exKey, (sets) => sets.map((s, i) => (i === index ? { ...s, ...patch } : s)))
+      // A weight entered at one station is the weight of the whole load-sharing
+      // group — one cable stack, one dumbbell — so it carries to the group's other
+      // stations instead of being typed again at each of them.
+      if (patch.weightLbs == null) return
+      setSession((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          exercises: spreadSharedWeight({
+            logs: prev.exercises,
+            exercises: plan[prev.dayType]?.exercises ?? [],
+            exKey,
+            weightLbs: patch.weightLbs,
+          }),
+        }
+      })
+    },
+    [mutateExercise, plan],
   )
 
   const removeSet = useCallback(
