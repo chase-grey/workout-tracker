@@ -133,8 +133,11 @@ export type Plan = Record<DayType, DayPlan>
  * 5 — push + core: the arm circuit interleaves its delt and tricep stations —
  *     pushdown → one arm's raise → overhead extension → the other arm's raise —
  *     rather than running the two arms back to back.
+ *
+ * 6 — push + core: the arm circuit rests after the lateral raises only. Both
+ *     tricep stations roll straight on to the next move.
  */
-export const PLAN_REVISION = 5
+export const PLAN_REVISION = 6
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -220,10 +223,16 @@ export const DEFAULT_PLAN: Plan = {
       // own history: side-to-side differences in a delt are both common and worth
       // seeing. They're one dumbbell between them, hence the shared load, and the
       // leading arm alternates each session (see lib/pushSide).
-      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'triceps' },
-      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'lateral' },
-      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'triceps' },
-      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', sharedLoad: 'lateral' },
+      //
+      // The break sits after each raise and nowhere else: coming off a tricep
+      // station the next move is a delt, which is rested and ready, so the block
+      // rolls straight on (`circuitRestSec: 0`) instead of standing around. The
+      // raise is the only station worth a real rest after — you go from it to the
+      // other arm or back to the pushdown, and both want the shoulder settled.
+      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 0, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 60, sharedLoad: 'lateral' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 0, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 60, sharedLoad: 'lateral' },
     ],
   },
   pull: {

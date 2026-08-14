@@ -6,7 +6,9 @@ import {
   PLAN_REVISION,
   dayOrder,
   exerciseName,
+  sideOrderedExercises,
   unslugKey,
+  variantExercises,
   withCircuitRest,
   withDayOrder,
   withPlanDefaults,
@@ -14,6 +16,8 @@ import {
   type Plan,
   type PlannedExercise,
 } from './plan'
+import { buildSetOrder } from '../lib/circuit'
+import { restBeforeNextSet } from '../lib/rest'
 
 describe('TODAY_DAY_ORDER', () => {
   it('offers every day exactly once', () => {
@@ -277,11 +281,13 @@ describe('withCircuitRest', () => {
   const station = (d: DayPlan, key: string) => d.exercises.find((e) => e.key === key)
 
   it('sets one station rest and leaves the rest of the day alone', () => {
-    const next = withCircuitRest(day, 'lateral_raise_l', 60)
-    expect(station(next, 'lateral_raise_l')?.circuitRestSec).toBe(60)
+    const next = withCircuitRest(day, 'lateral_raise_l', 90)
+    expect(station(next, 'lateral_raise_l')?.circuitRestSec).toBe(90)
     expect(next.exercises.map((e) => e.key)).toEqual(day.exercises.map((e) => e.key))
     for (const e of next.exercises) {
-      if (e.key !== 'lateral_raise_l') expect(e.circuitRestSec).toBeUndefined()
+      if (e.key !== 'lateral_raise_l') {
+        expect(e.circuitRestSec).toBe(station(day, e.key)?.circuitRestSec)
+      }
     }
   })
 
@@ -317,8 +323,55 @@ describe('withCircuitRest', () => {
   })
 
   it('does not mutate the day it was given', () => {
+    const before = station(day, 'lateral_raise_l')?.circuitRestSec
     withCircuitRest(day, 'lateral_raise_l', 45)
-    expect(station(day, 'lateral_raise_l')?.circuitRestSec).toBeUndefined()
+    expect(station(day, 'lateral_raise_l')?.circuitRestSec).toBe(before)
+  })
+})
+
+describe('the arm circuit as it ships', () => {
+  /** The circuit's stations in the order a session led by the left arm rotates them. */
+  const stations = sideOrderedExercises(variantExercises(DEFAULT_PLAN.push, 'A'), 'left').filter(
+    (e) => e.circuit === 'arms',
+  )
+
+  /** Every hop inside the circuit — station change and new round alike — and its rest. */
+  const hops = (() => {
+    const order = buildSetOrder(
+      stations,
+      stations.map((e) => e.sets),
+    )
+    return order.slice(0, -1).map((step, i) => {
+      const next = order[i + 1]
+      const from = stations[step.exIndex]
+      const to = stations[next.exIndex]
+      return {
+        from: from.key,
+        sec: restBeforeNextSet({
+          currentRestSec: from.restSec,
+          sameExercise: to.key === from.key,
+          nextRestSec: to.restSec,
+          sameCircuit: true,
+          newCircuitRound: next.setIndex > step.setIndex,
+          circuitRestSec: from.circuitRestSec,
+        }),
+      }
+    })
+  })()
+
+  it('breaks after a lateral raise and nowhere else', () => {
+    for (const { from, sec } of hops) {
+      if (from.startsWith('lateral_raise')) expect(sec).toBeGreaterThan(0)
+      else expect(sec).toBe(0)
+    }
+  })
+
+  it('rests the same after either arm, station change or new round', () => {
+    const raises = hops.filter((h) => h.from.startsWith('lateral_raise'))
+    // Both arms and both kinds of hop, or the assertion above proves little.
+    expect(new Set(raises.map((h) => h.from)).size).toBe(2)
+    expect(raises.length).toBeGreaterThan(2)
+    expect(new Set(raises.map((h) => h.sec))).toEqual(new Set([60]))
   })
 })
 
