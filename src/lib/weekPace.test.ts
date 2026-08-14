@@ -37,7 +37,13 @@ describe('requiredByNow', () => {
     expect([0, 1, 2, 3, 4, 5, 6].map((c) => requiredByNow(6, c))).toEqual([0, 0, 1, 2, 3, 4, 5])
   })
 
-  it('never demands the whole goal, since the last day is always still in play', () => {
+  it('packs a short window into its own days and comes due at its end', () => {
+    // Two sessions across Mon–Fri: one by the end of Wednesday, both by the end
+    // of Friday — after which the window is closed and stays closed.
+    expect([0, 1, 2, 3, 4, 5, 6].map((c) => requiredByNow(2, c, 5))).toEqual([0, 0, 0, 1, 1, 2, 2])
+  })
+
+  it('never demands the whole goal of a full-week metric, whose last day is always still in play', () => {
     for (const goal of [1, 2, 3, 6, 7, 14]) {
       expect(requiredByNow(goal, DAYS_IN_WEEK - 1)).toBeLessThan(goal)
     }
@@ -70,6 +76,18 @@ describe('weekPace — the schedule marker', () => {
     }
   })
 
+  it('holds flex to its Mon–Fri window rather than the whole week', () => {
+    // Thursday: one of the two sessions was due by the end of Wednesday, where a
+    // seven-day spread would still have asked for none.
+    expect(weekPace({ workouts: 0, flex: 0, calDays: 0 }, G, at(MON + 3)).metrics.find((m) => m.key === 'flex')!
+      .required).toBe(1)
+    // Saturday: the window has closed, so both are due and stay due.
+    for (const d of [MON + 5, MON + 6]) {
+      expect(weekPace({ workouts: 0, flex: 0, calDays: 0 }, G, at(d)).metrics.find((m) => m.key === 'flex')!
+        .required).toBe(2)
+    }
+  })
+
   it('is behind on a metric only once a scheduled unit went unbanked', () => {
     // Friday (4 days done): one workout was due by the end of Thursday.
     const none = weekPace({ workouts: 0, flex: 0, calDays: 3 }, G, at(MON + 4))
@@ -88,13 +106,42 @@ describe('weekPace — the buffer', () => {
 
   it('calls out no room left even when the overall bar looks well ahead', () => {
     // Saturday, two workouts and two flex banked, four calorie days: the mean
-    // progress is ~89% against a ~56% marker, but the two remaining calorie days
+    // progress is ~89% against a ~72% marker, but the two remaining calorie days
     // need the two remaining days. This is the case an averaged bar gets wrong.
     const counts = { workouts: 2, flex: 2, calDays: 4 }
     const p = weekPace(counts, G, at(MON + 5))
-    expect(p.requiredFraction).toBeLessThan(0.6)
+    expect(p.requiredFraction).toBeCloseTo(0.722, 3)
     expect(p.buffer).toBe(0)
     expect(p.binding?.key).toBe('calDays')
+  })
+
+  it('binds on flex once its own window runs out, days before the week does', () => {
+    // Thursday with no flex done: four days are left in the week, but only two of
+    // them are days flex actually happens on, and both sessions are still owed.
+    const p = weekPace({ workouts: 1, flex: 0, calDays: 3 }, G, at(MON + 3))
+    expect(p.binding?.key).toBe('flex')
+    expect(p.buffer).toBe(0)
+    expect(p.binding?.missed).toBe(false)
+  })
+
+  it('separates falling off the flex plan from losing the goal outright', () => {
+    // Saturday, one session short: past the plan, still reachable this week.
+    const sat = weekPace({ workouts: 2, flex: 1, calDays: 6 }, G, at(MON + 5))
+    expect(sat.buffer).toBe(-1)
+    expect(sat.binding?.missed).toBe(false)
+
+    // Sunday, both short: one day left can only carry one session.
+    const sun = weekPace({ workouts: 2, flex: 0, calDays: 6 }, G, at(MON + 6))
+    expect(sun.binding?.key).toBe('flex')
+    expect(sun.binding?.missed).toBe(true)
+  })
+
+  it('does not bind on flex once it is done, even with its window closed', () => {
+    // Saturday: flex is met and out of window, so its slack is 0 too — the unmet
+    // workouts are what the week hangs on.
+    const p = weekPace({ workouts: 0, flex: 2, calDays: 6 }, G, at(MON + 5))
+    expect(p.binding?.key).toBe('workouts')
+    expect(p.buffer).toBe(0)
   })
 
   it('goes negative once a goal can no longer be reached', () => {
@@ -120,8 +167,9 @@ describe('weekPace — the buffer', () => {
   })
 
   it('breaks a tie on the first-listed metric', () => {
-    // Tuesday: workouts and flex each owe 2 of 6 days left, so both slack 4.
-    const p = weekPace({ workouts: 0, flex: 0, calDays: 6 }, G, at(MON + 1))
+    // Tuesday: workouts owes 2 and calorie days owes 2, both of the same six
+    // days left, so both slack 4.
+    const p = weekPace({ workouts: 0, flex: 2, calDays: 4 }, G, at(MON + 1))
     expect(p.buffer).toBe(4)
     expect(p.binding?.key).toBe('workouts')
   })

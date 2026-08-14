@@ -43,8 +43,12 @@ function MetricBar({ label, m, suffix }: { label: string; m: MetricPace; suffix?
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
         {m.required > 0 && (
           <div
-            className={`absolute inset-y-0 w-0.5 -translate-x-1/2 ${behind ? 'bg-amber-400' : 'bg-white/70'}`}
-            style={{ left: `${(m.required / m.goal) * 100}%` }}
+            // A metric whose window has closed has its whole goal due, putting the
+            // line on the far edge — pull it fully inside so it doesn't clip away.
+            className={`absolute inset-y-0 w-0.5 ${m.required >= m.goal ? '-translate-x-full' : '-translate-x-1/2'} ${
+              behind ? 'bg-amber-400' : 'bg-white/70'
+            }`}
+            style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
           />
         )}
       </div>
@@ -91,9 +95,9 @@ export function ThisWeek() {
   const pace = weekPace(wp, goals)
   const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
   const buffer = pace.binding
-    ? pace.buffer < 0
+    ? pace.binding.missed
       ? `${METRIC_SHORT[pace.binding.key]} missed`
-      : pace.buffer === 0
+      : pace.buffer <= 0
         ? `${METRIC_SHORT[pace.binding.key]}: no room`
         : `${pace.buffer} spare day${pace.buffer === 1 ? '' : 's'}`
     : null

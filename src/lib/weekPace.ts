@@ -16,8 +16,9 @@
  * So pace is answered twice, in two different currencies:
  *
  *  - {@link requiredByNow} — the schedule. Each metric's goal spread across the
- *    seven days and floored to whole units, stepping only when a day has fully
- *    ended. Never asks for a fraction, never moves during the day you're still in.
+ *    days it's actually done on and floored to whole units, stepping only when a
+ *    day has fully ended. Never asks for a fraction, never moves during the day
+ *    you're still in.
  *  - {@link MetricPace.slack} — the room. Days that could still be missed with the
  *    goal met anyway. The week's real standing is the tightest of these, because a
  *    maxed-out metric averages away a binding one.
@@ -43,22 +44,43 @@ export function weekDaysCompleted(now: Date = new Date()): number {
 }
 
 /**
- * How many of a metric's `goal` units the week's schedule expects to be banked
- * once `daysCompleted` days have ended: the goal spread evenly across the seven
- * days, floored.
+ * How many of a metric's `goal` units the schedule expects to be banked once
+ * `daysCompleted` days have ended: the goal spread evenly across its
+ * `windowDays`, floored.
  *
- * Flooring is the whole point. It reads as "count the units whose last possible
- * day has passed" — with a goal of 2 that's one by the end of Thursday and the
- * other by the end of Sunday, and with a goal of 6 it's one more each day from
- * Tuesday on. Since `daysCompleted` never reaches 7, the result is always below
- * the goal: the schedule can't demand the week be finished before it's over.
+ * Flooring is the whole point. It reads as "count the units whose last intended
+ * day has passed" — over a full week a goal of 2 wants one by the end of Thursday
+ * and the other by the end of Sunday, while a goal of 6 wants one more each day
+ * from Tuesday on. Once `daysCompleted` reaches `windowDays` the whole goal is
+ * due, so a full-week metric never demands a finished week (7 days never end
+ * inside the week) but a shorter window does come due before Sunday.
  */
-export function requiredByNow(goal: number, daysCompleted: number): number {
+export function requiredByNow(
+  goal: number,
+  daysCompleted: number,
+  windowDays: number = DAYS_IN_WEEK,
+): number {
   if (goal <= 0) return 0
-  return Math.floor((daysCompleted * goal) / DAYS_IN_WEEK)
+  return Math.floor((Math.min(daysCompleted, windowDays) * goal) / windowDays)
 }
 
 export type MetricKey = keyof WeekCounts
+
+/**
+ * The days of the Mon–Sun week each metric is actually done on, counted from
+ * Monday. Flex sessions land by the end of Friday — the weekend isn't part of the
+ * plan for them, so pacing them over seven days let two undone sessions look
+ * comfortable on Thursday when only two intended days were left.
+ *
+ * A goal can still be rescued outside its window; that's what
+ * {@link MetricPace.missed} is for. The window is about where you're *supposed*
+ * to be, not what's possible.
+ */
+export const METRIC_WINDOW: Record<MetricKey, number> = {
+  workouts: DAYS_IN_WEEK,
+  flex: 5,
+  calDays: DAYS_IN_WEEK,
+}
 
 /** One metric's standing against both the schedule and the days left. */
 export type MetricPace = {
@@ -67,15 +89,20 @@ export type MetricPace = {
   goal: number
   /** Units the schedule expects by now (see {@link requiredByNow}). */
   required: number
-  /** Days that could still carry a unit, today included. */
+  /** Days of this metric's own window (see {@link METRIC_WINDOW}). */
+  windowDays: number
+  /** Intended days that could still carry a unit, today included. */
   daysLeft: number
   /** Units still owed. */
   remaining: number
   /**
-   * Days that could be missed entirely with the goal still met. Zero means every
-   * remaining day has to land; negative means the goal is already out of reach.
+   * Days of the window that could be missed entirely with the goal still met.
+   * Zero means every intended day left has to land; negative means the goal has
+   * fallen off its plan, which for a short window is not yet the same as lost.
    */
   slack: number
+  /** True once the goal can't be reached before the week itself ends. */
+  missed: boolean
   met: boolean
 }
 
@@ -87,7 +114,11 @@ export type WeekPace = {
    * directly comparable.
    */
   requiredFraction: number
-  /** Days of room on the tightest metric — the week's real standing. */
+  /**
+   * Days of room on the tightest unmet metric — the week's real standing. Falls
+   * back to the days left in the week once every goal is met, when they're all
+   * spare.
+   */
   buffer: number
   /**
    * The metric the buffer was read off. Null once every goal is met, when there's
@@ -105,8 +136,7 @@ export const METRIC_KEYS: MetricKey[] = ['workouts', 'flex', 'calDays']
  *
  * The buffer is a MINIMUM rather than an average because the week isn't finished
  * until all three goals are, so the tightest metric is the one that decides
- * whether it's still on time. A metric already met has nothing owed and so holds
- * the full `daysLeft` — it can never be the one binding.
+ * whether it's still on time.
  */
 export function weekPace(
   counts: WeekCounts,
@@ -120,14 +150,18 @@ export function weekPace(
     const goal = goals[key]
     const done = counts[key]
     const remaining = Math.max(0, goal - done)
+    const windowDays = METRIC_WINDOW[key]
+    const windowLeft = Math.max(0, windowDays - daysCompleted)
     return {
       key,
       done,
       goal,
-      required: requiredByNow(goal, daysCompleted),
-      daysLeft,
+      required: requiredByNow(goal, daysCompleted, windowDays),
+      windowDays,
+      daysLeft: windowLeft,
       remaining,
-      slack: daysLeft - remaining,
+      slack: windowLeft - remaining,
+      missed: remaining > daysLeft,
       met: remaining === 0,
     }
   })
@@ -135,14 +169,19 @@ export function weekPace(
   const requiredFraction =
     metrics.reduce((sum, m) => sum + (m.goal > 0 ? m.required / m.goal : 0), 0) / metrics.length
 
-  // First-listed wins a tie, which only happens between metrics owing the same
-  // number of units — they all share one `daysLeft`.
-  const binding = metrics.reduce((worst, m) => (m.slack < worst.slack ? m : worst), metrics[0])
+  // Only an unmet metric can bind: a met one owes nothing, and its window may
+  // have closed, which would otherwise make it look like the tightest of the
+  // three. First-listed wins a tie.
+  const unmet = metrics.filter((m) => !m.met)
+  const binding = unmet.reduce<MetricPace | null>(
+    (worst, m) => (worst === null || m.slack < worst.slack ? m : worst),
+    null,
+  )
 
   return {
     metrics,
     requiredFraction,
-    buffer: binding.slack,
-    binding: binding.met ? null : binding,
+    buffer: binding ? binding.slack : daysLeft,
+    binding,
   }
 }
