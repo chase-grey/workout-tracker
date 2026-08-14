@@ -24,6 +24,7 @@ import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder, circuitStations } from '../../lib/circuit'
+import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { DISCOMFORT_SPOTS, parseDiscomfort, toggleDiscomfort } from '../../lib/discomfort'
 import {
   bankRest,
@@ -108,6 +109,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     return saved && canResumeRest(saved.endsAt, Date.now()) ? saved : null
   })
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
+  // A step to jump to as soon as it exists — a set added mid-rest, which only
+  // appears in the flow once the log it's counted from has updated (see addSet).
+  const [pendingStepKey, setPendingStepKey] = useState<string | null>(null)
   const [showList, setShowList] = useState(false)
   const [paused, setPaused] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -188,7 +192,22 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const planned = step.ex
   const log = logFor(planned.key)
   const set = log?.sets[step.setIndex]
-  const atLast = safeCurrent >= N - 1
+
+  // Which steps are already logged, in step order. `done` alone rather than
+  // doneCount's `done && reps > 0`: the checklist and the advance button both mark
+  // sets done outright, and a step the flow can't get past is one it would keep
+  // handing back (see lib/setFlow).
+  const stepDone = useMemo(
+    () => steps.map((s) => !!logFor(s.ex.key)?.sets[s.setIndex]?.done),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [steps, session],
+  )
+  // Where "next" goes from here — the nearest set still owed, skipping the ones
+  // already logged, rather than the step one along. Null once this is the last one
+  // left, which is what makes the button say finish.
+  const upcoming = useMemo(() => nextUnfinishedStep(stepDone, safeCurrent), [stepDone, safeCurrent])
+  const nextStep = upcoming == null ? null : steps[upcoming]
+  const atLast = nextStep == null
 
   // Resume by step key when the saved one still exists: a plan change can reshape
   // the step list under a session that was already in progress, and the bare index
@@ -201,6 +220,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // Only on mount: afterwards `current` is the source of truth, not storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!pendingStepKey) return
+    const idx = steps.findIndex((s) => s.stepKey === pendingStepKey)
+    if (idx < 0) return
+    setCurrent(idx)
+    setPendingStepKey(null)
+  }, [pendingStepKey, steps])
 
   useEffect(() => {
     storage.saveActiveStep(safeCurrent)
@@ -281,12 +308,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }
 
   const timeLeft = useMemo(() => {
-    // Remaining sets from the current step onward, each priced by its exercise's
-    // learned average active time plus its own prescribed rest scaled by the
-    // learned rest ratio (structural fallbacks day one). The prescribed rest comes
-    // from restBeforeNextSet — the same source the ratio was measured against — so
-    // a circuit station change isn't priced as a full inter-set rest.
-    const remaining = steps.slice(safeCurrent).map((s, i, arr) => {
+    // The sets still owed, in the order the flow will reach them — not everything
+    // from here to the end of the list, which after a jump counts sets already
+    // logged and misses the ones left behind.
+    //
+    // Each is priced by its exercise's learned average active time plus its own
+    // prescribed rest scaled by the learned rest ratio (structural fallbacks day
+    // one). The prescribed rest comes from restBeforeNextSet — the same source the
+    // ratio was measured against — so a circuit station change isn't priced as a
+    // full inter-set rest.
+    const remaining = remainingFlow(stepDone, safeCurrent).map((idx) => steps[idx]).map((s, i, arr) => {
       const next = arr[i + 1]
       const sameCircuit = !!next && !!s.ex.circuit && next.ex.circuit === s.ex.circuit
       return {
@@ -304,7 +335,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     })
     return remainingWorkoutSecs(exerciseAverages, remaining)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps, safeCurrent, exerciseAverages])
+  }, [steps, stepDone, safeCurrent, exerciseAverages])
 
   const setExerciseComplete = (key: string, complete: boolean) => {
     const l = logFor(key)
@@ -384,33 +415,32 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const completeSetAndAdvance = () => {
     recordActiveForCurrent(planned.key)
     controls.updateSet(planned.key, step.setIndex, { done: true })
-    if (atLast) {
+    if (!nextStep || upcoming == null) {
       finish()
       return
     }
     // Carry this set's actual weight/reps forward to the next set of the same
     // exercise, so subsequent sets prefill what you just did (not the target).
-    const nextStep = steps[safeCurrent + 1]
-    if (nextStep && nextStep.ex.key === planned.key && set) {
+    if (nextStep.ex.key === planned.key && set) {
       controls.updateSet(planned.key, nextStep.setIndex, { weightLbs: set.weightLbs ?? null, reps: set.reps })
     }
-    const nextIsNewExercise = !!nextStep && nextStep.ex.key !== planned.key
+    const nextIsNewExercise = nextStep.ex.key !== planned.key
     // Rotating to another station of the same circuit, vs. coming back around to
     // start a fresh round of it (the set number goes up).
-    const sameCircuit = !!nextStep && !!planned.circuit && nextStep.ex.circuit === planned.circuit
-    const newCircuitRound = sameCircuit && nextStep!.setIndex > step.setIndex
+    const sameCircuit = !!planned.circuit && nextStep.ex.circuit === planned.circuit
+    const newCircuitRound = sameCircuit && nextStep.setIndex > step.setIndex
     // Full inter-set rest within an exercise, a brief station change inside a
     // circuit (or whatever that station prescribes), and a shorter transition
     // rest (sized to the next exercise, capped) when moving to a different move.
     const restSec = restBeforeNextSet({
       currentRestSec: planned.restSec,
       sameExercise: !nextIsNewExercise,
-      nextRestSec: nextStep ? nextStep.ex.restSec : null,
+      nextRestSec: nextStep.ex.restSec,
       sameCircuit,
       newCircuitRound,
       circuitRestSec: planned.circuitRestSec,
     })
-    setCurrent(safeCurrent + 1)
+    setCurrent(upcoming)
     // A station set to no rest goes straight on to the next move: a zero-second
     // timer would open already in overtime, and it isn't a rest to be counted.
     if (restSec <= 0) {
@@ -426,17 +456,23 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       endsAt: Date.now() + restSec * 1000,
       exKey: planned.key,
       isLastSetOfExercise: step.setIndex === step.setCount - 1,
-      upNext: nextIsNewExercise ? `up next: ${nextStep!.ex.name}` : null,
+      upNext: nextIsNewExercise ? `up next: ${nextStep.ex.name}` : null,
     })
   }
 
   // Add a set to whichever exercise is in play. During an exercise's *final* rest
-  // the new set lands in the slot `current` already points at, so drop out of rest
-  // and go log it; anywhere else it just extends the exercise further down the flow.
+  // the new set is what the rest should lead into, so jump to it and drop out of
+  // rest; anywhere else it just extends the exercise further down the flow.
   const addSet = () => {
     if (rest) {
       controls.addSet(rest.exKey)
-      if (rest.isLastSetOfExercise) closeRest()
+      if (rest.isLastSetOfExercise) {
+        // By key, not by index: the rest was leading somewhere else entirely once
+        // sets can be done out of order, so where the new set lands in the reshaped
+        // step list isn't the index `current` happens to sit at.
+        setPendingStepKey(`${rest.exKey}:${logFor(rest.exKey)?.sets.length ?? 0}`)
+        closeRest()
+      }
       return
     }
     controls.addSet(planned.key)
@@ -762,7 +798,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             <div className="flex flex-col gap-1">
               {exercises.map((e, i) => {
                 const complete = isComplete(e.key)
-                const firstStep = steps.findIndex((s) => s.exIndex === i)
+                // Land on the first set of it still owed — picking an exercise you
+                // half finished means carrying on with it, not redoing set one.
+                // Falls back to its first set when they're all logged.
+                const firstStep = steps.findIndex((s, si) => s.exIndex === i && !stepDone[si])
+                const jumpStep = firstStep >= 0 ? firstStep : steps.findIndex((s) => s.exIndex === i)
                 return (
                   <div
                     key={e.key}
@@ -770,7 +810,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                   >
                     <button
                       onClick={() => {
-                        if (firstStep >= 0) setCurrent(firstStep)
+                        if (jumpStep >= 0) setCurrent(jumpStep)
                         // Jumping is a decision to start that exercise now, so an
                         // in-flight rest ends rather than covering it back up.
                         if (rest) closeRest()
