@@ -35,6 +35,7 @@ import {
   restLabel,
   resumeRestTally,
   staleRestSec,
+  upNextSetLabel,
   upNextTargetLabel,
   type RestTally,
 } from '../../lib/rest'
@@ -635,8 +636,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           endsAt={rest.endsAt}
           upNext={rest.upNext}
           // The flow advances before resting, so `step` is already the set this
-          // rest leads into and `targetNumbers` is its target — the numbers to
-          // walk back to the bar with, on the rests that should carry them.
+          // rest leads into: its position in the exercise, and `targetNumbers` its
+          // target — the numbers to walk back to the bar with, on the rests that
+          // should carry them.
+          upNextSet={upNextSetLabel(step.setIndex, step.setCount)}
           upNextTarget={upNextTargetLabel(step.setIndex, targetNumbers)}
           fastForward={fast}
           onToggleFastForward={() => setFast(!fast)}

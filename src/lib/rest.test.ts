@@ -9,6 +9,7 @@ import {
   restLabel,
   resumeRestTally,
   staleRestSec,
+  upNextSetLabel,
   upNextTargetLabel,
   CIRCUIT_REST_CHOICES,
   CIRCUIT_STATION_REST_SEC,
@@ -190,6 +191,21 @@ describe('upNextTargetLabel', () => {
 
   it('shows nothing when the coming set has no target', () => {
     expect(upNextTargetLabel(0, null)).toBeNull()
+  })
+})
+
+describe('upNextSetLabel', () => {
+  it('counts the coming set up from its 0-based index', () => {
+    expect(upNextSetLabel(0, 4)).toBe('set 1 of 4')
+    expect(upNextSetLabel(2, 4)).toBe('set 3 of 4')
+  })
+
+  it('says so on the last set of an exercise', () => {
+    expect(upNextSetLabel(3, 4)).toBe('set 4 of 4')
+  })
+
+  it('shows nothing for an exercise with no sets to count', () => {
+    expect(upNextSetLabel(0, 0)).toBeNull()
   })
 })
 

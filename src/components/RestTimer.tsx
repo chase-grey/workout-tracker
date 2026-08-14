@@ -744,7 +744,9 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
  * user what's coming; `progress` + `timeLeftLabel` (rendered verbatim, so the
  * caller phrases it — "~5 min left in workout") show the same session progress
  * bar as the session header — pinned to the top of the rest screen — so rest says
- * how far in you are and not just how long is left. `upNextTarget` puts the load
+ * how far in you are and not just how long is left. `upNextSet` says which set of
+ * the exercise the rest leads into, so the count is on screen for the rests where
+ * the move isn't changing and its name isn't. `upNextTarget` puts the load
  * and reps for the coming set alongside its name — see lib/rest for which rests
  * get it. `menu` keeps the session's overflow actions reachable without ending
  * rest first, and the fast-forward toggle beside it hands the rest of the session
@@ -755,6 +757,7 @@ export function RestTimer({
   endsAt,
   onClose,
   upNext,
+  upNextSet,
   upNextTarget,
   progress,
   timeLeftLabel,
@@ -776,6 +779,8 @@ export function RestTimer({
    */
   onClose: (expired?: boolean) => void
   upNext?: string | null
+  /** Where the coming set sits in its exercise, pre-formatted ("set 2 of 4"). */
+  upNextSet?: string | null
   /** What to go for on the coming set, pre-formatted ("135 × 8", "12 reps"). */
   upNextTarget?: string | null
   /** Session position for the progress bar — completed sets out of the total. */
@@ -904,6 +909,14 @@ export function RestTimer({
               {menu && <KebabMenu items={menu} />}
             </div>
           </div>
+        )}
+        {upNextSet && (
+          // Which set the rest leads into. On a same-exercise rest there's no name
+          // above it, and this is the whole of what the top row says: the count you
+          // stop keeping the moment you sit down.
+          <p className="mt-1 text-center text-sm font-semibold tabular-nums text-neutral-400">
+            {upNextSet}
+          </p>
         )}
         {upNextTarget && (
           // The numbers for the coming set, big enough to read at arm's length

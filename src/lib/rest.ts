@@ -41,6 +41,22 @@ export function upNextTargetLabel(setIndex: number, target: string | null): stri
 }
 
 /**
+ * Where the coming set sits in its exercise, as the rest screen says it ("set 2
+ * of 4"). `setIndex` is 0-based, so it counts up for display.
+ *
+ * Shown on every rest, first set included: resting is when you lose track of the
+ * count, and the number answers both "how much of this move is left" and "which
+ * set am I walking back to". Spelled out rather than "2/4" — this is read at
+ * arm's length, from the shape's distance rather than the set screen's.
+ *
+ * `null` for an exercise with no sets to count, which has nothing to say.
+ */
+export function upNextSetLabel(setIndex: number, setCount: number): string | null {
+  if (setCount <= 0) return null
+  return `set ${setIndex + 1} of ${setCount}`
+}
+
+/**
  * A session's rest accounting so far: seconds actually spent on the rest screen,
  * the rest those intervals prescribed, and how many were taken. Prescribed and
  * count ride along with the time taken because the estimator learns the *ratio*
