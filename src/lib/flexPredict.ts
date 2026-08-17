@@ -12,4 +12,4 @@
 export const SPLIT_GOALS = [100, 120, 135, 150, 165, 180] as const
 
 /** Tailor's-pose goal angles (degrees), ascending. */
-export const TAILORS_GOALS = [70, 80, 90] as const
+export const TAILORS_GOALS = [60, 70, 80, 90] as const
