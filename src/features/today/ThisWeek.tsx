@@ -4,6 +4,7 @@ import {
   MdCelebration,
   MdCheckCircle,
   MdEmojiEvents,
+  MdExpandMore,
   MdLocalFireDepartment,
   MdStar,
 } from 'react-icons/md'
@@ -12,7 +13,7 @@ import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
 import { weekPace, type MetricPace } from '../../lib/weekPace'
-import { StreakHistorySheet } from './StreakHistorySheet'
+import { StreakHistoryPanel } from './StreakHistoryPanel'
 
 /**
  * One metric's row: the fill is what's done, and the pale line is where the
@@ -63,8 +64,9 @@ export function ThisWeek() {
   const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
     useData()
 
-  // The weeks behind the flame live one tap away rather than in a panel down the
-  // Progress tab: the streak is read here, so that's where it explains itself.
+  // The weeks behind the flame drop open right under it rather than living in a
+  // panel down the Progress tab: the streak is read here, so that's where it
+  // explains itself.
   const [showStreak, setShowStreak] = useState(false)
 
   const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
@@ -100,8 +102,9 @@ export function ThisWeek() {
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-wide text-neutral-500">this week</h2>
         <button
-          onClick={() => setShowStreak(true)}
+          onClick={() => setShowStreak((v) => !v)}
           disabled={streakHistory.length === 0}
+          aria-expanded={showStreak}
           aria-label="completed weeks"
           className="-m-2 flex items-center gap-3 p-2 text-sm font-semibold active:opacity-70"
         >
@@ -111,10 +114,16 @@ export function ThisWeek() {
           <span className="flex items-center gap-1 text-neutral-300">
             <MdAcUnit aria-hidden /> {streaks.freezes}
           </span>
+          {streakHistory.length > 0 && (
+            <MdExpandMore
+              className={`text-neutral-500 transition-transform ${showStreak ? 'rotate-180' : ''}`}
+              aria-hidden
+            />
+          )}
         </button>
       </div>
 
-      {showStreak && <StreakHistorySheet onClose={() => setShowStreak(false)} />}
+      {showStreak && <StreakHistoryPanel />}
 
       {/* Milestone bar: fill = progress; white line = where the schedule expects you; markers for checkpoint & goal. */}
       <div className="relative h-3 rounded-full bg-surface-2">
