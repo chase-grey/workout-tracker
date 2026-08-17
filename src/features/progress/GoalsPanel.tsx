@@ -31,8 +31,9 @@ import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptModel,
+  clampToRange,
   commitRange,
-  lockProjection,
+  dateWithinHorizon,
   lockProjectionByDate,
   paceAgainstLock,
   projectedSeries,
@@ -57,7 +58,7 @@ import { BodyWeightChart } from './BodyWeightChart'
 import { CommitChart } from './CommitChart'
 import { FlexLadderBlock, type Ladder } from './FlexLadderBlock'
 import { GoalTooltip } from './GoalTooltip'
-import { MdBolt, MdCelebration, MdLockOutline, MdRefresh } from 'react-icons/md'
+import { MdBolt, MdCelebration, MdEditCalendar, MdLockOutline } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -360,6 +361,123 @@ function LockInPrompt({
 }
 
 /**
+ * Changing a date already committed to, or letting the commitment go.
+ *
+ * A committed date is a promise, so it doesn't move on its own and it doesn't
+ * move quietly: this reopens the same bargain the goal was committed through
+ * (see {@link LockInPrompt}), starting from the date in force, and stores nothing
+ * until commit. The estimate it bargains against is the one that has actually
+ * moved since — the projection if the goal still trends toward the target, else
+ * the pace it has really held since the lock (see paceAgainstLock) — and the same
+ * window applies, so a date can only be re-signed where it could have been signed
+ * in the first place.
+ *
+ * A goal whose estimate has drifted past {@link LOCK_HORIZON_MONTHS} has no
+ * honest date left to offer: that's the distance at which the app doesn't ask for
+ * a commitment at all. All this can do then is let the commitment go, and the row
+ * goes back to projecting — which is the only way out of a date that was signed
+ * from too far off in the first place.
+ */
+function RecommitPrompt({
+  goal,
+  proj,
+  lock,
+  months,
+  revisedEta,
+  onLock,
+  onDrop,
+  onClose,
+}: {
+  goal: GoalSpec
+  proj: Projection
+  lock: LockedProjection
+  /** The tab's range pill, passed on to the commit chart's run-up. */
+  months: number | null
+  /** The date the pace held since the lock implies, when the goal no longer projects one. */
+  revisedEta: string | null
+  onLock: (etaDate: string) => void
+  onDrop: () => void
+  onClose: () => void
+}) {
+  const estimate = proj.onTrack ? proj.etaDate : revisedEta
+  const inReach = estimate != null && dateWithinHorizon(estimate)
+  const range = useMemo(
+    () => (inReach ? commitRange(estimate!) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [estimate, inReach],
+  )
+  // The date in force is where the handle starts — held inside the window, so a
+  // commitment made from further out than the window now reaches opens on a date
+  // it can actually be moved from.
+  const [date, setDate] = useState(() => (range ? clampToRange(lock.etaDate, range) : lock.etaDate))
+  const valid = range != null && date >= range.soonest && date <= range.latest
+
+  return (
+    <div className="mt-2 rounded-xl bg-accent-2/10 p-3">
+      <div className="flex items-baseline gap-2">
+        <p className="text-sm font-medium text-accent-2">
+          <MdLockOutline className="inline align-text-bottom mr-1" aria-hidden />
+          committed {fmtDate(lock.etaDate)}
+        </p>
+        {estimate && estimate !== lock.etaDate && (
+          <p className="text-sm text-neutral-500 tabular-nums">on pace for {fmtDate(estimate)}</p>
+        )}
+      </div>
+
+      {range ? (
+        <>
+          <CommitChart
+            goalId={goal.id}
+            proj={proj}
+            points={goal.points}
+            months={months}
+            date={date}
+            onChange={setDate}
+            estimate={estimate!}
+          />
+          <div className="mt-3 flex items-center gap-2">
+            <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
+              hit it by
+              <input
+                type="date"
+                value={date}
+                min={range.soonest}
+                max={range.latest}
+                onChange={(e) => setDate(e.target.value)}
+                className="min-h-[36px] flex-1 rounded-lg bg-surface-2 px-2 text-sm text-neutral-200 [color-scheme:dark]"
+              />
+            </label>
+            <button
+              onClick={() => valid && onLock(date)}
+              disabled={!valid}
+              className="min-h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-black active:opacity-70 disabled:opacity-40"
+            >
+              <MdLockOutline className="inline align-text-bottom mr-1" aria-hidden />
+              commit
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-neutral-400">
+          {estimate == null
+            ? 'no pace to set a new date from yet.'
+            : `${fmtDate(estimate)} is too far out to commit to.`}
+        </p>
+      )}
+
+      <div className="mt-3 flex items-center gap-4">
+        <button onClick={onDrop} className="text-sm text-accent-deep active:opacity-70">
+          drop this commitment
+        </button>
+        <button onClick={onClose} className="ml-auto text-sm text-neutral-400 active:opacity-70">
+          cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
  * The box a goal wears: a light green ring once it's committed, so the set of
  * things being tracked against a promise reads as a group; the darker accent,
  * drawn a step heavier, on the one being asked to commit — the darker green
@@ -462,15 +580,15 @@ function AttemptPrompt({
  * One goal. Until its ETA comes within {@link LOCK_HORIZON_MONTHS} it shows the
  * live projection; once inside that horizon the row lights up and offers a
  * lock-in ({@link LockInPrompt}). Once locked, the row shows how the real numbers
- * track against the committed line, with a chart of actual vs projected and a
- * button to re-lock from today's data.
+ * track against the committed line, with a chart of actual vs projected and a way
+ * to change the date or let the commitment go ({@link RecommitPrompt}).
  */
 function GoalRow({
   goal,
   proj,
   lock,
   months,
-  onRecalculate,
+  onDrop,
   onLock,
   onLogAttempt,
   showData,
@@ -484,8 +602,9 @@ function GoalRow({
   lock?: LockedProjection
   /** The tab's range pill, handed to the commit chart's run-up. */
   months: number | null
-  onRecalculate: () => void
-  /** Commit the goal to a target date once it's within reach. */
+  /** Let a commitment go, putting the goal back to a live projection. */
+  onDrop: () => void
+  /** Commit the goal to a target date — the first one, or a changed one. */
   onLock: (etaDate: string) => void
   /** Log the single that settles the goal, once it's ready to be attempted. */
   onLogAttempt: (weightLbs: number) => void
@@ -511,6 +630,9 @@ function GoalRow({
   grouped?: boolean
   children?: React.ReactNode
 }) {
+  // Open only while the date is being changed, and closed again by committing or
+  // cancelling — a committed goal reads as a commitment the rest of the time.
+  const [editing, setEditing] = useState(false)
   const has = Number.isFinite(proj.current)
   const reached = isReached(goal)
   const doneDate = reached ? reachedDate(goal) : null
@@ -582,6 +704,23 @@ function GoalRow({
         </p>
       ) : ready && goal.exerciseKey ? (
         <AttemptPrompt goal={goal} exerciseKey={goal.exerciseKey} onLog={onLogAttempt} />
+      ) : lock && editing ? (
+        <RecommitPrompt
+          goal={goal}
+          proj={proj}
+          lock={lock}
+          months={months}
+          revisedEta={pace?.revisedEta ?? null}
+          onLock={(etaDate) => {
+            onLock(etaDate)
+            setEditing(false)
+          }}
+          onDrop={() => {
+            onDrop()
+            setEditing(false)
+          }}
+          onClose={() => setEditing(false)}
+        />
       ) : lock ? (
         <>
           {/* The row with its own chart puts both ETAs on it; a row charted above
@@ -606,12 +745,15 @@ function GoalRow({
                 on pace for {fmtDate(pace.revisedEta)}
               </p>
             )}
+            {/* Says what it opens, rather than leaving an icon to imply that a
+                committed date can be re-derived by tapping it. */}
             <button
-              onClick={onRecalculate}
-              aria-label="recalculate time left"
-              className="ml-auto shrink-0 rounded-lg bg-surface-2 p-1.5 text-base text-neutral-400 active:opacity-70"
+              onClick={() => setEditing(true)}
+              aria-label={`change the date committed to for ${goal.title}`}
+              className="ml-auto shrink-0 rounded-lg bg-surface-2 px-2 py-1 text-xs text-neutral-400 active:opacity-70"
             >
-              <MdRefresh aria-hidden />
+              <MdEditCalendar className="mr-1 inline align-text-bottom text-sm" aria-hidden />
+              change date
             </button>
           </div>
           {!chartedAbove && (
@@ -768,19 +910,21 @@ export function GoalsPanel({ months }: { months: number | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, projections])
 
-  const recalculate = (goal: GoalSpec) => {
-    const proj = projections.get(goal.id)
-    if (!proj) return
-    const fresh = lockProjection(goal.id, proj)
+  // Let a commitment go, putting the goal back to a live projection. The only way
+  // a lock leaves other than by being met: nothing re-derives or clears one on its
+  // own. The button that used to re-freeze the lock from today's pace did exactly
+  // that, with none of the checks a commitment goes through — a stalled goal could
+  // be signed up to a date years out, or lose its commitment, in one tap.
+  const dropCommitment = (goal: GoalSpec) => {
     const next: LockedProjections = { ...locked }
-    if (fresh) next[goal.id] = fresh
-    else delete next[goal.id]
+    delete next[goal.id]
     updateSettings({ ...settings, lockedGoals: next })
   }
 
   // Commit a goal that's within reach to a target date — the one it projects, or
   // one the user nudged sooner or later. This is the deliberate lock the lit-up
-  // row offers in place of the old automatic snapshot.
+  // row offers in place of the old automatic snapshot, and the same path a
+  // committed goal changes its date through (see RecommitPrompt).
   const lockIn = (goal: GoalSpec, etaDate: string) => {
     const proj = projections.get(goal.id)
     if (!proj) return
@@ -853,7 +997,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
       proj={projections.get(g.id)!}
       lock={locked[g.id]}
       months={months}
-      onRecalculate={() => recalculate(g)}
+      onDrop={() => dropCommitment(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       onLogAttempt={(weightLbs) => {
         if (g.exerciseKey) void logMaxAttempt(g.exerciseKey, weightLbs)

@@ -11,8 +11,10 @@
  * and the real series as *actual*, and every new entry is either ahead of the
  * line or behind it.
  *
- * The lock is a snapshot, not a verdict — recalculate() re-locks from today's
- * data whenever the user asks for a fresh estimate.
+ * A committed date can be changed afterwards, but only through the same bargain
+ * that set it and only where it could have been set in the first place — today's
+ * estimate still inside the horizon, the new date still inside
+ * {@link commitRange}. Nothing here re-freezes a lock on its own.
  *
  * Pure module — no React/DOM, no storage.
  */
@@ -153,8 +155,23 @@ export function addDays(from: string, days: number): string {
  */
 export function withinHorizon(proj: Projection, today: Date = new Date()): boolean {
   if (!proj.onTrack || proj.etaDate == null || proj.etaWeeks === 0) return false
+  return dateWithinHorizon(proj.etaDate, today)
+}
+
+/**
+ * The horizon test on a bare date, for an estimate that didn't come off a live
+ * projection — the pace-revised ETA a committed goal is re-offered against (see
+ * {@link paceAgainstLock}).
+ *
+ * This is the rule that keeps a commitment a commitment: past the horizon the
+ * date is an extrapolation rather than something to be held to, which is exactly
+ * why a goal that far out isn't asked to commit yet. Anything that sets or
+ * changes a committed date runs through here, or a goal ends up signed up to a
+ * year it was never within reach of.
+ */
+export function dateWithinHorizon(etaDate: string, today: Date = new Date()): boolean {
   const horizon = new Date(today.getFullYear(), today.getMonth() + LOCK_HORIZON_MONTHS, today.getDate())
-  return parseISODate(proj.etaDate) <= horizon
+  return parseISODate(etaDate) <= horizon
 }
 
 /**
@@ -209,6 +226,11 @@ export function commitRange(etaDate: string, today: Date = new Date()): CommitRa
     Math.max(projected * LATEST_COMMIT_MULTIPLE, projected + MIN_COMMIT_SLACK_DAYS),
   )
   return { soonest, latest: latest > soonest ? latest : addDays(soonest, MIN_COMMIT_SLACK_DAYS) }
+}
+
+/** `iso` held inside a commit window, so every control offers the same dates. */
+export function clampToRange(iso: string, range: CommitRange): string {
+  return iso < range.soonest ? range.soonest : iso > range.latest ? range.latest : iso
 }
 
 /**

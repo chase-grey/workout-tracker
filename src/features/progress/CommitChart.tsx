@@ -23,7 +23,14 @@ import {
 } from 'recharts'
 import type { Projection } from '../../lib/predictions'
 import { filterRange, type Point } from '../../lib/progress'
-import { addDays, commitRange, lockProjection, lockProjectionByDate, projectedSeries } from '../../lib/goalLock'
+import {
+  addDays,
+  clampToRange,
+  commitRange,
+  lockProjection,
+  lockProjectionByDate,
+  projectedSeries,
+} from '../../lib/goalLock'
 import { LINE_GOAL, LINE_GOAL_LABEL, LINE_PRIMARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { parseISODate, toISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
@@ -86,6 +93,7 @@ export function CommitChart({
   months,
   date,
   onChange,
+  estimate,
   now,
 }: {
   goalId: string
@@ -97,6 +105,14 @@ export function CommitChart({
   /** The date currently chosen, ISO. */
   date: string
   onChange: (iso: string) => void
+  /**
+   * The estimate being bargained against: the date the drag window opens around
+   * and the mark the handle is measured away from. Defaults to the projection's
+   * own ETA — a goal changing a date it already committed to passes the estimate
+   * its held pace implies instead, which is the answer that has actually moved
+   * since it committed (see paceAgainstLock).
+   */
+  estimate?: string
   /** Overridable clock, for tests. */
   now?: Date
 }) {
@@ -108,7 +124,8 @@ export function CommitChart({
   // curve mid-drag, which is exactly the thing that has to stay still.
   const [today] = useState(() => now ?? new Date())
 
-  const range = useMemo(() => commitRange(proj.etaDate!, today), [proj.etaDate, today])
+  const eta = estimate ?? proj.etaDate!
+  const range = useMemo(() => commitRange(eta, today), [eta, today])
 
   // The machine's answer, frozen once: it must not move while the handle does,
   // or there'd be nothing steady to bargain against.
@@ -168,8 +185,7 @@ export function CommitChart({
   }
 
   /** `iso` held inside the commit window. */
-  const inRange = (iso: string): string =>
-    iso < range.soonest ? range.soonest : iso > range.latest ? range.latest : iso
+  const inRange = (iso: string): string => clampToRange(iso, range)
 
   // Dragging only takes over once the pointer has moved sideways past the slop,
   // so a thumb travelling down the page still scrolls it.
@@ -206,9 +222,9 @@ export function CommitChart({
   const rising = proj.target > proj.current
   const tagSide = rising ? 'below' : 'above'
   const chosenMs = parseISODate(date).getTime()
-  const projectedMs = parseISODate(proj.etaDate!).getTime()
+  const projectedMs = parseISODate(eta).getTime()
   // Two dots on one line: hide the machine's when the choice is sitting on it.
-  const showReferenceDot = Math.abs(daysBetween(proj.etaDate!, date)) > 3
+  const showReferenceDot = Math.abs(daysBetween(eta, date)) > 3
 
   return (
     <div
@@ -262,7 +278,7 @@ export function CommitChart({
               fill={LINE_GOAL}
               stroke="#0a0a0a"
               label={
-                <ChartTag text={fmtDate(proj.etaDate!)} color={LINE_GOAL_LABEL} bg="#262626" align="center" side={tagSide} />
+                <ChartTag text={fmtDate(eta)} color={LINE_GOAL_LABEL} bg="#262626" align="center" side={tagSide} />
               }
             />
           )}

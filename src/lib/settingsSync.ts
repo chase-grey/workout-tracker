@@ -92,9 +92,9 @@ function definedOnly<T extends object>(o: T): Partial<T> {
  * holds nothing yet, so neither side may be dropped.
  *
  * Known gap: with no tombstones, un-committing a goal on one device (see
- * GoalsPanel.recalculate, which drops a lock the pace can no longer reach) can
- * be undone by the other device pushing the lock back. Recalculating again
- * clears it. Worth it to keep the merge this simple, and a resurrected
+ * GoalsPanel.dropCommitment) can be undone by the other device pushing the lock
+ * back. Dropping it again clears it. Worth it to keep the merge this simple, and
+ * a resurrected
  * commitment is recoverable in a way a deleted one isn't.
  */
 function mergeLockedGoals(local: Settings, remote: SyncedSettings): LockedProjections {

@@ -3,7 +3,9 @@ import { project } from './predictions'
 import {
   addDays,
   adoptModel,
+  clampToRange,
   commitRange,
+  dateWithinHorizon,
   expectedAt,
   lockProjection,
   lockProjectionByDate,
@@ -67,6 +69,31 @@ describe('withinHorizon', () => {
   it('is false when nothing is trending toward the target', () => {
     const proj = project([{ date: '2026-01-01', value: 100 }], 200)
     expect(withinHorizon(proj, TODAY)).toBe(false)
+  })
+})
+
+describe('dateWithinHorizon', () => {
+  it('takes a date six months out and refuses one past it', () => {
+    expect(dateWithinHorizon('2026-07-01', TODAY)).toBe(true)
+    expect(dateWithinHorizon('2026-07-02', TODAY)).toBe(false)
+    expect(dateWithinHorizon('2028-01-14', TODAY)).toBe(false)
+  })
+
+  it('agrees with the projection-level test it backs', () => {
+    const proj = project(CLIMBING, 140, TODAY)
+    expect(dateWithinHorizon(proj.etaDate!, TODAY)).toBe(withinHorizon(proj, TODAY))
+  })
+})
+
+describe('clampToRange', () => {
+  it('holds a date inside the commit window', () => {
+    const range = commitRange('2026-04-11', TODAY)
+    expect(clampToRange('2026-03-01', range)).toBe('2026-03-01')
+    // A commitment made from further out than the window now reaches — the shape
+    // the old one-tap re-lock left behind — comes back to the window's own edge
+    // rather than being offered again as it stands.
+    expect(clampToRange('2028-01-14', range)).toBe(range.latest)
+    expect(clampToRange('2026-01-02', range)).toBe(range.soonest)
   })
 })
 
