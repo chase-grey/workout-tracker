@@ -34,6 +34,7 @@ export function AngleEditor({
   initial,
   note,
   detecting,
+  saving,
   onRedetect,
   onSave,
   onCancel,
@@ -44,6 +45,8 @@ export function AngleEditor({
   initial: Handles
   note?: string | null
   detecting?: boolean
+  /** The photo is being drawn up for the save prompt — one tap is enough. */
+  saving?: boolean
   onRedetect?: () => void
   onSave: (result: MeasureResult, handles: Handles) => void
   onCancel: () => void
@@ -245,7 +248,8 @@ export function AngleEditor({
       <div className="border-t border-border p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         <button
           onClick={() => onSave(result, handles)}
-          className="min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+          disabled={saving}
+          className="min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80 disabled:opacity-50"
         >
           save angle
         </button>

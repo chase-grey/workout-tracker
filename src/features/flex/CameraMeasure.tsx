@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MdCameraAlt, MdCameraswitch, MdPhotoLibrary } from 'react-icons/md'
+import { MdCameraAlt, MdCameraswitch, MdDownload, MdPhotoLibrary } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { detectPose } from '../../lib/pose'
 import {
@@ -35,14 +35,12 @@ const DETECT_NOTE = {
   partial: "couldn't make out your legs clearly — these dots are a rough guess.",
 } as const
 
-/** Hand the captured JPEG to the OS share/save sheet; fall back to a download. */
-async function savePhoto(blob: Blob, name: string): Promise<void> {
-  const file = new File([blob], name, { type: 'image/jpeg' })
-  const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean }
-  if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-    await nav.share({ files: [file], title: 'stretch photo' })
-    return
-  }
+/**
+ * Download the measured JPEG. Deliberately not the OS share sheet: sharing puts
+ * the photo in front of a list of apps to send it to, when the only thing wanted
+ * is a copy of it on the phone.
+ */
+function downloadPhoto(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -236,8 +234,8 @@ async function renderMeasuredPhoto(
 /**
  * Full-screen camera flow: live preview, a self-timer (default 30s) so you can
  * get into position, then an auto-capture that runs pose detection and opens the
- * draggable AngleEditor. On save it hands the photo to the OS share sheet (so it
- * lands in your gallery) and keeps nothing itself.
+ * draggable AngleEditor. On save it shows the measured photo and asks whether to
+ * download it — the reading is logged either way, and nothing is kept here.
  */
 export function CameraMeasure({
   mode: initialMode,
@@ -272,6 +270,15 @@ export function CameraMeasure({
   /** Whether the frame we're working on is a mirror image (front-camera shot). */
   const mirroredRef = useRef(false)
   const [redetecting, setRedetecting] = useState(false)
+  /** True while the measured photo is being drawn, between save and the prompt. */
+  const [composing, setComposing] = useState(false)
+  /** The measured photo, waiting on an answer to "save this photo?". */
+  const [pending, setPending] = useState<{
+    blob: Blob
+    name: string
+    url: string
+    result: MeasureResult
+  } | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -289,6 +296,14 @@ export function CameraMeasure({
    * "Lift") for exactly as long as a page holds the camera.
    */
   const streamGenRef = useRef(0)
+
+  // The preview URL outlives the render that made it, so it's released when the
+  // prompt is answered or the screen closes with it still up.
+  useEffect(() => {
+    if (!pending) return
+    const { url } = pending
+    return () => URL.revokeObjectURL(url)
+  }, [pending])
 
   const stopStream = useCallback(() => {
     streamGenRef.current++
@@ -461,16 +476,29 @@ export function CameraMeasure({
     const name = `stretch-${toISODate(new Date())}-${mode}${temp ? `-${temp}` : ''}.jpg`
     const raw = blobRef.current
     const src = shot?.url
+    setComposing(true)
     void (async () => {
-      // Save the photo with the angle lines + measurements burned in; fall back
-      // to the plain capture if compositing fails for any reason.
+      // The photo carries the angle lines + measurements burned in; fall back to
+      // the plain capture if compositing fails for any reason.
       const composed = src
         ? await renderMeasuredPhoto(src, mode, handles, result, temp).catch(() => null)
         : null
       const out = composed ?? raw
-      if (out) await savePhoto(out, name).catch(() => {})
+      blobRef.current = null
+      setComposing(false)
+      // Ask before writing anything to the phone. With no photo to offer — a
+      // capture that produced no blob at all — the reading still stands.
+      if (out) setPending({ blob: out, name, url: URL.createObjectURL(out), result })
+      else onDone(result)
     })()
-    blobRef.current = null
+  }
+
+  /** Answer the save prompt, then hand the reading on. */
+  const finishSave = (download: boolean) => {
+    if (!pending) return
+    if (download) downloadPhoto(pending.blob, pending.name)
+    const { result } = pending
+    setPending(null)
     onDone(result)
   }
 
@@ -482,6 +510,38 @@ export function CameraMeasure({
     setPhase('setup')
   }
 
+  if (pending) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-bg px-4 pt-8">
+        <h2 className="text-xl font-bold">save this photo?</h2>
+        <div className="flex flex-1 items-center justify-center overflow-hidden py-4">
+          <img
+            src={pending.url}
+            alt="measured stretch"
+            className="max-h-full w-auto rounded-2xl object-contain"
+          />
+        </div>
+        <div
+          className="flex gap-2"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
+          <button
+            onClick={() => finishSave(false)}
+            className="min-h-[56px] flex-1 rounded-2xl bg-surface-2 font-semibold active:opacity-80"
+          >
+            don't save
+          </button>
+          <button
+            onClick={() => finishSave(true)}
+            className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+          >
+            <MdDownload aria-hidden /> save
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (phase === 'editing' && shot) {
     return (
       <AngleEditor
@@ -491,6 +551,7 @@ export function CameraMeasure({
         initial={shot.handles}
         note={shot.note}
         detecting={redetecting}
+        saving={composing}
         onRedetect={() => void redetect()}
         onSave={handleSave}
         onCancel={retake}
