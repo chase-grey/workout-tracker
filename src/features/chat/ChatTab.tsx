@@ -665,11 +665,11 @@ export function ChatTab({
         <Toggle on={skills.planEdits} onClick={() => toggleSkill('planEdits')}>
           edit plan
         </Toggle>
-        <Toggle on={skills.issues} onClick={() => toggleSkill('issues')}>
-          report issues
-        </Toggle>
         <Toggle on={keepContext} onClick={toggleKeepContext}>
           keep context
+        </Toggle>
+        <Toggle on={skills.issues} onClick={() => toggleSkill('issues')}>
+          report issues
         </Toggle>
       </div>
 
@@ -818,7 +818,10 @@ export function ChatTab({
                ambiguous. Plain chat gets none — the tab it lives on already
                says what typing here does. */
             placeholder={answerTarget ? `answer #${answerTarget.number}` : undefined}
-            className="min-h-[44px] flex-1 rounded-xl bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-accent"
+            /* px-2, matching the bar's own 0.5rem: the text starts the same
+               distance in from the field's edge as the field sits from the
+               bar's, so the inset reads as one measure all the way out. */
+            className="min-h-[44px] flex-1 rounded-xl bg-surface px-2 text-base focus:outline-none focus:ring-2 focus:ring-accent"
           />
           <button
             onClick={() => void send()}
