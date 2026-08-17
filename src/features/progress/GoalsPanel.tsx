@@ -26,6 +26,7 @@ import {
   type GoalSpec,
 } from '../../lib/goals'
 import { exerciseName } from '../../config/plan'
+import { setsByDate, type DaySets } from '../../lib/goalSets'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import type { SixPackStatus } from '../../services/storage'
 import {
@@ -40,7 +41,6 @@ import {
   type LockedProjections,
 } from '../../lib/goalLock'
 import {
-  fmtDateLabel,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
@@ -55,6 +55,7 @@ import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
 import { CommitChart } from './CommitChart'
 import { FlexLadderBlock, type Ladder } from './FlexLadderBlock'
+import { GoalTooltip } from './GoalTooltip'
 import { MdBolt, MdCelebration, MdLockOutline, MdRefresh } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -64,7 +65,6 @@ function fmtDate(iso: string | null): string {
 }
 
 const axisTick = { fill: '#737373', fontSize: 10 }
-const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
 /** Merge the actual series with the locked projection into one row per date. */
 function mergeActualProjected(actual: { date: string; value: number }[], projected: { date: string; value: number }[]) {
@@ -91,12 +91,17 @@ function LockChart({
   actual,
   revisedEta,
   behind,
+  sets,
+  unit,
 }: {
   lock: LockedProjection
   actual: { date: string; value: number }[]
   /** ETA implied by the pace actually being held, when it differs from the lock's. */
   revisedEta?: string | null
   behind?: boolean
+  /** The sets behind each reading, for the tooltip (see goalSets.setsByDate). */
+  sets?: Record<string, DaySets[]>
+  unit: string
 }) {
   const rows = useMemo(
     () => withTime(mergeActualProjected(actual, projectedSeries(lock))),
@@ -147,11 +152,7 @@ function LockChart({
             interval={0}
           />
           <AxisBreak broken={yScale.broken} bg="#262626" />
-          <Tooltip
-            contentStyle={tooltipStyle}
-            labelStyle={{ color: '#a3a3a3' }}
-            labelFormatter={(ms) => fmtDateLabel(Number(ms))}
-          />
+          <Tooltip content={<GoalTooltip sets={sets} unit={unit} />} />
           {/* Where the projection was frozen: history to the left, the commitment
               it's being measured against to the right. */}
           <ReferenceLine
@@ -231,7 +232,20 @@ function LockChart({
  * only a "keep at it" line. No projected line, because there isn't a reliable
  * one to draw.
  */
-function DataChart({ points, target, targetLabel }: { points: Point[]; target: number; targetLabel: string }) {
+function DataChart({
+  points,
+  target,
+  targetLabel,
+  sets,
+  unit,
+}: {
+  points: Point[]
+  target: number
+  targetLabel: string
+  /** The sets behind each reading, for the tooltip (see goalSets.setsByDate). */
+  sets?: Record<string, DaySets[]>
+  unit: string
+}) {
   const rows = useMemo(() => withTime(points), [points])
   const yScale = useMemo(() => niceScale([...points.map((p) => p.value), target]), [points, target])
 
@@ -250,11 +264,7 @@ function DataChart({ points, target, targetLabel }: { points: Point[]; target: n
             interval={0}
           />
           <AxisBreak broken={yScale.broken} bg="#262626" />
-          <Tooltip
-            contentStyle={tooltipStyle}
-            labelStyle={{ color: '#a3a3a3' }}
-            labelFormatter={(ms) => fmtDateLabel(Number(ms))}
-          />
+          <Tooltip content={<GoalTooltip sets={sets} unit={unit} />} />
           <ReferenceLine
             y={target}
             stroke={LINE_GOAL}
@@ -461,6 +471,7 @@ function GoalRow({
   onLock,
   onLogAttempt,
   showData,
+  sets,
   chartedAbove = false,
   grouped = false,
   children,
@@ -477,6 +488,12 @@ function GoalRow({
   onLogAttempt: (weightLbs: number) => void
   /** Plot the goal's own series (with its target line) while it's unlocked. */
   showData?: boolean
+  /**
+   * The sets each of the goal's readings came off, for its chart's tooltip — the
+   * session as it was performed, rather than the one number the line plots (see
+   * goalSets). Absent for a goal no lift feeds.
+   */
+  sets?: Record<string, DaySets[]>
   /**
    * This goal's line is already drawn on a shared chart above the row (the
    * bodyweight pair, a flexibility ladder). No chart inside the row, and the
@@ -600,6 +617,8 @@ function GoalRow({
               actual={goal.points}
               revisedEta={pace?.revisedEta ?? null}
               behind={pace?.status === 'behind'}
+              sets={sets}
+              unit={goal.unit}
             />
           )}
         </>
@@ -632,6 +651,8 @@ function GoalRow({
           points={goal.points}
           target={shownTarget}
           targetLabel={`goal ${shownTarget}`}
+          sets={sets}
+          unit={goal.unit}
         />
       )}
 
@@ -801,6 +822,24 @@ export function GoalsPanel({ months }: { months: number | null }) {
     [weightGoals, locked],
   )
 
+  // The sets behind every lift goal's readings, so its chart's tooltip can show
+  // the session as it was performed (see goalSets). Held by the lifts a goal
+  // counts rather than by goal, because the four pull-up rungs read one series
+  // and the two squat targets another — one record each, not one per rung.
+  const setsByLifts = useMemo(() => {
+    const m = new Map<string, Record<string, DaySets[]>>()
+    for (const g of goals) {
+      if (!g.exerciseKey) continue
+      const keys = [g.exerciseKey, ...(g.alsoCounts ?? [])]
+      const id = keys.join('+')
+      if (!m.has(id)) m.set(id, setsByDate(workouts, keys))
+    }
+    return m
+  }, [goals, workouts])
+
+  const setsFor = (g: GoalSpec): Record<string, DaySets[]> | undefined =>
+    g.exerciseKey ? setsByLifts.get([g.exerciseKey, ...(g.alsoCounts ?? [])].join('+')) : undefined
+
   /* Lift and flexibility goals plot their own series; body-composition ones are
      already charted by the block above them, and sit inside the box that block
      draws around itself. */
@@ -817,6 +856,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
         if (g.exerciseKey) void logMaxAttempt(g.exerciseKey, weightLbs)
       }}
       showData={g.exerciseKey != null || g.milestone}
+      sets={setsFor(g)}
       chartedAbove={inBlock}
       grouped={inBlock}
     />
