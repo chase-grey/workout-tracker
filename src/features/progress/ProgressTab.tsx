@@ -32,6 +32,7 @@ import {
   timeXAxis,
   withTime,
 } from '../../lib/chart'
+import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
@@ -113,6 +114,7 @@ function mergeSeries(flat: Point[], incline: Point[], offSlot: Point[] = []) {
 }
 
 function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit: string }) {
+  const readout = useChartReadout()
   const yScale = useMemo(
     () =>
       niceScale(
@@ -129,14 +131,19 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
     )
   }
   return (
-    <div className="rounded-2xl bg-surface p-2">
+    <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <ResponsiveContainer width="100%" height={224}>
-        <LineChart data={withTime(data)} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <LineChart
+          data={withTime(data)}
+          margin={{ top: 8, right: 12, bottom: 0, left: -12 }}
+          {...readout.chart}
+        >
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
           <AxisBreak broken={yScale.broken} bg="#171717" />
           <Tooltip
+            {...readout.tooltip}
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}

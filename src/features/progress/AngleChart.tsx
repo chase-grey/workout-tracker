@@ -19,6 +19,7 @@ import {
   timeXAxis,
   withTime,
 } from '../../lib/chart'
+import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 
@@ -91,6 +92,7 @@ export function AngleChart({
   /** Placeholder text when there's nothing to plot. */
   empty: string
 }) {
+  const readout = useChartReadout()
   const rows = useMemo(() => withTime(mergeRows(readings, goals)), [readings, goals])
 
   // The axis has to frame the targets as well as the readings, or a goal above
@@ -113,14 +115,15 @@ export function AngleChart({
   }
 
   return (
-    <div className="rounded-2xl bg-surface p-2">
+    <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={rows} margin={{ top: 8, right: 14, bottom: 0, left: -12 }}>
+        <LineChart data={rows} margin={{ top: 8, right: 14, bottom: 0, left: -12 }} {...readout.chart}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
           <AxisBreak broken={yScale.broken} bg="#171717" />
           <Tooltip
+            {...readout.tooltip}
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}

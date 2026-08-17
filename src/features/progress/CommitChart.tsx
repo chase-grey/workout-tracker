@@ -228,7 +228,13 @@ export function CommitChart({
       className="mt-3 touch-pan-y select-none rounded-xl bg-surface-2 p-1 outline-none focus-visible:ring-1 focus-visible:ring-accent-2"
     >
       <ResponsiveContainer width="100%" height={170}>
-        <LineChart data={rows} margin={{ top: 6, right: 10, bottom: 0, left: 0 }}>
+        {/* The slider above is the thing to focus here; Recharts' own focus layer
+            would put a second focus box inside it, around the plot. */}
+        <LineChart
+          data={rows}
+          margin={{ top: 6, right: 10, bottom: 0, left: 0 }}
+          accessibilityLayer={false}
+        >
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} domain={xDomain} tick={axisTick} />
           <YAxis

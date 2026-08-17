@@ -50,6 +50,7 @@ import {
   withTime,
 } from '../../lib/chart'
 import { daysBetween, parseISODate } from '../../lib/dates'
+import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
@@ -103,6 +104,7 @@ function LockChart({
   sets?: Record<string, DaySets[]>
   unit: string
 }) {
+  const readout = useChartReadout()
   const rows = useMemo(
     () => withTime(mergeActualProjected(actual, projectedSeries(lock))),
     [lock, actual],
@@ -138,9 +140,9 @@ function LockChart({
   const revisedNudge = rising ? 12 : -12
 
   return (
-    <div className="mt-3 rounded-xl bg-surface-2 p-1">
+    <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card}>
       <ResponsiveContainer width="100%" height={140}>
-        <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+        <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }} {...readout.chart}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} domain={xDomain} tick={axisTick} />
           <YAxis
@@ -152,7 +154,7 @@ function LockChart({
             interval={0}
           />
           <AxisBreak broken={yScale.broken} bg="#262626" />
-          <Tooltip content={<GoalTooltip sets={sets} unit={unit} />} />
+          <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} />} />
           {/* Where the projection was frozen: history to the left, the commitment
               it's being measured against to the right. */}
           <ReferenceLine
@@ -246,13 +248,14 @@ function DataChart({
   sets?: Record<string, DaySets[]>
   unit: string
 }) {
+  const readout = useChartReadout()
   const rows = useMemo(() => withTime(points), [points])
   const yScale = useMemo(() => niceScale([...points.map((p) => p.value), target]), [points, target])
 
   return (
-    <div className="mt-3 rounded-xl bg-surface-2 p-1">
+    <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card}>
       <ResponsiveContainer width="100%" height={120}>
-        <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+        <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }} {...readout.chart}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis
@@ -264,7 +267,7 @@ function DataChart({
             interval={0}
           />
           <AxisBreak broken={yScale.broken} bg="#262626" />
-          <Tooltip content={<GoalTooltip sets={sets} unit={unit} />} />
+          <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} />} />
           <ReferenceLine
             y={target}
             stroke={LINE_GOAL}

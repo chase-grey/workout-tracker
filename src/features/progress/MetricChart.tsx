@@ -24,6 +24,7 @@ import {
   timeXAxis,
   withTime,
 } from '../../lib/chart'
+import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 
@@ -86,6 +87,7 @@ export function MetricChart({
   /** Placeholder text when there's nothing to plot. */
   empty?: string
 }) {
+  const readout = useChartReadout()
   const overlay = calories != null && calories.length > 0
   const off = useMemo(() => offSlot ?? [], [offSlot])
   // The left axis must also frame any goal line and the rings beside the line,
@@ -116,9 +118,13 @@ export function MetricChart({
     )
   }
   return (
-    <div className="rounded-2xl bg-surface p-2">
+    <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <ResponsiveContainer width="100%" height={224}>
-        <LineChart data={rows} margin={{ top: 8, right: overlay ? 0 : 12, bottom: 0, left: -12 }}>
+        <LineChart
+          data={rows}
+          margin={{ top: 8, right: overlay ? 0 : 12, bottom: 0, left: -12 }}
+          {...readout.chart}
+        >
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis
@@ -141,6 +147,7 @@ export function MetricChart({
             />
           )}
           <Tooltip
+            {...readout.tooltip}
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}

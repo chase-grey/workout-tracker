@@ -93,6 +93,15 @@ input[type='number'] {
   -moz-appearance: textfield;
 }
 
+/* Nothing inside a chart is a control, so nothing inside one draws a focus box.
+   The plots ask Recharts not to make itself focusable (see useChartReadout), and
+   this catches whatever it decides to make focusable next — a tap on a graph
+   should leave numbers behind, not an outline. */
+.recharts-wrapper :focus,
+.recharts-wrapper :focus-visible {
+  outline: none;
+}
+
 /* ---- Rest timer shapes (see RestTimer) ----
    Each shape's *level* encodes the time left; these loops are texture only and
    never touch that level, so the time reading stays honest. */

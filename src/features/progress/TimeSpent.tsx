@@ -20,6 +20,7 @@ import {
   secToMin,
 } from '../../lib/activityTime'
 import { LINE_GOAL, LINE_PRIMARY, LINE_SECONDARY, niceScale } from '../../lib/chart'
+import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 
 /** The green ladder, brightest bucket first: work, then stretch, then rest. */
@@ -47,6 +48,9 @@ const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRa
 
 export function TimeSpent({ months }: { months: number | null }) {
   const { durations } = useData()
+  // One per chart: reading the donut shouldn't leave the months chart lit up.
+  const split = useChartReadout()
+  const monthlyReadout = useChartReadout()
 
   const inRange = useMemo(() => filterDurationsByMonths(durations, months), [durations, months])
   const totals = useMemo(() => activityTotals(inRange), [inRange])
@@ -90,10 +94,13 @@ export function TimeSpent({ months }: { months: number | null }) {
         </div>
       ) : (
         <>
-          <div className="rounded-2xl bg-surface p-2">
+          <div className="rounded-2xl bg-surface p-2" {...split.card}>
             <ResponsiveContainer width="100%" height={224}>
-              <PieChart>
+              <PieChart {...split.chart}>
+                {/* The ring is one more thing Recharts makes focusable in its own
+                    right, on top of the plot around it. */}
                 <Pie
+                  rootTabIndex={-1}
                   data={pieData}
                   dataKey="sec"
                   nameKey="name"
@@ -109,6 +116,7 @@ export function TimeSpent({ months }: { months: number | null }) {
                   ))}
                 </Pie>
                 <Tooltip
+                  {...split.tooltip}
                   contentStyle={tooltipStyle}
                   formatter={(v, n) => [fmtHm(Number(v)), n]}
                 />
@@ -131,9 +139,13 @@ export function TimeSpent({ months }: { months: number | null }) {
           </div>
 
           {monthly.length > 1 && (
-            <div className="rounded-2xl bg-surface p-2">
+            <div className="rounded-2xl bg-surface p-2" {...monthlyReadout.card}>
               <ResponsiveContainer width="100%" height={224}>
-                <LineChart data={monthly} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                <LineChart
+                  data={monthly}
+                  margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
+                  {...monthlyReadout.chart}
+                >
                   <CartesianGrid stroke="#262626" vertical={false} />
                   <XAxis dataKey="month" tick={axisTick} />
                   <YAxis
@@ -145,6 +157,7 @@ export function TimeSpent({ months }: { months: number | null }) {
                   />
                   <AxisBreak broken={minutesScale.broken} bg="#171717" />
                   <Tooltip
+                    {...monthlyReadout.tooltip}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: '#a3a3a3' }}
                     formatter={(v, n) => [`${v} min`, n]}
