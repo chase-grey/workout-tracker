@@ -76,6 +76,17 @@ export type PlannedExercise = {
    */
   sharedLoad?: string
   /**
+   * Loaded with a dumbbell in each hand, and the weight logged is the pair's
+   * total. The rack steps in 5s, but both hands change at once, so the smallest
+   * move available is 10 lbs — every paired movement's `increment` is 10, and one
+   * added later should be too.
+   *
+   * A movement that shares a single dumbbell between the hands isn't one of
+   * these: the lateral raise logs that one dumbbell, so it steps in the rack's
+   * own smaller jumps.
+   */
+  dumbbellPair?: boolean
+  /**
    * A movement trained one limb at a time. Each side is its own exercise — its own
    * key, its own history, its own line on the chart — so an imbalance between them
    * is visible instead of averaged away.
@@ -210,7 +221,7 @@ export const DEFAULT_PLAN: Plan = {
       // Overhead press is a compound, so it goes before chest isolation — three
       // sets done fresh beat four done after flys, and front delts already take
       // heavy work from seven press sets above.
-      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders' },
+      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, dumbbellPair: true, group: 'shoulders' },
       { key: 'iso_chest', name: 'chest fly / pec deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'chest finisher' },
 
       // Circuit: pushdown → one arm's raise → overhead extension → the other arm's
@@ -270,8 +281,9 @@ export const DEFAULT_PLAN: Plan = {
 
       { key: 'cable_row', name: 'cable row (neutral grip)', sets: 2, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'back' },
 
-      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 5, group: 'biceps' },
-      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'biceps' },
+      // Both are a dumbbell in each hand, so both step in 10s (see dumbbellPair).
+      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 10, dumbbellPair: true, group: 'biceps' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 10, dumbbellPair: true, group: 'biceps' },
 
       // Extension and flexion are antagonists, so they rotate as a circuit and the
       // pair costs about as long as one of them would alone. Two directions is what
@@ -294,9 +306,9 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'leg_press', name: 'leg press', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 10, group: 'legs' },
       { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest' },
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
-      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders' },
+      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, dumbbellPair: true, group: 'shoulders' },
 
-      { key: 'hammer_curl', name: 'hammer curl', sets: 2, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'arms circuit', circuit: 'arms' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 2, repMin: 10, repMax: 15, restSec: 60, increment: 10, dumbbellPair: true, group: 'arms circuit', circuit: 'arms' },
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 2, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'arms circuit', circuit: 'arms' },
 
       { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'core' },
@@ -409,6 +421,19 @@ const LEGACY_EXERCISE_NAMES: Record<string, string[]> = {
   [HANGING_RAISE_KEY]: ['hanging leg raise'],
 }
 
+/**
+ * Same idea again, for the weight step. The two-dumbbell movements shipped
+ * stepping in 5s before {@link PlannedExercise.dumbbellPair} was understood, and
+ * that's half a step — a pair of dumbbells only changes 10 lbs at a time. A
+ * stored 5 on one of these is the old default rather than a choice, so it follows
+ * the defaults up to 10; any other number is the user's own and is left alone.
+ */
+const LEGACY_EXERCISE_INCREMENTS: Record<string, number[]> = {
+  db_overhead_press: [5],
+  incline_db_curl: [5],
+  hammer_curl: [5],
+}
+
 /** Same idea as LEGACY_EXERCISE_NAMES, for the display group. */
 const LEGACY_EXERCISE_GROUPS: Record<string, string[]> = {
   db_overhead_press: ['shoulders & triceps'],
@@ -462,16 +487,16 @@ function mergeDayExercises(
   }
   const kept = stored.filter((e) => !retiredSet.has(e.key))
   const storedKeys = new Set(kept.map((e) => e.key))
-  // Re-adopt the default name/group when a stored one differs only by case (so a
-  // device that saved the old Title Case names picks up the lowercase ones) or
-  // when it still matches a name/group the defaults used to ship with. A name the
-  // user actually chose reads as neither and is left alone.
+  // Re-adopt the default name/group/weight step when a stored one differs only by
+  // case (so a device that saved the old Title Case names picks up the lowercase
+  // ones) or when it still matches a value the defaults used to ship with. A name
+  // or a step the user actually chose reads as neither and is left alone.
   //
-  // The structural fields (circuit, sharedLoad, side, byVariant, repsOnly) are
-  // program design rather than user preference, and the plan editor doesn't expose
-  // them, so they always come from the defaults — otherwise a stored day would
-  // never pick up the arm circuit, the shared tricep load, which arm a raise
-  // trains, or the push A/B split.
+  // The structural fields (circuit, sharedLoad, dumbbellPair, side, byVariant,
+  // repsOnly) are program design rather than user preference, and the plan editor
+  // doesn't expose them, so they always come from the defaults — otherwise a
+  // stored day would never pick up the arm circuit, the shared tricep load, which
+  // arm a raise trains, or the push A/B split.
   const out = kept.map((e) => {
     const def = defaults.find((d) => d.key === e.key)
     if (!def) return e
@@ -481,12 +506,16 @@ function mergeDayExercises(
     const wasDefaultGroup =
       def.group.toLowerCase() === e.group.toLowerCase() ||
       (LEGACY_EXERCISE_GROUPS[e.key] ?? []).some((g) => g.toLowerCase() === e.group.toLowerCase())
+    const wasDefaultIncrement =
+      e.increment != null && (LEGACY_EXERCISE_INCREMENTS[e.key] ?? []).includes(e.increment)
     return {
       ...e,
       name: wasDefaultName ? def.name : e.name,
       group: wasDefaultGroup ? def.group : e.group,
+      increment: wasDefaultIncrement ? def.increment : e.increment,
       circuit: def.circuit,
       sharedLoad: def.sharedLoad,
+      dumbbellPair: def.dumbbellPair,
       side: def.side,
       byVariant: def.byVariant,
       repsOnly: def.repsOnly,

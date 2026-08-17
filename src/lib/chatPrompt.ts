@@ -20,13 +20,19 @@ function renderPlan(): string {
       // Exercises sharing a load are prescribed one weight between them, so the
       // coach shouldn't propose a number for either of them alone.
       const shared = ex.sharedLoad ? ` [shares one weight with the other ${ex.sharedLoad} move]` : ''
+      // A dumbbell in each hand: the logged number is the pair's total, so the
+      // smallest change is 10 lbs. The coach talks in these numbers and can add
+      // exercises, so the rule belongs where it can read it.
+      const paired = ex.dumbbellPair
+        ? ' [a dumbbell in each hand, so the weight logged is the pair total and only moves in 10s]'
+        : ''
       // Circuit stations rotate rather than running their sets back to back, and
       // each one sets the rest that follows it, so both belong on the line.
       const circuit = ex.circuit
         ? ` [circuit ${ex.circuit}${ex.circuitRestSec == null ? '' : `, ${ex.circuitRestSec}s rest after each of its sets`}]`
         : ''
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}${shared}${circuit}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}`,
       )
     }
   }
@@ -128,6 +134,8 @@ function renderTools(skills: CoachSkills): string[] {
       : 'When the user asks for one of those, say plainly that it needs the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, say so rather than doing something adjacent.'
     lines.push(
       `Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. ${elsewhere}`,
+      ``,
+      `A movement done with a dumbbell in each hand logs the pair's total, so its weight step is 10 lbs and never 5: the rack moves in 5s and both hands change at once. Give any such exercise you add \`increment: 10\`, and never talk about a 5-lb jump on one of the paired movements marked in the plan below.`,
       ``,
     )
   } else {

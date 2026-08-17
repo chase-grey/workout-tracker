@@ -149,6 +149,40 @@ describe('withPlanDefaults', () => {
     expect(merged.push.exercises.find((e) => e.key === 'flat_bench')?.byVariant?.B?.sets).toBe(4)
   })
 
+  it('raises a stored 5-lb step on a two-dumbbell movement to a real one', () => {
+    // What every device saved before the pair was accounted for: half a step, since
+    // moving up swaps both dumbbells.
+    const storedPull = {
+      ...DEFAULT_PLAN.pull,
+      exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
+        e.dumbbellPair ? { ...e, increment: 5 } : e,
+      ),
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
+    expect(merged.pull.exercises.find((e) => e.key === 'hammer_curl')?.increment).toBe(10)
+    expect(merged.pull.exercises.find((e) => e.key === 'incline_db_curl')?.increment).toBe(10)
+  })
+
+  it('leaves a weight step the user chose themselves alone', () => {
+    const storedPull = {
+      ...DEFAULT_PLAN.pull,
+      exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
+        e.key === 'hammer_curl' ? { ...e, increment: 20 } : e,
+      ),
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
+    expect(merged.pull.exercises.find((e) => e.key === 'hammer_curl')?.increment).toBe(20)
+  })
+
+  it('adopts the pair flag on a day stored before it existed', () => {
+    const storedPull = {
+      ...DEFAULT_PLAN.pull,
+      exercises: DEFAULT_PLAN.pull.exercises.map(({ dumbbellPair: _p, ...rest }) => rest),
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
+    expect(merged.pull.exercises.find((e) => e.key === 'hammer_curl')?.dumbbellPair).toBe(true)
+  })
+
   it('never clobbers a user-customized exercise', () => {
     const storedPush = {
       ...DEFAULT_PLAN.push,
@@ -372,6 +406,33 @@ describe('the arm circuit as it ships', () => {
     expect(new Set(raises.map((h) => h.from)).size).toBe(2)
     expect(raises.length).toBeGreaterThan(2)
     expect(new Set(raises.map((h) => h.sec))).toEqual(new Set([60]))
+  })
+})
+
+describe('the two-dumbbell movements as they ship', () => {
+  const paired = DAY_TYPES.flatMap((t) =>
+    DEFAULT_PLAN[t].exercises.filter((e) => e.dumbbellPair).map((e) => ({ day: t, ex: e })),
+  )
+
+  it('steps every one of them in 10s, on every day it appears', () => {
+    // A pair only changes 10 lbs at a time: the rack moves in 5s and both hands
+    // change together, so 5 is a step that doesn't exist.
+    expect(paired.length).toBeGreaterThan(0)
+    for (const { day, ex } of paired) {
+      expect(ex.increment, `${ex.key} on ${day}`).toBe(10)
+    }
+  })
+
+  it('covers the curls and the overhead press', () => {
+    expect(new Set(paired.map((p) => p.ex.key))).toEqual(
+      new Set(['hammer_curl', 'incline_db_curl', 'db_overhead_press']),
+    )
+  })
+
+  it('leaves the one-dumbbell lateral raise on its own smaller step', () => {
+    const raise = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'lateral_raise_l')
+    expect(raise?.dumbbellPair).toBeUndefined()
+    expect(raise?.increment).toBe(2.5)
   })
 })
 
