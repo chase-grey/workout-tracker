@@ -413,6 +413,27 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setRest(null)
   }
 
+  // Rest again before the set on screen — for the rest that was cut short, or the
+  // one hands-free rolled straight through. The seconds count like any other rest,
+  // and the time already spent on this set screen is dropped rather than carried
+  // through the rest: an exercise's average has nothing to learn from a set that
+  // was stood down from halfway.
+  const reopenRest = (sec: number) => {
+    activeStartRef.current = 0
+    restStartRef.current = Date.now()
+    commitTally(openRest(tally.current, sec))
+    setRest({
+      seconds: sec,
+      endsAt: Date.now() + sec * 1000,
+      exKey: planned.key,
+      // This rest leads *into* the set on screen rather than away from one, so
+      // there's no exercise to announce, and adding a set is the ordinary
+      // extend-this-exercise case rather than a jump.
+      isLastSetOfExercise: false,
+      upNext: null,
+    })
+  }
+
   // Mark the current set done and either rest into the next set or finish.
   const completeSetAndAdvance = () => {
     recordActiveForCurrent(planned.key)
@@ -524,6 +545,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
+    // Off the rest screen only — there's nothing to go back to while it's up, and
+    // nothing to rest before if the workout hasn't started.
+    ...(rest == null && !awaitingStart && restShownSec > 0
+      ? [{ label: 'back to rest', onClick: () => reopenRest(restShownSec) }]
+      : []),
     // Only inside a circuit: everywhere else the rest after a set is simply the
     // exercise's own, and there's nothing per-station to choose between.
     ...(stations.length > 0
