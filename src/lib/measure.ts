@@ -79,6 +79,134 @@ export const SEGMENTS: Record<MeasureMode, Segment[]> = {
 }
 
 /**
+ * The handle a mode's plumb line hangs from, for a mode measured off vertical
+ * rather than off a second body line. Without the line drawn, the number on the
+ * photo has nothing to be read against. Null when both of the mode's lines are
+ * body lines and the angle between them is visible on its own.
+ */
+export const VERTICAL_REF: Record<MeasureMode, string | null> = {
+  split: null,
+  tailors: 'center',
+}
+
+/** Shortest plumb line worth drawing, as a fraction of the photo's height. */
+const MIN_GUIDE = 0.14
+
+/**
+ * The plumb line to draw for this mode: from its reference handle, straight up
+ * to the height of the highest handle measured against it (and never so short
+ * it can't be seen). In normalized coords, like the handles.
+ */
+export function verticalGuide(mode: MeasureMode, h: Handles): { from: Pt; toY: number } | null {
+  const key = VERTICAL_REF[mode]
+  if (!key) return null
+  const from = h[key]
+  if (!from) return null
+  const ends = SEGMENTS[mode]
+    .filter((s) => s.from === key)
+    .map((s) => h[s.to])
+    .filter((p): p is Pt => p !== undefined)
+  if (ends.length === 0) return null
+  return { from, toY: Math.min(...ends.map((p) => p.y), from.y - MIN_GUIDE) }
+}
+
+/**
+ * Where a reading actually sits on the photo: the vertex the angle opens from,
+ * the two rays that bound it, and which way to put the arc and the number.
+ */
+export type AngleMark = {
+  vertex: Pt
+  /** Unit directions of the two bounding rays. */
+  rays: [Pt, Pt]
+  /** Unit direction bisecting them — the middle of the wedge. */
+  bisector: Pt
+  /** How far the nearer bounding ray reaches, so an arc can be sized to fit. */
+  reach: number
+  deg: number
+  /** The line this reading belongs to, for coloring it to match. */
+  role: Segment['role']
+}
+
+const vec = (from: Pt, to: Pt): Pt => ({ x: to.x - from.x, y: to.y - from.y })
+
+const unitVec = (p: Pt): Pt | null => {
+  const m = Math.hypot(p.x, p.y)
+  return m < 1e-9 ? null : { x: p.x / m, y: p.y / m }
+}
+
+/**
+ * Direction bisecting two unit rays. Opposite rays — a straight 180° reading,
+ * which is the whole point of the split — sum to nothing and have two bisectors,
+ * so fall back to a perpendicular, taking the downward one: on a photo of either
+ * pose the body is above the vertex and the wedge opens below it.
+ */
+function bisect(a: Pt, b: Pt): Pt {
+  const sum = unitVec({ x: a.x + b.x, y: a.y + b.y })
+  if (sum) return sum
+  const perp = { x: -a.y, y: a.x }
+  return perp.y < 0 ? { x: -perp.x, y: -perp.y } : perp
+}
+
+/**
+ * The angles to annotate on a measured photo, in the order they're read.
+ *
+ * Pass handles in a space where both axes share a scale — pixels, not the
+ * per-axis normalized handles. Both are the same space up to a uniform scale
+ * (see `sub`), so a pixel-space arc spans exactly the angle that was logged;
+ * hand it the raw normalized handles and it would draw a different angle than
+ * the number beside it. Readings whose handles are missing, or sat on top of
+ * their vertex, are left out rather than drawn somewhere arbitrary.
+ */
+export function angleMarks(mode: MeasureMode, h: Handles, r: MeasureResult): AngleMark[] {
+  if (mode === 'split') {
+    const { hip, ankleL, ankleR } = h
+    if (!hip || !ankleL || !ankleR || r.splitDeg == null) return []
+    const legL = vec(hip, ankleL)
+    const legR = vec(hip, ankleR)
+    const a = unitVec(legL)
+    const b = unitVec(legR)
+    if (!a || !b) return []
+    // The split is one angle across both legs, so it takes the neutral color
+    // rather than either leg's.
+    return [
+      {
+        vertex: hip,
+        rays: [a, b],
+        bisector: bisect(a, b),
+        reach: Math.min(Math.hypot(legL.x, legL.y), Math.hypot(legR.x, legR.y)),
+        deg: r.splitDeg,
+        role: 'ref',
+      },
+    ]
+  }
+
+  const center = h.center
+  if (!center) return []
+  const sides = [
+    { key: 'kneeL', deg: r.tailorsLeftDeg, role: 'a' as const },
+    { key: 'kneeR', deg: r.tailorsRightDeg, role: 'b' as const },
+  ]
+  const marks: AngleMark[] = []
+  for (const s of sides) {
+    const knee = h[s.key]
+    if (!knee || s.deg == null) continue
+    const leg = vec(center, knee)
+    const u = unitVec(leg)
+    if (!u) continue
+    // Measured off straight up, so the plumb line is the angle's other ray.
+    marks.push({
+      vertex: center,
+      rays: [UP, u],
+      bisector: bisect(UP, u),
+      reach: Math.hypot(leg.x, leg.y),
+      deg: s.deg,
+      role: s.role,
+    })
+  }
+  return marks
+}
+
+/**
  * Fallback handle positions when pose detection fails. Placed where a full-body
  * phone shot of each pose usually lands — the dots still need dragging, but from
  * roughly the right part of the body rather than the middle of the frame.

@@ -7,9 +7,11 @@ import {
   SEGMENTS,
   ROLE_COLOR,
   MEASURE_LABEL,
+  angleMarks,
   defaultHandles,
   handlesFromLandmarks,
   summarizeResult,
+  verticalGuide,
   type Handles,
   type MeasureMode,
   type MeasureResult,
@@ -55,10 +57,10 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
 
 /**
  * Burn the measurement onto the photo: draw the same lines and dots the editor
- * showed, label each line with its angle, and stamp a caption (pose + angles +
- * date) so the saved image is self-explanatory. A cold/warm reading also gets a
- * pill in the top-right corner. Returns a fresh JPEG blob, or null if the image
- * can't be drawn (caller falls back to the raw photo).
+ * showed, arc each reading across the angle it measures, and stamp a caption
+ * (pose + angles + date) so the saved image is self-explanatory. A cold/warm
+ * reading also gets a pill in the top-right corner. Returns a fresh JPEG blob,
+ * or null if the image can't be drawn (caller falls back to the raw photo).
  */
 async function renderMeasuredPhoto(
   imageUrl: string,
@@ -92,6 +94,30 @@ async function renderMeasuredPhoto(
   const dotR = lineW * 1.6
   const px = (p: { x: number; y: number }) => ({ x: p.x * W, y: p.y * H })
 
+  // Plumb line, for a pose measured off vertical: the ray the numbers are read
+  // against. Drawn under the body lines, and always long enough to clear the arc.
+  const guide = verticalGuide(mode, handles)
+  const marks = angleMarks(
+    mode,
+    Object.fromEntries(Object.entries(handles).map(([k, p]) => [k, px(p)])),
+    result,
+  )
+  const maxRad = marks.length
+    ? Math.max(...marks.map((m) => Math.min(m.reach * 0.42, unit * 0.12)))
+    : 0
+  if (guide) {
+    const from = px(guide.from)
+    ctx.save()
+    ctx.setLineDash([lineW * 3, lineW * 2])
+    ctx.beginPath()
+    ctx.moveTo(from.x, from.y)
+    ctx.lineTo(from.x, Math.min(guide.toY * H, from.y - maxRad * 1.35))
+    ctx.strokeStyle = ROLE_COLOR.ref
+    ctx.lineWidth = Math.max(2, lineW * 0.7)
+    ctx.stroke()
+    ctx.restore()
+  }
+
   // Angle lines.
   ctx.lineCap = 'round'
   for (const s of SEGMENTS[mode]) {
@@ -122,37 +148,51 @@ async function renderMeasuredPhoto(
     ctx.stroke()
   }
 
-  // Per-line angle labels near the middle of each measured line.
   const font = Math.round(unit * 0.05)
   ctx.font = `bold ${font}px system-ui, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.lineJoin = 'round'
-  const stamp = (text: string, x: number, y: number) => {
+  const stamp = (text: string, x: number, y: number, fill = '#ffffff') => {
     ctx.lineWidth = Math.max(2, font * 0.18)
     ctx.strokeStyle = 'rgba(0,0,0,0.85)'
     ctx.strokeText(text, x, y)
-    ctx.fillStyle = '#ffffff'
+    ctx.fillStyle = fill
     ctx.fillText(text, x, y)
   }
-  const labels =
-    mode === 'split'
-      ? [{ deg: result.splitDeg, from: 'hip', to: 'ankleL' }]
-      : [
-          { deg: result.tailorsLeftDeg, from: 'center', to: 'kneeL' },
-          { deg: result.tailorsRightDeg, from: 'center', to: 'kneeR' },
-        ]
-  for (const l of labels) {
-    const a = handles[l.from]
-    const b = handles[l.to]
-    if (!a || !b || l.deg == null) continue
-    const pa = px(a)
-    const pb = px(b)
-    stamp(`${l.deg}°`, (pa.x + pb.x) / 2, (pa.y + pb.y) / 2 - font * 0.6)
+
+  const capH = Math.round(unit * 0.11)
+
+  // Each reading gets an arc across the angle it actually measures, at the vertex
+  // that angle opens from, with the number in the middle of the wedge — so what's
+  // written is what the picture shows. Colored to match its line, which is what
+  // tells the two tailor's readings apart.
+  for (const m of marks) {
+    const rad = Math.min(m.reach * 0.42, unit * 0.12)
+    const a0 = Math.atan2(m.rays[0].y, m.rays[0].x)
+    const a1 = Math.atan2(m.rays[1].y, m.rays[1].x)
+    // Sweep the short way round, which is the angle that was logged (0..180).
+    let delta = (a1 - a0) % (Math.PI * 2)
+    if (delta > Math.PI) delta -= Math.PI * 2
+    if (delta < -Math.PI) delta += Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(m.vertex.x, m.vertex.y, rad, a0, a1, delta < 0)
+    ctx.strokeStyle = ROLE_COLOR[m.role]
+    ctx.lineWidth = Math.max(2, lineW * 0.8)
+    ctx.stroke()
+
+    const reachOut = rad + font * 0.85
+    stamp(
+      `${m.deg}°`,
+      // Kept clear of the edges and the caption, so a wide angle whose wedge
+      // points off-frame still reads.
+      Math.min(W - font, Math.max(font, m.vertex.x + m.bisector.x * reachOut)),
+      Math.min(H - capH - font * 0.6, Math.max(font, m.vertex.y + m.bisector.y * reachOut)),
+      ROLE_COLOR[m.role],
+    )
   }
 
   // Bottom caption: pose, angles, date.
-  const capH = Math.round(unit * 0.11)
   ctx.fillStyle = 'rgba(0,0,0,0.6)'
   ctx.fillRect(0, H - capH, W, capH)
   const capFont = Math.round(unit * 0.045)

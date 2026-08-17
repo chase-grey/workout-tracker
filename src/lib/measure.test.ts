@@ -2,12 +2,16 @@ import { describe, it, expect } from 'vitest'
 import {
   HANDLES,
   SEGMENTS,
+  VERTICAL_REF,
+  angleMarks,
   anglesFromHandles,
   defaultHandles,
   handlesFromLandmarks,
   hasSides,
   summarizeResult,
   swapSides,
+  verticalGuide,
+  type AngleMark,
   type Handles,
 } from './measure'
 import { POSE, type Pt } from './splitAngle'
@@ -73,6 +77,127 @@ describe('anglesFromHandles', () => {
     }
     const r = anglesFromHandles('tailors', h, 0.75)
     expect(r.tailorsLeftDeg).toBeCloseTo(0, 0)
+  })
+})
+
+describe('angleMarks', () => {
+  /** The angle the mark's own rays span, which is what an arc across it draws. */
+  const spanned = (m: AngleMark): number => {
+    const [a, b] = m.rays
+    const dot = Math.min(1, Math.max(-1, a.x * b.x + a.y * b.y))
+    return (Math.acos(dot) * 180) / Math.PI
+  }
+
+  /** Handles in pixel space, where the drawn angle is the logged one. */
+  const inPixels = (h: Handles, w: number, hgt: number): Handles =>
+    Object.fromEntries(Object.entries(h).map(([k, p]) => [k, { x: p.x * w, y: p.y * hgt }]))
+
+  it('split: opens from the hip, not the middle of a leg', () => {
+    const h: Handles = {
+      hip: { x: 0.5, y: 0.5 },
+      ankleL: { x: 0.2, y: 0.8 },
+      ankleR: { x: 0.8, y: 0.8 },
+    }
+    const [m] = angleMarks('split', inPixels(h, 900, 1200), { splitDeg: 73.7 })
+    expect(m.vertex).toEqual({ x: 450, y: 600 })
+    // The wedge between the legs opens downward, so that's where the number goes.
+    expect(m.bisector.x).toBeCloseTo(0, 5)
+    expect(m.bisector.y).toBeGreaterThan(0)
+  })
+
+  it('draws the angle it reports, at the aspect the photo was measured at', () => {
+    const h: Handles = {
+      hip: { x: 0.5, y: 0.5 },
+      ankleL: { x: 0.2, y: 0.8 },
+      ankleR: { x: 0.8, y: 0.8 },
+    }
+    for (const [w, hgt] of [
+      [1200, 1200],
+      [900, 1200],
+      [1600, 900],
+    ]) {
+      const logged = anglesFromHandles('split', h, w / hgt).splitDeg!
+      const [m] = angleMarks('split', inPixels(h, w, hgt), { splitDeg: logged })
+      expect(spanned(m)).toBeCloseTo(logged, 1)
+    }
+  })
+
+  it('split: a full straddle still has somewhere to put the number', () => {
+    const h: Handles = {
+      hip: { x: 0.5, y: 0.5 },
+      ankleL: { x: 0.1, y: 0.5 },
+      ankleR: { x: 0.9, y: 0.5 },
+    }
+    const [m] = angleMarks('split', inPixels(h, 1200, 1200), { splitDeg: 180 })
+    expect(spanned(m)).toBeCloseTo(180, 1)
+    // Legs straight out leave two bisectors; the number belongs below the hip,
+    // away from the body.
+    expect(Math.hypot(m.bisector.x, m.bisector.y)).toBeCloseTo(1, 5)
+    expect(m.bisector.y).toBeGreaterThan(0)
+  })
+
+  it("tailors: one mark per knee, both off the vertical at the center dot", () => {
+    const h: Handles = {
+      center: { x: 0.5, y: 0.9 },
+      kneeL: { x: 0.3, y: 0.75 },
+      kneeR: { x: 0.72, y: 0.8 },
+    }
+    const r = anglesFromHandles('tailors', h, 0.75)
+    const marks = angleMarks('tailors', inPixels(h, 900, 1200), r)
+    expect(marks).toHaveLength(2)
+    for (const m of marks) {
+      expect(m.vertex).toEqual({ x: 450, y: 1080 })
+      expect(m.rays[0]).toEqual({ x: 0, y: -1 })
+      expect(spanned(m)).toBeCloseTo(m.deg, 1)
+    }
+    // Each number is colored to its own line, which is what tells them apart.
+    expect(marks.map((m) => m.role)).toEqual(['a', 'b'])
+    expect(marks[0].deg).toBe(r.tailorsLeftDeg)
+    expect(marks[1].deg).toBe(r.tailorsRightDeg)
+    // Left knee out to the left: its wedge, and its number, sit on that side.
+    expect(marks[0].bisector.x).toBeLessThan(0)
+    expect(marks[1].bisector.x).toBeGreaterThan(0)
+  })
+
+  it('leaves out a reading it has no handles or no number for', () => {
+    expect(angleMarks('split', defaultHandles('split'), {})).toEqual([])
+    expect(angleMarks('split', { hip: { x: 1, y: 1 } }, { splitDeg: 90 })).toEqual([])
+    const h = { ...defaultHandles('tailors') }
+    expect(angleMarks('tailors', h, { tailorsLeftDeg: 55 })).toHaveLength(1)
+    // A knee dragged onto the center dot has no direction to measure.
+    expect(
+      angleMarks('tailors', { ...h, kneeL: h.center }, { tailorsLeftDeg: 55 }),
+    ).toEqual([])
+  })
+})
+
+describe('verticalGuide', () => {
+  it('is only drawn for a pose measured off vertical', () => {
+    expect(VERTICAL_REF.split).toBeNull()
+    expect(verticalGuide('split', defaultHandles('split'))).toBeNull()
+    expect(verticalGuide('tailors', defaultHandles('tailors'))).not.toBeNull()
+  })
+
+  it('reaches up past the highest knee it is measured against', () => {
+    const h: Handles = {
+      center: { x: 0.5, y: 0.9 },
+      kneeL: { x: 0.3, y: 0.6 },
+      kneeR: { x: 0.7, y: 0.75 },
+    }
+    const g = verticalGuide('tailors', h)!
+    expect(g.from).toEqual(h.center)
+    expect(g.toY).toBeCloseTo(0.6, 5)
+  })
+
+  it('stays visible when the knees sit level with the center dot', () => {
+    const h: Handles = {
+      center: { x: 0.5, y: 0.7 },
+      kneeL: { x: 0.3, y: 0.7 },
+      kneeR: { x: 0.7, y: 0.7 },
+    }
+    // 90° each way: nothing above the center dot to reach for, but a plumb line
+    // of zero length is what leaves the numbers unreadable.
+    expect(verticalGuide('tailors', h)!.toY).toBeLessThan(0.7 - 0.1)
   })
 })
 

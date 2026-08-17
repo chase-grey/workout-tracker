@@ -7,6 +7,7 @@ import {
   anglesFromHandles,
   hasSides,
   swapSides,
+  verticalGuide,
   type Handles,
   type MeasureMode,
   type MeasureResult,
@@ -63,6 +64,9 @@ export function AngleEditor({
   const specs = HANDLES[mode]
   const segments = SEGMENTS[mode]
   const result = anglesFromHandles(mode, handles, aspect)
+  // Tailor's angles are read off straight up, so the vertical has to be on screen
+  // too — otherwise the lines being dragged have nothing to be judged against.
+  const guide = verticalGuide(mode, handles)
 
   /** Pointer position in 0..1 image space, unclamped so grab offsets stay accurate at the edges. */
   const coordFromEvent = (e: PointerEvent): { x: number; y: number } | null => {
@@ -140,6 +144,18 @@ export function AngleEditor({
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
           >
+            {guide && (
+              <line
+                x1={guide.from.x * 100}
+                y1={guide.from.y * 100}
+                x2={guide.from.x * 100}
+                y2={Math.max(0, guide.toY) * 100}
+                stroke={ROLE_COLOR.ref}
+                strokeWidth={1}
+                strokeDasharray="2 1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
             {segments.map((s, i) => {
               const a = handles[s.from]
               const b = handles[s.to]
