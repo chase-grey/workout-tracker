@@ -12,6 +12,7 @@ import {
   strain,
   type MotionKind,
 } from '../lib/rhythmMotion'
+import { createRotation, type Rotation } from '../lib/variantRotation'
 
 /**
  * An abstract, nature-inspired rhythm animation that paces a stretch's tempo.
@@ -22,21 +23,26 @@ import {
  *   segments are told apart by more than position: working is bright, crisp and
  *   faintly straining, resting is dim, soft and still.
  * A random variant within the family is chosen per mount, so it varies from one
- * set to the next, and a live rep counter tracks where you are in the set.
+ * set to the next.
+ *
+ * No rep count on screen: mid-stretch you're upside down or eyes-closed, and a
+ * number you have to focus on to read is worse than useless there. The reps are
+ * still counted (the caller persists them, and the target still ends the set) —
+ * the guide just says it by brightening once the set is done.
  */
 const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
 const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
 type Variant = (typeof BREATHE_VARIANTS)[number] | (typeof DESCENT_VARIANTS)[number]
 
-// Remembered per family across mounts (each set remounts the guide) so we never
-// show the same shape twice in a row — each family reliably rotates its variants.
-const lastVariant: Record<MotionKind, Variant | null> = { breathe: null, descent: null }
+// One rotation per family, held across mounts (each set remounts the guide): the
+// order stays random, but a shape never follows itself and none of them sits out
+// for long. See lib/variantRotation.
+const rotations: Record<MotionKind, Rotation<Variant>> = {
+  breathe: createRotation(BREATHE_VARIANTS),
+  descent: createRotation(DESCENT_VARIANTS),
+}
 function pickVariant(kind: MotionKind): Variant {
-  const all = kind === 'descent' ? DESCENT_VARIANTS : BREATHE_VARIANTS
-  const pool = all.filter((v) => v !== lastVariant[kind])
-  const choice = pool[Math.floor(Math.random() * pool.length)]
-  lastVariant[kind] = choice
-  return choice
+  return rotations[kind].next()
 }
 
 /** Depth 0–1 (0 = neutral/top, 1 = deepest) mapped to a breathing orb's scale. */
@@ -396,14 +402,14 @@ export function RhythmGuide({
     motion === 'descent' && !closes ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
   const showPrevRep = fadeIn < 1 && rep > startRep
 
-  // Once you've finished the target the count reads entirely in the accent colour
-  // and the shape brightens with it, so "done" is a single glance at the guide
-  // rather than a comparison of two numbers. It waits for the last rep to end,
-  // not to begin — the counter shows the rep you're mid-way through.
+  // Once you've finished the target the shape brightens, and that is the whole of
+  // how the guide says you're done — a change you catch out of the corner of your
+  // eye rather than a number to read. It waits for the last rep to end, not to
+  // begin, so the brightening lands as the set closes.
   const hitTarget = hitRepTarget(rep, reps)
 
   return (
-    <div className="flex flex-1 flex-col items-center py-3">
+    <div className="flex flex-1 flex-col items-center justify-center py-3">
       <div className="relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
         {motion === 'descent' ? (
           <>
@@ -428,16 +434,6 @@ export function RhythmGuide({
           </>
         ) : (
           <BreatheShape variant={variant} scale={scaleFromDepth(depth)} bright={hitTarget} />
-        )}
-      </div>
-      {/* Sits at the bottom of the guide, under the shape: the animation carries
-          the pace, so the count is the only thing worth reading. */}
-      <div className="mt-auto pt-4 text-center text-4xl font-bold tabular-nums text-accent-bright">
-        rep {rep}
-        {reps ? (
-          <span className={hitTarget ? undefined : 'text-neutral-400'}> / {reps}</span>
-        ) : (
-          ''
         )}
       </div>
     </div>
