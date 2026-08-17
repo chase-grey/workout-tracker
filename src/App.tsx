@@ -48,7 +48,8 @@ export default function App() {
 function AppShell() {
   // A reload the app kicked off itself (the update check) picks its own landing
   // tab; everything else starts on Today.
-  const [tab, setTab] = useState<Tab>(() => takeResumeTab() ?? 'today')
+  const [resumedTab] = useState(takeResumeTab)
+  const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, settings, updateSettings } = useData()
   const showChat = chatEnabled(settings)
@@ -60,7 +61,10 @@ function AppShell() {
   // A session set aside — the rest of the app is usable while it keeps running.
   // The session stays mounted (just hidden), so its rest timer, rep pace and
   // elapsed-time accounting carry on untouched until you jump back in.
-  const [minimized, setMinimized] = useState(false)
+  // A reload that asked for a tab starts with the restored session set aside:
+  // the full-screen session would otherwise cover the tab you came back for,
+  // which reads as the update check throwing you into your workout.
+  const [minimized, setMinimized] = useState(resumedTab != null)
   const sessionActive = controls.session != null || stretching
   // Filed issues, polled app-wide rather than only while Settings is open: the
   // point of the dot is to tell you a question is waiting when you weren't
