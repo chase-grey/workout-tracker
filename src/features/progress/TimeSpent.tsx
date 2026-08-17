@@ -13,12 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import { useData } from '../../store/DataContext'
-import {
-  activityTotals,
-  filterDurationsByMonths,
-  monthlyActivity,
-  secToMin,
-} from '../../lib/activityTime'
+import { activityTotals, monthlyActivity, secToMin } from '../../lib/activityTime'
 import { LINE_GOAL, LINE_PRIMARY, LINE_SECONDARY, niceScale } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
@@ -46,14 +41,13 @@ function fmtHm(sec: number): string {
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
-export function TimeSpent({ months }: { months: number | null }) {
+export function TimeSpent() {
   const { durations } = useData()
   // One per chart: reading the donut shouldn't leave the months chart lit up.
   const split = useChartReadout()
   const monthlyReadout = useChartReadout()
 
-  const inRange = useMemo(() => filterDurationsByMonths(durations, months), [durations, months])
-  const totals = useMemo(() => activityTotals(inRange), [inRange])
+  const totals = useMemo(() => activityTotals(durations), [durations])
   const grandTotal = totals.workoutSec + totals.stretchSec + totals.restSec
 
   const pieData = useMemo(
@@ -68,13 +62,13 @@ export function TimeSpent({ months }: { months: number | null }) {
 
   const monthly = useMemo(
     () =>
-      monthlyActivity(inRange).map((m) => ({
+      monthlyActivity(durations).map((m) => ({
         month: monthLabel(m.month),
         workout: secToMin(m.workoutSec),
         stretch: secToMin(m.stretchSec),
         rest: secToMin(m.restSec),
       })),
-    [inRange],
+    [durations],
   )
 
   const minutesScale = useMemo(
@@ -90,7 +84,7 @@ export function TimeSpent({ months }: { months: number | null }) {
 
       {grandTotal === 0 ? (
         <div className="flex h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          no sessions logged yet in this range — finish a workout or stretch to start tracking time.
+          no sessions logged yet — finish a workout or stretch to start tracking time.
         </div>
       ) : (
         <>

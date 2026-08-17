@@ -6,7 +6,6 @@ import {
   combinedRepsSeries,
   exerciseSeries,
   exercisesByFrequency,
-  filterRange,
   offSlotSeries,
   sessionCount,
   sustainedRepsSeries,
@@ -413,13 +412,5 @@ describe('combinedRepsSeries', () => {
 
   it('returns empty when no core work is logged', () => {
     expect(combinedRepsSeries(rows, new Set(['deadbug']))).toEqual([])
-  })
-})
-
-describe('filterRange', () => {
-  it('keeps only points within the window', () => {
-    const s = exerciseSeries(rows, 'bench', 'weight')
-    const recent = filterRange(s, 3, new Date(2026, 6, 1)) // last 3 months from Jul 2026
-    expect(recent.map((p) => p.date)).toEqual(['2026-06-01'])
   })
 })

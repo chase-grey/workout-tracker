@@ -8,7 +8,6 @@
  *   rest   = pooled across both kinds
  */
 import type { SessionDuration } from './estimate'
-import { parseISODate } from './dates'
 
 export type ActivityTotals = { workoutSec: number; stretchSec: number; restSec: number }
 
@@ -51,15 +50,4 @@ export function monthlyActivity(durations: SessionDuration[]): ActivityMonth[] {
     accumulate(bucket, d)
   }
   return [...byMonth.values()].sort((a, b) => (a.month < b.month ? -1 : 1))
-}
-
-/** Keep durations dated within the last `months` (null = all time). */
-export function filterDurationsByMonths(
-  durations: SessionDuration[],
-  months: number | null,
-  today: Date = new Date(),
-): SessionDuration[] {
-  if (months == null) return durations
-  const cutoff = new Date(today.getFullYear(), today.getMonth() - months, today.getDate())
-  return durations.filter((d) => parseISODate(d.date) >= cutoff)
 }

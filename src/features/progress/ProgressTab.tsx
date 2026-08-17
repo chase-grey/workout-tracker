@@ -13,7 +13,6 @@ import { useData } from '../../store/DataContext'
 import {
   exerciseSeries,
   exercisesByFrequency,
-  filterRange,
   offSlotSeries,
   sessionCount,
   type Metric,
@@ -54,12 +53,6 @@ import {
 } from '../../lib/review'
 
 const BENCH_COMBO = '__bench__'
-
-const RANGES: { label: string; months: number | null }[] = [
-  { label: '3m', months: 3 },
-  { label: '6m', months: 6 },
-  { label: 'all', months: null },
-]
 
 const METRICS: { label: string; value: Metric }[] = [
   { label: 'est. 1rm', value: '1rm' },
@@ -125,7 +118,7 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
-        no bench data in this range
+        no bench data logged yet
       </div>
     )
   }
@@ -178,7 +171,6 @@ export function ProgressTab() {
   const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries } = useData()
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
-  const [months, setMonths] = useState<number | null>(null)
   const [showMeasure, setShowMeasure] = useState(false)
   const [bodyMetric, setBodyMetric] = useState<'bf' | 'waist'>('bf')
   const [recap, setRecap] = useState<Review | null>(null)
@@ -216,19 +208,15 @@ export function ProgressTab() {
   const lastMeasure = latestMeasurement(measurements)
   const latestBf = lastMeasure ? effectiveBodyFat(lastMeasure, heightIn) : null
   const bodySeries = useMemo(
-    () =>
-      filterRange(
-        bodyMetric === 'bf' ? bodyFatSeries(measurements, heightIn) : waistSeries(measurements),
-        months,
-      ),
-    [measurements, heightIn, bodyMetric, months],
+    () => (bodyMetric === 'bf' ? bodyFatSeries(measurements, heightIn) : waistSeries(measurements)),
+    [measurements, heightIn, bodyMetric],
   )
 
   // Weekly rather than daily, complete days only, unlogged days assumed —
   // see weeklyCalorieSurplusSeries.
   const calorieSurplus = useMemo(
-    () => filterRange(weeklyCalorieSurplusSeries(calorieEntries), months),
-    [calorieEntries, months],
+    () => weeklyCalorieSurplusSeries(calorieEntries),
+    [calorieEntries],
   )
 
   // The 6-pack target, once its projection has been locked in (ETA within six
@@ -255,30 +243,27 @@ export function ProgressTab() {
   }, [workouts])
 
   const series = useMemo(
-    () => filterRange(exerciseSeries(workouts, exercise, metric), months),
-    [workouts, exercise, metric, months],
+    () => exerciseSeries(workouts, exercise, metric),
+    [workouts, exercise, metric],
   )
   // The sessions that series leaves out because they trained the lift second (see
   // progress.offSlotSeries) — drawn beside it, so a logged workout is never
   // simply missing from the chart.
   const offSeries = useMemo(
-    () => filterRange(offSlotSeries(workouts, exercise, metric), months),
-    [workouts, exercise, metric, months],
+    () => offSlotSeries(workouts, exercise, metric),
+    [workouts, exercise, metric],
   )
   const benchSeries = useMemo(
     () =>
       mergeSeries(
-        filterRange(exerciseSeries(workouts, 'flat_bench', metric), months),
-        filterRange(exerciseSeries(workouts, 'incline_bench', metric), months),
-        filterRange(
-          [
-            ...offSlotSeries(workouts, 'flat_bench', metric),
-            ...offSlotSeries(workouts, 'incline_bench', metric),
-          ],
-          months,
-        ),
+        exerciseSeries(workouts, 'flat_bench', metric),
+        exerciseSeries(workouts, 'incline_bench', metric),
+        [
+          ...offSlotSeries(workouts, 'flat_bench', metric),
+          ...offSlotSeries(workouts, 'incline_bench', metric),
+        ],
       ),
-    [workouts, metric, months],
+    [workouts, metric],
   )
 
   // Names the line in the legend and the tooltip, which the rings beside it make
@@ -315,9 +300,7 @@ export function ProgressTab() {
         </div>
       )}
 
-      <Pills options={RANGES.map((r) => ({ label: r.label, value: r.months }))} value={months} onChange={setMonths} />
-
-      <GoalsPanel months={months} />
+      <GoalsPanel />
 
       <MuscleAvatar />
 
@@ -361,7 +344,7 @@ export function ProgressTab() {
         />
       )}
 
-      <TimeSpent months={months} />
+      <TimeSpent />
 
       {showMeasure && <MeasurementLogSheet onClose={() => setShowMeasure(false)} />}
       {recap && <ReviewOverlay review={recap} onClose={() => setRecap(null)} />}

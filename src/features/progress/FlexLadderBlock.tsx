@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { flexStats, splitSeries, tailorsSeries, type FlexEntry } from '../../lib/flex'
 import { isReached, type GoalSpec } from '../../lib/goals'
 import type { LockedProjections } from '../../lib/goalLock'
-import { filterRange } from '../../lib/progress'
 import { LINE_COLD, LINE_COLD_2, LINE_PRIMARY, LINE_SECONDARY } from '../../lib/chart'
 import { AngleChart, type AngleReading, type AngleSeries } from './AngleChart'
 
@@ -66,7 +65,6 @@ function headline(ladder: Ladder, entries: FlexEntry[]): string {
 export function FlexLadderBlock({
   ladder,
   entries,
-  months,
   rungs,
   locked,
   ring,
@@ -74,8 +72,6 @@ export function FlexLadderBlock({
 }: {
   ladder: Ladder
   entries: FlexEntry[]
-  /** The range pill, so the chart shows the same window as the rest of the tab. */
-  months: number | null
   /** The ladder's rungs, ascending. */
   rungs: GoalSpec[]
   locked: LockedProjections
@@ -88,10 +84,10 @@ export function FlexLadderBlock({
   // Cold and warm readings per date. The rungs are measured on the warm series
   // (for tailor's pose, the average of its left and right), which is the line
   // that runs at the goals; the cold readings ride along as the day's floor.
-  const readings = useMemo<AngleReading[]>(() => {
-    const rows: AngleReading[] = ladder === 'split' ? splitSeries(entries) : tailorsSeries(entries)
-    return filterRange(rows, months)
-  }, [ladder, entries, months])
+  const readings = useMemo<AngleReading[]>(
+    () => (ladder === 'split' ? splitSeries(entries) : tailorsSeries(entries)),
+    [ladder, entries],
+  )
 
   // Which rungs the chart draws a line for: the one being worked on, plus any
   // rung already committed to. All of them would frame the axis on 180° and

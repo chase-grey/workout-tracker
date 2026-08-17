@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  activityTotals,
-  filterDurationsByMonths,
-  monthlyActivity,
-  secToMin,
-} from './activityTime'
+import { activityTotals, monthlyActivity, secToMin } from './activityTime'
 import type { SessionDuration } from './estimate'
 
 const w = (date: string, totalSec: number, restSec: number, dayType: 'push' | 'pull' = 'push'): SessionDuration => ({
@@ -55,17 +50,5 @@ describe('monthlyActivity', () => {
     ])
     expect(months.map((m) => m.month)).toEqual(['2026-06', '2026-07'])
     expect(months[1]).toEqual({ month: '2026-07', workoutSec: 3000, stretchSec: 1000, restSec: 800 })
-  })
-})
-
-describe('filterDurationsByMonths', () => {
-  const today = new Date(2026, 6, 21) // 2026-07-21
-  const data = [w('2026-07-10', 1800, 0), w('2026-01-10', 1800, 0)]
-
-  it('keeps everything when months is null', () => {
-    expect(filterDurationsByMonths(data, null, today)).toHaveLength(2)
-  })
-  it('drops entries older than the cutoff', () => {
-    expect(filterDurationsByMonths(data, 1, today).map((d) => d.date)).toEqual(['2026-07-10'])
   })
 })

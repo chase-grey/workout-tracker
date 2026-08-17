@@ -12,7 +12,7 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { isPaceCapped, type Projection } from '../../lib/predictions'
-import { filterRange, type Point } from '../../lib/progress'
+import { type Point } from '../../lib/progress'
 import { calorieHitsByWeek } from '../../lib/calories'
 import {
   attemptWeight,
@@ -315,13 +315,10 @@ function paceLabel(proj: Projection, unit: string): string {
 function LockInPrompt({
   goal,
   proj,
-  months,
   onLock,
 }: {
   goal: GoalSpec
   proj: Projection
-  /** The tab's range pill, passed on to the commit chart's run-up. */
-  months: number | null
   onLock: (etaDate: string) => void
 }) {
   const [date, setDate] = useState(proj.etaDate ?? '')
@@ -334,7 +331,7 @@ function LockInPrompt({
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
         in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
       </p>
-      <CommitChart goalId={goal.id} proj={proj} points={goal.points} months={months} date={date} onChange={setDate} />
+      <CommitChart goalId={goal.id} proj={proj} points={goal.points} date={date} onChange={setDate} />
       <div className="mt-3 flex items-center gap-2">
         <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
           hit it by
@@ -382,7 +379,6 @@ function RecommitPrompt({
   goal,
   proj,
   lock,
-  months,
   revisedEta,
   onLock,
   onDrop,
@@ -391,8 +387,6 @@ function RecommitPrompt({
   goal: GoalSpec
   proj: Projection
   lock: LockedProjection
-  /** The tab's range pill, passed on to the commit chart's run-up. */
-  months: number | null
   /** The date the pace held since the lock implies, when the goal no longer projects one. */
   revisedEta: string | null
   onLock: (etaDate: string) => void
@@ -430,7 +424,6 @@ function RecommitPrompt({
             goalId={goal.id}
             proj={proj}
             points={goal.points}
-            months={months}
             date={date}
             onChange={setDate}
             estimate={estimate!}
@@ -587,7 +580,6 @@ function GoalRow({
   goal,
   proj,
   lock,
-  months,
   onDrop,
   onLock,
   onLogAttempt,
@@ -600,8 +592,6 @@ function GoalRow({
   goal: GoalSpec
   proj: Projection
   lock?: LockedProjection
-  /** The tab's range pill, handed to the commit chart's run-up. */
-  months: number | null
   /** Let a commitment go, putting the goal back to a live projection. */
   onDrop: () => void
   /** Commit the goal to a target date — the first one, or a changed one. */
@@ -709,7 +699,6 @@ function GoalRow({
           goal={goal}
           proj={proj}
           lock={lock}
-          months={months}
           revisedEta={pace?.revisedEta ?? null}
           onLock={(etaDate) => {
             onLock(etaDate)
@@ -768,7 +757,7 @@ function GoalRow({
           )}
         </>
       ) : lockable ? (
-        <LockInPrompt goal={goal} proj={proj} months={months} onLock={onLock} />
+        <LockInPrompt goal={goal} proj={proj} onLock={onLock} />
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
           on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
@@ -864,7 +853,7 @@ function SixPackRow({
   )
 }
 
-export function GoalsPanel({ months }: { months: number | null }) {
+export function GoalsPanel() {
   const {
     workouts,
     bodyWeights,
@@ -934,11 +923,8 @@ export function GoalsPanel({ months }: { months: number | null }) {
   }
 
   // The weigh-ins the two bodyweight goals are projected from — shown alongside
-  // them, since the goals are only as good as the log behind them. The heading
-  // reads the whole log, not the visible range, so it agrees with the goal rows
-  // even when the range holds no weigh-ins.
+  // them, since the goals are only as good as the log behind them.
   const weightPoints = useMemo(() => bodyWeightPoints(bodyWeights), [bodyWeights])
-  const weightSeries = useMemo(() => filterRange(weightPoints, months), [weightPoints, months])
   const latestWeight = weightPoints.length ? weightPoints[weightPoints.length - 1].value : null
 
   // The eating behind the curve, one number per week: how many days hit the
@@ -996,7 +982,6 @@ export function GoalsPanel({ months }: { months: number | null }) {
       goal={g}
       proj={projections.get(g.id)!}
       lock={locked[g.id]}
-      months={months}
       onDrop={() => dropCommitment(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       onLogAttempt={(weightLbs) => {
@@ -1042,7 +1027,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
         body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
       </h4>
       <BodyWeightChart
-        points={weightSeries}
+        points={weightPoints}
         calorieWeeks={calorieWeeks}
         goals={weightGoalLines}
         empty="log my weight to project these goals"
@@ -1070,7 +1055,6 @@ export function GoalsPanel({ months }: { months: number | null }) {
               key={ladder}
               ladder={ladder}
               entries={flexEntries}
-              months={months}
               rungs={rungs}
               locked={locked}
               ring={blockRing(rungs)}
@@ -1080,7 +1064,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
         }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [goals, flexEntries, months, locked, projections],
+    [goals, flexEntries, locked, projections],
   )
 
   // The date a goal has committed to, or null if it isn't a locked, still-open
@@ -1205,7 +1189,7 @@ export function GoalsPanel({ months }: { months: number | null }) {
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, locked, projections, settings, months, ladders])
+  }, [goals, locked, projections, settings, ladders])
 
   const ordered = useMemo(() => orderGoalUnits(units).map((u) => u.node), [units])
 
