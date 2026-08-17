@@ -291,8 +291,12 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
   return (
     <button
       onClick={onClick}
+      // Flipping a switch mid-sentence shouldn't cost you the keyboard: the
+      // press would otherwise pull focus out of the composer and drop it, and
+      // you'd have to tap back in to carry on typing.
+      onMouseDown={(e) => e.preventDefault()}
       aria-pressed={on}
-      className={`min-h-[44px] rounded-xl px-3 text-sm font-medium active:opacity-80 ${
+      className={`min-h-[44px] rounded-xl px-2 text-sm font-medium active:opacity-80 ${
         on ? 'bg-accent text-black' : 'bg-surface text-neutral-300'
       }`}
     >
@@ -654,7 +658,10 @@ export function ChatTab({
        its containing block. The other half is the bar's own -bottom-4 (see
        below), which is what actually sends it down there. */
     <div className="-mb-4 flex min-h-[calc(100%+1rem)] flex-col">
-      <div className="flex flex-wrap items-center justify-end gap-2 pb-2">
+      {/* Equal columns rather than a right-aligned row: the three switches are
+          the same kind of thing, so they split the width evenly and each one
+          sits where it always sits. */}
+      <div className="grid grid-cols-3 gap-2 pb-2">
         <Toggle on={skills.planEdits} onClick={() => toggleSkill('planEdits')}>
           edit plan
         </Toggle>
@@ -760,10 +767,13 @@ export function ChatTab({
           doesn't measure itself against the parent, it measures against the
           scrollport, so the same 1rem has to come off again here.
 
-          The padding is even top and bottom: the bar's own border is the line
-          above the field and 0.5rem of its own is the gap below, whether or not
-          the nav is standing under it. */}
-      <div className="sticky -bottom-4 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 px-4 py-2 backdrop-blur-md">
+          The padding is the same 0.5rem on all four sides, so the field is
+          framed evenly: the bar's own border is the line above it, and the
+          0.5rem below holds whether or not the nav is standing under it. The
+          bar is full-bleed, so this is deliberately tighter than the 1rem the
+          thread above it is inset by — the field reaches nearer the edge than
+          the messages do. */}
+      <div className="sticky -bottom-4 -mx-4 flex flex-col gap-2 border-t border-border bg-bg/80 p-2 backdrop-blur-md">
         {/* The question rides above the composer rather than sitting in the
             thread: it has to stay on screen while the answer is being typed. */}
         {(answerLoading || answerTarget || answerError) && (
