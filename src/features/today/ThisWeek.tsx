@@ -23,7 +23,7 @@ import { weekPace, type MetricPace } from '../../lib/weekPace'
  * marker pinned to the end say nothing the check beside the numbers doesn't, and
  * three of them crowd out the week's overall bar, which is the one still moving.
  */
-function MetricBar({ label, m, suffix }: { label: string; m: MetricPace; suffix?: string }) {
+function MetricBar({ label, m }: { label: string; m: MetricPace }) {
   const over = m.done > m.goal
   const pct = Math.min(m.done / m.goal, 1) * 100
   return (
@@ -31,8 +31,7 @@ function MetricBar({ label, m, suffix }: { label: string; m: MetricPace; suffix?
       <div className={`flex items-center justify-between text-sm ${m.met ? '' : 'mb-1'}`}>
         <span className="text-neutral-300">{label}</span>
         <span className="tabular-nums text-neutral-400">
-          {m.done}/{m.goal}
-          {suffix ?? ''}{' '}
+          {m.done}/{m.goal}{' '}
           {over ? (
             <MdStar className="inline align-text-bottom text-accent-2" aria-hidden />
           ) : m.met ? (
@@ -127,7 +126,7 @@ export function ThisWeek() {
       <div className="mt-3 flex flex-col gap-2">
         <MetricBar label="workouts" m={byKey.get('workouts')!} />
         <MetricBar label="flex sessions" m={byKey.get('flex')!} />
-        <MetricBar label="calorie days" m={byKey.get('calDays')!} suffix=" days" />
+        <MetricBar label="calorie days" m={byKey.get('calDays')!} />
       </div>
 
       {summary.weightTrend !== null && (
