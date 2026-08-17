@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_PLAN, dayOrder } from '../config/plan'
+import { DEFAULT_PLAN, PLAN_REVISION, dayOrder, withPlanDefaults } from '../config/plan'
 import type { Plan } from '../config/plan'
 import type { DayType } from '../types'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from './planTools'
@@ -127,6 +127,39 @@ describe('applyPlanEdits', () => {
     ])
     const ex = plan.push.exercises.find((e) => e.key === 'flat_bench')
     expect(ex?.name).toBe(DEFAULT_PLAN.push.exercises.find((e) => e.key === 'flat_bench')?.name)
+  })
+
+  it('removeExercise records a shipped exercise so the merge stops re-adding it', () => {
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'removeExercise', day: 'pull', key: 'leg_abductor' },
+      { op: 'removeExercise', day: 'pull', key: 'leg_adductor' },
+    ])
+    expect(plan.pull.removed).toEqual(['leg_abductor', 'leg_adductor'])
+    // The load it has to survive: without the list, both machines come straight back.
+    const keys = withPlanDefaults(plan, PLAN_REVISION).pull.exercises.map((e) => e.key)
+    expect(keys).not.toContain('leg_abductor')
+    expect(keys).not.toContain('leg_adductor')
+  })
+
+  it('removeExercise leaves no record for an exercise the user added themselves', () => {
+    // Nothing puts a custom exercise back, so a headstone would only sit there
+    // waiting to strike out whatever later took the key.
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'addExercise', day: 'pull', exercise: { key: 'face_pull' } as never },
+      { op: 'removeExercise', day: 'pull', key: 'face_pull' },
+    ])
+    expect(plan.pull.removed).toBeUndefined()
+  })
+
+  it('addExercise takes back the deletion of a shipped exercise', () => {
+    const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+      { op: 'removeExercise', day: 'pull', key: 'calf_raise' },
+      { op: 'addExercise', day: 'pull', exercise: { key: 'calf_raise' } as never },
+    ])
+    expect(plan.pull.removed).toBeUndefined()
+    expect(withPlanDefaults(plan, PLAN_REVISION).pull.exercises.map((e) => e.key)).toContain(
+      'calf_raise',
+    )
   })
 
   it('removeExercise on a missing key records an error', () => {

@@ -113,6 +113,20 @@ export type DayPlan = {
    * existed still comes up in {@link TODAY_DAY_ORDER}.
    */
   order?: number
+  /**
+   * Keys of *shipped* exercises deleted from this day. A deletion can't be stored
+   * as an absence: {@link mergeDayExercises} reads "a default the stored day
+   * doesn't have" as a newly shipped movement and splices it back in, so without
+   * this list a deleted default returns on the next load — or on the next sync,
+   * which re-merges the fetched copy and saves it. Recorded here instead, and
+   * honoured by both merge branches so a revision bump doesn't undo it.
+   *
+   * Only keys the defaults own for this day need recording; a custom exercise is
+   * gone the moment it leaves the list, since nothing puts it back. Re-adding an
+   * exercise drops its key from here (see lib/planTools), so the list never
+   * contradicts the exercises alongside it.
+   */
+  removed?: string[]
 }
 
 export type Plan = Record<DayType, DayPlan>
@@ -269,7 +283,7 @@ export const DEFAULT_PLAN: Plan = {
       // Pressing never takes the calves through range, so they get the only direct
       // work they see all week. A hard pause at the bottom is the point — bouncing
       // the stretch turns the whole set into tendon rebound.
-      { key: 'calf_raise', name: 'calf raise (paused)', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
+      { key: 'calf_raise', name: 'calf raise', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
 
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
@@ -419,6 +433,9 @@ const LEGACY_LABELS: Record<DayType, string[]> = {
  */
 const LEGACY_EXERCISE_NAMES: Record<string, string[]> = {
   [HANGING_RAISE_KEY]: ['hanging leg raise'],
+  // The tempo cue read as a status — "calf raise (paused)" looked like a movement
+  // the app had suspended rather than one to pause at the bottom of.
+  calf_raise: ['calf raise (paused)'],
 }
 
 /**
@@ -476,16 +493,28 @@ function mergeDayExercises(
    * added exercises. See PLAN_REVISION.
    */
   restructure = false,
+  /** Shipped exercises the user deleted; see {@link DayPlan.removed}. */
+  removed: string[] = [],
 ): PlannedExercise[] {
   const retiredSet = new Set(retired)
+  // A deletion outranks both ways a default gets re-adopted: the splice below and
+  // a restructure's wholesale re-adoption. A restructure is a change of shipped
+  // programming, not grounds to hand back a movement that was turned down.
+  //
+  // It also outranks the stored list itself. A deletion has to hold against a copy
+  // that still lists the movement — the fetched one from a device that hadn't made
+  // the deletion yet, which is the copy that kept resurrecting it. Safe because a
+  // deletion is taken back by clearing the key rather than by re-listing the
+  // exercise, so a plan never says both at once (see lib/planTools).
+  const goneSet = new Set([...retiredSet, ...removed])
   if (restructure) {
     const defaultKeys = new Set(defaults.map((e) => e.key))
     // Exercises the user added themselves are theirs to keep; they go after the
     // shipped list rather than being dropped.
-    const custom = stored.filter((e) => !defaultKeys.has(e.key) && !retiredSet.has(e.key))
-    return [...defaults.map((e) => ({ ...e })), ...custom]
+    const custom = stored.filter((e) => !defaultKeys.has(e.key) && !goneSet.has(e.key))
+    return [...defaults.filter((e) => !goneSet.has(e.key)).map((e) => ({ ...e })), ...custom]
   }
-  const kept = stored.filter((e) => !retiredSet.has(e.key))
+  const kept = stored.filter((e) => !goneSet.has(e.key))
   const storedKeys = new Set(kept.map((e) => e.key))
   // Re-adopt the default name/group/weight step when a stored one differs only by
   // case (so a device that saved the old Title Case names picks up the lowercase
@@ -522,7 +551,7 @@ function mergeDayExercises(
     }
   })
   defaults.forEach((def, i) => {
-    if (storedKeys.has(def.key)) return
+    if (storedKeys.has(def.key) || goneSet.has(def.key)) return
     // Insert after the nearest earlier default exercise that the stored list has,
     // so a new move keeps its intended neighbour; otherwise append.
     let insertAt = out.length
@@ -563,6 +592,12 @@ export function withPlanDefaults(
   for (const type of DAY_TYPES) {
     const storedDay = stored[type]
     const day = storedDay ?? DEFAULT_PLAN[type]
+    // Deletions are pruned to the keys the defaults still ship, since those are
+    // the only ones anything would put back — a movement the defaults have since
+    // retired needs no headstone, and the list is written back on every save.
+    const removed = readRemoved(storedDay).filter((key) =>
+      DEFAULT_PLAN[type].exercises.some((e) => e.key === key),
+    )
     // A day taken from storage keeps its exercises but gains any new defaults.
     const exercises = storedDay
       ? mergeDayExercises(
@@ -570,6 +605,7 @@ export function withPlanDefaults(
           day.exercises,
           RETIRED_EXERCISES[type],
           restructure,
+          removed,
         )
       : day.exercises
     // A restructure also restores the shipped label, since a stored one may name a
@@ -583,8 +619,40 @@ export function withPlanDefaults(
       return name === e.name ? e : { ...e, name }
     })
     merged[type] = { ...day, type, label, exercises: named }
+    // Left off entirely when there's nothing to record, so a plan that has never
+    // had a deletion doesn't start carrying an empty array around.
+    if (removed.length) merged[type].removed = removed
+    else delete merged[type].removed
   }
   return merged
+}
+
+/** A day's {@link DayPlan.removed}, tolerating the shapes storage can hand back. */
+function readRemoved(day: DayPlan | undefined): string[] {
+  if (!day || !Array.isArray(day.removed)) return []
+  return day.removed.filter((key): key is string => typeof key === 'string' && key !== '')
+}
+
+/**
+ * A fetched plan with each day's deletions unioned with what this device already
+ * knew was deleted.
+ *
+ * The backend keeps the plan as one JSON blob, so `removed` normally survives the
+ * round trip. What doesn't survive is a copy pushed before this shipped, or from a
+ * device that hasn't updated: it carries no list, and merging it would splice every
+ * deleted default back in and then save that. Deletions are unioned rather than
+ * overwritten for the same reason a lock is (see lib/settingsSync) — a device can
+ * only report the removals it knows about, never that another device's are stale.
+ */
+export function withRemovedFrom(fetched: Partial<Plan>, local: Plan): Partial<Plan> {
+  const out: Partial<Record<DayType, DayPlan>> = { ...fetched }
+  for (const type of DAY_TYPES) {
+    const day = out[type]
+    if (!day) continue
+    const removed = [...new Set([...readRemoved(day), ...readRemoved(local[type])])]
+    out[type] = removed.length ? { ...day, removed } : day
+  }
+  return out
 }
 
 /**

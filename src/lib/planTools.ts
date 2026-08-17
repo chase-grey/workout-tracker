@@ -1,9 +1,11 @@
 import type { DayType } from '../types'
 import {
   DAY_TYPES,
+  DEFAULT_PLAN,
   dayOrder,
   exerciseName,
   withDayOrder,
+  type DayPlan,
   type Plan,
   type PlannedExercise,
 } from '../config/plan'
@@ -100,6 +102,28 @@ function slug(input: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
+}
+
+/**
+ * Note a shipped exercise's deletion on the day, so the plan merge stops handing
+ * it back (see {@link DayPlan.removed}). Only the defaults' own keys are recorded:
+ * a custom exercise is gone for good the moment it leaves the list, and a headstone
+ * for it would only sit there waiting to strike out an unrelated exercise that
+ * later took the same key.
+ */
+function recordRemoval(dayPlan: DayPlan, day: DayType, key: string): void {
+  if (!DEFAULT_PLAN[day]?.exercises.some((e) => e.key === key)) return
+  const removed = Array.isArray(dayPlan.removed) ? dayPlan.removed : []
+  if (removed.includes(key)) return
+  dayPlan.removed = [...removed, key]
+}
+
+/** Undo {@link recordRemoval}, dropping the field once nothing is struck out. */
+function clearRemoval(dayPlan: DayPlan, key: string): void {
+  if (!Array.isArray(dayPlan.removed)) return
+  const removed = dayPlan.removed.filter((k) => k !== key)
+  if (removed.length) dayPlan.removed = removed
+  else delete dayPlan.removed
 }
 
 /** Produce a key unique within `existingKeys`, appending _2, _3, ... on collision. */
@@ -224,6 +248,9 @@ export function applyPlanEdits(
         if (typeof src.bodyweight === 'boolean') exercise.bodyweight = src.bodyweight
         if (typeof src.optional === 'boolean') exercise.optional = src.optional
         dayPlan.exercises.push(exercise)
+        // Asked for back, so the deletion no longer stands — otherwise the merge
+        // would strike it out again on the next load.
+        clearRemoval(dayPlan, key)
         applied.push(`added ${exercise.name} to ${edit.day}`)
         break
       }
@@ -235,6 +262,7 @@ export function applyPlanEdits(
           break
         }
         const [removed] = dayPlan.exercises.splice(idx, 1)
+        recordRemoval(dayPlan, edit.day, removed.key)
         applied.push(`removed ${removed.name || exerciseName(removed.key)} from ${edit.day}`)
         break
       }

@@ -12,6 +12,7 @@ import {
   withCircuitRest,
   withDayOrder,
   withPlanDefaults,
+  withRemovedFrom,
   type DayPlan,
   type Plan,
   type PlannedExercise,
@@ -194,6 +195,72 @@ describe('withPlanDefaults', () => {
     const flat = merged.push.exercises.find((e) => e.key === 'flat_bench')
     expect(flat?.sets).toBe(5)
     expect(flat?.restSec).toBe(200)
+  })
+
+  it('re-adopts the calf raise name a stored day still carries the tempo cue in', () => {
+    const storedPull = {
+      ...DEFAULT_PLAN.pull,
+      exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
+        e.key === 'calf_raise' ? { ...e, name: 'calf raise (paused)' } : e,
+      ),
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
+    expect(merged.pull.exercises.find((e) => e.key === 'calf_raise')?.name).toBe('calf raise')
+  })
+
+  describe('a shipped exercise the user deleted', () => {
+    const GONE = ['leg_adductor', 'leg_abductor']
+
+    /** A stored pull day with the two machines deleted, as the editor would save it. */
+    const storedPull: DayPlan = {
+      ...DEFAULT_PLAN.pull,
+      exercises: DEFAULT_PLAN.pull.exercises.filter((e) => !GONE.includes(e.key)),
+      removed: [...GONE],
+    }
+
+    /** Through storage and back, since that's where the list has to survive. */
+    const load = (day: DayPlan, revision: number) =>
+      withPlanDefaults(
+        JSON.parse(JSON.stringify({ ...DEFAULT_PLAN, pull: day })) as Plan,
+        revision,
+      )
+
+    it('stays gone on the next load instead of being spliced back in', () => {
+      const keys = load(storedPull, PLAN_REVISION).pull.exercises.map((e) => e.key)
+      expect(keys).not.toContain('leg_adductor')
+      expect(keys).not.toContain('leg_abductor')
+    })
+
+    it('stays gone through a shipped restructure', () => {
+      // A revision bump re-adopts the shipped day wholesale. Deleting a movement is
+      // an answer about that movement, not a stale copy of the programming.
+      const keys = load(storedPull, 0).pull.exercises.map((e) => e.key)
+      expect(keys).not.toContain('leg_adductor')
+      expect(keys).not.toContain('leg_abductor')
+      // The rest of the restructure still lands.
+      expect(keys).toContain('leg_press')
+    })
+
+    it('carries the list forward so the next load can honour it too', () => {
+      expect(load(storedPull, PLAN_REVISION).pull.removed).toEqual(GONE)
+    })
+
+    it('comes back once the exercise is added again', () => {
+      const readded: DayPlan = { ...storedPull, exercises: DEFAULT_PLAN.pull.exercises, removed: [] }
+      const merged = load(readded, PLAN_REVISION)
+      expect(merged.pull.exercises.map((e) => e.key)).toContain('leg_adductor')
+      expect(merged.pull.removed).toBeUndefined()
+    })
+
+    it('forgets a deletion the defaults have since retired anyway', () => {
+      const stale: DayPlan = { ...DEFAULT_PLAN.pull, removed: ['barbell_squat'] }
+      expect(load(stale, PLAN_REVISION).pull.removed).toBeUndefined()
+    })
+
+    it('leaves no empty list on a plan that has never deleted anything', () => {
+      const merged = withPlanDefaults(DEFAULT_PLAN, PLAN_REVISION)
+      expect(DAY_TYPES.every((t) => merged[t].removed === undefined)).toBe(true)
+    })
   })
 
   describe('a plan that predates a shipped restructure', () => {
@@ -450,6 +517,42 @@ describe('exerciseName', () => {
   it('never shows an unknown key with its underscores', () => {
     expect(exerciseName('face_pull')).toBe('face pull')
     expect(exerciseName('side-bend')).toBe('side bend')
+  })
+})
+
+describe('withRemovedFrom', () => {
+  const deleted = (day: DayPlan, keys: string[]): DayPlan => ({
+    ...day,
+    exercises: day.exercises.filter((e) => !keys.includes(e.key)),
+    removed: keys,
+  })
+
+  it('keeps a deletion the fetched copy knows nothing about', () => {
+    // What the sheet holds after a push from a device that predates the list.
+    const local = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['leg_abductor']) }
+    const fetched = { ...DEFAULT_PLAN, pull: { ...DEFAULT_PLAN.pull } }
+    const merged = withPlanDefaults(withRemovedFrom(fetched, local), PLAN_REVISION)
+    expect(merged.pull.exercises.map((e) => e.key)).not.toContain('leg_abductor')
+  })
+
+  it('takes a deletion made on another device', () => {
+    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['calf_raise']) }
+    const merged = withPlanDefaults(withRemovedFrom(fetched, DEFAULT_PLAN), PLAN_REVISION)
+    expect(merged.pull.exercises.map((e) => e.key)).not.toContain('calf_raise')
+  })
+
+  it('unions the two rather than letting either side win', () => {
+    const local = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['leg_abductor']) }
+    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['leg_adductor']) }
+    const merged = withPlanDefaults(withRemovedFrom(fetched, local), PLAN_REVISION)
+    const keys = merged.pull.exercises.map((e) => e.key)
+    expect(keys).not.toContain('leg_abductor')
+    expect(keys).not.toContain('leg_adductor')
+  })
+
+  it('leaves a plan alone when neither copy has deleted anything', () => {
+    const merged = withRemovedFrom(DEFAULT_PLAN, DEFAULT_PLAN)
+    expect(DAY_TYPES.every((t) => merged[t]?.removed === undefined)).toBe(true)
   })
 })
 

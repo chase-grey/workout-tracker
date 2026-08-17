@@ -10,7 +10,7 @@ import { sessionToRows, trainingDates } from '../lib/session'
 import { DAY_TYPES, DEAD_BUG } from '../config/plan'
 import { maxAttemptRow } from '../lib/maxAttempt'
 import { toISODate, weekStartISO } from '../lib/dates'
-import { withPlanDefaults, type Plan } from '../config/plan'
+import { withPlanDefaults, withRemovedFrom, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import {
@@ -422,8 +422,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (p && p.push && p.pull) {
         // The sheet stores the plan without a revision marker, so reconcile the
         // fetched copy against this device's — a plan that predates a shipped
-        // restructure gets it applied rather than overwriting the local one.
-        const merged = withPlanDefaults(p, storage.loadPlanRevision())
+        // restructure gets it applied rather than overwriting the local one. Its
+        // deletions come along the same way: a copy pushed before those were
+        // recorded would otherwise re-adopt every default it dropped, and this
+        // line saves the result.
+        const local = storage.loadPlan()
+        const merged = withPlanDefaults(withRemovedFrom(p, local), storage.loadPlanRevision())
         setPlan(merged)
         storage.savePlan(merged)
       }
