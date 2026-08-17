@@ -17,7 +17,7 @@
  *
  *  - {@link requiredByNow} — the schedule. Each metric's goal spread across the
  *    days it's actually done on and floored to whole units, stepping only when a
- *    day has fully ended. Never asks for a fraction, never moves during the day
+ *    day has come due. Never asks for a fraction, never moves during the day
  *    you're still in.
  *  - {@link MetricPace.slack} — the room. Days that could still be missed with the
  *    goal met anyway. The week's real standing is the tightest of these, because a
@@ -43,6 +43,27 @@ export function weekDaysCompleted(now: Date = new Date()): number {
   return Math.min(DAYS_IN_WEEK - 1, Math.max(0, elapsed))
 }
 
+/** Hour on Sunday the week's goals are meant to be finished by. */
+export const WEEK_DEADLINE_HOUR = 21
+
+/**
+ * Days of the week whose share of a goal has COME DUE at `now`: 0..7.
+ *
+ * The same count as {@link weekDaysCompleted} except at the end, where Sunday
+ * comes due at {@link WEEK_DEADLINE_HOUR} rather than at midnight. Counting only
+ * ended days meant a full-week goal was never entirely due inside the week, so
+ * the schedule marker stopped short of the end no matter how the week went; the
+ * deadline is 9pm Sunday, so that's where the schedule finishes.
+ *
+ * The three hours after it are not part of the schedule but are still yours to
+ * log in — nothing here says a goal is lost (see {@link MetricPace.missed}).
+ */
+export function weekDaysDue(now: Date = new Date()): number {
+  const completed = weekDaysCompleted(now)
+  const onSunday = completed === DAYS_IN_WEEK - 1
+  return onSunday && now.getHours() >= WEEK_DEADLINE_HOUR ? DAYS_IN_WEEK : completed
+}
+
 /**
  * How many of a metric's `goal` units the schedule expects to be banked once
  * `daysCompleted` days have ended: the goal spread evenly across its
@@ -50,10 +71,10 @@ export function weekDaysCompleted(now: Date = new Date()): number {
  *
  * Flooring is the whole point. It reads as "count the units whose last intended
  * day has passed" — over a full week a goal of 2 wants one by the end of Thursday
- * and the other by the end of Sunday, while a goal of 6 wants one more each day
+ * and the other by Sunday's deadline, while a goal of 6 wants one more each day
  * from Tuesday on. Once `daysCompleted` reaches `windowDays` the whole goal is
- * due, so a full-week metric never demands a finished week (7 days never end
- * inside the week) but a shorter window does come due before Sunday.
+ * due, which for a full-week metric is 9pm Sunday and for a shorter window is the
+ * end of the window's last day.
  */
 export function requiredByNow(
   goal: number,
@@ -111,7 +132,8 @@ export type WeekPace = {
   /**
    * Where the pace marker sits on the overall bar: the mean of the per-metric
    * required fractions, aggregated the same way progress is so the two are
-   * directly comparable.
+   * directly comparable. Reaches 1 at the week's deadline, where the schedule has
+   * nothing left to say and the marker goes away.
    */
   requiredFraction: number
   /**
@@ -145,6 +167,10 @@ export function weekPace(
 ): WeekPace {
   const daysCompleted = weekDaysCompleted(now)
   const daysLeft = DAYS_IN_WEEK - daysCompleted
+  // The schedule runs to 9pm Sunday; the room runs to midnight. Past the deadline
+  // the whole goal is due and the marker is done, but the day is not, so `daysLeft`
+  // and everything read off it stay on ended days.
+  const daysDue = weekDaysDue(now)
 
   const metrics = METRIC_KEYS.map<MetricPace>((key) => {
     const goal = goals[key]
@@ -156,7 +182,7 @@ export function weekPace(
       key,
       done,
       goal,
-      required: requiredByNow(goal, daysCompleted, windowDays),
+      required: requiredByNow(goal, daysDue, windowDays),
       windowDays,
       daysLeft: windowLeft,
       remaining,
