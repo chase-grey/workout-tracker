@@ -615,7 +615,9 @@ function GoalRow({
             ? 'log data to project this.'
             : proj.basis.thin
               ? 'not enough recent data to project.'
-              : 'not trending toward this yet — keep at it.'}
+              : proj.beyondHorizon
+                ? 'too far to predict yet.'
+                : 'not trending toward this yet — keep at it.'}
         </p>
       )}
 

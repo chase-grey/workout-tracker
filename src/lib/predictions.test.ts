@@ -6,6 +6,7 @@ import {
   trendPoints,
   weeklyTarget,
   weeksToClose,
+  ETA_HORIZON_WEEKS,
   PACE_FLOOR,
   TREND_WINDOW,
 } from './predictions'
@@ -289,16 +290,89 @@ describe('project with a decaying gain rate', () => {
   })
 
   it('dates a goal a long way out rather than reporting nothing', () => {
-    // 285 to go at +5/wk. The taper spends itself long before that, but the pace
+    // 185 to go at +5/wk. The taper spends itself long before that, but the pace
     // floors instead of vanishing, so the answer is a distant date — years of it
     // — and not the blank the bare taper used to give.
-    const straight = project(gaining, 400, today)
-    const decayed = project(gaining, 400, today, { decayPerWeek: 0.9 })
+    const straight = project(gaining, 300, today)
+    const decayed = project(gaining, 300, today, { decayPerWeek: 0.9 })
     expect(straight.onTrack).toBe(true)
     expect(decayed.onTrack).toBe(true)
     expect(decayed.etaWeeks!).toBeGreaterThan(straight.etaWeeks!)
-    expect(decayed.etaWeeks!).toBeGreaterThan(52 * 4)
+    expect(decayed.etaWeeks!).toBeGreaterThan(52 * 2)
+    expect(decayed.etaWeeks!).toBeLessThan(ETA_HORIZON_WEEKS)
     expect(decayed.etaDate).not.toBeNull()
+  })
+})
+
+describe('project declines a date past the horizon', () => {
+  const today = new Date(2026, 0, 26)
+
+  /**
+   * The pull-up ladder: four sets of six, climbing a fifth of a rep a week. The
+   * far rung — 4×20 — is fourteen reps away, which once the taper is spent is a
+   * sum in the 2030s rather than a forecast.
+   */
+  const creeping = [
+    { date: '2026-01-05', value: 5.4 },
+    { date: '2026-01-12', value: 5.6 },
+    { date: '2026-01-19', value: 5.8 },
+    { date: '2026-01-26', value: 6 },
+  ]
+  const ladder = { decayPerWeek: 0.93, capPerWeek: 1 }
+
+  it('reports beyondHorizon instead of a date years out', () => {
+    const p = project(creeping, 20, today, ladder)
+
+    // The pace is real and pointed the right way — it's the date that isn't useful.
+    expect(p.slopePerWeek).toBeGreaterThan(0)
+    expect(p.beyondHorizon).toBe(true)
+    expect(p.etaWeeks).toBeNull()
+    expect(p.etaDate).toBeNull()
+    expect(p.onTrack).toBe(false)
+  })
+
+  it('still dates the nearer rungs of the same climb', () => {
+    const p = project(creeping, 10, today, ladder)
+
+    expect(p.beyondHorizon).toBe(false)
+    expect(p.onTrack).toBe(true)
+    expect(p.etaWeeks!).toBeLessThan(ETA_HORIZON_WEEKS)
+  })
+
+  it('keeps beyondHorizon off the states that have no pace to project', () => {
+    // Flat, moving away, and nothing logged: all blank for reasons of their own,
+    // none of them "too far out".
+    const flat = project(
+      [
+        { date: '2026-01-05', value: 6 },
+        { date: '2026-01-12', value: 6 },
+        { date: '2026-01-19', value: 6 },
+        { date: '2026-01-26', value: 6 },
+      ],
+      20,
+      today,
+    )
+    const away = project(
+      [
+        { date: '2026-01-05', value: 8 },
+        { date: '2026-01-12', value: 7.5 },
+        { date: '2026-01-19', value: 7 },
+        { date: '2026-01-26', value: 6.5 },
+      ],
+      20,
+      today,
+    )
+
+    expect(flat.beyondHorizon).toBe(false)
+    expect(away.beyondHorizon).toBe(false)
+    expect(project([], 20, today).beyondHorizon).toBe(false)
+  })
+
+  it('holds a goal sitting on its target inside the horizon', () => {
+    const p = project(creeping, 6, today)
+
+    expect(p.etaWeeks).toBe(0)
+    expect(p.beyondHorizon).toBe(false)
   })
 })
 

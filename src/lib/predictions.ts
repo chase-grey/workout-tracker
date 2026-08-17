@@ -19,6 +19,11 @@ export type Projection = {
   etaWeeks: number | null // weeks from today to reach target; null if not trending toward it
   etaDate: string | null // ISO YYYY-MM-DD; null if etaWeeks null
   onTrack: boolean // true iff etaWeeks is a positive finite number
+  /**
+   * The pace does point at the target, but the date it lands on is past
+   * {@link ETA_HORIZON_WEEKS} — so no ETA is quoted (see the horizon note there).
+   */
+  beyondHorizon: boolean
   /** Weekly decay of the gain rate the ETA assumes (1 = none, i.e. straight line). */
   decayPerWeek: number
   /**
@@ -286,6 +291,24 @@ export function weeksToClose(
   return bend + (gap - bought) / (slopePerWeek * floorFraction)
 }
 
+/**
+ * How far out an ETA is still worth putting a date on.
+ *
+ * The far rungs of a ladder are the ones the pace has least to say about: 14 reps
+ * away at a fifth of a rep a week is arithmetic, not a forecast, and it comes out
+ * as a day in 2043. Nothing about the next seventeen years of training is in a
+ * fortnight of readings — the programme will change, the ladder's earlier rungs
+ * will change what the pace even is, and the date moves by years every time
+ * another set is logged. Quoting it invites a plan to be made around it.
+ *
+ * Past this horizon the projection keeps its direction and its pace but declines
+ * the date, and says so as {@link Projection.beyondHorizon} — which reads as "too
+ * far to predict yet", not as "you're not getting there". Five years is set well
+ * past anything worth committing to (see goalLock.LOCK_HORIZON_MONTHS) so the goals
+ * you can actually work toward are untouched.
+ */
+export const ETA_HORIZON_WEEKS = 5 * 52
+
 export type ProjectOptions = {
   /** How much history the pace is read from (see TREND_WINDOW). */
   window?: TrendWindow
@@ -334,6 +357,7 @@ export function project(
       etaWeeks: null,
       etaDate: null,
       onTrack: false,
+      beyondHorizon: false,
       decayPerWeek,
       paceFloorFraction: floorFraction,
       basis: { points: 0, spanDays: 0, thin: true },
@@ -368,6 +392,7 @@ export function project(
       etaWeeks: 0,
       etaDate: toISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate())),
       onTrack: true,
+      beyondHorizon: false,
       decayPerWeek,
       paceFloorFraction: floorFraction,
       basis,
@@ -378,7 +403,7 @@ export function project(
   // allowed to decay (a straight line when decayPerWeek is 1). null otherwise:
   // flat, moving away, or gaining too slowly to ever close the gap at this pace.
   const etaWeeks = weeksToClose(diff, slopePerWeek, decayPerWeek, floorFraction)
-  if (etaWeeks != null) {
+  if (etaWeeks != null && etaWeeks <= ETA_HORIZON_WEEKS) {
     return {
       slopePerWeek,
       observedSlopePerWeek,
@@ -388,13 +413,16 @@ export function project(
       etaWeeks,
       etaDate: addDaysISO(today, Math.round(etaWeeks * 7)),
       onTrack: true,
+      beyondHorizon: false,
       decayPerWeek,
       paceFloorFraction: floorFraction,
       basis,
     }
   }
 
-  // Too little recent data to read, flat, moving away, or short of the ceiling.
+  // Too little recent data to read, flat, moving away, short of the ceiling — or
+  // pointed at the target but landing so far out that the date says nothing (see
+  // ETA_HORIZON_WEEKS), which is worth telling apart from the rest.
   return {
     slopePerWeek,
     observedSlopePerWeek,
@@ -404,6 +432,7 @@ export function project(
     etaWeeks: null,
     etaDate: null,
     onTrack: false,
+    beyondHorizon: etaWeeks != null,
     decayPerWeek,
     paceFloorFraction: floorFraction,
     basis,
