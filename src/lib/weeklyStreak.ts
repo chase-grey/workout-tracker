@@ -180,6 +180,22 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   return out
 }
 
+/**
+ * Split a history into the weeks behind the current streak and the ones before
+ * it. The run is everything after the last week that broke a streak — those
+ * weeks, and only those, are the ones the number on the Today tab is counting;
+ * a frozen week is in the run because it kept the run alive. Anything at or
+ * before the last reset says nothing about the current number, so callers can
+ * fold it away.
+ */
+export function splitAtCurrentRun(history: WeekResult[]): {
+  earlier: WeekResult[]
+  run: WeekResult[]
+} {
+  const lastReset = history.findLastIndex((w) => w.outcome === 'reset')
+  return { earlier: history.slice(0, lastReset + 1), run: history.slice(lastReset + 1) }
+}
+
 /** Compute the current weekly streak (and banked freezes) from date lists. */
 export function computeWeeklyStreak(input: StreakInput): WeeklyStreak {
   const history = weeklyStreakHistory(input)

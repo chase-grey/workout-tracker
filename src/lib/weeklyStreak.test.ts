@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   classifyWeek,
   computeWeeklyStreak,
+  splitAtCurrentRun,
   weeklyStreakHistory,
   DEFAULT_WEEKLY_GOALS,
+  type WeekResult,
 } from './weeklyStreak'
 
 // A fixed "today". 2026-07-10 is a Friday; its Monday is 2026-07-06,
@@ -344,5 +346,47 @@ describe('weeklyStreakHistory', () => {
       streak: last.streakAfter,
       freezes: last.freezesAfter,
     })
+  })
+})
+
+describe('splitAtCurrentRun', () => {
+  const row = (week: string, outcome: WeekResult['outcome']) => ({ week, outcome }) as WeekResult
+  const weeksOf = (rows: WeekResult[]) => rows.map((r) => r.week)
+
+  it('keeps every week when nothing broke the run', () => {
+    const rows = [row('a', 'advanced'), row('b', 'froze'), row('c', 'advanced')]
+    const { earlier, run } = splitAtCurrentRun(rows)
+    expect(earlier).toEqual([])
+    expect(weeksOf(run)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('folds away the reset week and everything before it', () => {
+    const rows = [
+      row('a', 'advanced'),
+      row('b', 'reset'),
+      row('c', 'advanced'),
+      row('d', 'froze'),
+    ]
+    const { earlier, run } = splitAtCurrentRun(rows)
+    expect(weeksOf(earlier)).toEqual(['a', 'b'])
+    expect(weeksOf(run)).toEqual(['c', 'd'])
+  })
+
+  it('splits at the last reset, not the first', () => {
+    const rows = [row('a', 'reset'), row('b', 'advanced'), row('c', 'reset'), row('d', 'advanced')]
+    const { earlier, run } = splitAtCurrentRun(rows)
+    expect(weeksOf(earlier)).toEqual(['a', 'b', 'c'])
+    expect(weeksOf(run)).toEqual(['d'])
+  })
+
+  it('leaves an empty run when the streak just broke', () => {
+    const rows = [row('a', 'advanced'), row('b', 'reset')]
+    const { earlier, run } = splitAtCurrentRun(rows)
+    expect(weeksOf(earlier)).toEqual(['a', 'b'])
+    expect(run).toEqual([])
+  })
+
+  it('handles an empty history', () => {
+    expect(splitAtCurrentRun([])).toEqual({ earlier: [], run: [] })
   })
 })

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   MdAcUnit,
   MdCelebration,
@@ -12,6 +12,7 @@ import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
 import { weekPace, type MetricPace } from '../../lib/weekPace'
+import { StreakHistorySheet } from './StreakHistorySheet'
 
 /**
  * One metric's row: the fill is what's done, and the pale line is where the
@@ -59,8 +60,12 @@ function MetricBar({ label, m }: { label: string; m: MetricPace }) {
 }
 
 export function ThisWeek() {
-  const { weekProgress: wp, goals, streaks, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
+  const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
     useData()
+
+  // The weeks behind the flame live one tap away rather than in a panel down the
+  // Progress tab: the streak is read here, so that's where it explains itself.
+  const [showStreak, setShowStreak] = useState(false)
 
   const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
   const calPR = caloriePR(calorieEntries)
@@ -94,15 +99,22 @@ export function ThisWeek() {
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-wide text-neutral-500">this week</h2>
-        <div className="flex items-center gap-3 text-sm font-semibold">
+        <button
+          onClick={() => setShowStreak(true)}
+          disabled={streakHistory.length === 0}
+          aria-label="completed weeks"
+          className="-m-2 flex items-center gap-3 p-2 text-sm font-semibold active:opacity-70"
+        >
           <span className="flex items-center gap-1 text-accent">
             <MdLocalFireDepartment aria-hidden /> {streaks.streak}
           </span>
           <span className="flex items-center gap-1 text-neutral-300">
             <MdAcUnit aria-hidden /> {streaks.freezes}
           </span>
-        </div>
+        </button>
       </div>
+
+      {showStreak && <StreakHistorySheet onClose={() => setShowStreak(false)} />}
 
       {/* Milestone bar: fill = progress; white line = where the schedule expects you; markers for checkpoint & goal. */}
       <div className="relative h-3 rounded-full bg-surface-2">
