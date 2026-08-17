@@ -84,7 +84,9 @@ export function ThisWeek() {
     (goals.halfWorkouts / goals.workouts + goals.halfFlex / goals.flex + goals.halfCalDays / goals.calDays) / 3
 
   // The pace marker used to track elapsed time, which demanded fractions of a
-  // workout mid-Monday; it now follows the schedule in whole units.
+  // workout mid-Monday; it now follows the schedule in whole units, reaching the
+  // goal end of the bar at the week's 9pm Sunday deadline. It's dropped there
+  // rather than parked on the goal marker, which already says the same thing.
   const pace = weekPace(wp, goals)
   const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
 
@@ -110,11 +112,13 @@ export function ThisWeek() {
         />
         <div className="absolute inset-y-0 w-0.5 bg-neutral-500" style={{ left: `${checkpointFrac * 100}%` }} />
         <div className="absolute inset-y-0 right-0 w-0.5 bg-accent-2" />
-        <div
-          className="absolute -top-0.5 h-4 w-0.5 -translate-x-1/2 rounded bg-white"
-          style={{ left: `${pace.requiredFraction * 100}%` }}
-          title="where the week's schedule expects you"
-        />
+        {pace.requiredFraction < 1 && (
+          <div
+            className="absolute -top-0.5 h-4 w-0.5 -translate-x-1/2 rounded bg-white"
+            style={{ left: `${pace.requiredFraction * 100}%` }}
+            title="where the week's schedule expects you"
+          />
+        )}
       </div>
       <div className="relative mt-1 h-3 text-[10px] tracking-wide text-neutral-500">
         <span className="absolute -translate-x-1/2" style={{ left: `${checkpointFrac * 100}%` }}>
