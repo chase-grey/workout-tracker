@@ -157,7 +157,26 @@ export function restLabel(sec: number): string {
  * timing, stored as no `circuitRestSec` at all — and is deliberately a separate
  * choice from `0`, which is an explicit "roll straight on to the next move".
  */
-export const CIRCUIT_REST_CHOICES: readonly (number | null)[] = [null, 0, 30, 45, 60, 90, 120]
+export const CIRCUIT_REST_CHOICES: readonly (number | null)[] = [null, 0, 10, 30, 45, 60, 90, 120]
+
+/**
+ * The rests a circuit's ROUND boundary can be set to, in the order they're
+ * offered — the wrap from the last station back round to the first, once every
+ * station has been worked (see PlannedExercise.circuitRoundRestSec).
+ *
+ * Longer choices than the station list above and no `0`: this is the break after a
+ * full round of the circuit, and a round you roll straight out of is what the
+ * station rests are for. `null` is "leave it to the stations", i.e. no round rest
+ * of its own.
+ */
+export const CIRCUIT_ROUND_REST_CHOICES: readonly (number | null)[] = [
+  null,
+  60,
+  90,
+  120,
+  150,
+  180,
+]
 
 /** How one {@link CIRCUIT_REST_CHOICES} entry reads in the picker. */
 export function circuitRestLabel(sec: number | null): string {
@@ -173,7 +192,11 @@ export function circuitRestLabel(sec: number | null): string {
  *   circuit rests only where it needs to — `0` rolls straight on to the next
  *   move, so a rest can sit after one station and nowhere else.
  * - Moving to the next STATION of a circuit otherwise: {@link CIRCUIT_STATION_REST_SEC}.
- * - Starting a new ROUND of a circuit (back to the first station): the next
+ * - Starting a new ROUND of a circuit, when the station carries a
+ *   `circuitRoundRestSec`: that value, which outranks its `circuitRestSec` —
+ *   the two are the whole point of the field being separate (see
+ *   PlannedExercise.circuitRoundRestSec).
+ * - Starting a new ROUND of a circuit otherwise: the next
  *   exercise's own `restSec`, capped — you've now worked every station once.
  * - Transitioning to a DIFFERENT exercise: only what the NEXT exercise needs
  *   (its `restSec`), capped at {@link TRANSITION_REST_CAP_SEC}.
@@ -194,12 +217,27 @@ export function restBeforeNextSet(params: {
    * built-in station/round timing alone.
    */
   circuitRestSec?: number | null
+  /**
+   * The same, for the wrap into a new round only (`PlannedExercise.
+   * circuitRoundRestSec`). Outranks `circuitRestSec` there, which is what lets a
+   * circuit hold a short change between its stations and a full rest between
+   * rounds; absent leaves the round boundary to `circuitRestSec` as before.
+   */
+  circuitRoundRestSec?: number | null
 }): number {
-  const { currentRestSec, sameExercise, nextRestSec, sameCircuit, newCircuitRound, circuitRestSec } =
-    params
+  const {
+    currentRestSec,
+    sameExercise,
+    nextRestSec,
+    sameCircuit,
+    newCircuitRound,
+    circuitRestSec,
+    circuitRoundRestSec,
+  } = params
   if (sameExercise) return currentRestSec
   if (nextRestSec == null) return 0
   if (sameCircuit) {
+    if (newCircuitRound && circuitRoundRestSec != null) return circuitRoundRestSec
     if (circuitRestSec != null) return circuitRestSec
     if (!newCircuitRound) return CIRCUIT_STATION_REST_SEC
   }

@@ -54,7 +54,7 @@ export function GoalTooltip({
       {day.map((d) => (
         <p key={d.exercise} className="mt-0.5 text-neutral-200 tabular-nums">
           {day.length > 1 && <span className="text-neutral-500">{exerciseName(d.exercise)} </span>}
-          {d.sets.map(fmtSet).join(' · ')}
+          {d.sets.map((s) => fmtSet(s)).join(' · ')}
         </p>
       ))}
       {plotted.map((p) => (

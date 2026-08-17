@@ -105,7 +105,7 @@ describe('leadVariant', () => {
   })
 
   it('has no lead for an exercise the variants train alike', () => {
-    for (const key of ['cable_crunch', 'db_overhead_press', 'lateral_raise_l']) {
+    for (const key of ['cable_crunch', 'machine_overhead_press', 'lateral_raise_l']) {
       expect(leadVariant(DEFAULT_PLAN.push, key)).toBeNull()
     }
   })

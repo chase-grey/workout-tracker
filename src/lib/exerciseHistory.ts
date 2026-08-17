@@ -65,6 +65,18 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${Math.abs(n) === 1 ? '' : 's'}`
 }
 
+/**
+ * What the number logged for a set counts. Reps for nearly everything; seconds for
+ * a timed hold, where the same field carries how long it was held (see
+ * PlannedExercise.timed) and calling that "30 reps" would be nonsense.
+ */
+export type CountUnit = 'rep' | 'sec'
+
+/** A logged count in words: `12 reps`, or `30s` for a hold. */
+function count(n: number, unit: CountUnit): string {
+  return unit === 'sec' ? `${n}s` : plural(n, 'rep')
+}
+
 /** `'2026-07-29'` → `jul 29`, with a `'25` suffix once the year isn't this one. */
 export function fmtSessionDate(date: string, today: Date = new Date()): string {
   const [y, m, d] = date.split('-')
@@ -72,19 +84,20 @@ export function fmtSessionDate(date: string, today: Date = new Date()): string {
   return Number(y) === today.getFullYear() ? label : `${label} '${y.slice(2)}`
 }
 
-/** One set as `130×8`, or just `18` when it carried no weight. */
-export function fmtSet(set: LoggedSet): string {
-  return set.weightLbs == null ? String(set.reps) : `${num(set.weightLbs)}×${set.reps}`
+/** One set as `130×8`, or just `18` — `18s` for a hold — when it carried no weight. */
+export function fmtSet(set: LoggedSet, unit: CountUnit = 'rep'): string {
+  if (set.weightLbs != null) return `${num(set.weightLbs)}×${set.reps}`
+  return unit === 'sec' ? `${set.reps}s` : String(set.reps)
 }
 
 /** The best set for the footer: `155×5`, or `22 reps` when it carried no weight. */
-export function fmtBestSet(set: LoggedSet): string {
-  return set.weightLbs == null ? plural(set.reps, 'rep') : fmtSet(set)
+export function fmtBestSet(set: LoggedSet, unit: CountUnit = 'rep'): string {
+  return set.weightLbs == null ? count(set.reps, unit) : fmtSet(set, unit)
 }
 
 /** Today's prescription as `135 × 8`, or `8 reps` when there's no weight to give. */
-export function fmtTarget(target: Target, repsOnly = false): string {
-  if (repsOnly || target.weightLbs == null) return plural(target.reps, 'rep')
+export function fmtTarget(target: Target, repsOnly = false, unit: CountUnit = 'rep'): string {
+  if (repsOnly || target.weightLbs == null) return count(target.reps, unit)
   return `${num(target.weightLbs)} × ${target.reps}`
 }
 
@@ -196,6 +209,7 @@ export function targetDeltaLabel(
   target: Target | undefined,
   last: LastPerformance | null,
   repsOnly = false,
+  unit: CountUnit = 'rep',
 ): string {
   if (last === null) return 'first time logging this'
   if (target == null) return ''
@@ -205,7 +219,7 @@ export function targetDeltaLabel(
   // No weight on either side of the comparison: reps are the whole story.
   if (repsOnly || target.weightLbs == null || last.topWeight == null) {
     if (repDelta === 0) return 'same as last session'
-    return `${repDelta > 0 ? '+' : '-'}${plural(Math.abs(repDelta), 'rep')} from last session`
+    return `${repDelta > 0 ? '+' : '-'}${count(Math.abs(repDelta), unit)} from last session`
   }
 
   const weightDelta = target.weightLbs - last.topWeight
@@ -213,7 +227,7 @@ export function targetDeltaLabel(
     return `${weightDelta > 0 ? '+' : '-'}${num(Math.abs(weightDelta))} lbs from last session`
   }
   if (repDelta === 0) return 'same as last session'
-  return `same weight, ${repDelta > 0 ? '+' : '-'}${plural(Math.abs(repDelta), 'rep')}`
+  return `same weight, ${repDelta > 0 ? '+' : '-'}${count(Math.abs(repDelta), unit)}`
 }
 
 /**
@@ -225,12 +239,13 @@ export function sessionsAtTargetLabel(
   history: ExerciseHistory,
   target: Target | undefined,
   repsOnly = false,
+  unit: CountUnit = 'rep',
 ): string {
   if (target == null) return ''
   if (repsOnly || target.weightLbs == null) {
-    const count = history.sessionsByReps[target.reps] ?? 0
-    return count === 0 ? '' : `${plural(count, 'session')} at ${plural(target.reps, 'rep')}`
+    const sessions = history.sessionsByReps[target.reps] ?? 0
+    return sessions === 0 ? '' : `${plural(sessions, 'session')} at ${count(target.reps, unit)}`
   }
-  const count = history.sessionsByWeight[target.weightLbs] ?? 0
-  return count === 0 ? '' : `${plural(count, 'session')} at ${num(target.weightLbs)} lbs`
+  const atWeight = history.sessionsByWeight[target.weightLbs] ?? 0
+  return atWeight === 0 ? '' : `${plural(atWeight, 'session')} at ${num(target.weightLbs)} lbs`
 }

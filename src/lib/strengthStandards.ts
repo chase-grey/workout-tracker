@@ -378,6 +378,12 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   incline_bench: { lift: 'bench', muscles: ['chest'] },
   iso_chest: { muscles: ['chest'] }, // chest fly / pec deck — no standard
   db_overhead_press: { lift: 'ohp', muscles: ['shoulders'] },
+  // The push day's press. Ranked against the same overhead-press table as the
+  // dumbbell version and with no conversion: a fixed path is easier than free
+  // weight, so the reading runs a little generous, but every gym's press machine
+  // has its own lever arm and inventing a ratio per machine would be a made-up
+  // number. The displayed load stays a real est-1RM either way.
+  machine_overhead_press: { lift: 'ohp', muscles: ['shoulders'] },
   // Isolation — no standard. The single-arm key is retired from the plan but kept
   // here so the sessions logged under it still count toward the delts.
   lateral_raise: { muscles: ['shoulders'] },
@@ -385,6 +391,9 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   lateral_raise_r: { muscles: ['shoulders'] },
   weighted_pullups: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
   pullups_or_pulldown: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
+  // Retired from the plan — pull + legs trains back with weighted pull-ups alone
+  // now — but back still reads the rows already logged, so the muscle keeps the
+  // better of its two lifts rather than losing one outright.
   cable_row: { lift: 'row', muscles: ['back'] },
   incline_db_curl: { lift: 'curl', muscles: ['biceps'] },
   hammer_curl: { lift: 'curl', muscles: ['biceps'] },
@@ -392,11 +401,17 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   overhead_tricep_ext: { lift: 'tricep', muscles: ['triceps'] },
   hamstring_curl: { lift: 'legcurl', muscles: ['hamstrings'] },
   calf_raise: { lift: 'calfraise', muscles: ['calves'] },
+  // Both machines are retired from the plan, and kept here for the same reason the
+  // single-arm raise is: the sessions logged under them are the only reading the
+  // hips have, so retiring the movement shouldn't blank the avatar's inner thigh
+  // and outer hip. Nothing new gets logged to them, so their ladder rungs simply
+  // stop where they stopped.
   leg_adductor: { ladder: 'load', muscles: ['adductors'] },
   leg_abductor: { ladder: 'load', muscles: ['abductors'] },
   neck_extension: { ladder: 'load', muscles: ['neck'] },
   neck_flexion: { ladder: 'load', muscles: ['neck'] },
   cable_crunch: { ladder: 'load', muscles: ['core'] },
+  weighted_situp: { ladder: 'load', muscles: ['core'] },
   hanging_leg_raise: { ladder: 'reps', muscles: ['core'] },
   deadbug: { ladder: 'reps', muscles: ['core'] },
 }
@@ -568,6 +583,7 @@ const LADDER_ORDER: string[] = [
   'neck_extension',
   'neck_flexion',
   'cable_crunch',
+  'weighted_situp',
   'hanging_leg_raise',
   'deadbug',
   'leg_adductor',

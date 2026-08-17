@@ -1,10 +1,11 @@
 /**
  * Which side leads a session's one-limb-at-a-time work.
  *
- * Lateral raises run one arm at a time (see PlannedExercise.side), and whichever
- * arm goes first is the one done fresh — the other follows it, and inside the arm
- * circuit it follows another lap of the stations too. Left every time would hand
- * that advantage to the same arm forever, so the lead alternates:
+ * Lateral raises and Copenhagen planks run one limb at a time (see
+ * PlannedExercise.side), and whichever side goes first is the one done fresh — the
+ * other follows it, and inside a circuit it follows another lap of the stations too.
+ * Left every time would hand that advantage to the same side forever, so the lead
+ * alternates:
  *
  *   1st push session ever → left, 2nd → right, 3rd → left, …
  *

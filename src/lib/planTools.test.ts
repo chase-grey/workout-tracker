@@ -131,14 +131,14 @@ describe('applyPlanEdits', () => {
 
   it('removeExercise records a shipped exercise so the merge stops re-adding it', () => {
     const { plan } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'removeExercise', day: 'pull', key: 'leg_abductor' },
-      { op: 'removeExercise', day: 'pull', key: 'leg_adductor' },
+      { op: 'removeExercise', day: 'pull', key: 'hamstring_curl' },
+      { op: 'removeExercise', day: 'pull', key: 'calf_raise' },
     ])
-    expect(plan.pull.removed).toEqual(['leg_abductor', 'leg_adductor'])
-    // The load it has to survive: without the list, both machines come straight back.
+    expect(plan.pull.removed).toEqual(['hamstring_curl', 'calf_raise'])
+    // The load it has to survive: without the list, both come straight back.
     const keys = withPlanDefaults(plan, PLAN_REVISION).pull.exercises.map((e) => e.key)
-    expect(keys).not.toContain('leg_abductor')
-    expect(keys).not.toContain('leg_adductor')
+    expect(keys).not.toContain('hamstring_curl')
+    expect(keys).not.toContain('calf_raise')
   })
 
   it('removeExercise leaves no record for an exercise the user added themselves', () => {
@@ -254,19 +254,19 @@ describe('applyPlanEdits', () => {
 
   it('reorderDay leaves the exercises it does not name behind the ones it does', () => {
     const { plan } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'reorderDay', day: 'pull', keys: ['cable_row', 'weighted_pullups'] },
+      { op: 'reorderDay', day: 'pull', keys: ['hammer_curl', 'weighted_pullups'] },
     ])
     const rest = keys(DEFAULT_PLAN, 'pull').filter(
-      (k) => k !== 'cable_row' && k !== 'weighted_pullups',
+      (k) => k !== 'hammer_curl' && k !== 'weighted_pullups',
     )
-    expect(keys(plan, 'pull')).toEqual(['cable_row', 'weighted_pullups', ...rest])
+    expect(keys(plan, 'pull')).toEqual(['hammer_curl', 'weighted_pullups', ...rest])
   })
 
   it('reorderDay skips a key the day does not have and keeps the rest', () => {
     const { plan, applied, errors } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'reorderDay', day: 'pull', keys: ['nope', 'cable_row'] },
+      { op: 'reorderDay', day: 'pull', keys: ['nope', 'hammer_curl'] },
     ])
-    expect(keys(plan, 'pull')[0]).toBe('cable_row')
+    expect(keys(plan, 'pull')[0]).toBe('hammer_curl')
     expect(keys(plan, 'pull')).toHaveLength(DEFAULT_PLAN.pull.exercises.length)
     expect(applied).toHaveLength(1)
     expect(errors).toEqual(['no exercise "nope" on pull'])

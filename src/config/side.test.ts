@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { buildSetOrder } from '../lib/circuit'
-import { DEFAULT_PLAN, sideOrderedExercises, variantExercises, type PlannedExercise } from './plan'
+import {
+  absExerciseKeys,
+  COPENHAGEN_HOLD_SEC,
+  COPENHAGEN_ROUND_REST_SEC,
+  COPENHAGEN_SWITCH_SEC,
+  DEFAULT_PLAN,
+  legExerciseKeys,
+  sideOrderedExercises,
+  variantExercises,
+  type PlannedExercise,
+} from './plan'
 
 /** A minimal exercise; only key and side matter to the ordering. */
 function ex(key: string, over: Partial<PlannedExercise> = {}): PlannedExercise {
@@ -20,8 +30,8 @@ describe('sideOrderedExercises', () => {
   })
 
   it('leaves a day with no sided exercises alone', () => {
-    const keys = sideOrderedExercises(DEFAULT_PLAN.pull.exercises, 'right').map((e) => e.key)
-    expect(keys).toEqual(DEFAULT_PLAN.pull.exercises.map((e) => e.key))
+    const keys = sideOrderedExercises(DEFAULT_PLAN.fullbody.exercises, 'right').map((e) => e.key)
+    expect(keys).toEqual(DEFAULT_PLAN.fullbody.exercises.map((e) => e.key))
   })
 
   it('leads with the left raise on a left session', () => {
@@ -142,5 +152,77 @@ describe('the shipped lateral raise pair', () => {
     expect(left.sets).toBe(right.sets)
     expect(left.repMin).toBe(right.repMin)
     expect(left.repMax).toBe(right.repMax)
+  })
+})
+
+describe('the shipped copenhagen plank pair', () => {
+  const find = (key: string) => DEFAULT_PLAN.pull.exercises.find((e) => e.key === key)!
+  const left = find('copenhagen_plank_l')
+  const right = find('copenhagen_plank_r')
+
+  it('is a fixed hold rather than a rep range', () => {
+    for (const e of [left, right]) {
+      expect(e.timed).toBe(true)
+      expect(e.repMin).toBe(COPENHAGEN_HOLD_SEC)
+      expect(e.repMax).toBe(COPENHAGEN_HOLD_SEC)
+    }
+  })
+
+  it('holds each side unloaded', () => {
+    for (const e of [left, right]) {
+      expect(e.repsOnly).toBe(true)
+      expect(e.bodyweight).toBe(true)
+    }
+  })
+
+  it('trains both sides the same way', () => {
+    expect(left.side).toBe('left')
+    expect(right.side).toBe('right')
+    expect(left.sets).toBe(right.sets)
+  })
+
+  it('is two stations of one circuit', () => {
+    expect(left.circuit).toBeTruthy()
+    expect(left.circuit).toBe(right.circuit)
+  })
+
+  it('switches sides on both stations and rests after the round', () => {
+    // Declared on both, because which side leads flips every session and either of
+    // them can end up being the one that wraps into the next round.
+    for (const e of [left, right]) {
+      expect(e.circuitRestSec).toBe(COPENHAGEN_SWITCH_SEC)
+      expect(e.circuitRoundRestSec).toBe(COPENHAGEN_ROUND_REST_SEC)
+    }
+  })
+
+  it('rests far longer after the pair than between its sides', () => {
+    expect(COPENHAGEN_ROUND_REST_SEC).toBeGreaterThan(COPENHAGEN_SWITCH_SEC)
+  })
+
+  it('is kept out of the core and leg aggregates, which count reps', () => {
+    // 30 seconds is not 30 of anything, so a hold has no business being summed into
+    // a rep series (see absExerciseKeys / legExerciseKeys).
+    const abs = absExerciseKeys(DEFAULT_PLAN)
+    const legs = legExerciseKeys(DEFAULT_PLAN)
+    for (const e of [left, right]) {
+      expect(abs.has(e.key)).toBe(false)
+      expect(legs.has(e.key)).toBe(false)
+    }
+  })
+
+  it('runs left, right, left, right through the day rather than one side at a time', () => {
+    for (const side of ['left', 'right'] as const) {
+      const exercises = sideOrderedExercises(DEFAULT_PLAN.pull.exercises, side)
+      const order = buildSetOrder(
+        exercises,
+        exercises.map((e) => e.sets),
+      )
+      const held = order
+        .map((s) => exercises[s.exIndex].key)
+        .filter((k) => k.startsWith('copenhagen_plank'))
+      const lead = side === 'left' ? 'copenhagen_plank_l' : 'copenhagen_plank_r'
+      const follow = side === 'left' ? 'copenhagen_plank_r' : 'copenhagen_plank_l'
+      expect(held.slice(0, 4)).toEqual([lead, follow, lead, follow])
+    }
   })
 })

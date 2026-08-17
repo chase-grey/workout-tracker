@@ -68,6 +68,32 @@ export type PlannedExercise = {
    */
   circuitRestSec?: number
   /**
+   * Rest taken when this station wraps the circuit into a NEW ROUND, as opposed to
+   * the change to the next station that {@link circuitRestSec} covers. Set both and
+   * a circuit can hold a brief switch between its stations and a real rest between
+   * its rounds — which is what the Copenhagen pair needs: ten seconds to turn over
+   * onto the other side, two minutes before doing the pair again.
+   *
+   * Absent leaves the round boundary exactly as it was: the station's own
+   * `circuitRestSec` if it has one, else the next exercise's capped rest. Unlike
+   * that capped fallback this is taken at face value — it's a rest prescribed for
+   * this boundary rather than one carried over from the coming exercise.
+   */
+  circuitRoundRestSec?: number
+  /**
+   * A HOLD rather than a count of reps: what gets logged for each set is the
+   * seconds held, so `repMin`/`repMax` are a seconds range and the set screen
+   * offers a hold timer in place of the reps box (see components/HoldTimer). Equal
+   * min and max is a fixed hold — a 30-second plank stays a 30-second plank —
+   * while a range lets the progression engine climb the hold the way it climbs
+   * reps.
+   *
+   * Timed movements are kept out of the `abs`/`core` and leg groups that
+   * {@link absExerciseKeys} and {@link legExerciseKeys} match, since those sum
+   * their members as reps and 30 seconds is not 30 of anything.
+   */
+  timed?: boolean
+  /**
    * Exercises sharing a `sharedLoad` id are prescribed ONE weight, so a circuit
    * you rotate through doesn't ask you to re-pin the stack between stations.
    * The group loads to the lightest of its members' own suggestions — the only
@@ -86,6 +112,18 @@ export type PlannedExercise = {
    * own smaller jumps.
    */
   dumbbellPair?: boolean
+  /**
+   * The heaviest load this movement can actually be given — the top of the stack,
+   * the last plate on the rack. Once a session is working at it, double progression
+   * has no weight left to add, so the reps become the ladder instead: the top of the
+   * rep range stops applying and the prescription is simply one more rep than last
+   * time, session after session (see progression.nextTarget).
+   *
+   * Only worth setting where the ceiling is real and already reached. A movement
+   * with room left on the stack progresses in weight the ordinary way, and the cap
+   * does nothing until the load arrives at it.
+   */
+  weightCapLbs?: number
   /**
    * A movement trained one limb at a time. Each side is its own exercise — its own
    * key, its own history, its own line on the chart — so an imbalance between them
@@ -166,8 +204,23 @@ export type Plan = Record<DayType, DayPlan>
  *     is retired — there's no squat rack to train it in anymore. The squat's
  *     logged history stays, and still counts toward the squat goals through a
  *     conversion (see lib/liftRatios).
+ *
+ * 8 — push + core: the weighted sit-up replaces the hanging raise, and the
+ *     machine press replaces the dumbbell overhead press. Both movements are
+ *     retired from this day only — the raise still runs on pull + legs and full
+ *     body, and the dumbbells still press on full body.
+ *
+ * 9 — pull + legs trimmed to what it's actually training: the adductor and
+ *     abductor machines and the cable row are retired, the weighted sit-up takes
+ *     the hanging raise's core slot the way it did on push, and the calf raise is
+ *     capped at the gym's heaviest 100 lbs so it climbs in reps from here.
+ *
+ * 10 — pull + legs: the Copenhagen plank ships as a left and a right station of a
+ *     timed circuit — a 30-second hold each side, ten seconds to switch, and a full
+ *     rest after the pair. It was a hand-added exercise before this, so the
+ *     single-entry versions of it are retired.
  */
-export const PLAN_REVISION = 7
+export const PLAN_REVISION = 10
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -206,14 +259,40 @@ export const DEAD_BUG: PlannedExercise = {
 
 /**
  * The hanging-raise slot. Starts as KNEE raises and graduates to full leg raises
- * once 4×20 is comfortable (see GRADUATION_REPS / shouldGraduateHangingRaise) —
+ * once 3×20 is comfortable (see GRADUATION_REPS / shouldGraduateHangingRaise) —
  * one progression, so it keeps one exercise key and one continuous history.
  */
 export const HANGING_RAISE_KEY = 'hanging_leg_raise'
 
-/** Sets × reps of hanging knee raises that earn the move up to full leg raises. */
-export const GRADUATION_SETS = 4
+/**
+ * Sets × reps of hanging knee raises that earn the move up to full leg raises.
+ *
+ * The set count tracks the most any day actually prescribes, which is what makes
+ * the standard reachable: it was four while push + core trained the raise, and is
+ * three now that full body is the only day that trains it. Leaving it above what
+ * any day asks for would make graduation impossible to earn.
+ */
+export const GRADUATION_SETS = 3
 export const GRADUATION_REPS = 20
+
+/**
+ * The Copenhagen plank: a timed hold, one side at a time, with the two sides
+ * rotated as a circuit (see the pull + legs day below).
+ *
+ * A fixed 30 seconds rather than a range — the hold is hard enough at 30 that the
+ * thing worth progressing is how well it's held, and the actual time is logged
+ * either way, so a set that only made 22 reads as 22 rather than as a failure to
+ * reach a target.
+ *
+ * The switch is the whole rest between the sides: there's nothing to do between
+ * them but turn over onto the other elbow, and resting the left adductor while the
+ * right one works is what makes the pair a circuit in the first place. The real
+ * rest lands after both sides, and is long because a 30-second adductor hold is
+ * closer to a heavy set than to an ab exercise.
+ */
+export const COPENHAGEN_HOLD_SEC = 30
+export const COPENHAGEN_SWITCH_SEC = 10
+export const COPENHAGEN_ROUND_REST_SEC = 150
 
 export const DEFAULT_PLAN: Plan = {
   push: {
@@ -222,7 +301,12 @@ export const DEFAULT_PLAN: Plan = {
     required: true,
     exercises: [
       { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
-      { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: GRADUATION_SETS, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'abs' },
+
+      // The day's second ab movement is loaded rather than reps-only: a plate held
+      // at the chest gives the abs somewhere to progress once the reps are there,
+      // which a hanging raise capped at 20 doesn't. The raise isn't gone — it still
+      // runs on pull + legs and full body, so it's trained twice a week.
+      { key: 'weighted_situp', name: 'weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
 
       // Incline leads variant A (upper-chest emphasis is the aesthetic priority);
       // flat leads variant B. The non-primary press drops to 3 sets that day,
@@ -235,7 +319,14 @@ export const DEFAULT_PLAN: Plan = {
       // Overhead press is a compound, so it goes before chest isolation — three
       // sets done fresh beat four done after flys, and front delts already take
       // heavy work from seven press sets above.
-      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, dumbbellPair: true, group: 'shoulders' },
+      //
+      // The machine rather than the dumbbells: coming off seven sets of pressing,
+      // what limits the dumbbell version is getting them overhead and holding the
+      // path, not the delts. A fixed path takes that out, and the stack steps in
+      // 5s where a pair of dumbbells can only move 10 at a time — twice the
+      // resolution on the movement that needs it most. The dumbbell press keeps
+      // its place on full body, where it's pressed fresh.
+      { key: 'machine_overhead_press', name: 'machine overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders' },
       { key: 'iso_chest', name: 'chest fly / pec deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'chest finisher' },
 
       // Circuit: pushdown → one arm's raise → overhead extension → the other arm's
@@ -278,22 +369,45 @@ export const DEFAULT_PLAN: Plan = {
       // the noise of how the pad was set.
       { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
       { key: 'hamstring_curl', name: 'hamstring curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'legs' },
-      { key: 'leg_adductor', name: 'leg adductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
-      { key: 'leg_abductor', name: 'leg abductor machine', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 5, group: 'legs' },
+
       // Pressing never takes the calves through range, so they get the only direct
       // work they see all week. A hard pause at the bottom is the point — bouncing
       // the stretch turns the whole set into tendon rebound.
-      { key: 'calf_raise', name: 'calf raise', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
+      //
+      // 100 lbs is the whole stack on this machine, and it's already a comfortable
+      // 3×20, so the cap is where the load stays and the reps are the ladder from
+      // here — one more every session, with no top (see weightCapLbs). 20 is
+      // therefore the floor rather than a range: a target under it means the day
+      // went badly, not that the load needs lightening, which is the one thing the
+      // machine can't offer anyway.
+      { key: 'calf_raise', name: 'calf raise', sets: 3, repMin: 20, repMax: 20, restSec: 60, increment: 5, weightCapLbs: 100, group: 'legs' },
+
+      // A hold rather than a count of reps (see PlannedExercise.timed), trained one
+      // side at a time so each adductor is logged and charted on its own — an
+      // imbalance here is both common and the thing the movement is for.
+      //
+      // The two sides rotate as a circuit rather than running one side's sets
+      // through and then the other's: the resting adductor is recovering while the
+      // working one holds, so the only break the switch needs is the time it takes
+      // to turn over onto the other elbow. The full rest goes after the pair instead
+      // (see COPENHAGEN_ROUND_REST_SEC) — declared on both stations, since which
+      // side leads flips every session and either of them can be the one wrapping
+      // into the next round.
+      //
+      // Grouped as adductors rather than core: it's what the movement actually
+      // trains, and it keeps a hold measured in seconds out of the aggregates that
+      // sum their members as reps (see absExerciseKeys / legExerciseKeys).
+      { key: 'copenhagen_plank_l', name: 'copenhagen plank (left)', side: 'left', sets: 3, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
+      { key: 'copenhagen_plank_r', name: 'copenhagen plank (right)', side: 'right', sets: 3, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
 
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
-      // Straight off the pull-up bar and into the raises — same station, nothing
-      // to walk to. Three sets, not the push day's four: it takes abs to 3× a week
-      // without tipping weekly volume past the point where more sets stop paying.
-      // Still after the leg press, so nothing pre-fatigues the core under the bar.
-      { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: 3, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
-
-      { key: 'cable_row', name: 'cable row (neutral grip)', sets: 2, repMin: 10, repMax: 12, restSec: 90, increment: 5, group: 'back' },
+      // The same swap push + core made, for the same reason: a plate at the chest
+      // gives the abs somewhere to keep progressing, where the hanging raise tops
+      // out at the 20 reps that graduate it. Three sets, not push's four — abs are
+      // trained 3× a week and this is the second of those days. The raise still runs
+      // on full body, which is what carries it to graduation now.
+      { key: 'weighted_situp', name: 'weighted sit-up', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'core' },
 
       // Both are a dumbbell in each hand, so both step in 10s (see dumbbellPair).
       { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 10, dumbbellPair: true, group: 'biceps' },
@@ -326,7 +440,11 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 2, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'arms circuit', circuit: 'arms' },
 
       { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'core' },
-      { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: 3, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
+
+      // The only day that trains the raise now, so it's the day graduation has to
+      // be earned on — hence the set count comes from the standard itself rather
+      // than being written out beside it (see GRADUATION_SETS).
+      { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: GRADUATION_SETS, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
     ],
   },
 }
@@ -364,8 +482,18 @@ export function withDayOrder(plan: Plan, order: DayType[]): Plan {
   return next
 }
 
-/** Human-readable rep range, e.g. "6–10" or "12". */
-export function repRangeLabel(e: Pick<PlannedExercise, 'repMin' | 'repMax'>): string {
+/**
+ * Human-readable rep range, e.g. "6–10", "12", or "20+".
+ *
+ * A movement at a load ceiling gets the open-ended form: there's no weight to earn
+ * by reaching the top of its range, so the reps go on climbing past it and a closed
+ * range would be describing a ceiling that isn't there (see
+ * {@link PlannedExercise.weightCapLbs}).
+ */
+export function repRangeLabel(
+  e: Pick<PlannedExercise, 'repMin' | 'repMax' | 'weightCapLbs'>,
+): string {
+  if (e.weightCapLbs != null) return `${e.repMax}+`
   return e.repMin === e.repMax ? `${e.repMin}` : `${e.repMin}–${e.repMax}`
 }
 
@@ -384,6 +512,36 @@ export function withCircuitRest(day: DayPlan, key: string, sec: number | null): 
       if (sec != null) return { ...e, circuitRestSec: sec }
       const cleared = { ...e }
       delete cleared.circuitRestSec
+      return cleared
+    }),
+  }
+}
+
+/**
+ * A copy of `day` with {@link PlannedExercise.circuitRoundRestSec} set on every
+ * station of one circuit.
+ *
+ * The whole circuit at once, unlike {@link withCircuitRest}, because the round
+ * boundary isn't a property of any one station: whichever station happens to run
+ * last is the one that wraps, and for a sided pair that's a different station every
+ * session. Setting it in one place is also how it reads — "rest between rounds" is
+ * one rest, not one per move.
+ *
+ * `null` clears it, handing the boundary back to the stations' own
+ * {@link PlannedExercise.circuitRestSec} (see lib/rest.restBeforeNextSet).
+ */
+export function withCircuitRoundRest(
+  day: DayPlan,
+  circuit: string,
+  sec: number | null,
+): DayPlan {
+  return {
+    ...day,
+    exercises: day.exercises.map((e) => {
+      if (e.circuit !== circuit) return e
+      if (sec != null) return { ...e, circuitRoundRestSec: sec }
+      const cleared = { ...e }
+      delete cleared.circuitRoundRestSec
       return cleared
     }),
   }
@@ -468,11 +626,43 @@ const LEGACY_EXERCISE_GROUPS: Record<string, string[]> = {
 const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
   // Superseded by the regular pull + legs day, which trains back properly; and
   // the both-arms lateral raise, now split into a left and a right station.
-  push: ['pullups_or_pulldown', 'lateral_raise'],
-  // The barbell squat, replaced by the leg press on both leg days: there's no
-  // rack to squat in. Retiring it rather than leaving it means a device that
-  // already saved a plan doesn't end up prescribing both.
-  pull: ['barbell_squat'],
+  //
+  // The last two are retired from THIS day only — both are still shipped
+  // elsewhere (the raise on full body, the dumbbell press on full body), which is
+  // fine: retirement is per day, and their logged history is untouched either way.
+  push: [
+    'pullups_or_pulldown',
+    'lateral_raise',
+    HANGING_RAISE_KEY,
+    'db_overhead_press',
+  ],
+  pull: [
+    // The barbell squat, replaced by the leg press on both leg days: there's no
+    // rack to squat in. Retiring it rather than leaving it means a device that
+    // already saved a plan doesn't end up prescribing both.
+    'barbell_squat',
+    // The hip machines. Two more machines and six more sets for the two muscles
+    // the day was least interested in training, and the leg press already works
+    // both through the range it moves them in.
+    'leg_adductor',
+    'leg_abductor',
+    // The row. Back is trained by four sets of weighted pull-ups here, which is
+    // the movement worth the day's pulling volume; two sets of a row on the end
+    // were the part of the day that got dropped when time ran short anyway.
+    'cable_row',
+    // Replaced by the weighted sit-up, as on push. Still shipped on full body.
+    HANGING_RAISE_KEY,
+    // The hand-added Copenhagen plank, now shipped as a left and a right station
+    // (see COPENHAGEN_HOLD_SEC). It was only ever a custom entry, so what it was
+    // keyed as depends on the name it was added under — the plausible slugs are all
+    // listed, and a key nothing ever stored costs nothing to retire. Its logged
+    // history stays either way; only the plan entry goes.
+    'copenhagen_plank',
+    'copenhagen_planks',
+    'copenhagen',
+    'copenhagen_side_plank',
+    'copenhagen_plank_hold',
+  ],
   fullbody: ['barbell_squat'],
 }
 
@@ -522,10 +712,15 @@ function mergeDayExercises(
   // or a step the user actually chose reads as neither and is left alone.
   //
   // The structural fields (circuit, sharedLoad, dumbbellPair, side, byVariant,
-  // repsOnly) are program design rather than user preference, and the plan editor
-  // doesn't expose them, so they always come from the defaults — otherwise a
-  // stored day would never pick up the arm circuit, the shared tricep load, which
-  // arm a raise trains, or the push A/B split.
+  // repsOnly, weightCapLbs, timed) are program design rather than user preference,
+  // and the plan editor doesn't expose them, so they always come from the defaults —
+  // otherwise a stored day would never pick up the arm circuit, the shared tricep
+  // load, which arm a raise trains, the push A/B split, the calf machine's ceiling,
+  // or that a plank is held for seconds rather than counted in reps.
+  //
+  // The round rest is the exception among the circuit fields: like `circuitRestSec`
+  // it's editable from the session menu, so a stored value is the user's own and is
+  // kept. A restructure still re-adopts it, which is how the shipped value arrives.
   const out = kept.map((e) => {
     const def = defaults.find((d) => d.key === e.key)
     if (!def) return e
@@ -548,6 +743,8 @@ function mergeDayExercises(
       side: def.side,
       byVariant: def.byVariant,
       repsOnly: def.repsOnly,
+      weightCapLbs: def.weightCapLbs,
+      timed: def.timed,
     }
   })
   defaults.forEach((def, i) => {
@@ -664,6 +861,12 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
   [HANGING_RAISE_KEY]: ['hanging leg raise', 'leg raise', 'knee raise', 'hanging raise'],
   iso_chest: ['pec fly', 'pec deck', 'chest fly'],
   db_overhead_press: ['shoulder press', 'overhead press'],
+  // "situp" written closed up is one token where the display name is two ("sit-up"
+  // normalizes to "sit up"), so it needs saying explicitly. The bare "overhead
+  // press" stays with the dumbbell key — that's what every log written before the
+  // machine took over the push day meant.
+  weighted_situp: ['situp', 'weighted situp'],
+  machine_overhead_press: ['machine shoulder press'],
 }
 
 /**
@@ -675,6 +878,11 @@ const RETIRED_EXERCISE_NAMES: Record<string, string> = {
   lateral_raise: 'lateral raise',
   pullups_or_pulldown: 'weighted pull-ups or lat pulldown',
   barbell_squat: 'barbell squat',
+  leg_adductor: 'leg adductor machine',
+  leg_abductor: 'leg abductor machine',
+  // Spaced-out keys would read "cable row" and lose the grip, which is the part
+  // that says which row the logged sessions were.
+  cable_row: 'cable row (neutral grip)',
 }
 
 /**

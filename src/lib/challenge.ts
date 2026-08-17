@@ -22,6 +22,8 @@ export type ChallengeOpts = {
   repMax: number
   bodyweight?: boolean
   increment?: number
+  /** Heaviest load available, so a capped lift is scored on reps as it was asked. */
+  weightCapLbs?: number
   /** Load-sharing group id, so the target read here matches the one prefilled. */
   sharedLoad?: string
 }

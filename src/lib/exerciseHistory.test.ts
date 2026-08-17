@@ -241,6 +241,16 @@ describe('targetDeltaLabel', () => {
   it('says nothing when there is no target to compare', () => {
     expect(targetDeltaLabel(undefined, last)).toBe('')
   })
+
+  it('compares a timed hold in seconds', () => {
+    const held = { date: '2026-07-29', topWeight: null, topReps: 30, sameSlot: true }
+    expect(targetDeltaLabel({ weightLbs: null, reps: 35 }, held, true, 'sec')).toBe(
+      '+5s from last session',
+    )
+    expect(targetDeltaLabel({ weightLbs: null, reps: 22 }, held, true, 'sec')).toBe(
+      '-8s from last session',
+    )
+  })
 })
 
 describe('sessionsAtTargetLabel', () => {
@@ -265,6 +275,19 @@ describe('sessionsAtTargetLabel', () => {
       'deadbug',
     )
     expect(sessionsAtTargetLabel(h, { weightLbs: null, reps: 18 })).toBe('2 sessions at 18 reps')
+  })
+
+  it('counts a timed hold by the seconds it was held', () => {
+    const h = exerciseHistory(
+      [
+        r('s1', '2026-07-15', 1, null, 30, { exercise: 'copenhagen_plank_l' }),
+        r('s2', '2026-07-22', 1, null, 30, { exercise: 'copenhagen_plank_l' }),
+      ],
+      'copenhagen_plank_l',
+    )
+    expect(sessionsAtTargetLabel(h, { weightLbs: null, reps: 30 }, true, 'sec')).toBe(
+      '2 sessions at 30s',
+    )
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_PLAN, variantExercises } from './plan'
+import { DEFAULT_PLAN, GRADUATION_SETS, repRangeLabel, variantExercises } from './plan'
 
 /** Set count for one exercise in one variant of the push day. */
 function sets(variant: 'A' | 'B', key: string): number | undefined {
@@ -59,7 +59,18 @@ describe('variantExercises', () => {
 describe('the push + core day', () => {
   it('runs overhead press before chest isolation', () => {
     const keys = variantExercises(DEFAULT_PLAN.push, 'A').map((e) => e.key)
-    expect(keys.indexOf('db_overhead_press')).toBeLessThan(keys.indexOf('iso_chest'))
+    expect(keys.indexOf('machine_overhead_press')).toBeLessThan(keys.indexOf('iso_chest'))
+  })
+
+  it('presses overhead on the machine, not the dumbbells', () => {
+    const keys = DEFAULT_PLAN.push.exercises.map((e) => e.key)
+    expect(keys).toContain('machine_overhead_press')
+    expect(keys).not.toContain('db_overhead_press')
+    // A stack steps in 5s where a pair of dumbbells can only move 10 — the point
+    // of the switch, so a 10 here would be a regression.
+    const press = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'machine_overhead_press')
+    expect(press?.increment).toBe(5)
+    expect(press?.dumbbellPair).toBeUndefined()
   })
 
   it('never puts the two tricep movements next to each other', () => {
@@ -80,12 +91,17 @@ describe('the push + core day', () => {
 
   it('does four sets of each core movement', () => {
     expect(sets('A', 'cable_crunch')).toBe(4)
-    expect(sets('A', 'hanging_leg_raise')).toBe(4)
+    expect(sets('A', 'weighted_situp')).toBe(4)
   })
 
-  it('offers no added weight on the hanging raise', () => {
-    const raise = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'hanging_leg_raise')
-    expect(raise?.repsOnly).toBe(true)
+  it('loads both ab movements, and no longer hangs from the bar', () => {
+    const keys = DEFAULT_PLAN.push.exercises.map((e) => e.key)
+    expect(keys).toContain('weighted_situp')
+    expect(keys).not.toContain('hanging_leg_raise')
+    // The reason for the swap: an ab movement you can add weight to has somewhere
+    // to progress once the reps are there.
+    const abs = DEFAULT_PLAN.push.exercises.filter((e) => e.group === 'abs')
+    expect(abs.every((e) => e.increment != null && !e.repsOnly)).toBe(true)
   })
 
   it('no longer carries the lat-pulldown finisher', () => {
@@ -94,20 +110,51 @@ describe('the push + core day', () => {
 })
 
 describe('the pull + legs day', () => {
-  it('runs the hanging raise straight off the pull-up bar, still after the leg press', () => {
+  it('takes its core work loaded, leaving the raise to full body', () => {
     const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
-    expect(keys.indexOf('hanging_leg_raise')).toBe(keys.indexOf('weighted_pullups') + 1)
-    expect(keys.indexOf('leg_press')).toBeLessThan(keys.indexOf('hanging_leg_raise'))
+    expect(keys).toContain('weighted_situp')
+    expect(keys).not.toContain('hanging_leg_raise')
+  })
+
+  it('does core after the leg press, so nothing pre-fatigues it', () => {
+    const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
+    expect(keys.indexOf('leg_press')).toBeLessThan(keys.indexOf('weighted_situp'))
+  })
+
+  it('no longer carries the hip machines or the row', () => {
+    const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
+    expect(keys).not.toContain('leg_adductor')
+    expect(keys).not.toContain('leg_abductor')
+    expect(keys).not.toContain('cable_row')
+  })
+
+  it('still trains back, on the movement worth the day pulling volume', () => {
+    const back = DEFAULT_PLAN.pull.exercises.filter((e) => e.group === 'back')
+    expect(back.map((e) => e.key)).toEqual(['weighted_pullups'])
   })
 
   it('does less core than a push day, keeping weekly volume in range', () => {
-    const pull = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'hanging_leg_raise')
+    const pull = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'weighted_situp')
     expect(pull?.sets).toBe(3)
-    expect(pull!.sets).toBeLessThan(sets('A', 'hanging_leg_raise')!)
+    expect(pull!.sets).toBeLessThan(sets('A', 'weighted_situp')!)
   })
 
   it('trains calves directly, since pressing never takes them through range', () => {
     expect(DEFAULT_PLAN.pull.exercises.map((e) => e.key)).toContain('calf_raise')
+  })
+
+  it('caps the calf raise at the stack, so it climbs in reps from there', () => {
+    const calf = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'calf_raise')
+    expect(calf?.weightCapLbs).toBe(100)
+    // The reps already owned at the cap are the floor the ladder starts from — a
+    // range topping out below them would ask for a step backwards.
+    expect(calf?.repMin).toBe(20)
+    expect(calf?.repMax).toBe(20)
+  })
+
+  it('shows the capped movement as an open-ended rep range', () => {
+    const calf = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'calf_raise')!
+    expect(repRangeLabel(calf)).toBe('20+')
   })
 
   it('pairs the two neck directions as a circuit', () => {
@@ -130,6 +177,18 @@ describe('the full body day', () => {
   it('includes core work', () => {
     const groups = DEFAULT_PLAN.fullbody.exercises.map((e) => e.group)
     expect(groups).toContain('core')
+  })
+
+  it('prescribes the sets the graduation standard is judged against', () => {
+    // The only day that still trains the raise, so if these two ever drift apart
+    // the switch to full leg raises stops being earnable at all.
+    const raise = DEFAULT_PLAN.fullbody.exercises.find((e) => e.key === 'hanging_leg_raise')
+    expect(raise?.sets).toBe(GRADUATION_SETS)
+  })
+
+  it('offers no added weight on the hanging raise', () => {
+    const raise = DEFAULT_PLAN.fullbody.exercises.find((e) => e.key === 'hanging_leg_raise')
+    expect(raise?.repsOnly).toBe(true)
   })
 
   it('lands in the same ballpark of sets as a push day', () => {
@@ -155,7 +214,7 @@ describe('the A/B swap', () => {
     const keys = variantExercises(reordered, 'B').map((e) => e.key)
     expect(keys[0]).toBe('flat_bench')
     expect(keys[1]).toBe('incline_bench')
-    expect(keys[2]).toBe('db_overhead_press')
+    expect(keys[2]).toBe('machine_overhead_press')
   })
 
   it('skips the swap when the partner has been removed', () => {

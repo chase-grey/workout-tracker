@@ -269,6 +269,51 @@ describe('nextTarget', () => {
   })
 })
 
+describe('nextTarget at a load ceiling', () => {
+  /** The calf machine: 100 lbs is the whole stack, and 20 reps is what it does. */
+  const CALF = { repMin: 20, repMax: 20, increment: 5, weightCapLbs: 100, today: TODAY }
+
+  it('climbs a rep past the top of the range instead of adding weight', () => {
+    const rows = [row({ exercise: 'calf_raise', weight_lbs: 100, reps: 20 })]
+    expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 100, reps: 21 })
+  })
+
+  it('goes on climbing, with no ceiling to arrive at', () => {
+    const rows = [row({ exercise: 'calf_raise', weight_lbs: 100, reps: 34 })]
+    expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 100, reps: 35 })
+  })
+
+  it('does not lighten the load when a session lands under the floor', () => {
+    // There's no lighter load to move to, and one short session is a bad day rather
+    // than a weight set too heavy — so it asks for one more than what was managed.
+    const rows = [row({ exercise: 'calf_raise', weight_lbs: 100, reps: 16 })]
+    expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 100, reps: 17 })
+  })
+
+  it('steps in weight the ordinary way while there is stack left', () => {
+    const rows = [row({ exercise: 'calf_raise', weight_lbs: 85, reps: 20 })]
+    expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 90, reps: 20 })
+  })
+
+  it('lands the last step ON the cap rather than past it', () => {
+    const rows = [row({ exercise: 'calf_raise', weight_lbs: 98, reps: 20 })]
+    expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 100, reps: 20 })
+  })
+
+  it('repeats rather than climbing after a layoff', () => {
+    const rows = [row({ exercise: 'calf_raise', date: '2025-11-01', weight_lbs: 100, reps: 24 })]
+    expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 100, reps: 24 })
+  })
+
+  it('leaves an uncapped lift bounded by its range', () => {
+    const rows = [row({ weight_lbs: 135, reps: 10 })]
+    expect(nextTarget(rows, 'bench', { repMin: 6, repMax: 10, increment: 5, today: TODAY })).toEqual({
+      weightLbs: 140,
+      reps: 6,
+    })
+  })
+})
+
 describe('lastPerformance', () => {
   it('returns null when the exercise has no rows', () => {
     expect(lastPerformance([], 'bench')).toBeNull()
@@ -405,6 +450,51 @@ describe('nextTarget across A/B slots', () => {
       weightLbs: 165,
       reps: 9,
     })
+  })
+})
+
+/**
+ * A hold prescribed as a single number rather than a range — the Copenhagen plank's
+ * 30 seconds (see PlannedExercise.timed).
+ */
+describe('a fixed timed hold', () => {
+  const HOLD = { repMin: 30, repMax: 30, bodyweight: true, timed: true, today: TODAY }
+  const held = (reps: number, date = '2026-01-08'): WorkoutRow[] => [
+    row({ exercise: 'copenhagen_plank_l', date, reps, session_id: 's9' }),
+    row({ exercise: 'copenhagen_plank_l', date, reps, session_id: 's9', set_number: 2 }),
+    row({ exercise: 'copenhagen_plank_l', date, reps, session_id: 's9', set_number: 3 }),
+  ]
+
+  it('prescribes the hold on the first session', () => {
+    expect(nextTarget([], 'copenhagen_plank_l', HOLD)).toEqual({ weightLbs: null, reps: 30 })
+  })
+
+  it('keeps prescribing it after a session that made the full hold', () => {
+    expect(nextTarget(held(30), 'copenhagen_plank_l', HOLD)).toEqual({ weightLbs: null, reps: 30 })
+  })
+
+  it('does not re-pace down after a session that fell short', () => {
+    // The one that matters: a set held for 22 is logged as 22, but the prescription
+    // is still the 30 the plan asks for rather than 23.
+    expect(nextTarget(held(22), 'copenhagen_plank_l', HOLD)).toEqual({ weightLbs: null, reps: 30 })
+  })
+
+  it('does not step up after a session that went longer', () => {
+    expect(nextTarget(held(45), 'copenhagen_plank_l', HOLD)).toEqual({ weightLbs: null, reps: 30 })
+  })
+
+  it('holds the prescription across a layoff', () => {
+    // Nothing to re-pace to: the hold is what it is however long you were away.
+    expect(nextTarget(held(30, '2025-09-01'), 'copenhagen_plank_l', HOLD)).toEqual({
+      weightLbs: null,
+      reps: 30,
+    })
+  })
+
+  it('still climbs a hold given a real range', () => {
+    expect(
+      nextTarget(held(30), 'copenhagen_plank_l', { ...HOLD, repMax: 45 }),
+    ).toEqual({ weightLbs: null, reps: 31 })
   })
 })
 

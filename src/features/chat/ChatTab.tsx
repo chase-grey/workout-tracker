@@ -247,6 +247,16 @@ function circuitNote(e: PlannedExercise): string {
 }
 
 /**
+ * The load ceiling, where there is one — otherwise the coach reads an open-ended
+ * rep range with no explanation for it and suggests adding weight the gym hasn't
+ * got (see PlannedExercise.weightCapLbs).
+ */
+function capNote(e: PlannedExercise): string {
+  if (e.weightCapLbs == null) return ''
+  return `, ${e.weightCapLbs} lbs is the heaviest available — progress by reps only`
+}
+
+/**
  * A compact snapshot of the current plans so the assistant knows exact keys.
  *
  * It goes even with plan editing switched off: flag_discomfort takes a key from
@@ -264,7 +274,7 @@ function planSnapshot(plan: Plan, flexPlan: FlexBlock[], planEdits: boolean): st
     lines.push(`${plan[d].label} (${d}), listed in the order it is performed:`)
     plan[d].exercises.forEach((e, i) => {
       lines.push(
-        `  ${i + 1}. key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s${circuitNote(e)}`,
+        `  ${i + 1}. key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s${circuitNote(e)}${capNote(e)}`,
       )
     })
   }

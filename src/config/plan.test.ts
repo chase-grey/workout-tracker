@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  COPENHAGEN_HOLD_SEC,
   DAY_TYPES,
   DEFAULT_PLAN,
   TODAY_DAY_ORDER,
@@ -10,6 +11,7 @@ import {
   unslugKey,
   variantExercises,
   withCircuitRest,
+  withCircuitRoundRest,
   withDayOrder,
   withPlanDefaults,
   withRemovedFrom,
@@ -127,16 +129,26 @@ describe('withPlanDefaults', () => {
   })
 
   it('re-adopts a renamed default exercise a stored day still calls by its old name', () => {
-    const storedPush = {
-      ...DEFAULT_PLAN.push,
-      exercises: DEFAULT_PLAN.push.exercises.map((e) =>
+    const storedFull = {
+      ...DEFAULT_PLAN.fullbody,
+      exercises: DEFAULT_PLAN.fullbody.exercises.map((e) =>
         e.key === 'hanging_leg_raise' ? { ...e, name: 'hanging leg raise' } : e,
       ),
     }
-    const merged = withPlanDefaults({ ...DEFAULT_PLAN, push: storedPush }, PLAN_REVISION)
-    expect(merged.push.exercises.find((e) => e.key === 'hanging_leg_raise')?.name).toBe(
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: storedFull }, PLAN_REVISION)
+    expect(merged.fullbody.exercises.find((e) => e.key === 'hanging_leg_raise')?.name).toBe(
       'hanging knee raise',
     )
+  })
+
+  it('retires a movement from one day without touching the days that keep it', () => {
+    // The hanging raise and the dumbbell press both left push + core and both still
+    // ship on full body — a retirement is per day, so a stored plan keeps them there.
+    const merged = withPlanDefaults(DEFAULT_PLAN, PLAN_REVISION)
+    expect(merged.push.exercises.map((e) => e.key)).not.toContain('hanging_leg_raise')
+    expect(merged.fullbody.exercises.map((e) => e.key)).toContain('hanging_leg_raise')
+    expect(merged.push.exercises.map((e) => e.key)).not.toContain('db_overhead_press')
+    expect(merged.fullbody.exercises.map((e) => e.key)).toContain('db_overhead_press')
   })
 
   it('adopts structural fields (circuit, variants) the plan editor cannot set', () => {
@@ -209,9 +221,9 @@ describe('withPlanDefaults', () => {
   })
 
   describe('a shipped exercise the user deleted', () => {
-    const GONE = ['leg_adductor', 'leg_abductor']
+    const GONE = ['hamstring_curl', 'calf_raise']
 
-    /** A stored pull day with the two machines deleted, as the editor would save it. */
+    /** A stored pull day with the two movements deleted, as the editor would save it. */
     const storedPull: DayPlan = {
       ...DEFAULT_PLAN.pull,
       exercises: DEFAULT_PLAN.pull.exercises.filter((e) => !GONE.includes(e.key)),
@@ -227,16 +239,16 @@ describe('withPlanDefaults', () => {
 
     it('stays gone on the next load instead of being spliced back in', () => {
       const keys = load(storedPull, PLAN_REVISION).pull.exercises.map((e) => e.key)
-      expect(keys).not.toContain('leg_adductor')
-      expect(keys).not.toContain('leg_abductor')
+      expect(keys).not.toContain('hamstring_curl')
+      expect(keys).not.toContain('calf_raise')
     })
 
     it('stays gone through a shipped restructure', () => {
       // A revision bump re-adopts the shipped day wholesale. Deleting a movement is
       // an answer about that movement, not a stale copy of the programming.
       const keys = load(storedPull, 0).pull.exercises.map((e) => e.key)
-      expect(keys).not.toContain('leg_adductor')
-      expect(keys).not.toContain('leg_abductor')
+      expect(keys).not.toContain('hamstring_curl')
+      expect(keys).not.toContain('calf_raise')
       // The rest of the restructure still lands.
       expect(keys).toContain('leg_press')
     })
@@ -248,7 +260,7 @@ describe('withPlanDefaults', () => {
     it('comes back once the exercise is added again', () => {
       const readded: DayPlan = { ...storedPull, exercises: DEFAULT_PLAN.pull.exercises, removed: [] }
       const merged = load(readded, PLAN_REVISION)
-      expect(merged.pull.exercises.map((e) => e.key)).toContain('leg_adductor')
+      expect(merged.pull.exercises.map((e) => e.key)).toContain('hamstring_curl')
       expect(merged.pull.removed).toBeUndefined()
     })
 
@@ -303,15 +315,20 @@ describe('withPlanDefaults', () => {
 
     it('adopts the shipped volume, so core reaches four sets', () => {
       expect(merged.push.exercises.find((e) => e.key === 'cable_crunch')?.sets).toBe(4)
-      const raise = merged.push.exercises.find((e) => e.key === 'hanging_leg_raise')
-      expect(raise?.sets).toBe(4)
-      // Without the new repMax the graduation to full leg raises is unreachable.
-      expect(raise?.repMax).toBe(20)
+      expect(merged.push.exercises.find((e) => e.key === 'weighted_situp')?.sets).toBe(4)
+    })
+
+    it('swaps in the current movements for the ones the day has retired', () => {
+      const keys = merged.push.exercises.map((e) => e.key)
+      expect(keys).not.toContain('hanging_leg_raise')
+      expect(keys).toContain('weighted_situp')
+      expect(keys).not.toContain('db_overhead_press')
+      expect(keys).toContain('machine_overhead_press')
     })
 
     it('moves overhead press ahead of chest isolation', () => {
       const keys = merged.push.exercises.map((e) => e.key)
-      expect(keys.indexOf('db_overhead_press')).toBeLessThan(keys.indexOf('iso_chest'))
+      expect(keys.indexOf('machine_overhead_press')).toBeLessThan(keys.indexOf('iso_chest'))
     })
 
     it('drops the retired finisher and refreshes the day label', () => {
@@ -329,6 +346,59 @@ describe('withPlanDefaults', () => {
       }
       const out = withPlanDefaults({ ...DEFAULT_PLAN, push: withCustom })
       expect(out.push.exercises.map((e) => e.key)).toContain('ex_custom')
+    })
+  })
+
+  describe('a hand-added copenhagen plank', () => {
+    /**
+     * The pull day as it was before the pair shipped: one entry for the movement,
+     * added by name and so counted in reps, with both sides folded into it.
+     */
+    const storedPull = (key: string): DayPlan => ({
+      ...DEFAULT_PLAN.pull,
+      exercises: [
+        ...DEFAULT_PLAN.pull.exercises.filter((e) => !e.key.startsWith('copenhagen_plank')),
+        { key, name: 'copenhagen plank', sets: 3, repMin: 8, repMax: 12, restSec: 60, group: 'core' },
+      ],
+    })
+
+    it('gives way to the shipped left/right pair', () => {
+      const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull('copenhagen_plank') })
+      const keys = out.pull.exercises.map((e) => e.key)
+      expect(keys).not.toContain('copenhagen_plank')
+      expect(keys).toContain('copenhagen_plank_l')
+      expect(keys).toContain('copenhagen_plank_r')
+    })
+
+    it('gives way whichever plausible name it was added under', () => {
+      for (const key of ['copenhagen_planks', 'copenhagen', 'copenhagen_side_plank']) {
+        const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull(key) })
+        expect(out.pull.exercises.map((e) => e.key)).not.toContain(key)
+      }
+    })
+
+    it('arrives as a timed hold rather than a rep count', () => {
+      const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull('copenhagen_plank') })
+      for (const e of out.pull.exercises.filter((x) => x.key.startsWith('copenhagen_plank'))) {
+        expect(e.timed).toBe(true)
+        expect(e.repMax).toBe(COPENHAGEN_HOLD_SEC)
+      }
+    })
+
+    it('picks up that it is a hold even on a stored copy of the pair itself', () => {
+      // The ordinary merge path: a device that saved the pair before `timed` shipped
+      // keeps its own numbers, but what the number MEANS is program design and
+      // always comes from the defaults.
+      const stale = {
+        ...DEFAULT_PLAN.pull,
+        exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
+          e.key.startsWith('copenhagen_plank') ? { ...e, timed: undefined } : e,
+        ),
+      }
+      const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: stale }, PLAN_REVISION)
+      for (const e of out.pull.exercises.filter((x) => x.key.startsWith('copenhagen_plank'))) {
+        expect(e.timed).toBe(true)
+      }
     })
   })
 
@@ -427,6 +497,49 @@ describe('withCircuitRest', () => {
     const before = station(day, 'lateral_raise_l')?.circuitRestSec
     withCircuitRest(day, 'lateral_raise_l', 45)
     expect(station(day, 'lateral_raise_l')?.circuitRestSec).toBe(before)
+  })
+})
+
+describe('withCircuitRoundRest', () => {
+  const day = DEFAULT_PLAN.pull
+  const station = (d: DayPlan, key: string) => d.exercises.find((e) => e.key === key)
+  const sides = ['copenhagen_plank_l', 'copenhagen_plank_r']
+
+  it('sets every station of the circuit, since any of them can be the one that wraps', () => {
+    const next = withCircuitRoundRest(day, 'copenhagen', 120)
+    for (const key of sides) {
+      expect(station(next, key)?.circuitRoundRestSec).toBe(120)
+    }
+  })
+
+  it('leaves the stations of other circuits alone', () => {
+    const next = withCircuitRoundRest(day, 'copenhagen', 120)
+    expect(station(next, 'neck_extension')?.circuitRoundRestSec).toBeUndefined()
+    expect(next.exercises.map((e) => e.key)).toEqual(day.exercises.map((e) => e.key))
+  })
+
+  it('leaves the switch between the sides untouched', () => {
+    const next = withCircuitRoundRest(day, 'copenhagen', 120)
+    for (const key of sides) {
+      expect(station(next, key)?.circuitRestSec).toBe(station(day, key)?.circuitRestSec)
+    }
+  })
+
+  it('clears the field rather than storing a number for the default', () => {
+    const cleared = withCircuitRoundRest(day, 'copenhagen', null)
+    for (const key of sides) {
+      expect(station(cleared, key)).not.toHaveProperty('circuitRoundRestSec')
+    }
+  })
+
+  it('leaves the day untouched when no station matches', () => {
+    expect(withCircuitRoundRest(day, 'not_a_circuit', 120)).toEqual(day)
+  })
+
+  it('does not mutate the day it was given', () => {
+    const before = station(day, 'copenhagen_plank_l')?.circuitRoundRestSec
+    withCircuitRoundRest(day, 'copenhagen', 60)
+    expect(station(day, 'copenhagen_plank_l')?.circuitRoundRestSec).toBe(before)
   })
 })
 
@@ -529,10 +642,10 @@ describe('withRemovedFrom', () => {
 
   it('keeps a deletion the fetched copy knows nothing about', () => {
     // What the sheet holds after a push from a device that predates the list.
-    const local = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['leg_abductor']) }
+    const local = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['hamstring_curl']) }
     const fetched = { ...DEFAULT_PLAN, pull: { ...DEFAULT_PLAN.pull } }
     const merged = withPlanDefaults(withRemovedFrom(fetched, local), PLAN_REVISION)
-    expect(merged.pull.exercises.map((e) => e.key)).not.toContain('leg_abductor')
+    expect(merged.pull.exercises.map((e) => e.key)).not.toContain('hamstring_curl')
   })
 
   it('takes a deletion made on another device', () => {
@@ -542,12 +655,12 @@ describe('withRemovedFrom', () => {
   })
 
   it('unions the two rather than letting either side win', () => {
-    const local = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['leg_abductor']) }
-    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['leg_adductor']) }
+    const local = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['hamstring_curl']) }
+    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['calf_raise']) }
     const merged = withPlanDefaults(withRemovedFrom(fetched, local), PLAN_REVISION)
     const keys = merged.pull.exercises.map((e) => e.key)
-    expect(keys).not.toContain('leg_abductor')
-    expect(keys).not.toContain('leg_adductor')
+    expect(keys).not.toContain('hamstring_curl')
+    expect(keys).not.toContain('calf_raise')
   })
 
   it('leaves a plan alone when neither copy has deleted anything', () => {

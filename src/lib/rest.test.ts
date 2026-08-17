@@ -115,6 +115,68 @@ describe('restBeforeNextSet', () => {
     ).toBe(45)
   })
 
+  it('takes the round rest at a round boundary over the station rest', () => {
+    // The Copenhagen pair: ten seconds to switch sides between the two stations,
+    // and a full rest once both have been held.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 150,
+        sameExercise: false,
+        nextRestSec: 150,
+        sameCircuit: true,
+        newCircuitRound: true,
+        circuitRestSec: 10,
+        circuitRoundRestSec: 150,
+      }),
+    ).toBe(150)
+  })
+
+  it('takes the round rest at face value rather than capping it', () => {
+    // Unlike the next exercise's rest, which a transition caps: this is a rest
+    // prescribed for the boundary rather than one carried over from what's coming.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 60,
+        sameCircuit: true,
+        newCircuitRound: true,
+        circuitRoundRestSec: 180,
+      }),
+    ).toBeGreaterThan(TRANSITION_REST_CAP_SEC)
+  })
+
+  it('leaves the station change alone when a round rest is set', () => {
+    // The same pair mid-round: the round rest says nothing about the switch between
+    // the two sides, which is the whole reason the two are separate fields.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 150,
+        sameExercise: false,
+        nextRestSec: 150,
+        sameCircuit: true,
+        newCircuitRound: false,
+        circuitRestSec: 10,
+        circuitRoundRestSec: 150,
+      }),
+    ).toBe(10)
+  })
+
+  it('ignores a round rest when the next set leaves the circuit', () => {
+    // Leaving for another exercise is a transition however the circuit rests inside
+    // itself, so it's sized to what's coming up.
+    expect(
+      restBeforeNextSet({
+        currentRestSec: 150,
+        sameExercise: false,
+        nextRestSec: 60,
+        sameCircuit: false,
+        circuitRestSec: 10,
+        circuitRoundRestSec: 150,
+      }),
+    ).toBe(60)
+  })
+
   it('ignores a station rest when the next set is outside the circuit', () => {
     // Leaving the circuit for an ordinary exercise is a transition, sized to what
     // is coming up rather than to the station being left behind.

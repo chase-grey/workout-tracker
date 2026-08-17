@@ -1,6 +1,7 @@
 /**
- * The hanging-raise progression: knee raises until 4×20 is comfortable, then
- * full leg raises.
+ * The hanging-raise progression: knee raises until 3×20 is comfortable, then
+ * full leg raises. The set count comes from the plan (GRADUATION_SETS), so it
+ * follows the days that actually train the raise rather than being fixed here.
  *
  * Both live under one exercise key (HANGING_RAISE_KEY) because they're one
  * progression, not two exercises — that keeps a single continuous history and
@@ -37,9 +38,9 @@ function qualifyingSessions(workouts: WorkoutRow[]): string[] {
 
 /**
  * Whether knee raises have been owned long enough to move up to full leg raises:
- * GRADUATION_SESSIONS separate sessions at 4×20. One good session could be a
- * fluke or a generous rep count, so we want it repeated before suggesting the
- * harder variant.
+ * GRADUATION_SESSIONS separate sessions at the standard. One good session could
+ * be a fluke or a generous rep count, so we want it repeated before suggesting
+ * the harder variant.
  */
 export function shouldGraduateHangingRaise(workouts: WorkoutRow[]): boolean {
   return qualifyingSessions(workouts).length >= GRADUATION_SESSIONS

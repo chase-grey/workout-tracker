@@ -271,6 +271,11 @@ export function lastPerformance(
  *
  * Reps-only lifts are the exception: with no load to shed, a bodyweight exercise
  * below its range can only climb back a rep at a time.
+ *
+ * `opts.weightCapLbs` is the other exception, at the opposite end. A lift already
+ * working at the heaviest load it can be given has no weight bump left to earn, so
+ * once it's there the rep range stops bounding it and the reps become the ladder:
+ * one more than last time, indefinitely (see PlannedExercise.weightCapLbs).
  */
 export function nextTarget(
   workouts: WorkoutRow[],
@@ -280,6 +285,10 @@ export function nextTarget(
     repMax: number
     bodyweight?: boolean
     increment?: number
+    /** Heaviest load available — see PlannedExercise.weightCapLbs. */
+    weightCapLbs?: number
+    /** The prescription is a hold in seconds — see PlannedExercise.timed. */
+    timed?: boolean
     today?: Date
     /** The A/B slot being trained — see lastPerformance. */
     variant?: VariantKey | null
@@ -289,6 +298,15 @@ export function nextTarget(
   const increment = opts.increment ?? 5
   const today = opts.today ?? new Date()
 
+  // A hold with a single number rather than a range: the prescription IS that
+  // number, so it neither steps up after a good set nor re-paces down after a short
+  // one. A 30-second plank is a 30-second plank next week too — the clock reads the
+  // same 30 either way, and what was actually held is logged beside it. A hold given
+  // a real range still climbs it the way reps do.
+  if (opts.timed && repMin === repMax) {
+    return { weightLbs: null, reps: repMax }
+  }
+
   const last = lastPerformance(workouts, exerciseKey, repMin, opts.variant)
 
   // Brand-new exercise: no weight suggestion, start at the bottom of the range.
@@ -296,10 +314,21 @@ export function nextTarget(
     return { weightLbs: null, reps: repMin }
   }
 
+  const cap = opts.weightCapLbs
+  /**
+   * Already training at the heaviest load this movement has. Double progression's
+   * weight bump has nowhere left to go, so the reps take over as the ladder: the
+   * top of the range stops applying, and there's no point lightening a load that's
+   * the only one on offer.
+   */
+  const atCap = cap != null && last.topWeight != null && last.topWeight >= cap
+  /** Top of the rep range — gone once the load is capped and reps are the ladder. */
+  const repCeiling = atCap ? Infinity : repMax
+
   /** One more rep than last time, never past the top of the range. */
-  const oneMoreRep = Math.min(last.topReps + 1, repMax)
+  const oneMoreRep = Math.min(last.topReps + 1, repCeiling)
   /** What you last actually managed, for repeating rather than stepping up. */
-  const repeatReps = Math.max(1, Math.min(last.topReps, repMax))
+  const repeatReps = Math.max(1, Math.min(last.topReps, repCeiling))
   // Checked before the bodyweight branch, so reps-only lifts re-pace after a
   // layoff too rather than being asked for a rep they haven't earned in months.
   const stale = daysBetween(last.date, toISODate(today)) > STALE_HISTORY_DAYS
@@ -318,17 +347,21 @@ export function nextTarget(
     return { weightLbs: null, reps: repeat ? repeatReps : Math.max(1, oneMoreRep) }
   }
 
-  // Weighted double progression: earned a weight bump at the top of the range.
-  if (!repeat && last.topReps >= repMax) {
-    return { weightLbs: roundHalf(last.topWeight + increment), reps: repMin }
+  // Weighted double progression: earned a weight bump at the top of the range. A
+  // step is never taken past the cap — the last one lands ON it, and from there
+  // `atCap` sends the progression into reps.
+  if (!atCap && !repeat && last.topReps >= repMax) {
+    const bumped = last.topWeight + increment
+    return { weightLbs: roundHalf(cap == null ? bumped : Math.min(bumped, cap)), reps: repMin }
   }
 
   const reps = repeat ? repeatReps : oneMoreRep
 
   // Too heavy for the range: the reps this weight allows fall short of repMin, so
   // drop to a load that carries the bottom of the range rather than prescribing a
-  // set outside it.
-  if (reps < repMin) {
+  // set outside it. Not at the cap, where there's no lighter load to move to and a
+  // session short of the floor is a bad day rather than a mis-set weight.
+  if (!atCap && reps < repMin) {
     return {
       weightLbs: weightForRepMin(last.topWeight, last.topReps, repMin, increment),
       reps: repMin,
@@ -345,6 +378,10 @@ export type TargetInputs = {
   repMax: number
   bodyweight?: boolean
   increment?: number
+  /** Heaviest load available — see PlannedExercise.weightCapLbs. */
+  weightCapLbs?: number
+  /** The prescription is a hold in seconds — see PlannedExercise.timed. */
+  timed?: boolean
   /** Load-sharing group id — see {@link nextTargets}. */
   sharedLoad?: string
 }
@@ -398,6 +435,8 @@ export function nextTargets(
         repMax: e.repMax,
         bodyweight: e.bodyweight,
         increment: e.increment,
+        weightCapLbs: e.weightCapLbs,
+        timed: e.timed,
         today: opts.today,
         variant: opts.variantFor?.(e.key),
       }),

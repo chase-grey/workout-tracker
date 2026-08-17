@@ -29,10 +29,14 @@ function renderPlan(): string {
       // Circuit stations rotate rather than running their sets back to back, and
       // each one sets the rest that follows it, so both belong on the line.
       const circuit = ex.circuit
-        ? ` [circuit ${ex.circuit}${ex.circuitRestSec == null ? '' : `, ${ex.circuitRestSec}s rest after each of its sets`}]`
+        ? ` [circuit ${ex.circuit}${ex.circuitRestSec == null ? '' : `, ${ex.circuitRestSec}s rest after each of its sets`}${ex.circuitRoundRestSec == null ? '' : `, ${ex.circuitRoundRestSec}s rest after each full round of it`}]`
         : ''
+      // A timed hold logs seconds in the same field a lift logs reps, so the range
+      // is a range of seconds. Said outright, or the coach reads a 30-second plank
+      // as thirty repetitions of something.
+      const unit = ex.timed ? 'second hold' : 'reps'
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} reps, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}`,
       )
     }
   }

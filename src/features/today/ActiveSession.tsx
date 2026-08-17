@@ -16,6 +16,7 @@ import {
   sideOrderedExercises,
   variantExercises,
   withCircuitRest,
+  withCircuitRoundRest,
   type PlannedExercise,
 } from '../../config/plan'
 import { nextTargets, type Target } from '../../lib/progression'
@@ -33,6 +34,7 @@ import {
   canResumeRest,
   circuitRestLabel,
   CIRCUIT_REST_CHOICES,
+  CIRCUIT_ROUND_REST_CHOICES,
   openRest,
   restBeforeNextSet,
   restLabel,
@@ -55,6 +57,7 @@ import { useOnHidden } from '../../lib/useOnHidden'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
+import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
@@ -102,8 +105,14 @@ function toWeight(v: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function targetLabel(target: Target | undefined): string | null {
+/**
+ * The prescription for the set on screen. A timed hold's number is seconds rather
+ * than reps (see PlannedExercise.timed), so it reads as a hold to make rather than
+ * a count to reach.
+ */
+function targetLabel(target: Target | undefined, timed = false): string | null {
   if (!target) return null
+  if (timed) return `hold ${target.reps}s`
   if (target.weightLbs == null) return `target ${target.reps} reps`
   return `target ${target.weightLbs} × ${target.reps}`
 }
@@ -403,6 +412,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           sameCircuit,
           newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
           circuitRestSec: s.ex.circuitRestSec,
+          circuitRoundRestSec: s.ex.circuitRoundRestSec,
         }),
       }
     })
@@ -552,6 +562,37 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     })
   }
 
+  /**
+   * The rest that actually follows the set on screen: a full inter-set rest within
+   * an exercise, whatever a circuit station prescribes for the change to the next
+   * one, the round rest when this station wraps the circuit, and a transition rest
+   * sized to the coming exercise otherwise (see lib/rest.restBeforeNextSet).
+   *
+   * Derived from the step the flow will actually reach rather than from the
+   * exercise's own number, because inside a circuit the two differ by design: the
+   * Copenhagen pair gives ten seconds to turn over onto the other side between its
+   * two stations and a full rest on the wrap into the next round, and a header
+   * reading either of those for the other would be naming a break you don't get.
+   *
+   * On the last set of all there's no transition to price, so it falls back to the
+   * exercise's own rest — the number "back to rest" reopens.
+   */
+  const restShownSec = useMemo(() => {
+    if (!nextStep) return planned.restSec
+    const sameCircuit = !!planned.circuit && nextStep.ex.circuit === planned.circuit
+    return restBeforeNextSet({
+      currentRestSec: planned.restSec,
+      sameExercise: nextStep.ex.key === planned.key,
+      nextRestSec: nextStep.ex.restSec,
+      sameCircuit,
+      // Coming back around to a station starts a fresh round (the set number goes up)
+      // rather than continuing the current one.
+      newCircuitRound: sameCircuit && nextStep.setIndex > step.setIndex,
+      circuitRestSec: planned.circuitRestSec,
+      circuitRoundRestSec: planned.circuitRoundRestSec,
+    })
+  }, [planned, nextStep, step.setIndex])
+
   // Mark the current set done and either rest into the next set or finish.
   const completeSetAndAdvance = () => {
     recordActiveForCurrent(planned.key)
@@ -574,22 +615,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     if (nextStep.ex.key === planned.key && set) {
       controls.updateSet(planned.key, nextStep.setIndex, { weightLbs: set.weightLbs ?? null, reps: set.reps })
     }
-    const nextIsNewExercise = nextStep.ex.key !== planned.key
-    // Rotating to another station of the same circuit, vs. coming back around to
-    // start a fresh round of it (the set number goes up).
-    const sameCircuit = !!planned.circuit && nextStep.ex.circuit === planned.circuit
-    const newCircuitRound = sameCircuit && nextStep.setIndex > step.setIndex
-    // Full inter-set rest within an exercise, a brief station change inside a
-    // circuit (or whatever that station prescribes), and a shorter transition
-    // rest (sized to the next exercise, capped) when moving to a different move.
-    const restSec = restBeforeNextSet({
-      currentRestSec: planned.restSec,
-      sameExercise: !nextIsNewExercise,
-      nextRestSec: nextStep.ex.restSec,
-      sameCircuit,
-      newCircuitRound,
-      circuitRestSec: planned.circuitRestSec,
-    })
+    // The rest the header has been naming all along (see restShownSec) — one
+    // computation for both, so the break you get is the one you were shown.
+    const restSec = restShownSec
     setCurrent(upcoming)
     // A station set to no rest goes straight on to the next move: a zero-second
     // timer would open already in overtime, and it isn't a rest to be counted.
@@ -680,16 +708,25 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     void updatePlan({ ...plan, [session.dayType]: withCircuitRest(day, key, sec) })
   }
 
-  const hint = targetLabel(target)
+  // The break after a full round of the circuit, set for the circuit rather than for
+  // a station: whichever one runs last is the one that wraps, and for a pair of
+  // sides that's a different station every session (see withCircuitRoundRest).
+  const setCircuitRoundRest = (sec: number | null) => {
+    if (!planned.circuit) return
+    void updatePlan({
+      ...plan,
+      [session.dayType]: withCircuitRoundRest(day, planned.circuit, sec),
+    })
+  }
+
+  const hint = targetLabel(target, planned.timed)
   const targetNumbers = target
-    ? target.weightLbs == null
-      ? `${target.reps} reps`
-      : `${target.weightLbs} × ${target.reps}`
+    ? planned.timed
+      ? `${target.reps}s`
+      : target.weightLbs == null
+        ? `${target.reps} reps`
+        : `${target.weightLbs} × ${target.reps}`
     : null
-  // A circuit station never runs two of its sets back to back, so what follows one
-  // of its sets is the rest that station prescribes — not its inter-set number.
-  const restShownSec =
-    planned.circuit && planned.circuitRestSec != null ? planned.circuitRestSec : planned.restSec
 
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
@@ -759,7 +796,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
       <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
         {planned.group} · set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
-        {repRangeLabel(planned)} reps · rest {restLabel(restShownSec)}
+        {repRangeLabel(planned)} {planned.timed ? 'sec' : 'reps'} · rest {restLabel(restShownSec)}
       </p>
     </div>
   )
@@ -798,39 +835,69 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               {goalCue.weightLbs} × {goalCue.reps}
             </p>
           )}
-          <div className="flex items-end justify-center gap-3">
-            {/* A move that's never loaded (hanging raises, dead bugs) gets no
-                weight field at all rather than an empty "added lbs" box. */}
-            {!planned.repsOnly && (
-              <>
-                <label className="flex flex-1 flex-col items-center gap-1">
-                  <span className="text-xs tracking-wide text-neutral-500">
-                    {planned.bodyweight ? 'added lbs' : 'weight'}
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    placeholder={planned.bodyweight ? 'bw' : 'lbs'}
-                    value={set.weightLbs ?? ''}
-                    onChange={(e) => editSet({ weightLbs: toWeight(e.target.value) })}
-                    className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-                  />
-                </label>
-                <span className="pb-5 text-2xl text-neutral-600">×</span>
-              </>
-            )}
-            <label className="flex flex-1 flex-col items-center gap-1">
-              <span className="text-xs tracking-wide text-neutral-500">reps</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                placeholder="reps"
-                value={set.reps || ''}
-                onChange={(e) => editSet({ reps: Number(e.target.value) || 0 })}
-                className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+          {/* A hold rather than a count of reps: the clock is the set, and the field
+              under it is the seconds it actually lasted — prefilled with the hold
+              prescribed, overwritten by the timer when one is run, and typeable
+              either way for a set held without it. */}
+          {planned.timed ? (
+            <div className="flex flex-col items-center gap-4">
+              <HoldTimer
+                targetSec={target?.reps ?? planned.repMin}
+                onStop={(held) => editSet({ reps: held })}
+                // The seconds on the clock aren't seconds spent standing at the set
+                // screen deciding anything, so the exercise's active-time average
+                // has nothing to learn from them (see recordActiveForCurrent).
+                onStart={() => {
+                  activeStartRef.current = 0
+                }}
               />
-            </label>
-          </div>
+              <label className="flex w-full flex-col items-center gap-1">
+                <span className="text-xs tracking-wide text-neutral-500">seconds held</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="sec"
+                  value={set.reps || ''}
+                  onChange={(e) => editSet({ reps: Number(e.target.value) || 0 })}
+                  className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="flex items-end justify-center gap-3">
+              {/* A move that's never loaded (hanging raises, dead bugs) gets no
+                  weight field at all rather than an empty "added lbs" box. */}
+              {!planned.repsOnly && (
+                <>
+                  <label className="flex flex-1 flex-col items-center gap-1">
+                    <span className="text-xs tracking-wide text-neutral-500">
+                      {planned.bodyweight ? 'added lbs' : 'weight'}
+                    </span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      placeholder={planned.bodyweight ? 'bw' : 'lbs'}
+                      value={set.weightLbs ?? ''}
+                      onChange={(e) => editSet({ weightLbs: toWeight(e.target.value) })}
+                      className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                  </label>
+                  <span className="pb-5 text-2xl text-neutral-600">×</span>
+                </>
+              )}
+              <label className="flex flex-1 flex-col items-center gap-1">
+                <span className="text-xs tracking-wide text-neutral-500">reps</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="reps"
+                  value={set.reps || ''}
+                  onChange={(e) => editSet({ reps: Number(e.target.value) || 0 })}
+                  className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+              </label>
+            </div>
+          )}
         </div>
       )}
 
@@ -880,6 +947,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           // flagged `bodyweight` but do take added weight, so they keep the
           // weight-based metrics.
           repsOnly={!!planned.repsOnly}
+          // A hold logs its seconds in the reps field, so its sets read as seconds
+          // rather than as a count of something (see PlannedExercise.timed).
+          unit={planned.timed ? 'sec' : 'rep'}
           onClose={() => setShowHistory(false)}
         />
       )}
@@ -917,6 +987,28 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                   </select>
                 </label>
               ))}
+              {/* And the break after the whole round, which belongs to the circuit
+                  rather than to any one station of it. Only where a round rest is
+                  actually part of how the circuit is programmed — elsewhere the wrap
+                  is sized to the coming exercise and there's nothing here to set. */}
+              {stations.some((e) => e.circuitRoundRestSec != null) && (
+                <label className="flex items-center gap-3 rounded-xl px-2 py-1">
+                  <span className="min-w-0 flex-1 truncate font-medium">after the round</span>
+                  <select
+                    value={planned.circuitRoundRestSec ?? ''}
+                    onChange={(ev) =>
+                      setCircuitRoundRest(ev.target.value === '' ? null : Number(ev.target.value))
+                    }
+                    className="min-h-[44px] shrink-0 rounded-xl bg-surface-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                  >
+                    {CIRCUIT_ROUND_REST_CHOICES.map((sec) => (
+                      <option key={sec ?? 'default'} value={sec ?? ''}>
+                        {circuitRestLabel(sec)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
           </div>
         </div>

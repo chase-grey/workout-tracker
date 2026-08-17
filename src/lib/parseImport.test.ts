@@ -101,6 +101,20 @@ describe('matchExercise', () => {
     expect(matchExercise('cable crunches').key).toBe('cable_crunch')
     expect(matchExercise('overhead press').key).toBe('db_overhead_press')
   })
+  it('matches a sit-up however it was written down', () => {
+    // "situp" closed up is one token where the display name is two, so it only
+    // lands via an alias — and the log could just as well spell it either way.
+    for (const raw of ['weighted situps', 'weighted sit-ups', 'sit ups', 'situp']) {
+      expect(matchExercise(raw).key, raw).toBe('weighted_situp')
+    }
+  })
+  it('keeps the bare overhead press on the dumbbell key', () => {
+    // Every log written before the machine took over the push day meant the
+    // dumbbells, which still press on full body.
+    expect(matchExercise('overhead press').key).toBe('db_overhead_press')
+    expect(matchExercise('machine overhead press').key).toBe('machine_overhead_press')
+    expect(matchExercise('machine shoulder press').key).toBe('machine_overhead_press')
+  })
   it('marks unknowns as new', () => {
     expect(matchExercise('prayer curls').isNew).toBe(true)
   })

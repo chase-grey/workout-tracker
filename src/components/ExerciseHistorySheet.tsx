@@ -10,6 +10,7 @@ import {
   fmtTarget,
   sessionsAtTargetLabel,
   targetDeltaLabel,
+  type CountUnit,
 } from '../lib/exerciseHistory'
 import { discomfortCounts, discomfortReports, fmtDiscomfortCount } from '../lib/discomfort'
 
@@ -29,6 +30,7 @@ export function ExerciseHistorySheet({
   target,
   slot,
   repsOnly = false,
+  unit = 'rep',
   onClose,
 }: {
   exerciseKey: string
@@ -48,6 +50,12 @@ export function ExerciseHistorySheet({
    * weightless on the first-ever session of a loaded lift.
    */
   repsOnly?: boolean
+  /**
+   * What the logged number counts. A timed hold logs seconds in the same field a
+   * lift logs reps, so its sets read `30s` rather than `30 reps` (see
+   * PlannedExercise.timed).
+   */
+  unit?: CountUnit
   onClose: () => void
 }) {
   const { workouts } = useData()
@@ -72,8 +80,8 @@ export function ExerciseHistorySheet({
     [workouts, exerciseKey],
   )
 
-  const delta = targetDeltaLabel(target, last, repsOnly)
-  const atTarget = sessionsAtTargetLabel(history, target, repsOnly)
+  const delta = targetDeltaLabel(target, last, repsOnly, unit)
+  const atTarget = sessionsAtTargetLabel(history, target, repsOnly, unit)
 
   return (
     // Above the rest overlay (z-50) so it's reachable from either screen.
@@ -88,7 +96,7 @@ export function ExerciseHistorySheet({
         {target && (
           <div className="mb-3 rounded-2xl bg-surface-2 p-3">
             <div className="text-xs text-neutral-500">today</div>
-            <div className="text-2xl font-bold tabular-nums">{fmtTarget(target, repsOnly)}</div>
+            <div className="text-2xl font-bold tabular-nums">{fmtTarget(target, repsOnly, unit)}</div>
             {delta && <div className="text-sm text-neutral-400">{delta}</div>}
           </div>
         )}
@@ -117,7 +125,7 @@ export function ExerciseHistorySheet({
                   <span className="w-16 shrink-0 text-neutral-500">{fmtSessionDate(s.date)}</span>
                   <span className="flex flex-wrap gap-x-3 gap-y-1 text-neutral-200 tabular-nums">
                     {s.sets.map((set, i) => (
-                      <span key={i}>{fmtSet(set)}</span>
+                      <span key={i}>{fmtSet(set, unit)}</span>
                     ))}
                   </span>
                 </div>
@@ -127,7 +135,7 @@ export function ExerciseHistorySheet({
             <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 px-1 text-xs text-neutral-500 tabular-nums">
               {history.best && (
                 <span>
-                  best {fmtBestSet(history.best)} · {fmtSessionDate(history.best.date)}
+                  best {fmtBestSet(history.best, unit)} · {fmtSessionDate(history.best.date)}
                 </span>
               )}
               {atTarget && <span>{atTarget}</span>}
