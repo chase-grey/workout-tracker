@@ -70,6 +70,8 @@ export type WeekResult = {
   freezesSpent: number
   streakAfter: number
   freezesAfter: number
+  /** True for the week still being lived — only ever a week that already hit full. */
+  inProgress: boolean
 }
 
 /**
@@ -95,10 +97,10 @@ export type StreakInput = {
 }
 
 /**
- * Replay every completed week in order, oldest first, reporting what each one
- * did to the run. This is the whole streak calculation — `computeWeeklyStreak`
- * is just its last row — so the history a user reads can't disagree with the
- * number on the Today tab.
+ * Replay every week in order, oldest first, reporting what each one did to the
+ * run. This is the whole streak calculation — `computeWeeklyStreak` is just its
+ * last row — so the history a user reads can't disagree with the number on the
+ * Today tab.
  */
 export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   const config = input.config ?? DEFAULT_WEEKLY_GOALS
@@ -108,8 +110,12 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   const flexByWeek = bucketByWeek(input.flexDates)
   const calByWeek = bucketByWeek(input.calorieHitDates)
 
-  // The current in-progress week is excluded: only weeks strictly before it count.
   const currentWeekStart = weekStartISO(toISODate(today))
+  const countsFor = (week: string): WeekCounts => ({
+    workouts: workoutByWeek.get(week) ?? 0,
+    flex: flexByWeek.get(week) ?? 0,
+    calDays: calByWeek.get(week) ?? 0,
+  })
 
   const allWeeks = [
     ...workoutByWeek.keys(),
@@ -119,20 +125,22 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   if (allWeeks.length === 0) return []
   const earliestWeek = allWeeks.reduce((min, w) => (w < min ? w : min), allWeeks[0])
 
-  const completedWeeks = enumerateWeeks(earliestWeek, currentWeekStart).filter(
-    (w) => w < currentWeekStart,
+  // The week in progress joins the replay the moment it goes full, so the streak
+  // — and the freeze for one-upping the goals — lands the day it's earned rather
+  // than waiting for Monday. Short of full it stays out: a week still being
+  // lived can't spend a freeze or end the run.
+  const currentIsFull = classifyWeek(countsFor(currentWeekStart), config).tier === 'full'
+
+  const weeks = enumerateWeeks(earliestWeek, currentWeekStart).filter(
+    (w) => w < currentWeekStart || currentIsFull,
   )
 
   const out: WeekResult[] = []
   let streak = 0
   let freezes = 0
 
-  for (const week of completedWeeks) {
-    const counts: WeekCounts = {
-      workouts: workoutByWeek.get(week) ?? 0,
-      flex: flexByWeek.get(week) ?? 0,
-      calDays: calByWeek.get(week) ?? 0,
-    }
+  for (const week of weeks) {
+    const counts = countsFor(week)
     const { tier, exceeded } = classifyWeek(counts, config)
 
     let outcome: WeekOutcome
@@ -165,6 +173,7 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
       freezesSpent,
       streakAfter: streak,
       freezesAfter: freezes,
+      inProgress: week === currentWeekStart,
     })
   }
 

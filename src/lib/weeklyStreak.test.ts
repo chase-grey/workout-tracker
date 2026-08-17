@@ -30,6 +30,8 @@ function daysInWeek(monday: string, n: number): string[] {
 const WK1 = '2026-06-15'
 const WK2 = '2026-06-22'
 const WK3 = '2026-06-29'
+// The week TODAY sits in, still in progress.
+const CUR = '2026-07-06'
 
 // Defaults: full = w>=2, f>=2, cal>=6; half = w>=1, f>=1, cal>=5.
 
@@ -159,17 +161,50 @@ describe('computeWeeklyStreak', () => {
     expect(result).toEqual({ streak: 0, freezes: 1 })
   })
 
-  it('ignores the current in-progress week', () => {
+  it('advances on the current week as soon as it goes full', () => {
     // Current week is [2026-07-06 .. 2026-07-12]; TODAY = 2026-07-10.
-    // A full week's worth of data lands in the in-progress week and must not count.
-    const currentWeekMonday = '2026-07-06'
+    // The goals are met with days to spare, so the streak lands now.
     const result = computeWeeklyStreak({
-      workoutDates: daysInWeek(currentWeekMonday, 3),
-      flexDates: daysInWeek(currentWeekMonday, 2),
-      calorieHitDates: daysInWeek(currentWeekMonday, 6),
+      workoutDates: daysInWeek(CUR, 2),
+      flexDates: daysInWeek(CUR, 2),
+      calorieHitDates: daysInWeek(CUR, 6),
       today: TODAY,
     })
-    expect(result).toEqual({ streak: 0, freezes: 0 })
+    expect(result).toEqual({ streak: 1, freezes: 0 })
+  })
+
+  it('grants the freeze mid-week for one-upping the current week', () => {
+    const result = computeWeeklyStreak({
+      workoutDates: daysInWeek(CUR, 3),
+      flexDates: daysInWeek(CUR, 2),
+      calorieHitDates: daysInWeek(CUR, 6),
+      today: TODAY,
+    })
+    expect(result).toEqual({ streak: 1, freezes: 1 })
+  })
+
+  it('ignores a current week that has not gone full yet', () => {
+    // Half the week's work in, mid-week: no advance, and crucially no freeze
+    // spent and no reset — the week is still being lived.
+    const result = computeWeeklyStreak({
+      workoutDates: [...daysInWeek(WK3, 3), ...daysInWeek(CUR, 1)],
+      flexDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 1)],
+      calorieHitDates: [...daysInWeek(WK3, 6), ...daysInWeek(CUR, 5)],
+      today: TODAY,
+    })
+    // Only WK3 counts: exceeded full -> streak 1, freeze 1.
+    expect(result).toEqual({ streak: 1, freezes: 1 })
+  })
+
+  it('counts the current week once, not twice, when it goes full', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 2)],
+      flexDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 2)],
+      calorieHitDates: [...daysInWeek(WK3, 6), ...daysInWeek(CUR, 6)],
+      today: TODAY,
+    })
+    expect(rows.filter((r) => r.week === CUR)).toHaveLength(1)
+    expect(rows[rows.length - 1].streakAfter).toBe(2)
   })
 
   it('respects a custom config', () => {
@@ -274,14 +309,26 @@ describe('weeklyStreakHistory', () => {
     expect(wk3).toMatchObject({ tier: 'under', outcome: 'froze', freezesSpent: 2, streakAfter: 2 })
   })
 
-  it('excludes the current in-progress week', () => {
+  it('flags the current week when it earned its place in the run', () => {
     const rows = weeklyStreakHistory({
-      workoutDates: [...daysInWeek(WK3, 2), ...daysInWeek('2026-07-06', 3)],
-      flexDates: [...daysInWeek(WK3, 2), ...daysInWeek('2026-07-06', 2)],
-      calorieHitDates: [...daysInWeek(WK3, 6), ...daysInWeek('2026-07-06', 6)],
+      workoutDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 3)],
+      flexDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 2)],
+      calorieHitDates: [...daysInWeek(WK3, 6), ...daysInWeek(CUR, 6)],
       today: TODAY,
     })
-    expect(rows.every((r) => r.week < '2026-07-06')).toBe(true)
+    const last = rows[rows.length - 1]
+    expect(last).toMatchObject({ week: CUR, inProgress: true, exceeded: true, streakAfter: 2 })
+    expect(rows.slice(0, -1).every((r) => !r.inProgress)).toBe(true)
+  })
+
+  it('leaves an unfinished current week out of the rows', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 1)],
+      flexDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 1)],
+      calorieHitDates: [...daysInWeek(WK3, 6), ...daysInWeek(CUR, 5)],
+      today: TODAY,
+    })
+    expect(rows.every((r) => r.week < CUR)).toBe(true)
   })
 
   it('agrees with computeWeeklyStreak', () => {

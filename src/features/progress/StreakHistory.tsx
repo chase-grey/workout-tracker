@@ -51,7 +51,9 @@ function Row({ row, goals }: { row: WeekResult; goals: WeeklyGoalConfig }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0">
       <div className="min-w-0">
-        <div className="text-sm font-medium text-neutral-300">{weekLabel(row.week)}</div>
+        <div className="text-sm font-medium text-neutral-300">
+          {row.inProgress ? 'this week' : weekLabel(row.week)}
+        </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
           <Count label="workouts" value={row.counts.workouts} goal={goals.workouts} />
           <Count label="flex" value={row.counts.flex} goal={goals.flex} />
