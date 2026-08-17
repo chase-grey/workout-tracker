@@ -15,21 +15,22 @@ import { weekPace, type MetricPace } from '../../lib/weekPace'
 
 /**
  * One metric's row: the fill is what's done, and the pale line is where the
- * week's schedule expects it by now (see lib/weekPace). The numbers go amber
- * either when that line has been passed by without the units banked, or when
- * every remaining day has to land for the goal to still be met — a distinction
- * the overall bar can't make, since it averages the three together.
+ * week's schedule expects it by now (see lib/weekPace). Being behind that line is
+ * left for the line to show — the numbers and the marker keep one colour, since
+ * what's still owed this week is plain enough from the counts.
+ *
+ * A metric that's met drops its bar and keeps the count: a full track and a pace
+ * marker pinned to the end say nothing the check beside the numbers doesn't, and
+ * three of them crowd out the week's overall bar, which is the one still moving.
  */
 function MetricBar({ label, m, suffix }: { label: string; m: MetricPace; suffix?: string }) {
   const over = m.done > m.goal
   const pct = Math.min(m.done / m.goal, 1) * 100
-  const behind = m.done < m.required
-  const tight = !m.met && m.slack <= 0
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
+      <div className={`flex items-center justify-between text-sm ${m.met ? '' : 'mb-1'}`}>
         <span className="text-neutral-300">{label}</span>
-        <span className={`tabular-nums ${behind || tight ? 'text-amber-400' : 'text-neutral-400'}`}>
+        <span className="tabular-nums text-neutral-400">
           {m.done}/{m.goal}
           {suffix ?? ''}{' '}
           {over ? (
@@ -39,28 +40,23 @@ function MetricBar({ label, m, suffix }: { label: string; m: MetricPace; suffix?
           ) : null}
         </span>
       </div>
-      <div className="relative h-2 overflow-hidden rounded-full bg-surface-2">
-        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
-        {m.required > 0 && (
-          <div
-            // A metric whose window has closed has its whole goal due, putting the
-            // line on the far edge — pull it fully inside so it doesn't clip away.
-            className={`absolute inset-y-0 w-0.5 ${m.required >= m.goal ? '-translate-x-full' : '-translate-x-1/2'} ${
-              behind ? 'bg-amber-400' : 'bg-white/70'
-            }`}
-            style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
-          />
-        )}
-      </div>
+      {!m.met && (
+        <div className="relative h-2 overflow-hidden rounded-full bg-surface-2">
+          <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+          {m.required > 0 && (
+            <div
+              // A metric whose window has closed has its whole goal due, putting the
+              // line on the far edge — pull it fully inside so it doesn't clip away.
+              className={`absolute inset-y-0 w-0.5 bg-white/70 ${
+                m.required >= m.goal ? '-translate-x-full' : '-translate-x-1/2'
+              }`}
+              style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
+            />
+          )}
+        </div>
+      )}
     </div>
   )
-}
-
-/** Short names for the buffer readout, which names the metric that's tightest. */
-const METRIC_SHORT: Record<MetricPace['key'], string> = {
-  workouts: 'workouts',
-  flex: 'flex',
-  calDays: 'cal days',
 }
 
 export function ThisWeek() {
@@ -88,30 +84,16 @@ export function ThisWeek() {
   const checkpointFrac =
     (goals.halfWorkouts / goals.workouts + goals.halfFlex / goals.flex + goals.halfCalDays / goals.calDays) / 3
 
-  // The pace marker used to track elapsed time, which both demanded fractions of
-  // a workout mid-Monday and called a week "ahead" that had no days left to spare.
-  // It now follows the schedule in whole units, and the buffer beside the streak
-  // says whether the week is still comfortably finishable.
+  // The pace marker used to track elapsed time, which demanded fractions of a
+  // workout mid-Monday; it now follows the schedule in whole units.
   const pace = weekPace(wp, goals)
   const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
-  const buffer = pace.binding
-    ? pace.binding.missed
-      ? `${METRIC_SHORT[pace.binding.key]} missed`
-      : pace.buffer <= 0
-        ? `${METRIC_SHORT[pace.binding.key]}: no room`
-        : `${pace.buffer} spare day${pace.buffer === 1 ? '' : 's'}`
-    : null
 
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-wide text-neutral-500">this week</h2>
         <div className="flex items-center gap-3 text-sm font-semibold">
-          {buffer && (
-            <span className={`text-xs ${pace.buffer <= 0 ? 'text-amber-400' : 'text-neutral-500'}`}>
-              {buffer}
-            </span>
-          )}
           <span className="flex items-center gap-1 text-accent">
             <MdLocalFireDepartment aria-hidden /> {streaks.streak}
           </span>
