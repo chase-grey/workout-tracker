@@ -149,10 +149,10 @@ export function lastLoggedAt(entries: CalorieEntry[], date: string): Date | null
  * how long it's been since the last log — more useful than the word "today",
  * which the header position already implies. A day can have a total but no
  * timestamp — logged before the field existed, or only ever backfilled — and
- * then there's nothing honest to say, so it falls back to "today". A today with
- * neither a total nor a timestamp is the one exception: empty is itself the
- * answer — but only from {@link EMPTY_LOG_NAG_HOUR}, since every day starts out
- * empty and saying so at 7am is clutter, not information.
+ * then there's nothing honest to say, so the label is empty and the card drops
+ * the line. A today with neither a total nor a timestamp is the one exception:
+ * empty is itself the answer — but only from {@link EMPTY_LOG_NAG_HOUR}, since
+ * every day starts out empty and saying so at 7am is clutter, not information.
  */
 export function foodLogStatus(
   entries: CalorieEntry[],
@@ -168,7 +168,7 @@ export function foodLogStatus(
   // hour. That hour sits inside the eating window, so an untouched day worth
   // naming is exactly an untouched day worth flagging — one flag, not two.
   const nag = totalForDate(entries, date) === 0 && isEmptyDayNagTime(now)
-  return { label: nag ? 'nothing logged yet' : 'today', stale: nag }
+  return { label: nag ? 'nothing logged yet' : '', stale: nag }
 }
 
 /**

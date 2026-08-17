@@ -310,9 +310,9 @@ describe('foodLogStatus', () => {
   ]
 
   it('says nothing about an empty day through the morning', () => {
-    expect(foodLogStatus([], TODAY_ISO, at(7))).toEqual({ label: 'today', stale: false })
-    expect(foodLogStatus([], TODAY_ISO, at(9))).toEqual({ label: 'today', stale: false })
-    expect(foodLogStatus([], TODAY_ISO, at(10, 59))).toEqual({ label: 'today', stale: false })
+    expect(foodLogStatus([], TODAY_ISO, at(7))).toEqual({ label: '', stale: false })
+    expect(foodLogStatus([], TODAY_ISO, at(9))).toEqual({ label: '', stale: false })
+    expect(foodLogStatus([], TODAY_ISO, at(10, 59))).toEqual({ label: '', stale: false })
   })
 
   it('flags an empty day from 11am', () => {
@@ -321,7 +321,7 @@ describe('foodLogStatus', () => {
   })
 
   it('drops the empty-day flag once the eating window closes', () => {
-    expect(foodLogStatus([], TODAY_ISO, at(22))).toEqual({ label: 'today', stale: false })
+    expect(foodLogStatus([], TODAY_ISO, at(22))).toEqual({ label: '', stale: false })
   })
 
   it('counts a morning log, so the nag hour passes quietly', () => {
@@ -332,9 +332,9 @@ describe('foodLogStatus', () => {
     expect(foodLogStatus(logged(6), TODAY_ISO, at(10))).toEqual({ label: '4h ago', stale: true })
   })
 
-  it('falls back to "today" for a day with a total but no timestamp', () => {
+  it('says nothing for a day with a total but no timestamp', () => {
     const untimed: CalorieEntry[] = [{ date: TODAY_ISO, calories: 1200 }]
-    expect(foodLogStatus(untimed, TODAY_ISO, at(15))).toEqual({ label: 'today', stale: false })
+    expect(foodLogStatus(untimed, TODAY_ISO, at(15))).toEqual({ label: '', stale: false })
   })
 
   it('shows a past day as its date, never flagged', () => {

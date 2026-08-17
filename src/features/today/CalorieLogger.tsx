@@ -45,7 +45,8 @@ export function CalorieLogger() {
     <div className="rounded-2xl bg-surface p-3">
       <div className="flex items-baseline justify-between">
         <p className="text-xs tracking-wider text-neutral-500">
-          calories · <span className={stale ? 'text-amber-400' : undefined}>{selLabel}</span>
+          calories
+          {selLabel && <> · <span className={stale ? 'text-amber-400' : undefined}>{selLabel}</span></>}
         </p>
         <p className="text-sm tabular-nums text-neutral-400">
           <span className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}>
