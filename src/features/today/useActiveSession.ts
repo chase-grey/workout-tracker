@@ -37,8 +37,10 @@ export function useActiveSession() {
       storage.saveActiveRest(null)
       storage.saveRestTally(null)
       // Hands-free was a choice about the workout that just ended, so a new one
-      // opens waiting for taps again.
-      storage.saveFastForward(false)
+      // opens waiting for taps again. Same for whatever it skipped: today's sore
+      // knee isn't next week's.
+      storage.saveFastMode('off')
+      storage.saveSkipped(null)
       const chosen = variant ?? nextVariant(workouts, dayType) ?? undefined
       // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
       const startSide = nextStartSide(workouts, dayType)
@@ -87,17 +89,6 @@ export function useActiveSession() {
                 ? { ...ex, sets: fn(ex.sets).map((s, i) => ({ ...s, setNumber: i + 1 })) }
                 : ex,
             ),
-          }
-        : prev,
-    )
-  }, [])
-
-  const setNotes = useCallback((exKey: string, notes: string) => {
-    setSession((prev) =>
-      prev
-        ? {
-            ...prev,
-            exercises: prev.exercises.map((ex) => (ex.exercise === exKey ? { ...ex, notes } : ex)),
           }
         : prev,
     )
@@ -154,9 +145,10 @@ export function useActiveSession() {
     storage.saveActiveStepKey(null)
     storage.saveActiveRest(null)
     storage.saveRestTally(null)
-    storage.saveFastForward(false)
+    storage.saveFastMode('off')
+    storage.saveSkipped(null)
     setSession(null)
   }, [])
 
-  return { session, start, addSet, updateSet, removeSet, setNotes, clear }
+  return { session, start, addSet, updateSet, removeSet, clear }
 }

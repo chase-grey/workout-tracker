@@ -1,11 +1,21 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { KebabMenu, type MenuItem } from './KebabMenu'
 import { SessionProgress } from './SessionProgress'
 import { FastForwardToggle } from './FastForwardToggle'
+import { rollsThroughRest, type FastMode } from '../lib/fastMode'
 import { createFlame, flameLook, stepFlame } from '../lib/flame'
-import { createWave, impulseWave, splashStrength, stepWave, waveSurfacePath } from '../lib/tide'
+import {
+  createWave,
+  drawBubble,
+  impulseWave,
+  stepWave,
+  waveSurfacePath,
+  type Bubble,
+} from '../lib/tide'
+import { createVessel, spanBetween, VESSEL_KINDS } from '../lib/vessels'
 import { EXTRA_BOX_VARIANTS, EXTRA_FILL_VARIANTS, isExtraVariant } from '../lib/restShapes'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
+import { createRotation } from '../lib/variantRotation'
 import { ExtraRestShape } from './RestShapes'
 
 // Time-telling shapes made for rest: each one encodes the remaining fraction
@@ -51,14 +61,10 @@ function isFill(v: Variant): v is FillVariant {
  */
 const GHOST_CLICK_GRACE_MS = 400
 
-// Remembered across mounts (each rest remounts the timer) so we never show the
-// same shape twice in a row — rest reliably rotates through the whole set.
-let lastVariant: Variant | null = null
-function pickVariant(): Variant {
-  const pool = VARIANTS.filter((v) => v !== lastVariant)
-  lastVariant = pool[Math.floor(Math.random() * pool.length)]
-  return lastVariant
-}
+// Held across mounts (each rest remounts the timer) so the order stays random
+// without repeating the shape you just watched or leaving one unseen for a whole
+// workout — see lib/variantRotation for how the two pull against each other.
+const rotation = createRotation(VARIANTS)
 
 /**
  * The rest animation itself. `fraction` is how much rest is still left (1 at the
@@ -349,37 +355,35 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
 }
 
 /**
- * Below this much rest left, the water is too shallow to surface through: a
- * bubble is a fixed size while the liquid is not, so down here it would be about
- * as tall as the water it's meant to rise through.
+ * The gap between one bubble leaving the floor and the next, in ms. Most of them
+ * come apart in the water, so this is the beat of the shape rather than the beat of
+ * the splashes — how often a pop lands is decided by how rare buoyancy is (see
+ * lib/tide), and works out at one every several seconds.
  */
-const TIDE_SURFACING_MIN = 0.15
+const BUBBLE_GAP_MS = { min: 620, max: 1900 } as const
+
+/** The first bubble comes sooner, so the water is already alive on arrival. */
+const FIRST_BUBBLE_MS = { min: 300, max: 1100 } as const
 
 /**
- * How rare it is for a bubble to make it all the way up: the gap between one
- * surfacing and the next, in ms. Most bubbles fade out mid-water (the
- * `rest-bubble` ones, which drift constantly) — breaking the surface is an event
- * you occasionally catch rather than the steady beat of the shape.
+ * One splash's lifetime at a modest pop, in ms — scaled by the bubble's own pop
+ * height, so a crown thrown higher also takes longer to come down. Kept in step
+ * with the `rest-splash-*` keyframes, which read the same duration.
  */
-const SURFACE_GAP_MS = { min: 5500, max: 14000 } as const
-
-/** The first surfacing comes sooner, so even a short rest shows one. */
-const FIRST_SURFACE_MS = { min: 1200, max: 4200 } as const
-
-/** How long a bubble takes to climb the water, whatever the level. */
-const RISE_MS = { min: 2200, max: 3400 } as const
-
-/** One splash's lifetime — keep in step with the `rest-splash-*` keyframes. */
-const SPLASH_MS = 720
+const SPLASH_MS = 780
 
 /**
- * How far up a full-strength splash throws the surface, in the vessel's own
- * hundredths (the SVG viewBox is 100 tall). A small one barely creases it.
+ * How much water a bubble needs above it to be worth drawing, as a multiple of its
+ * own diameter. A bubble is a fixed size while the water is not: near the end of a
+ * rest the remaining puddle is shallower than a big bubble is tall, and one drawn
+ * there reads as a blob sitting in the vessel rather than anything rising through
+ * it. Surfacing asks for more room than dissolving because the climb is the point
+ * of it — there has to be a journey to watch.
  */
-const WAVE_LIFT = 8
+const WATER_PER_BUBBLE = { dissolve: 2, surface: 3.2 } as const
 
-/** Bubble diameter as a share of the vessel's width, smallest splash to largest. */
-const BUBBLE_SIZE = { min: 3.4, max: 7 } as const
+/** How far a bubble stays off the walls, in the vessel's hundredths. */
+const WALL_MARGIN = 1.5
 
 /** Droplets thrown by one splash: position across the crown and how far out each flies. */
 const SPLASH_DROPS = [
@@ -390,33 +394,48 @@ const SPLASH_DROPS = [
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min)
 
-/** A bubble on its way up, alive only until it breaks the surface. */
-type Riser = { id: number; left: number; size: number; rise: number }
-/** The splash it left behind: `x` across the vessel, `strength` its size. */
-type Splash = { id: number; x: number; strength: number }
+/** A bubble on its way up, alive until it surfaces or comes apart. */
+type Riser = { id: number; left: number; bubble: Bubble }
+/** The splash one left behind: `x` across the vessel, `strength` its size. */
+type Splash = { id: number; x: number; strength: number; pop: number }
+
+/**
+ * Which vessel the water is in. Rotated the same way the rest shapes themselves
+ * are — module scope, because the timer is remounted for every rest — so the tide
+ * comes up in a different container each time rather than always the circle.
+ */
+const vessels = createRotation(VESSEL_KINDS)
 
 /**
  * The 'tide' shape: a vessel that empties, with a living water surface.
  *
  * The surface is a real wave (see lib/tide) rather than a straight line — a row
  * of sprung nodes that gets thrown upward wherever a bubble bursts, spreads the
- * bump outward, bounces it off the walls and rings down to flat. So the top of
- * the water answers the bubbles instead of ignoring them, and goes still between
- * them. The water *level* is still the countdown, exactly as before; the wave
- * only ever rides on top of it.
+ * bump outward, bounces it off the walls and rings down. So the top of the water
+ * answers the bubbles instead of ignoring them. It is tuned slow, because wave
+ * speed is what says how big a body of water this is. The water *level* is still
+ * the countdown; the wave only ever rides on top of it.
  *
- * Bubbles that make it all the way up are spawned one at a time on a random gap,
- * each with its own randomly drawn splash — mostly small dents, occasionally a
- * full crown with droplets arcing out. Bubble size, splash size and the shove
- * given to the wave all come from that one strength draw, so a big splash comes
- * off a big bubble and hits the surface as hard as it looks like it should.
+ * Every bubble is drawn from a size and a buoyancy (see lib/tide) and its whole
+ * life follows from those two. The feeble ones barely leave the floor before they
+ * come apart; the buoyant few rush the whole depth and burst through the line, and
+ * how hard they hit it — the crown, the droplets, the shove given to the wave — is
+ * size and buoyancy together. So a big bubble rushing up is worth watching all the
+ * way, and you can tell it is going to be worth watching while it is still rising.
+ *
+ * The vessel is whatever came up in the rotation, and can be any shape that holds
+ * water. Its bounds are what the level is mapped into, so full is full and empty is
+ * empty in a triangle as much as in a circle; a CSS clip path cuts the water and the
+ * bubbles to its outline, and the room a bubble is given is measured from the actual
+ * walls over the stretch it climbs, so nothing rises through the glass.
  *
  * `left`/`size` are percentages of the *vessel's width*, never its height, so the
- * bubbles stay round as the level drops; the rise is a full-height column
+ * bubbles stay round as the level drops; the climb is a water-height column
  * translated by a percentage, which is what keeps a bubble surfacing exactly at
  * the line however far the water has drained.
  */
 function TideVessel({ fraction }: { fraction: number }) {
+  const [vessel] = useState(() => createVessel(vessels.next()))
   const [wave] = useState(createWave)
   const [risers, setRisers] = useState<Riser[]>([])
   const [splashes, setSplashes] = useState<Splash[]>([])
@@ -428,6 +447,12 @@ function TideVessel({ fraction }: { fraction: number }) {
   const fillRef = useRef<SVGPathElement>(null)
   const lineRef = useRef<SVGPathElement>(null)
   const layerRef = useRef<HTMLDivElement>(null)
+
+  // The water line runs from the vessel's own top to its own bottom rather than the
+  // box's, so a shape that doesn't reach the edges still reads full at the start and
+  // empty at the end instead of spending the ends of the rest out of sight.
+  const depth = vessel.bottom - vessel.top
+  const surfaceAt = (level: number) => vessel.bottom - level * depth
 
   // The surface is redrawn every frame, so it's written straight to the DOM: this
   // is texture at 60fps and has no business re-rendering the tree that often. The
@@ -444,18 +469,20 @@ function TideVessel({ fraction }: { fraction: number }) {
       // other shapes' `transition: height` does.
       level += (fractionRef.current - level) * (1 - Math.exp(-dt / 0.09))
       stepWave(wave, dt)
-      const surface = waveSurfacePath(wave, (1 - level) * 100)
+      const surface = waveSurfacePath(wave, surfaceAt(level))
       fillRef.current?.setAttribute('d', `${surface} L 100 100 L 0 100 Z`)
       lineRef.current?.setAttribute('d', surface)
-      if (layerRef.current) layerRef.current.style.height = `${level * 100}%`
+      if (layerRef.current) layerRef.current.style.height = `${level * depth}%`
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [wave])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the vessel never changes
+  }, [wave, depth])
 
-  // One bubble in flight at a time: spawn it, and when it reaches the top swap it
-  // for a splash and shove the wave where it broke through.
+  // Bubbles leave the floor on a steady-ish beat; what each one does when it gets
+  // where it's going is its own business. A surfacing one is swapped for a splash
+  // and shoves the wave where it broke through.
   useEffect(() => {
     if (calm) return
     const timers = new Set<number>()
@@ -468,98 +495,150 @@ function TideVessel({ fraction }: { fraction: number }) {
     }
     let nextId = 0
     const spawn = () => {
-      after(rand(SURFACE_GAP_MS.min, SURFACE_GAP_MS.max), spawn)
-      if (fractionRef.current <= TIDE_SURFACING_MIN) return
-      const strength = splashStrength(Math.random())
-      const size = BUBBLE_SIZE.min + strength * (BUBBLE_SIZE.max - BUBBLE_SIZE.min)
-      // Kept off the far edges: the vessel is round, so near the top of a full one
-      // the water is a narrow chord and a bubble at 20% would surface into glass.
-      const left = rand(24, 70 - size)
-      const rise = rand(RISE_MS.min, RISE_MS.max)
+      after(rand(BUBBLE_GAP_MS.min, BUBBLE_GAP_MS.max), spawn)
+      const level = fractionRef.current
+      const water = level * depth
+      const bubble = drawBubble()
+      if (water < bubble.size * WATER_PER_BUBBLE[bubble.surfaces ? 'surface' : 'dissolve']) return
+
+      // Where the bubble's centre travels: off the floor, up to wherever it gets to.
+      // Its own radius is kept off both ends so the *body* stays in the water, and
+      // the top is never lifted past the floor — a bubble whose whole climb is
+      // shorter than it is wide barely moves, and is measured where it sits.
+      const half = bubble.size / 2
+      const floor = vessel.bottom - half
+      const reach = Math.min(floor, surfaceAt(level * bubble.climb) + half)
+      const room = spanBetween(vessel, reach, floor)
+      const lo = room ? room[0] + half + WALL_MARGIN : 0
+      const hi = room ? room[1] - half - WALL_MARGIN : 0
+      // Water pinched narrower than the bubble is wide: nothing this size rises here.
+      if (hi <= lo) return
+
+      const centre = rand(lo, hi)
       const id = nextId++
-      setRisers((r) => [...r, { id, left, size, rise }])
-      after(rise, () => {
+      setRisers((r) => [...r, { id, left: centre - half, bubble }])
+      after(bubble.life, () => {
         setRisers((r) => r.filter((b) => b.id !== id))
-        const x = left + size / 2
-        impulseWave(wave, x / 100, strength * WAVE_LIFT)
-        setSplashes((s) => [...s, { id, x, strength }])
-        after(SPLASH_MS, () => setSplashes((s) => s.filter((p) => p.id !== id)))
+        if (!bubble.surfaces) return
+        impulseWave(wave, centre / 100, bubble.lift, bubble.bump)
+        setSplashes((s) => [...s, { id, x: centre, strength: bubble.splash, pop: bubble.pop }])
+        after(SPLASH_MS * bubble.pop, () => setSplashes((s) => s.filter((p) => p.id !== id)))
       })
     }
-    after(rand(FIRST_SURFACE_MS.min, FIRST_SURFACE_MS.max), spawn)
+    after(rand(FIRST_BUBBLE_MS.min, FIRST_BUBBLE_MS.max), spawn)
     return () => timers.forEach(clearTimeout)
-  }, [calm, wave])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the vessel never changes
+  }, [calm, wave, depth])
 
   return (
-    <div className="absolute h-[74%] w-[74%] overflow-hidden rounded-full ring-1 ring-accent-bright/50">
-      <div className="absolute inset-0 bg-accent-bright/12" />
-      {/* The water is a path so its top edge can be the wave. */}
+    <div className="absolute h-[74%] w-[74%]">
+      {/* The vessel's outline cuts the water and everything in it, so any shape that
+          holds water can be the container. */}
+      <div className="absolute inset-0 overflow-hidden" style={{ clipPath: vessel.clip }}>
+        <div className="absolute inset-0 bg-accent-bright/12" />
+        {/* The water is a path so its top edge can be the wave. It's drawn across the
+            whole box and cropped to the vessel, which is what lets the surface line
+            meet the walls exactly wherever they happen to be — the wave's own
+            reflections happen at the box's edges rather than the vessel's, so in a
+            narrow shape a ripple rolls out of sight and comes back, which is as
+            close to right as a one-dimensional surface gets. */}
+        <svg
+          className="absolute inset-0 h-full w-full text-accent-bright"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          <path ref={fillRef} fill="currentColor" fillOpacity={0.7} />
+          {/* The surface line is the reading; non-scaling so it stays 3px however
+              the viewBox is stretched onto the vessel. */}
+          <path
+            ref={lineRef}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={3}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        {/* Everything that belongs *to* the water rides in a layer exactly as tall
+            as it, so `top: 0` is the surface and `bottom: 0` the floor. */}
+        <div
+          ref={layerRef}
+          className="absolute inset-x-0"
+          style={{ bottom: `${100 - vessel.bottom}%`, height: `${fraction * depth}%` }}
+        >
+          {risers.map(({ id, left, bubble }) => (
+            // The riser is the travel: a column as tall as the water carrying one
+            // bubble at its foot, translated by the share of the depth it climbs.
+            <div
+              key={id}
+              className="rest-riser absolute inset-y-0"
+              style={
+                {
+                  left: `${left}%`,
+                  width: `${bubble.size}%`,
+                  '--rise': `${bubble.life}ms`,
+                  '--climb': `${-bubble.climb * 100}%`,
+                  '--drift': `${bubble.drift * 100}%`,
+                  // A bubble on its way up accelerates; one giving up slows down.
+                  '--ease': bubble.surfaces ? 'ease-in' : 'ease-out',
+                } as CSSProperties
+              }
+            >
+              <div
+                className={`absolute bottom-0 aspect-square w-full rounded-full bg-accent-bright/70 ${
+                  bubble.surfaces ? 'rest-riser-bubble' : 'rest-bubble-dissolve'
+                }`}
+              />
+            </div>
+          ))}
+          {splashes.map((s) => (
+            // Pinned to the surface line where its bubble broke through. Zero height,
+            // so its children hang off the line; one scale sizes the whole splash,
+            // and `--lift` is how high this one throws it.
+            <div
+              key={s.id}
+              className="absolute top-0 h-0 w-[44%] -translate-x-1/2"
+              style={
+                {
+                  left: `${s.x}%`,
+                  transform: `scale(${s.strength})`,
+                  transformOrigin: '50% 100%',
+                  '--lift': s.pop,
+                  '--splash-ms': `${SPLASH_MS * s.pop}ms`,
+                } as CSSProperties
+              }
+            >
+              <div className="rest-splash-crown absolute bottom-0 left-1/2 aspect-square w-[26%] -translate-x-1/2 rounded-t-full bg-accent-bright/60" />
+              {SPLASH_DROPS.map((drop) => (
+                <div
+                  key={drop.left}
+                  className="rest-splash-drop absolute bottom-0 aspect-square -translate-x-1/2 rounded-full bg-accent-bright"
+                  style={
+                    { left: `${drop.left}%`, width: `${drop.size}%`, '--dx': drop.dx } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* The glass, over the water and outside the clip so its full weight shows
+          rather than the outer half being cropped away. */}
       <svg
         className="absolute inset-0 h-full w-full text-accent-bright"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
         aria-hidden
       >
-        <path ref={fillRef} fill="currentColor" fillOpacity={0.7} />
-        {/* The surface line is the reading; non-scaling so it stays 3px however
-            the viewBox is stretched onto the vessel. */}
         <path
-          ref={lineRef}
+          d={vessel.outline}
           fill="none"
           stroke="currentColor"
-          strokeWidth={3}
+          strokeOpacity={0.5}
+          strokeWidth={1.5}
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      {/* Everything that belongs *to* the water rides in a layer exactly as tall
-          as it, so `top: 0` is the surface and `bottom: 0` the floor. */}
-      <div
-        ref={layerRef}
-        className="absolute inset-x-0 bottom-0"
-        style={{ height: `${fraction * 100}%` }}
-      >
-        <div className="rest-bubble absolute bottom-[8%] left-[34%] h-[6%] w-[6%] rounded-full bg-accent-bright/70" />
-        <div
-          className="rest-bubble absolute bottom-[8%] left-[62%] h-[4%] w-[4%] rounded-full bg-accent-bright/70"
-          style={{ animationDelay: '1.6s' }}
-        />
-        {risers.map((b) => (
-          // The riser is the travel: a full-height column carrying one bubble at its foot.
-          <div
-            key={b.id}
-            className="rest-riser absolute inset-y-0"
-            style={
-              { left: `${b.left}%`, width: `${b.size}%`, '--rise': `${b.rise}ms` } as CSSProperties
-            }
-          >
-            <div className="rest-riser-bubble absolute bottom-0 aspect-square w-full rounded-full bg-accent-bright/70" />
-          </div>
-        ))}
-        {splashes.map((s) => (
-          // Pinned to the surface line where its bubble broke through. Zero height,
-          // so its children hang off the line; one scale sizes the whole splash.
-          <div
-            key={s.id}
-            className="absolute top-0 h-0 w-[44%] -translate-x-1/2"
-            style={{
-              left: `${s.x}%`,
-              transform: `scale(${s.strength})`,
-              transformOrigin: '50% 100%',
-            }}
-          >
-            <div className="rest-splash-crown absolute bottom-0 left-1/2 aspect-square w-[26%] -translate-x-1/2 rounded-t-full bg-accent-bright/60" />
-            {SPLASH_DROPS.map((drop) => (
-              <div
-                key={drop.left}
-                className="rest-splash-drop absolute bottom-0 aspect-square -translate-x-1/2 rounded-full bg-accent-bright"
-                style={
-                  { left: `${drop.left}%`, width: `${drop.size}%`, '--dx': drop.dx } as CSSProperties
-                }
-              />
-            ))}
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
@@ -738,31 +817,32 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
  * The rest animation is the timer: a restful shape (a sandglass, a draining
  * vessel, a burning-down candle) encodes the time left directly in its level — a
  * calm, glanceable cue for how much rest is left — while the numeric countdown
- * (in dark green) sits at the bottom of the screen. Because the level is derived
+ * (in dark green) sits at the bottom of the screen. Running hands-free the
+ * countdown goes away and the shape is the whole screen. Because the level is derived
  * from the wall-clock end time (not a CSS loop), it stays in sync after
- * backgrounding or a reload. Optional `upNext` tells the resting
- * user what's coming; `progress` + `timeLeftLabel` (rendered verbatim, so the
- * caller phrases it — "~5 min left in workout") show the same session progress
- * bar as the session header — pinned to the top of the rest screen — so rest says
- * how far in you are and not just how long is left. `upNextSet` says which set of
- * the exercise the rest leads into, so the count is on screen for the rests where
- * the move isn't changing and its name isn't. `upNextTarget` puts the load
- * and reps for the coming set alongside its name — see lib/rest for which rests
- * get it. `menu` keeps the session's overflow actions reachable without ending
- * rest first, and the fast-forward toggle beside it hands the rest of the session
- * over to the clock.
+ * backgrounding or a reload.
+ *
+ * The top of the screen is the part you're resting to read. A caller with a
+ * header of its own hands it over whole as `header` — the workout does, so the
+ * bar, the lift, the set coming and its controls are exactly where they were on
+ * the set screen and rest changes nothing above the fold. Otherwise `progress` +
+ * `timeLeftLabel` (rendered verbatim, so the caller phrases it — "~5 min left in
+ * workout") put the session's progress bar there, with the fast-forward toggle and
+ * `menu` in a row under it so the session's actions stay reachable without ending
+ * rest first. `upNextTarget` puts the load and reps for the coming set below
+ * either, big enough to read while you walk over and load it — see lib/rest for
+ * which rests get it.
  */
 export function RestTimer({
   seconds,
   endsAt,
   onClose,
-  upNext,
-  upNextSet,
+  header,
   upNextTarget,
   progress,
   timeLeftLabel,
-  fastForward,
-  onToggleFastForward,
+  fastMode = 'off',
+  onPressFastForward,
   menu,
 }: {
   seconds: number
@@ -778,22 +858,28 @@ export function RestTimer({
    * one it hands a get-into-position count to.
    */
   onClose: (expired?: boolean) => void
-  upNext?: string | null
-  /** Where the coming set sits in its exercise, pre-formatted ("set 2 of 4"). */
-  upNextSet?: string | null
+  /**
+   * The caller's own top-of-screen block, rendered at the top of the rest screen
+   * in place of the progress bar and control row built here. Pass the *same* node
+   * the screen behind uses and resting leaves the top of the screen untouched.
+   * Controls inside it must stop their own clicks — a tap on the overlay ends rest.
+   */
+  header?: ReactNode
   /** What to go for on the coming set, pre-formatted ("135 × 8", "12 reps"). */
   upNextTarget?: string | null
   /** Session position for the progress bar — completed sets out of the total. */
   progress?: { done: number; total: number; unit?: string }
   timeLeftLabel?: string | null
   /**
-   * Hands-free mode: roll into the next set the moment rest is up, with no tap.
-   * The countdown and shape are unchanged, they just stop waiting at zero. Shown
-   * as a fast-forward toggle in the top row, so it's switchable from here as well
+   * How hands-free the session is running (see lib/fastMode). Anything but `off`
+   * rolls into the next set the moment rest is up, with no tap, and drops the
+   * numeric countdown: the seconds are only worth reading when you're the one
+   * deciding when rest is over, so what's left is the shape draining. Shown as the
+   * fast-forward toggle in the top row, so the mode is steppable from here as well
    * as from the session header.
    */
-  fastForward?: boolean
-  onToggleFastForward?: () => void
+  fastMode?: FastMode
+  onPressFastForward?: () => void
   /** Overflow actions for the 3-dots menu, mirroring the session header's. */
   menu?: MenuItem[]
 }) {
@@ -808,12 +894,15 @@ export function RestTimer({
   // this, and rounding here would step it once a second — a staircase the drain
   // transition can't smooth over. The readout rounds for display instead.
   const [remainingMs, setRemainingMs] = useState(() => endRef.current - Date.now())
-  const [variant] = useState<Variant>(pickVariant)
+  const [variant] = useState<Variant>(() => rotation.next())
   const buzzed = useRef(false)
+  // Whether this rest ends itself. Also what hides the numeric countdown: nothing
+  // is waiting on the number, so the shape carries the rest by itself.
+  const rolls = rollsThroughRest(fastMode)
   // The ticker runs on a mount-only effect, so auto-advance reads its trigger and
   // its callback through refs rather than re-subscribing whenever either changes.
-  const autoRef = useRef(fastForward)
-  autoRef.current = fastForward
+  const autoRef = useRef(rolls)
+  autoRef.current = rolls
   const closeRef = useRef(onClose)
   closeRef.current = onClose
   const advanced = useRef(false)
@@ -879,44 +968,37 @@ export function RestTimer({
           and passes behind everything without covering any of it. */}
       {variant === 'perimeter' && <PerimeterFrame fraction={remainingFraction} />}
 
-      {/* Top region: the "how far through the workout" bar sits at the very top,
-          with the up-next/menu row and the coming set's numbers under it. This
-          is the part you're resting to read, so it gets the top of the screen
-          and the filling shapes start below it. */}
+      {/* Top region: whatever says where you are in the session — the caller's own
+          header, or the bar and control row built here — with the coming set's
+          numbers under it. This is the part you're resting to read, so it gets the
+          top of the screen and the filling shapes start below it. */}
       <div className="relative z-10 w-full pt-[calc(0.75rem+env(safe-area-inset-top))]">
-        {progress && (
-          <SessionProgress
-            done={progress.done}
-            total={progress.total}
-            unit={progress.unit ?? 'sets'}
-            timeLeftLabel={timeLeftLabel}
-            className="w-full"
-          />
-        )}
-        {(upNext || menu || onToggleFastForward) && (
-          // One row: fast-forward at the left, the menu at the right, "up next"
-          // still centered between them so a long exercise name can't run
-          // underneath either. Tapping the overlay ends rest, so both controls
-          // keep their taps to themselves.
-          <div className="mt-3 flex w-full items-start gap-2">
-            <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
-              {onToggleFastForward && (
-                <FastForwardToggle on={!!fastForward} onToggle={onToggleFastForward} />
-              )}
-            </div>
-            <p className="flex-1 pt-2.5 text-center text-base font-semibold text-neutral-200">{upNext}</p>
-            <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
-              {menu && <KebabMenu items={menu} />}
-            </div>
-          </div>
-        )}
-        {upNextSet && (
-          // Which set the rest leads into. On a same-exercise rest there's no name
-          // above it, and this is the whole of what the top row says: the count you
-          // stop keeping the moment you sit down.
-          <p className="mt-1 text-center text-sm font-semibold tabular-nums text-neutral-400">
-            {upNextSet}
-          </p>
+        {header ?? (
+          <>
+            {progress && (
+              <SessionProgress
+                done={progress.done}
+                total={progress.total}
+                unit={progress.unit ?? 'sets'}
+                timeLeftLabel={timeLeftLabel}
+                className="w-full"
+              />
+            )}
+            {(menu || onPressFastForward) && (
+              // One row: fast-forward at the left, the menu at the right. Tapping
+              // the overlay ends rest, so both keep their taps to themselves.
+              <div className="mt-3 flex w-full items-start justify-between gap-2">
+                <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {onPressFastForward && (
+                    <FastForwardToggle mode={fastMode} onPress={onPressFastForward} />
+                  )}
+                </div>
+                <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {menu && <KebabMenu items={menu} />}
+                </div>
+              </div>
+            )}
+          </>
         )}
         {upNextTarget && (
           // The numbers for the coming set, big enough to read at arm's length
@@ -942,8 +1024,13 @@ export function RestTimer({
 
       <div className="relative z-10 flex flex-col items-center gap-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {/* Dark green for the timer UI, overtime included — the leading "+" says
-            you're past due without the number brightening to grab at you. */}
-        <div className="font-mono text-7xl font-bold tabular-nums text-accent">{label}</div>
+            you're past due without the number brightening to grab at you.
+            Hidden while the session is running itself forward: there's no moment
+            to wait for and no decision to make on the number, so the shape is
+            left to say how much rest is left on its own. */}
+        {!rolls && (
+          <div className="font-mono text-7xl font-bold tabular-nums text-accent">{label}</div>
+        )}
         {/* The session progress bar now lives at the top; when there's no bar to
             show, fall back to the bare time-left line here. */}
         {!progress && timeLeftLabel && (

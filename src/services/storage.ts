@@ -10,6 +10,8 @@ import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
 import type { RestTally } from '../lib/rest'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
+import { toFastMode, type FastMode } from '../lib/fastMode'
+import type { SkippedExercises } from '../lib/skipped'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -40,6 +42,7 @@ const KEYS = {
   activeRest: 'wt.activeRest',
   activeRestTally: 'wt.activeRestTally',
   activeFastForward: 'wt.activeFastForward',
+  activeSkipped: 'wt.activeSkipped',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
 } as const
@@ -83,14 +86,14 @@ export type StretchState = {
 }
 
 /**
- * The guided workout's in-progress rest: the countdown plus the context its
- * screen shows ("up next", the add-a-set affordance on an exercise's last rest).
- * Kept apart from the session log, which stores only sets.
+ * The guided workout's in-progress rest: the countdown plus which exercise it
+ * belongs to and whether it follows that exercise's last set (which is what makes
+ * adding a set mid-rest jump to it). Kept apart from the session log, which stores
+ * only sets.
  */
 export type ActiveRest = RestState & {
   exKey: string
   isLastSetOfExercise: boolean
-  upNext: string | null
 }
 
 export type Settings = {
@@ -266,14 +269,25 @@ export const storage = {
     t ? write(KEYS.activeRestTally, t) : localStorage.removeItem(KEYS.activeRestTally),
 
   /**
-   * Whether the workout in progress is running hands-free (see
-   * components/FastForwardToggle). Persisted so a reload mid-workout doesn't
-   * quietly start waiting for taps again; cleared when a workout starts or ends,
-   * because it's a choice about this session rather than a saved preference.
+   * How hands-free the workout in progress is running (see lib/fastMode).
+   * Persisted so a reload mid-workout doesn't quietly start waiting for taps
+   * again; cleared when a workout starts or ends, because it's a choice about
+   * this session rather than a saved preference. Read through `toFastMode`, which
+   * also understands the bare `true` older builds stored here.
    */
-  loadFastForward: (): boolean => read(KEYS.activeFastForward, false),
-  saveFastForward: (on: boolean) =>
-    on ? write(KEYS.activeFastForward, true) : localStorage.removeItem(KEYS.activeFastForward),
+  loadFastMode: (): FastMode => toFastMode(read<unknown>(KEYS.activeFastForward, null)),
+  saveFastMode: (mode: FastMode) =>
+    mode === 'off'
+      ? localStorage.removeItem(KEYS.activeFastForward)
+      : write(KEYS.activeFastForward, mode),
+
+  /**
+   * Which exercises the workout in progress has skipped. Read through
+   * lib/skipped.resumeSkipped, which drops skips belonging to another session.
+   */
+  loadSkipped: (): SkippedExercises | null => read<SkippedExercises | null>(KEYS.activeSkipped, null),
+  saveSkipped: (s: SkippedExercises | null) =>
+    s && s.keys.length > 0 ? write(KEYS.activeSkipped, s) : localStorage.removeItem(KEYS.activeSkipped),
 
   loadStretch: (): StretchState | null => read(KEYS.stretch, null),
   saveStretch: (s: StretchState | null) =>

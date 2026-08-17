@@ -16,6 +16,7 @@ import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement } from '../../store/DataContext'
 import { canResumeRest, staleRestSec } from '../../lib/rest'
+import { useOnHidden } from '../../lib/useOnHidden'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { DEAD_BUG, repRangeLabel } from '../../config/plan'
@@ -150,6 +151,11 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       fast,
     })
   }, [safeCurrent, done, startedAt, coreReps, rep, rest, seenGates, fast])
+
+  // Leave the app — another app, or the screen going dark — and hands-free
+  // switches off. Its rests and paced sets run on the wall clock, so they'd
+  // otherwise keep rolling the routine forward while it's out of sight.
+  useOnHidden(fast, () => setFast(false))
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
@@ -360,13 +366,17 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
           </p>
         </div>
         <div className="flex shrink-0 items-start">
-          <FastForwardToggle on={fast} onToggle={() => setFast(!fast)} />
+          {/* No turbo here: under hands-free every set that can advance itself
+              already does, and there's no learned per-set timing to run the core
+              block's rep entry on. */}
+          <FastForwardToggle mode={fast ? 'on' : 'off'} onPress={() => setFast(!fast)} />
           <KebabMenu items={menuItems} />
         </div>
       </header>
 
-      {/* Flex sets show their rep count live in the rhythm guide, so only the
-          core block's target range needs stating up here. */}
+      {/* A flex set is paced by the guide and brightens when it's done, so there's
+          no count to state; the core block's reps are typed in, and its target
+          range does need saying. */}
       {step.kind === 'core' && (
         <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
           {repRangeLabel(step)} reps
@@ -427,8 +437,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         <RestTimer
           seconds={rest.seconds}
           endsAt={rest.endsAt}
-          fastForward={fast}
-          onToggleFastForward={() => setFast(!fast)}
+          fastMode={fast ? 'on' : 'off'}
+          onPressFastForward={() => setFast(!fast)}
           menu={menuItems}
           progress={{ done: completed, total: N, unit: 'sets' }}
           timeLeftLabel={`${formatDuration(timeLeft)} left`}

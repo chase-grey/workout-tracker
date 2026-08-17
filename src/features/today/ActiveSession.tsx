@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  MdBlock,
   MdBolt,
   MdCheckCircle,
   MdChevronRight,
@@ -7,9 +8,8 @@ import {
   MdRadioButtonUnchecked,
   MdShowChart,
   MdTrackChanges,
-  MdWarningAmber,
 } from 'react-icons/md'
-import type { WorkoutSession } from '../../types'
+import type { SetLog, WorkoutSession } from '../../types'
 import { useData } from '../../store/DataContext'
 import {
   repRangeLabel,
@@ -22,10 +22,12 @@ import { nextTargets, type Target } from '../../lib/progression'
 import { buildGoals } from '../../lib/goals'
 import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
+import { gradeSet, type SetGrade } from '../../lib/setGrade'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder, circuitStations } from '../../lib/circuit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
-import { DISCOMFORT_SPOTS, parseDiscomfort, toggleDiscomfort } from '../../lib/discomfort'
+import { nextFastMode, turboSetMs, type FastMode } from '../../lib/fastMode'
+import { canSkip, resumeSkipped, toSkippedRecord, withSkipped } from '../../lib/skipped'
 import {
   bankRest,
   canResumeRest,
@@ -36,7 +38,6 @@ import {
   restLabel,
   resumeRestTally,
   staleRestSec,
-  upNextSetLabel,
   upNextTargetLabel,
   type RestTally,
 } from '../../lib/rest'
@@ -49,6 +50,8 @@ import {
 } from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
 import { usePressAction } from '../../lib/usePressAction'
+import { useIdleTimeout } from '../../lib/useIdleTimeout'
+import { useOnHidden } from '../../lib/useOnHidden'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
@@ -56,6 +59,7 @@ import { SessionProgress } from '../../components/SessionProgress'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
+import { SetCheer } from '../../components/SetCheer'
 
 type Props = {
   session: WorkoutSession
@@ -66,6 +70,21 @@ type Props = {
 /** Reject per-set active times outside this range (app left open / mis-taps). */
 const MIN_SET_ACTIVE_SEC = 3
 const MAX_SET_ACTIVE_SEC = 20 * 60
+
+/**
+ * A set screen left untouched this long pauses the workout itself.
+ *
+ * Short of turbo the set you're on waits for a tap — hands-free rolls out of
+ * *rest* on its own — so a workout walked away from mid-set otherwise just sits
+ * there live: the next set one stray pocket-tap from being logged, and every
+ * minute you were gone charged to the exercise you stopped on. Rest is
+ * deliberately exempt; a rest that's running is meant to run down untouched.
+ *
+ * It outlasts any turbo wait by a wide margin (see TURBO_MAX_SEC), so a workout
+ * running itself forward is never pausing over its own sets — this only catches
+ * turbo once it stops on the last set, which it leaves for you to finish.
+ */
+const IDLE_PAUSE_MS = 5 * 60 * 1000
 
 /** One set of one exercise — the unit the guided workout flow steps through. */
 type SetStep = {
@@ -116,14 +135,29 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const [paused, setPaused] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
-  const [showDiscomfort, setShowDiscomfort] = useState(false)
   // The first set of a workout waits on a start press (see `awaitingStart`).
   const [started, setStarted] = useState(false)
-  // Hands-free: every rest from here rolls into the next set on its own, until the
-  // fast-forward toggle is switched back off. A property of this workout rather
-  // than of the plan, but mirrored to storage so a reload mid-workout doesn't
-  // quietly start waiting for taps again.
-  const [fast, setFast] = useState(() => storage.loadFastForward())
+  // The flourish for a set that hit its target, keyed by a counter so consecutive
+  // on-target sets each get their own play rather than reusing a mid-flight one.
+  const [cheer, setCheer] = useState<{ id: number; grade: SetGrade } | null>(null)
+  const cheerId = useRef(0)
+  // Hands-free: on, every rest from here rolls into the next set on its own; on
+  // turbo the sets go with them, logging the numbers on screen after however long
+  // the exercise usually takes (see lib/fastMode). A property of this workout
+  // rather than of the plan, but mirrored to storage so a reload mid-workout
+  // doesn't quietly start waiting for taps again.
+  const [fastMode, setFastMode] = useState<FastMode>(() => storage.loadFastMode())
+  const stepFast = () => setFastMode(nextFastMode(fastMode))
+  // The exercises today isn't doing after all (see lib/skipped). Mirrored to
+  // storage like the rest of the in-progress state, and keyed to this session so
+  // it can't follow you into the next workout.
+  const [skipped, setSkipped] = useState<Set<string>>(() =>
+    resumeSkipped(storage.loadSkipped(), session.sessionId),
+  )
+  // Bumped by anything you do to the set on screen, to give turbo's clock the full
+  // wait again: typing a weight is the one moment when the numbers about to be
+  // logged are provably mid-edit.
+  const [edits, setEdits] = useState(0)
   // Time spent on the rest-timer screen (the "resting" slice of the session),
   // alongside the rest that was prescribed and how many intervals were taken —
   // the estimator learns the ratio between taken and prescribed, not a flat
@@ -163,6 +197,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     [day, session.variant, session.startSide],
   )
 
+  // The exercises actually being performed. Everything the workout is measured
+  // against downstream — the step flow, the set count, the time left — is built
+  // from this rather than from the day as written, so a skipped move stops being
+  // owed the moment it's skipped instead of sitting in the estimate to the end.
+  const inPlay = useMemo(() => exercises.filter((e) => !skipped.has(e.key)), [exercises, skipped])
+  /** Whether this exercise can be skipped — something has to be left to perform. */
+  const skippable = (key: string) => canSkip(skipped, exercises.map((e) => e.key), key)
+
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
   const doneCount = (key: string) => logFor(key)?.sets.filter((s) => s.done && s.reps > 0).length ?? 0
   const isComplete = (key: string) => {
@@ -175,16 +217,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // buildSetOrder rotates through a circuit's stations instead of finishing one
   // station at a time (see lib/circuit).
   const steps = useMemo(() => {
-    const counts = exercises.map((ex) => logFor(ex.key)?.sets.length ?? ex.sets)
-    return buildSetOrder(exercises, counts).map(({ exIndex, setIndex }) => ({
-      ex: exercises[exIndex],
+    const counts = inPlay.map((ex) => logFor(ex.key)?.sets.length ?? ex.sets)
+    return buildSetOrder(inPlay, counts).map(({ exIndex, setIndex }) => ({
+      ex: inPlay[exIndex],
       exIndex,
       setIndex,
       setCount: counts[exIndex],
-      stepKey: `${exercises[exIndex].key}:${setIndex}`,
+      stepKey: `${inPlay[exIndex].key}:${setIndex}`,
     })) satisfies SetStep[]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercises, session])
+  }, [inPlay, session])
 
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
@@ -239,8 +281,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }, [rest])
 
   useEffect(() => {
-    storage.saveFastForward(fast)
-  }, [fast])
+    storage.saveFastMode(fastMode)
+  }, [fastMode])
+
+  useEffect(() => {
+    storage.saveSkipped(toSkippedRecord(session.sessionId, skipped))
+  }, [session.sessionId, skipped])
 
   // Mirror the tally the session resumed with. Ordinarily that's a no-op rewrite
   // of what's already stored, but a stale rest settled into it above is banked
@@ -249,6 +295,28 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   useEffect(() => {
     storage.saveRestTally(savedTally)
   }, [savedTally])
+
+  // Step away mid-set and the curtain comes down on its own (see IDLE_PAUSE_MS),
+  // hands-free or not. Not armed over the rest screen, which is supposed to be
+  // left alone, nor under an open sheet: a sheet sits above the pause curtain, and
+  // reading one isn't being away.
+  useIdleTimeout(
+    rest == null && !paused && !showList && !showHistory && !showCircuitRest,
+    IDLE_PAUSE_MS,
+    () => {
+      // Drop this set's active-time slice rather than carry it into the pause: it
+      // already spans five minutes of nobody being here, and the exercise's
+      // average has nothing to learn from a set that was walked away from.
+      activeStartRef.current = 0
+      setPaused(true)
+    },
+  )
+
+  // Leave the app — another app, or the screen going dark — and hands-free
+  // switches off. Its clocks are wall-clock, so they'd otherwise keep advancing
+  // in the dark and you'd come back to a run of sets logged at their targets that
+  // nobody did. Coming back to a set waiting on a tap is the recoverable one.
+  useOnHidden(fastMode !== 'off', () => setFastMode('off'))
 
   // The slot this lift is being trained in, for every read of its history: the
   // press that leads today is compared against the days it led, not against the
@@ -291,12 +359,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     let done = 0
     let all = 0
     for (const e of exercises) {
-      done += doneCount(e.key)
-      all += logFor(e.key)?.sets.length ?? e.sets
+      const logged = doneCount(e.key)
+      done += logged
+      // A skipped exercise still counts whatever you'd already logged of it —
+      // those sets happened — but stops owing the ones you're not going to do.
+      all += skipped.has(e.key) ? logged : logFor(e.key)?.sets.length ?? e.sets
     }
     return { done, all }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercises, session])
+  }, [exercises, skipped, session])
 
   // A moment to get set up before anything is on the clock: the very first set of a
   // workout waits for a start press, so walking over and loading the bar isn't
@@ -338,6 +409,13 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     return remainingWorkoutSecs(exerciseAverages, remaining)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steps, stepDone, safeCurrent, exerciseAverages])
+
+  // Type into the set on screen. Counted as an edit as well as stored, so turbo's
+  // clock starts the wait over instead of logging a half-typed number.
+  const editSet = (patch: Partial<SetLog>) => {
+    controls.updateSet(planned.key, step.setIndex, patch)
+    setEdits((n) => n + 1)
+  }
 
   const setExerciseComplete = (key: string, complete: boolean) => {
     const l = logFor(key)
@@ -413,6 +491,48 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setRest(null)
   }
 
+  /**
+   * Drop an exercise from today's workout, or bring one back.
+   *
+   * Either way the flattened step list is rebuilt around the exercises still in
+   * play, so the set on screen is held by key rather than by index — the bare
+   * index means a different set in the reshaped list. Skipping the exercise on
+   * screen has no set to hold, so it moves on to the next one still owed (any set
+   * of anything still in play, when nothing is owed) and ends the rest that was
+   * counting down to the set just left.
+   */
+  const setExerciseSkipped = (key: string, skip: boolean) => {
+    if (skip && !skippable(key)) return
+    const leaving = skip && planned.key === key
+    const ahead = leaving
+      ? remainingFlow(stepDone, safeCurrent).slice(1).find((i) => steps[i].ex.key !== key)
+      : undefined
+    const held = leaving
+      ? ((ahead != null ? steps[ahead] : steps.find((s) => s.ex.key !== key))?.stepKey ?? null)
+      : step.stepKey
+    setSkipped(withSkipped(skipped, key, skip))
+    setPendingStepKey(held)
+    if (leaving) {
+      // Start the active-time clock over on the set we're landing on. The seconds
+      // spent on the one we're skipping away from are dropped rather than charged
+      // to it — it wasn't performed — and charging them to the next exercise would
+      // inflate the very averages the time left is priced from.
+      activeStartRef.current = Date.now()
+      if (rest) closeRest()
+    }
+  }
+
+  /** Tapping a skipped exercise in the checklist is deciding to do it after all. */
+  const unskipAndJump = (key: string) => {
+    setSkipped(withSkipped(skipped, key, false))
+    // Its steps don't exist yet, so land on it by key once they do — on the first
+    // set still owed, as jumping to any other exercise does.
+    const owed = logFor(key)?.sets.findIndex((s) => !s.done) ?? -1
+    setPendingStepKey(`${key}:${owed >= 0 ? owed : 0}`)
+    activeStartRef.current = Date.now()
+    if (rest) closeRest()
+  }
+
   // Rest again before the set on screen — for the rest that was cut short, or the
   // one hands-free rolled straight through. The seconds count like any other rest,
   // and the time already spent on this set screen is dropped rather than carried
@@ -427,10 +547,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       endsAt: Date.now() + sec * 1000,
       exKey: planned.key,
       // This rest leads *into* the set on screen rather than away from one, so
-      // there's no exercise to announce, and adding a set is the ordinary
-      // extend-this-exercise case rather than a jump.
+      // adding a set is the ordinary extend-this-exercise case rather than a jump.
       isLastSetOfExercise: false,
-      upNext: null,
     })
   }
 
@@ -439,8 +557,17 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     recordActiveForCurrent(planned.key)
     controls.updateSet(planned.key, step.setIndex, { done: true })
     if (!nextStep || upcoming == null) {
+      // No cheer on the last set: finishing hands the screen straight to the
+      // recap, which has its own (louder) celebration to give.
       finish()
       return
+    }
+    // Cheer what the numbers on screen actually were — the flourish plays over the
+    // rest that's about to open, so nothing waits on it (see SetCheer).
+    const grade = gradeSet(set?.weightLbs ?? null, set?.reps ?? 0, target)
+    if (grade) {
+      cheerId.current += 1
+      setCheer({ id: cheerId.current, grade })
     }
     // Carry this set's actual weight/reps forward to the next set of the same
     // exercise, so subsequent sets prefill what you just did (not the target).
@@ -479,7 +606,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       endsAt: Date.now() + restSec * 1000,
       exKey: planned.key,
       isLastSetOfExercise: step.setIndex === step.setCount - 1,
-      upNext: nextIsNewExercise ? `up next: ${nextStep.ex.name}` : null,
     })
   }
 
@@ -503,12 +629,49 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
   const advancePress = usePressAction(completeSetAndAdvance)
 
+  // Turbo: the set on screen logs itself, so a workout of prefilled targets runs
+  // end to end without a tap. The wait is this exercise's own learned average
+  // active time — what a set of it normally takes you, the same measurement the
+  // time-left estimate is priced from — not one flat number across every lift.
+  //
+  // Held off in the places where accepting the numbers wouldn't be right: the
+  // opening start press (still yours, so loading the bar isn't on the clock), a
+  // set with no reps in it yet (there'd be nothing to log), and the last set of
+  // all, which finishes the workout — that stays a deliberate press. Rest and any
+  // overlay disarm it too: rest already advances itself, and reading the checklist
+  // isn't standing at the bar.
+  const advanceRef = useRef(completeSetAndAdvance)
+  advanceRef.current = completeSetAndAdvance
+  const turboMs = turboSetMs(exerciseAverages, planned.key)
+  const turboArmed =
+    fastMode === 'turbo' &&
+    !awaitingStart &&
+    !atLast &&
+    (set?.reps ?? 0) > 0 &&
+    rest == null &&
+    !paused &&
+    !showList &&
+    !showHistory &&
+    !showCircuitRest
+  useEffect(() => {
+    if (!turboArmed) return
+    const id = window.setTimeout(() => {
+      // Mid-set you're rarely looking at the screen, so a set logging itself would
+      // otherwise be silent (rest running out buzzes for the same reason).
+      navigator.vibrate?.(200)
+      advanceRef.current()
+    }, turboMs)
+    return () => window.clearTimeout(id)
+    // Re-armed per set, and again whenever you touch this one's numbers — the wait
+    // starts over rather than logging a weight you're halfway through typing.
+  }, [turboArmed, turboMs, step.stepKey, edits])
+
   // The stations of the circuit in play, in the order they're rotated through —
   // the whole circuit rather than just the station on screen, because "rest only
   // after the lateral raise" is a statement about all of them.
   const stations = useMemo(
-    () => circuitStations(exercises, step.exIndex).map((i) => exercises[i]),
-    [exercises, step.exIndex],
+    () => circuitStations(inPlay, step.exIndex).map((i) => inPlay[i]),
+    [inPlay, step.exIndex],
   )
 
   // Per-station rest, saved to the plan like auto-advance: it's a property of how
@@ -528,20 +691,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const restShownSec =
     planned.circuit && planned.circuitRestSec != null ? planned.circuitRestSec : planned.restSec
 
-  // The exercise a discomfort flag belongs to. While resting that's the move just
-  // finished, not `planned` — the flow advances before it rests, so `planned` is
-  // already the set the rest leads into, and a twinge is noticed on the way out of
-  // the set that caused it. Same reasoning as addSet's use of `rest.exKey`.
-  const flagKey = rest?.exKey ?? planned.key
-  const flagName = exercises.find((e) => e.key === flagKey)?.name ?? flagKey
-  const flagNotes = logFor(flagKey)?.notes
-  // Where it felt off today, if anywhere. Recorded on the log and nowhere else:
-  // the flag exists so a repeat on the same movement shows up next time (see
-  // lib/discomfort), and it changes nothing about today's prescription.
-  const flagged = parseDiscomfort(flagNotes)
-  const toggleSpot = (spot: string) =>
-    controls.setNotes(flagKey, toggleDiscomfort(flagNotes, spot))
-
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
@@ -556,10 +705,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       ? [{ label: 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
     { label: 'add a set', onClick: addSet },
-    {
-      label: flagged.length > 0 ? `discomfort on ${flagName}` : `flag discomfort on ${flagName}`,
-      onClick: () => setShowDiscomfort(true),
-    },
+    // Not for the last exercise left in play: a workout with nothing in it has no
+    // set to show (see lib/skipped).
+    ...(skippable(planned.key)
+      ? [{ label: `skip ${planned.name}`, onClick: () => setExerciseSkipped(planned.key, true) }]
+      : []),
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'workout checklist', onClick: () => setShowList(true) },
     { label: 'finish workout now', onClick: finish },
@@ -572,10 +722,17 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     },
   ]
 
-  return (
-    <div className="flex flex-col gap-3 pb-6">
-      {/* Same bar, same place, as the rest screen's: how much of the whole
-          workout is still ahead of you, at the top of the screen either way. */}
+  // The top of the screen, built once and rendered on both the set screen and the
+  // rest screen over it, so resting changes nothing above the fold: the same
+  // progress bar, the same lift named, the same set of it coming, and the same
+  // trend button — the history for the move is as readable while you sit down as
+  // it is while you're standing at it.
+  //
+  // Which set it names is right either way: the flow advances *before* resting, so
+  // through a rest `step` is already the set the rest leads into.
+  const topBar = (
+    <div className="flex flex-col gap-3">
+      {/* How much of the whole workout is still ahead of you. */}
       <SessionProgress
         done={totals.done}
         total={totals.all}
@@ -584,11 +741,18 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       />
 
       <header className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-xl font-bold">{planned.name}</h2>
-        </div>
-        <div className="flex shrink-0 items-start">
-          <FastForwardToggle on={fast} onToggle={() => setFast(!fast)} />
+        <h2 className="min-w-0 text-xl font-bold">{planned.name}</h2>
+        {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
+        <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
+          {/* Puts the set in the context of the whole history for the lift. */}
+          <button
+            onClick={() => setShowHistory(true)}
+            aria-label={`recent sessions for ${planned.name}`}
+            className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
+          >
+            <MdShowChart className="text-2xl" aria-hidden />
+          </button>
+          <FastForwardToggle mode={fastMode} onPress={stepFast} />
           <KebabMenu items={menuItems} />
         </div>
       </header>
@@ -597,47 +761,29 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         {planned.group} · set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
         {repRangeLabel(planned)} reps · rest {restLabel(restShownSec)}
       </p>
+    </div>
+  )
 
-      {flagged.length > 0 && (
-        // Tapping it reopens the picker, so a flag can be corrected or cleared
-        // from the same place it shows up.
-        <button
-          onClick={() => setShowDiscomfort(true)}
-          className="flex items-center gap-1.5 self-start rounded-full bg-surface-2 px-3 py-1 text-xs font-semibold text-amber-400 active:opacity-70"
-        >
-          <MdWarningAmber aria-hidden />
-          discomfort: {flagged.join(', ')}
-        </button>
-      )}
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      {topBar}
 
       {set && (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
-          {/* The target line, and a chart button that puts this set in the
-              context of the whole history for the lift. */}
-          <div className="flex items-center gap-2">
-            {challenging && targetNumbers ? (
-              <p className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
-                <MdBolt aria-hidden />
-                {targetNumbers}
+          {/* What to go for on this set. */}
+          {challenging && targetNumbers ? (
+            <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
+              <MdBolt aria-hidden />
+              {targetNumbers}
+            </p>
+          ) : (
+            hint && (
+              <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
+                <MdTrackChanges aria-hidden />
+                {hint}
               </p>
-            ) : (
-              <p className="flex flex-1 items-center justify-center gap-1 text-sm font-medium text-accent">
-                {hint && (
-                  <>
-                    <MdTrackChanges aria-hidden />
-                    {hint}
-                  </>
-                )}
-              </p>
-            )}
-            <button
-              onClick={() => setShowHistory(true)}
-              aria-label={`recent sessions for ${planned.name}`}
-              className="shrink-0 rounded-xl bg-surface-2 p-2 text-xl text-neutral-300 active:opacity-70"
-            >
-              <MdShowChart aria-hidden />
-            </button>
-          </div>
+            )
+          )}
           {/* A goal that's ready shows through even when the reading is past the
               line — being ahead is exactly what makes the attempt the ask. */}
           {goalCue && (goalCue.ready || goalCue.standing !== 'ahead') && (
@@ -666,7 +812,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                     inputMode="decimal"
                     placeholder={planned.bodyweight ? 'bw' : 'lbs'}
                     value={set.weightLbs ?? ''}
-                    onChange={(e) => controls.updateSet(planned.key, step.setIndex, { weightLbs: toWeight(e.target.value) })}
+                    onChange={(e) => editSet({ weightLbs: toWeight(e.target.value) })}
                     className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
                   />
                 </label>
@@ -680,7 +826,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 inputMode="numeric"
                 placeholder="reps"
                 value={set.reps || ''}
-                onChange={(e) => controls.updateSet(planned.key, step.setIndex, { reps: Number(e.target.value) || 0 })}
+                onChange={(e) => editSet({ reps: Number(e.target.value) || 0 })}
                 className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </label>
@@ -706,21 +852,21 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         <RestTimer
           seconds={rest.seconds}
           endsAt={rest.endsAt}
-          upNext={rest.upNext}
-          // The flow advances before resting, so `step` is already the set this
-          // rest leads into: its position in the exercise, and `targetNumbers` its
-          // target — the numbers to walk back to the bar with, on the rests that
-          // should carry them.
-          upNextSet={upNextSetLabel(step.setIndex, step.setCount)}
+          // The same top of the screen the set behind it has — the bar, the lift,
+          // the set coming, the trend button and this session's own controls all
+          // included, so nothing up there moves when rest opens.
+          header={topBar}
+          // `targetNumbers` is the coming set's target: the numbers to walk back to
+          // the bar with, on the rests that should carry them (see lib/rest).
           upNextTarget={upNextTargetLabel(step.setIndex, targetNumbers)}
-          fastForward={fast}
-          onToggleFastForward={() => setFast(!fast)}
-          menu={menuItems}
-          progress={{ done: totals.done, total: totals.all, unit: 'sets' }}
-          timeLeftLabel={`${formatDuration(timeLeft)} left`}
+          fastMode={fastMode}
           onClose={closeRest}
         />
       )}
+
+      {/* Above the rest screen it plays over, and below the full-screen celebrations
+          (z-60), which own the moment when one of them is up. */}
+      {cheer && <SetCheer key={cheer.id} grade={cheer.grade} onDone={() => setCheer(null)} />}
 
       {paused && <PauseOverlay label="workout paused" onResume={() => setPaused(false)} />}
 
@@ -736,51 +882,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           repsOnly={!!planned.repsOnly}
           onClose={() => setShowHistory(false)}
         />
-      )}
-
-      {showDiscomfort && (
-        // Above the rest overlay (z-50) — a twinge is usually noticed on the way
-        // out of the set, which is the rest screen.
-        <div
-          className="fixed inset-0 z-60 flex items-end bg-black/60"
-          onClick={() => setShowDiscomfort(false)}
-        >
-          <div
-            className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
-            onClick={(e) => e.stopPropagation()}
-            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
-          >
-            <h3 className="mb-3 text-lg font-bold">discomfort on {flagName}</h3>
-            <div className="flex flex-col gap-1">
-              {DISCOMFORT_SPOTS.map((spot) => {
-                const on = flagged.includes(spot)
-                return (
-                  <button
-                    key={spot}
-                    onClick={() => toggleSpot(spot)}
-                    aria-pressed={on}
-                    className={`flex min-h-[48px] items-center gap-3 rounded-xl px-2 text-left font-medium active:opacity-70 ${
-                      on ? 'bg-surface-2' : ''
-                    }`}
-                  >
-                    {on ? (
-                      <MdCheckCircle className="text-2xl text-amber-400" aria-hidden />
-                    ) : (
-                      <MdRadioButtonUnchecked className="text-2xl text-neutral-600" aria-hidden />
-                    )}
-                    {spot}
-                  </button>
-                )
-              })}
-            </div>
-            <button
-              onClick={() => setShowDiscomfort(false)}
-              className="mt-4 min-h-[48px] w-full rounded-2xl bg-surface-2 font-semibold text-neutral-200 active:opacity-80"
-            >
-              done
-            </button>
-          </div>
-        </div>
       )}
 
       {showCircuitRest && stations.length > 0 && (
@@ -832,45 +933,65 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             <h3 className="mb-1 text-lg font-bold">workout checklist</h3>
             <p className="mb-3 text-xs text-neutral-500">tap a name to jump; tap the circle to mark done.</p>
             <div className="flex flex-col gap-1">
-              {exercises.map((e, i) => {
+              {exercises.map((e) => {
+                const isSkipped = skipped.has(e.key)
                 const complete = isComplete(e.key)
                 // Land on the first set of it still owed — picking an exercise you
                 // half finished means carrying on with it, not redoing set one.
-                // Falls back to its first set when they're all logged.
-                const firstStep = steps.findIndex((s, si) => s.exIndex === i && !stepDone[si])
-                const jumpStep = firstStep >= 0 ? firstStep : steps.findIndex((s) => s.exIndex === i)
+                // Falls back to its first set when they're all logged. By key
+                // rather than by list position: the step list is built from the
+                // exercises still in play, so the two only line up until a skip.
+                const firstStep = steps.findIndex((s, si) => s.ex.key === e.key && !stepDone[si])
+                const jumpStep = firstStep >= 0 ? firstStep : steps.findIndex((s) => s.ex.key === e.key)
                 return (
                   <div
                     key={e.key}
-                    className={`flex items-center gap-2 rounded-xl px-2 ${step.exIndex === i ? 'bg-surface-2' : ''}`}
+                    className={`flex items-center gap-2 rounded-xl px-2 ${planned.key === e.key ? 'bg-surface-2' : ''}`}
                   >
                     <button
                       onClick={() => {
-                        if (jumpStep >= 0) setCurrent(jumpStep)
-                        // Jumping is a decision to start that exercise now, so an
-                        // in-flight rest ends rather than covering it back up.
-                        if (rest) closeRest()
+                        // A skipped exercise has no step to jump to until it's
+                        // back in the flow, so choosing it puts it back.
+                        if (isSkipped) unskipAndJump(e.key)
+                        else {
+                          if (jumpStep >= 0) setCurrent(jumpStep)
+                          // Jumping is a decision to start that exercise now, so an
+                          // in-flight rest ends rather than covering it back up.
+                          if (rest) closeRest()
+                        }
                         setShowList(false)
                       }}
-                      className="flex-1 py-3 text-left active:opacity-70"
+                      className={`flex-1 py-3 text-left active:opacity-70 ${isSkipped ? 'opacity-50' : ''}`}
                     >
                       <span className="text-[10px] tracking-wide text-neutral-500">{e.group}</span>
-                      <span className="block font-medium">{e.name}</span>
+                      <span className={`block font-medium ${isSkipped ? 'line-through' : ''}`}>{e.name}</span>
                       <span className="text-xs text-neutral-500 tabular-nums">
                         {doneCount(e.key)}/{logFor(e.key)?.sets.length ?? e.sets} sets
                       </span>
                     </button>
-                    <button
-                      onClick={() => setExerciseComplete(e.key, !complete)}
-                      aria-label={complete ? 'mark incomplete' : 'mark complete'}
-                      className="p-2 text-2xl"
-                    >
-                      {complete ? (
-                        <MdCheckCircle className="text-accent-2" aria-hidden />
-                      ) : (
-                        <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
-                      )}
-                    </button>
+                    {(isSkipped || skippable(e.key)) && (
+                      <button
+                        onClick={() => setExerciseSkipped(e.key, !isSkipped)}
+                        aria-label={isSkipped ? `unskip ${e.name}` : `skip ${e.name}`}
+                        className="p-2 text-2xl"
+                      >
+                        <MdBlock className={isSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                      </button>
+                    )}
+                    {/* Nothing to mark done on an exercise that isn't being done. */}
+                    {!isSkipped && (
+                      <button
+                        onClick={() => setExerciseComplete(e.key, !complete)}
+                        aria-label={complete ? 'mark incomplete' : 'mark complete'}
+                        className="p-2 text-2xl"
+                      >
+                        {complete ? (
+                          <MdCheckCircle className="text-accent-2" aria-hidden />
+                        ) : (
+                          <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
+                        )}
+                      </button>
+                    )}
                   </div>
                 )
               })}
