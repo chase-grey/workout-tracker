@@ -32,3 +32,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sibling git worktrees for this repo (see CLAUDE.md: one folder per project)
+.worktrees/
