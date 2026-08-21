@@ -27,7 +27,7 @@ import { ExtraRestShape } from './RestShapes'
 // A shape may just as well *fill* as drain: `1 - fraction` is the same reading the
 // other way up, and rest is a recharge as much as it is a countdown. The rest of
 // the set lives in RestShapes, which is also where the mechanics that aren't a
-// falling level are — a closing gap, an angle, a width, a radius.
+// falling level are — a closing gap, an angle, a width, a radius, a count.
 //
 // Boxed shapes live in a square in the middle of the screen. Full-bleed ones use
 // the entire viewport instead, sitting behind the readout — a rest you can read
@@ -736,7 +736,9 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
   const drain = { transition: 'height 260ms linear' } as const
   // The shapes that live in RestShapes — a cell charging, a tap filling a glass, a
   // bar loading, a balance tipping, a moon waning, a coil paying out, ice melting,
-  // a snow globe settling, an icicle closing on its stalagmite.
+  // a snow globe settling, an icicle closing on its stalagmite, and a pane of black
+  // glass counting its beads: joining seven of them into one, breaking one into
+  // seven, shedding them off the pane, or gathering them onto it.
   if (isExtraVariant(variant)) return <ExtraRestShape variant={variant} fraction={fraction} />
 
   switch (variant) {

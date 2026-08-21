@@ -398,6 +398,72 @@ input[type='number'] {
   animation: rest-globe-settled 620ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
+/* Beads: the ring that answers two beads joining. Mounted with the bead they became
+   — so it runs once, at the moment their surfaces met, and never again. The count
+   dropping by one is the reading here, and a join that only removed a bead would
+   read as one going out rather than two becoming one. */
+@keyframes rest-bead-flash {
+  0% {
+    transform: scale(0.86);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+.rest-bead-flash {
+  animation: rest-bead-flash 620ms ease-out both;
+}
+
+/* And the bead itself taking on the one it just absorbed: a drop that has swallowed
+   another overshoots before it is a sphere again. Mounted the same way, so it lands
+   on the join and not on a tick near it. */
+@keyframes rest-bead-born {
+  0% {
+    transform: scale(0.9);
+  }
+  45% {
+    transform: scale(1.07);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.rest-bead-born {
+  animation: rest-bead-born 560ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* One band of light crossing the pane, then a while with none. Pure texture — it
+   passes behind the beads and touches nothing that tells the time — and slow enough
+   that it reads as the glass being lit rather than as anything happening. The
+   translate is in the band's own width: a third of the pane, so 400% carries it from
+   just off one edge to just off the other. */
+@keyframes rest-bead-sheen {
+  0% {
+    transform: translateX(0) rotate(14deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.09;
+  }
+  55% {
+    transform: translateX(400%) rotate(14deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(400%) rotate(14deg);
+    opacity: 0;
+  }
+}
+.rest-bead-sheen {
+  animation: rest-bead-sheen 13s linear infinite;
+  will-change: transform, opacity;
+}
+
 /* Tap: a drop falling from the spout to the water. The column it rides spans the
    air gap, so travelling its own height lands the drop exactly on the surface
    however full the glass is — the same trick as the tide's risers. It stretches on
@@ -609,7 +675,10 @@ input[type='number'] {
   .rest-star,
   .rest-pan-sway,
   .rest-frost,
-  .rest-fuse-head {
+  .rest-fuse-head,
+  /* The beads keep drifting and joining — that is the reading, not decoration — so
+     all that goes here is the wobble the bead they became would do on arriving. */
+  .rest-bead-born {
     animation: none;
   }
   /* Everything airborne is hidden rather than frozen: a spark or a drop parked
@@ -620,7 +689,13 @@ input[type='number'] {
   .rest-drip-fall,
   .rest-ice-drip,
   .rest-icicle-drip,
-  .rest-fuse-spark {
+  .rest-fuse-spark,
+  /* Same for the ring a join throws and the band of light crossing the pane: a ring
+     frozen mid-flight, or a sheen parked halfway over the glass, reads as a mistake.
+     Neither is rendered at all under reduced motion (see RestShapes) — this is only
+     here so they can't come back by being rendered again. */
+  .rest-bead-flash,
+  .rest-bead-sheen {
     display: none;
   }
 }

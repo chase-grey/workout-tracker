@@ -1,4 +1,14 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import {
+  BEAD_COUNT,
+  beadsAt,
+  createCoalescence,
+  createFission,
+  createGathering,
+  createShedding,
+  type BeadPlan,
+  type LiveBead,
+} from '../lib/beads'
 import { type ExtraVariant } from '../lib/restShapes'
 import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
 import { createSpiral, pointAt, shareAt, spiralPath } from '../lib/spiral'
@@ -23,6 +33,10 @@ import { usePrefersReducedMotion } from '../lib/useReducedMotion'
  *  - an *angle* — `scale`.
  *  - a *width* — `ice`, which is the only shape here that reads horizontally.
  *  - a *radius* — `moon`, `spiral`, `globe`.
+ *  - a *count* — the glass beads, which are the only shapes here that need nothing
+ *    measured against anything: `beads` joins seven of them down to one, `split`
+ *    breaks one into seven, `shed` empties a mass of them off the pane altogether,
+ *    and `gather` collects seven out of the dark into one.
  *
  * A shape that fills is exactly as honest as one that drains: `1 - fraction` is
  * the same reading upside down, and it still lands on the tick.
@@ -917,6 +931,221 @@ function IcicleGap({ fraction }: { fraction: number }) {
   )
 }
 
+/* --------------------------------------------------------------------- beads */
+
+/**
+ * The four glass-bead shapes: beads of black glass lying on a pane of it, and what
+ * tells the time is *how many*.
+ *
+ * A count is the one reading here that needs nothing measured against anything. A
+ * level has to be judged against the vessel around it, where four beads is four
+ * beads — and every step of a count lands as an event you can watch happen rather
+ * than as a line creeping past a mark, which is what makes zero legible: whatever the
+ * shape has been doing all rest, it does it for the last time exactly on the tick.
+ *
+ * `beads` and `shed` run one way, `split` and `gather` are those two run backwards
+ * (see lib/beads, which owns the schedules), so each of the four ends on a pane that
+ * looks like no other moment of any of them: one bead dead centre, seven spread
+ * across the glass, nothing at all, or one bead holding all seven.
+ *
+ * Drawn as black glass because that is what the rest screen already is: a black
+ * field, and beads with nothing in them but a rim, a highlight and the light
+ * gathering inside their own edge. A bead here is defined by what it catches, so it
+ * grows by taking in another bead's light rather than by any fill going up.
+ */
+
+/**
+ * A schedule, worked out once when the rest starts, and the beads the pane opens
+ * with.
+ *
+ * The schedule is read at whatever fraction the countdown is at rather than stepped
+ * along, so a rest resumed after a reload picks the pane up where it left it. The
+ * opening beads are worth holding on to because every other bead arrives as an
+ * event — a pair coming apart, a bead pinching off the mass — and what runs the ring
+ * and the wobble for that event is the bead mounting, which happens once, on the beat.
+ */
+function useBeadPlan(make: () => BeadPlan, fraction: number) {
+  const [plan] = useState(make)
+  const [opening] = useState(() => new Set(beadsAt(plan, 1).map((bead) => bead.id)))
+  return { beads: beadsAt(plan, fraction), opening }
+}
+
+/**
+ * The pane the four of them share, and the beads standing on it.
+ *
+ * `settled` is the shape's payoff — the pane holding the one arrangement it holds at
+ * no other point in the rest — and everything it changes is a light coming up: the
+ * pane's edge firms, and every bead left on it takes a harder rim and a wider halo.
+ */
+function BeadPane({
+  beads,
+  opening,
+  settled,
+}: {
+  beads: LiveBead[]
+  opening: Set<number>
+  settled: boolean
+}) {
+  const calm = usePrefersReducedMotion()
+  return (
+    <div className="absolute inset-0" aria-hidden>
+      <div
+        className={`absolute inset-[5%] overflow-hidden rounded-[11%] ring-1 transition-shadow duration-500 ${
+          // A ring is a box-shadow, so this carries on `transition-shadow`.
+          settled ? 'ring-accent-bright/60' : 'ring-accent-bright/20'
+        }`}
+      >
+        {/* The glass: barely lit, and a shade brighter at the top, so the pane reads
+            as a surface the beads are lying on rather than a hole cut in the screen.
+            It also cuts off everything crossing it, which is how a bead leaves. */}
+        <div className="absolute inset-0 bg-gradient-to-b from-accent-bright/7 to-accent-bright/2" />
+        {/* One band of light crossing it, slowly. Texture, and the only loop in the
+            shape: it touches nothing that tells the time. Dropped under reduced
+            motion, where the beads' own drift is the whole of the reading. */}
+        {!calm && (
+          <div
+            className="rest-bead-sheen absolute -inset-y-1/3 -left-1/3 w-1/3"
+            style={{
+              backgroundImage:
+                'linear-gradient(to right, transparent, var(--color-accent-bright), transparent)',
+            }}
+          />
+        )}
+        {beads.map((bead) => {
+          // A bead the pane didn't open with is a bead an event brought here, and it
+          // is mounting at the moment of that event.
+          const arrived = !opening.has(bead.id) && !calm
+          return (
+            <div
+              key={bead.id}
+              // Positioned by translating a pane-sized box, so a percentage here is
+              // a share of the pane and no element has to be measured. A bead's own
+              // size never changes — beads grow by joining, not by swelling — so the
+              // only thing the countdown moves is this transform.
+              className="absolute inset-0"
+              style={{
+                transform: `translate(${(bead.x - 0.5) * 100}%, ${(bead.y - 0.5) * 100}%)`,
+                ...drainOf('transform'),
+              }}
+            >
+              <div
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                style={{ width: pct(bead.r * 200), aspectRatio: '1' }}
+              >
+                {/* The light the rim throws onto the glass around it. `closest-side`
+                    so the fade is measured against the circle and not against the
+                    corners of the box it is drawn in. */}
+                <div
+                  className="absolute -inset-[18%] rounded-full"
+                  style={{
+                    backgroundImage:
+                      'radial-gradient(circle closest-side, var(--color-accent-bright) 62%, transparent 100%)',
+                    opacity: settled ? 0.24 : 0.12,
+                    transition: 'opacity 500ms linear',
+                  }}
+                />
+                <div
+                  className={`absolute inset-0 rounded-full bg-accent-bright/10 ring-2 transition-shadow duration-500 ${
+                    settled ? 'ring-accent-bright/90' : 'ring-accent-bright/45'
+                  } ${arrived ? 'rest-bead-born' : ''}`}
+                >
+                  {/* Light gathering inside the rim, which is what a bead of glass
+                      does and a flat disc doesn't. */}
+                  <div
+                    className="absolute inset-0 rounded-full"
+                    style={{
+                      backgroundImage:
+                        'radial-gradient(circle closest-side, transparent 55%, var(--color-accent-bright) 100%)',
+                      opacity: 0.3,
+                    }}
+                  />
+                  {/* And the one hard highlight it catches. Every bead catches it in
+                      the same place, because one light is lighting all of them. */}
+                  <div className="absolute left-[18%] top-[13%] h-[16%] w-[26%] -rotate-[24deg] rounded-full bg-accent-bright/70" />
+                  <div className="absolute bottom-[15%] right-[17%] h-[9%] w-[18%] rotate-[20deg] rounded-full bg-accent-bright/25" />
+                </div>
+                {/* The event: one ring going out from where it happened. */}
+                {arrived && (
+                  <div className="rest-bead-flash absolute -inset-[6%] rounded-full ring-2 ring-accent-bright" />
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The 'beads' shape: seven beads drifting together and joining as the rest runs down,
+ * until one bead is left as it ends.
+ *
+ * Two more readings ride along with the count and agree with it: the biggest bead only
+ * ever grows, and the gaps are closing on every side at once. What makes zero legible
+ * is that the last two beads *touch* on the tick — every join lands as an event rather
+ * than a fade, the pair meets and one ring goes out across the glass, so the final one
+ * reads as the same thing happening for the last time.
+ */
+function GlassBeads({ fraction }: { fraction: number }) {
+  const { beads, opening } = useBeadPlan(createCoalescence, fraction)
+  // One bead on the pane happens at exactly one moment, the last join, and that lands
+  // on zero: this is the shape's payoff, not a state it passes through.
+  return <BeadPane beads={beads} opening={opening} settled={beads.length === 1} />
+}
+
+/**
+ * The 'split' shape: one bead of glass coming apart into seven, which is 'beads' run
+ * backwards.
+ *
+ * The count is the reading the other way up — one at the start, seven when the rest is
+ * up, one more at every sixth of the way through — and the bead in the middle gets
+ * smaller every time it lets one go, so a glance at nothing but its size says roughly
+ * as much as counting does.
+ *
+ * Where a join lands on the tick as two beads touching, a break lands as two beads
+ * that have only just stopped touching: the seventh bead appears exactly at zero,
+ * still against the one it came off, and the pane is left with a full spread of seven
+ * where every other moment of the rest had fewer.
+ */
+function GlassSplit({ fraction }: { fraction: number }) {
+  const { beads, opening } = useBeadPlan(createFission, fraction)
+  return <BeadPane beads={beads} opening={opening} settled={beads.length === BEAD_COUNT} />
+}
+
+/**
+ * The 'shed' shape: a mass of glass in the middle of the pane emptying itself, one
+ * bead at a time, out through the rim.
+ *
+ * The mass is the reading and it only ever shrinks, by a seventh of the glass on the
+ * pane at every seventh of the rest. Each bead it drops crosses to the edge and is cut
+ * off by it — the pane keeps nothing it lets go of — and because a bead is wholly gone
+ * on the tick rather than fading out near it, the leaving is the beat.
+ *
+ * What zero looks like here is the one thing none of the other three ever shows: clear
+ * glass, with the rim lit and nothing standing on it.
+ */
+function GlassShed({ fraction }: { fraction: number }) {
+  const { beads, opening } = useBeadPlan(createShedding, fraction)
+  return <BeadPane beads={beads} opening={opening} settled={beads.length === 0} />
+}
+
+/**
+ * The 'gather' shape: beads arriving out of the dark beyond the pane, one every
+ * seventh of the rest, into a mass in the middle that ends up holding all seven — which
+ * is 'shed' run backwards.
+ *
+ * The reading is what the middle has gathered, and it only ever grows. Alone among the
+ * shapes on the rest screen it opens on an empty vessel: nothing on the glass at all,
+ * and the first bead already on its way in. Each one slows into the mass as it lands
+ * and is taken into it, and the last of them lands exactly at zero.
+ */
+function GlassGather({ fraction }: { fraction: number }) {
+  const { beads, opening } = useBeadPlan(createGathering, fraction)
+  const whole = beads.length === 1 && beads[0].mass === BEAD_COUNT
+  return <BeadPane beads={beads} opening={opening} settled={whole} />
+}
+
 /* ---------------------------------------------------------------------- fuse */
 
 /** Sparks thrown off a burning head: where each one flies, in multiples of its own size. */
@@ -1036,6 +1265,18 @@ export function ExtraRestShape({
     // An icicle and a stalagmite closing on each other, meeting at zero.
     case 'icicle':
       return <IcicleGap fraction={fraction} />
+    // Beads of black glass joining one pair at a time, down to a single bead.
+    case 'beads':
+      return <GlassBeads fraction={fraction} />
+    // The same pane run backwards: one bead of glass coming apart into seven.
+    case 'split':
+      return <GlassSplit fraction={fraction} />
+    // A mass in the middle dropping a bead at a time, each one out through the rim.
+    case 'shed':
+      return <GlassShed fraction={fraction} />
+    // And that backwards: beads arriving out of the dark into a mass that takes them.
+    case 'gather':
+      return <GlassGather fraction={fraction} />
     // A cord burning in from both edges of the screen.
     case 'fuse':
     default:

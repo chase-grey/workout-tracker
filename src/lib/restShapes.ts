@@ -17,6 +17,10 @@ export const EXTRA_BOX_VARIANTS = [
   'ice',
   'globe',
   'icicle',
+  'beads',
+  'split',
+  'shed',
+  'gather',
 ] as const
 
 /** And the one that takes the whole width instead, running off both edges. */
