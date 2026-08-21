@@ -77,14 +77,16 @@ describe('anglePRs', () => {
 
 describe('completedFlexGoals', () => {
   it('reports a goal today crossed for the first time', () => {
+    // 111.6° clears both of the ladder's first two rungs, biggest first.
     expect(completedFlexGoals(entries, TODAY)).toEqual([
+      { label: '110° split', target: 110, deg: 111.6 },
       { label: '100° split', target: 100, deg: 111.6 },
     ])
   })
 
   it('does not re-report a goal an earlier day already reached', () => {
     const already: FlexEntry[] = [
-      { date: '2026-07-31', splitDeg: null, warmSplitDeg: 104, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-07-31', splitDeg: null, warmSplitDeg: 111, tailorsLeftDeg: null, tailorsRightDeg: null },
       { date: '2026-08-05', splitDeg: null, warmSplitDeg: 111.6, tailorsLeftDeg: null, tailorsRightDeg: null },
     ]
     expect(completedFlexGoals(already, TODAY)).toEqual([])
@@ -95,7 +97,7 @@ describe('completedFlexGoals', () => {
       { date: '2026-07-31', splitDeg: null, warmSplitDeg: 95, tailorsLeftDeg: null, tailorsRightDeg: null },
       { date: '2026-08-05', splitDeg: null, warmSplitDeg: 152, tailorsLeftDeg: null, tailorsRightDeg: null },
     ]
-    expect(completedFlexGoals(leap, TODAY).map((g) => g.target)).toEqual([150, 135, 120, 100])
+    expect(completedFlexGoals(leap, TODAY).map((g) => g.target)).toEqual([150, 135, 120, 110, 100])
   })
 
   it('judges the tailor\'s goal on the average of the warm pair', () => {
@@ -132,8 +134,8 @@ describe('celebrations', () => {
   it('leads with the completed goal, then the pr', () => {
     const cheers = flexAngleCelebrations(entries, TODAY)
     expect(cheers).toHaveLength(2)
-    expect(cheers[0].title).toBe('goal complete!')
-    expect(cheers[0].subtitle).toBe('100° split — hit it at 111.6°.')
+    expect(cheers[0].title).toBe('goals complete!')
+    expect(cheers[0].subtitle).toBe('110° split — hit it at 111.6°.')
     expect(cheers[1].title).toBe('new flexibility prs!')
     expect(cheers.every((c) => c.tier === 'epic')).toBe(true)
   })

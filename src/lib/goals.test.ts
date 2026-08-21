@@ -224,6 +224,12 @@ describe('flexibility goals join the goal set', () => {
     }
   })
 
+  it('puts a rung at 110° between the first one and 120°', () => {
+    // The ladder's low end is where the log is, so it gets the closer spacing.
+    expect(goals.find((x) => x.id === 'split_110')!.title).toBe('110° split')
+    expect([...SPLIT_GOALS]).toEqual([...SPLIT_GOALS].sort((a, b) => a - b))
+  })
+
   it('tapers every ladder rung', () => {
     for (const deg of SPLIT_GOALS) {
       expect(goals.find((x) => x.id === `split_${deg}`)!.decayPerWeek).toBe(FLEX_GAIN_DECAY)
