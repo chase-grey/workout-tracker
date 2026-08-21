@@ -1,7 +1,4 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { KebabMenu, type MenuItem } from './KebabMenu'
-import { SessionProgress } from './SessionProgress'
-import { FastForwardToggle } from './FastForwardToggle'
 import { rollsThroughRest, type FastMode } from '../lib/fastMode'
 import { createFlame, flameLook, stepFlame } from '../lib/flame'
 import {
@@ -16,6 +13,7 @@ import { createVessel, spanBetween, VESSEL_KINDS } from '../lib/vessels'
 import { EXTRA_BOX_VARIANTS, EXTRA_FILL_VARIANTS, isExtraVariant } from '../lib/restShapes'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { createRotation } from '../lib/variantRotation'
+import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
 import { ExtraRestShape } from './RestShapes'
 
 // Time-telling shapes made for rest: each one encodes the remaining fraction
@@ -824,16 +822,15 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
  * from the wall-clock end time (not a CSS loop), it stays in sync after
  * backgrounding or a reload.
  *
- * The top of the screen is the part you're resting to read. A caller with a
- * header of its own hands it over whole as `header` — the workout does, so the
- * bar, the lift, the set coming and its controls are exactly where they were on
- * the set screen and rest changes nothing above the fold. Otherwise `progress` +
- * `timeLeftLabel` (rendered verbatim, so the caller phrases it — "~5 min left in
- * workout") put the session's progress bar there, with the fast-forward toggle and
- * `menu` in a row under it so the session's actions stay reachable without ending
- * rest first. `upNextTarget` puts the load and reps for the coming set below
- * either, big enough to read while you walk over and load it — see lib/rest for
- * which rests get it.
+ * The top of the screen is the part you're resting to read, and it belongs to the
+ * session: the caller hands over the very node its own screen puts up there as
+ * `header`, and this renders it in the same content box the app shell gives that
+ * screen — so the progress bar, the move named, the set coming and the session's
+ * controls all stay exactly where they were when rest opens over them. There is
+ * no alternative top row on purpose; a rest screen that built its own would drift
+ * from the session's the moment either changed. `upNextTarget` puts the load and
+ * reps for the coming set under it, big enough to read while you walk over and
+ * load it — see lib/rest for which rests get it.
  */
 export function RestTimer({
   seconds,
@@ -841,11 +838,7 @@ export function RestTimer({
   onClose,
   header,
   upNextTarget,
-  progress,
-  timeLeftLabel,
   fastMode = 'off',
-  onPressFastForward,
-  menu,
 }: {
   seconds: number
   /**
@@ -861,29 +854,23 @@ export function RestTimer({
    */
   onClose: (expired?: boolean) => void
   /**
-   * The caller's own top-of-screen block, rendered at the top of the rest screen
-   * in place of the progress bar and control row built here. Pass the *same* node
-   * the screen behind uses and resting leaves the top of the screen untouched.
-   * Controls inside it must stop their own clicks — a tap on the overlay ends rest.
+   * The session's own top-of-screen block — the same node the screen behind this
+   * one renders, so resting leaves the top of the screen untouched. Required:
+   * every rest belongs to a session, and the session's toolbar is the only one
+   * there is. Controls inside it must stop their own clicks, since a tap on the
+   * overlay ends rest.
    */
-  header?: ReactNode
+  header: ReactNode
   /** What to go for on the coming set, pre-formatted ("135 × 8", "12 reps"). */
   upNextTarget?: string | null
-  /** Session position for the progress bar — completed sets out of the total. */
-  progress?: { done: number; total: number; unit?: string }
-  timeLeftLabel?: string | null
   /**
    * How hands-free the session is running (see lib/fastMode). Anything but `off`
    * rolls into the next set the moment rest is up, with no tap, and drops the
    * numeric countdown: the seconds are only worth reading when you're the one
-   * deciding when rest is over, so what's left is the shape draining. Shown as the
-   * fast-forward toggle in the top row, so the mode is steppable from here as well
-   * as from the session header.
+   * deciding when rest is over, so what's left is the shape draining. Stepping the
+   * mode from here is the header's own fast-forward toggle, riding along in it.
    */
   fastMode?: FastMode
-  onPressFastForward?: () => void
-  /** Overflow actions for the 3-dots menu, mirroring the session header's. */
-  menu?: MenuItem[]
 }) {
   const endRef = useRef<number>(endsAt ?? Date.now() + seconds * 1000)
   // When this overlay mounted, so a tap that belongs to the *previous* screen
@@ -970,45 +957,26 @@ export function RestTimer({
           and passes behind everything without covering any of it. */}
       {variant === 'perimeter' && <PerimeterFrame fraction={remainingFraction} />}
 
-      {/* Top region: whatever says where you are in the session — the caller's own
-          header, or the bar and control row built here — with the coming set's
-          numbers under it. This is the part you're resting to read, so it gets the
-          top of the screen and the filling shapes start below it. */}
-      <div className="relative z-10 w-full pt-[calc(0.75rem+env(safe-area-inset-top))]">
-        {header ?? (
-          <>
-            {progress && (
-              <SessionProgress
-                done={progress.done}
-                total={progress.total}
-                unit={progress.unit ?? 'sets'}
-                timeLeftLabel={timeLeftLabel}
-                className="w-full"
-              />
-            )}
-            {(menu || onPressFastForward) && (
-              // One row: fast-forward at the left, the menu at the right. Tapping
-              // the overlay ends rest, so both keep their taps to themselves.
-              <div className="mt-3 flex w-full items-start justify-between gap-2">
-                <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  {onPressFastForward && (
-                    <FastForwardToggle mode={fastMode} onPress={onPressFastForward} />
-                  )}
-                </div>
-                <div className="w-11 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  {menu && <KebabMenu items={menu} />}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-        {upNextTarget && (
-          // The numbers for the coming set, big enough to read at arm's length
-          // while you walk over and load it.
-          <p className="mt-2 text-center text-4xl font-bold tabular-nums text-white">
-            {upNextTarget}
-          </p>
-        )}
+      {/* Top region: the session's own toolbar, with the coming set's numbers under
+          it. This is the part you're resting to read, so it gets the top of the
+          screen and the filling shapes start below it.
+
+          It is laid out in the app shell's own content box (see lib/shell), which
+          this overlay isn't inside — hence the negative margin, undoing the `px-6`
+          the shapes below are padded by so the shell's gutters can apply instead.
+          The toolbar then lands on the pixels it already occupied, and rest opening
+          moves nothing above the fold. */}
+      <div className={`relative z-10 -mx-6 self-stretch ${SHELL_PAD_TOP}`}>
+        <div className={`${SHELL_WIDTH} ${SHELL_PAD_X}`}>
+          {header}
+          {upNextTarget && (
+            // The numbers for the coming set, big enough to read at arm's length
+            // while you walk over and load it.
+            <p className="mt-2 text-center text-4xl font-bold tabular-nums text-white">
+              {upNextTarget}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* The animation is the timer: the shape's level carries the countdown
@@ -1032,11 +1000,6 @@ export function RestTimer({
             left to say how much rest is left on its own. */}
         {!rolls && (
           <div className="font-mono text-7xl font-bold tabular-nums text-accent">{label}</div>
-        )}
-        {/* The session progress bar now lives at the top; when there's no bar to
-            show, fall back to the bare time-left line here. */}
-        {!progress && timeLeftLabel && (
-          <p className="text-sm font-medium text-neutral-400">{timeLeftLabel}</p>
         )}
       </div>
     </div>

@@ -21,6 +21,7 @@ import { IS_DESKTOP } from './lib/device'
 import { useBackGuard } from './lib/useBackGuard'
 import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
+import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
 import { MdFitnessCenter } from 'react-icons/md'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
@@ -188,14 +189,13 @@ function AppShell() {
   }
 
   return (
-    <div className="app-shell mx-auto flex max-w-md flex-col">
+    <div className={`app-shell flex flex-col ${SHELL_WIDTH}`}>
       {/* min-h-0: a flex item's automatic minimum is its own content, which would
           let a tall tab push the nav off the bottom of the shell rather than
           scroll inside it. */}
       <main
         ref={mainRef}
-        className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
-        style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top))' }}
+        className={`min-h-0 flex-1 overflow-y-auto pb-4 ${SHELL_PAD_X} ${SHELL_PAD_TOP}`}
       >
         {/* A set-aside session stays mounted, only hidden — its timers, rep pace
             and elapsed-time accounting must not restart when you look away. */}

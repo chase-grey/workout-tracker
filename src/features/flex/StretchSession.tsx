@@ -363,10 +363,16 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     { label: 'exit without logging', danger: true, onClick: onClose },
   ]
 
-  return (
-    <div className="flex min-h-full flex-col gap-3" onClick={onScreenTap}>
-      {/* Same bar, same place, as the rest screen's: how much of the whole
-          routine is still ahead of you, at the top of the screen either way. */}
+  // The top of the screen, built once and rendered on both the set screen and the
+  // rest screen over it, so resting changes nothing above the fold: the same
+  // progress bar, the same stretch named, the same set of it coming, and the same
+  // controls — reachable while you sit down as much as while you're in the pose.
+  //
+  // Which set it names is right either way: the flow advances *before* resting (see
+  // advanceFrom), so through a rest `step` is already the set the rest leads into.
+  const topBar = (
+    <div className="flex flex-col gap-3">
+      {/* How much of the whole routine is still ahead of you. */}
       <SessionProgress
         done={completed}
         total={N}
@@ -375,13 +381,14 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       />
 
       <header className="flex items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-xl font-bold">{step.exName}</h2>
           <p className="text-sm text-neutral-500">
             set {step.round + 1} of {step.maxSets}
           </p>
         </div>
-        <div className="flex shrink-0 items-start">
+        {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
+        <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
           {/* No turbo here: under hands-free every set that can advance itself
               already does, and there's no learned per-set timing to run the core
               block's rep entry on. */}
@@ -398,6 +405,12 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
           {repRangeLabel(step)} reps
         </p>
       )}
+    </div>
+  )
+
+  return (
+    <div className="flex min-h-full flex-col gap-3" onClick={onScreenTap}>
+      {topBar}
 
       {step.kind === 'flex' ? (
         <RhythmGuide
@@ -474,11 +487,11 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         <RestTimer
           seconds={rest.seconds}
           endsAt={rest.endsAt}
+          // The same top of the screen the set behind it has — the bar, the stretch,
+          // the set coming and this session's own controls all included, so nothing
+          // up there moves when rest opens.
+          header={topBar}
           fastMode={fast ? 'on' : 'off'}
-          onPressFastForward={() => setFast(!fast)}
-          menu={menuItems}
-          progress={{ done: completed, total: N, unit: 'sets' }}
-          timeLeftLabel={`${formatDuration(timeLeft)} left`}
           onClose={closeRest}
         />
       )}
