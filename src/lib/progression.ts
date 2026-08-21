@@ -6,6 +6,19 @@ import { isMaxAttempt } from './maxAttempt'
 
 export type Target = { weightLbs: number | null; reps: number }
 
+/**
+ * The prescription in words, for the set screen. A timed hold's number is seconds
+ * rather than reps (see PlannedExercise.timed), so it reads as a hold to make
+ * rather than a count to reach, and a movement with no weight suggestion asks only
+ * for the reps.
+ */
+export function targetLabel(target: Target | undefined, timed = false): string | null {
+  if (!target) return null
+  if (timed) return `hold ${target.reps}s`
+  if (target.weightLbs == null) return `target ${target.reps} reps`
+  return `target ${target.weightLbs} × ${target.reps}`
+}
+
 /** Round a weight to the nearest 0.5 lb. */
 function roundHalf(n: number): number {
   return Math.round(n * 2) / 2

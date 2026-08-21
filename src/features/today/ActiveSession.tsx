@@ -19,7 +19,7 @@ import {
   withCircuitRoundRest,
   type PlannedExercise,
 } from '../../config/plan'
-import { nextTargets, type Target } from '../../lib/progression'
+import { nextTargets, targetLabel, type Target } from '../../lib/progression'
 import { buildGoals } from '../../lib/goals'
 import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
@@ -51,6 +51,7 @@ import {
   type ExerciseTimeSample,
 } from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
+import { toWeight } from '../../lib/weightField'
 import { usePressAction } from '../../lib/usePressAction'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
@@ -96,25 +97,6 @@ type SetStep = {
   setIndex: number
   setCount: number
   stepKey: string
-}
-
-function toWeight(v: string): number | null {
-  const t = v.trim()
-  if (t === '') return null
-  const n = Number(t)
-  return Number.isFinite(n) ? n : null
-}
-
-/**
- * The prescription for the set on screen. A timed hold's number is seconds rather
- * than reps (see PlannedExercise.timed), so it reads as a hold to make rather than
- * a count to reach.
- */
-function targetLabel(target: Target | undefined, timed = false): string | null {
-  if (!target) return null
-  if (timed) return `hold ${target.reps}s`
-  if (target.weightLbs == null) return `target ${target.reps} reps`
-  return `target ${target.weightLbs} × ${target.reps}`
 }
 
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
