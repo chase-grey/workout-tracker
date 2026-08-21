@@ -118,7 +118,8 @@ export function ThisWeek() {
 
       {showStreak && <StreakHistoryPanel />}
 
-      {/* Milestone bar: fill = progress; white line = where the schedule expects you; markers for checkpoint & goal. */}
+      {/* Milestone bar: fill = progress; white line = where the schedule expects you; the grey and
+          green ticks are the checkpoint and the goal, unlabelled — the two marks read on their own. */}
       <div className="relative h-3 rounded-full bg-surface-2">
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-accent transition-all"
@@ -133,12 +134,6 @@ export function ThisWeek() {
             title="where the week's schedule expects you"
           />
         )}
-      </div>
-      <div className="relative mt-1 h-3 text-[10px] tracking-wide text-neutral-500">
-        <span className="absolute -translate-x-1/2" style={{ left: `${checkpointFrac * 100}%` }}>
-          checkpoint
-        </span>
-        <span className="absolute right-0">goal</span>
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
