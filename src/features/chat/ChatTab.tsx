@@ -828,10 +828,17 @@ export function ChatTab({
                ambiguous. Plain chat gets none — the tab it lives on already
                says what typing here does. */
             placeholder={answerTarget ? `answer #${answerTarget.number}` : undefined}
-            /* px-2, matching the bar's own 0.5rem: the text starts the same
+            /* The grey ring is the same 2px the focus ring is, so it only
+               changes color when the field is aimed at: a ring paints outside
+               the box, so without one to begin with the field's visible edge
+               used to jump 2px outward on focus and the gap to the screen
+               tightened with it. Now the outline holds still and only the
+               color moves.
+
+               px-2, matching the bar's own 0.5rem: the text starts the same
                distance in from the field's edge as the field sits from the
                bar's, so the inset reads as one measure all the way out. */
-            className="min-h-[44px] flex-1 rounded-xl bg-surface px-2 text-base focus:outline-none focus:ring-2 focus:ring-accent"
+            className="min-h-[44px] flex-1 rounded-xl bg-surface px-2 text-base ring-2 ring-border focus:outline-none focus:ring-accent"
           />
           <button
             onClick={() => void send()}
