@@ -147,14 +147,6 @@ export type Settings = {
    * avatar's ab lines. Unset means not yet.
    */
   sixPackStatus?: SixPackStatus
-  /**
-   * Set once the angles logged before the aspect-ratio fix have been corrected
-   * (see lib/angleRepair). Rides in the synced settings rather than in a cache
-   * key of its own precisely because the repair isn't idempotent: it rewrites
-   * readings on the backend, so a second device that only knew about its own
-   * localStorage would correct the corrected numbers all over again.
-   */
-  flexAnglesRepaired?: boolean
 }
 
 /** The three answers the six-pack goal accepts. */

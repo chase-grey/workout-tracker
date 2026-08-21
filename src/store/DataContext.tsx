@@ -14,7 +14,6 @@ import { withPlanDefaults, withRemovedFrom, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import type { CoreSet } from '../lib/flexSteps'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
-import { repairFlexAngles } from '../lib/angleRepair'
 import {
   calorieHitDates,
   CALORIE_GOAL,
@@ -421,33 +420,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore — an older backend won't have this route */
     }
     try {
-      // Exactly once per account: correct the angles logged before the
-      // measurement math accounted for the photo's aspect ratio, and queue each
-      // corrected date back to the backend — it holds the inflated numbers too,
-      // and the next fetch merges them straight back over a local-only repair
-      // (see lib/angleRepair for the correction and what it can't tell apart).
-      //
-      // Here rather than with the flex fetch above because the marker rides in
-      // the synced settings, which have just been merged: correcting a corrected
-      // reading takes another 15° off it, so a device that hasn't run the repair
-      // has to hear that the account already has before it decides.
-      const stored = storage.loadSettings()
-      if (!stored.flexAnglesRepaired) {
-        const { entries, repaired } = repairFlexAngles(storage.loadFlex())
-        persistFlex(entries)
-        persistSettings({ ...stored, flexAnglesRepaired: true })
-        for (const entry of repaired) enqueue({ type: 'flex', entry })
-        if (repaired.length) {
-          void flush()
-          // Said out loud: rewriting logged readings shouldn't happen behind the
-          // user's back, even when it's putting them right.
-          notify(`corrected ${repaired.length} angle${repaired.length === 1 ? '' : 's'} logged before 8/5`, true)
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    try {
       const p = await api.fetchPlan()
       if (p && p.push && p.pull) {
         // The sheet stores the plan without a revision marker, so reconcile the
@@ -464,7 +436,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [enqueue, flush, notify, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations, persistExerciseAverages, persistSettings])
+  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistMeasurements, persistDurations, persistExerciseAverages, persistSettings])
 
   // Initial sync, then re-sync whenever there's a fresh chance to: back online,
   // or back in the foreground. A phone that logged something and got locked
