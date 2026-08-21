@@ -5,6 +5,7 @@ import {
   cycleProgress,
   hitRepTarget,
   loopFadeIn,
+  repGlow,
   motionForPhases,
   phaseDepths,
   phaseEfforts,
@@ -116,6 +117,32 @@ describe('hitRepTarget', () => {
   it('is never met without a target to hit', () => {
     expect(hitRepTarget(3)).toBe(false)
     expect(hitRepTarget(3, 0)).toBe(false)
+  })
+})
+
+describe('repGlow', () => {
+  it('lights the closing rep a step early when the set ends itself', () => {
+    expect(repGlow(5, 5, true)).toBe('final')
+  })
+
+  it('leaves the closing rep alone when you end the set by tapping', () => {
+    expect(repGlow(5, 5, false)).toBe('base')
+  })
+
+  it('keeps the earlier reps at their resting brightness either way', () => {
+    expect(repGlow(4, 5, true)).toBe('base')
+    expect(repGlow(1, 5, true)).toBe('base')
+  })
+
+  it('goes full bright once the target is met, and stays there past it', () => {
+    expect(repGlow(6, 5, true)).toBe('done')
+    expect(repGlow(6, 5, false)).toBe('done')
+    expect(repGlow(9, 5, true)).toBe('done')
+  })
+
+  it('never lifts a rep with no target to close on', () => {
+    expect(repGlow(3, undefined, true)).toBe('base')
+    expect(repGlow(3, 0, true)).toBe('base')
   })
 })
 

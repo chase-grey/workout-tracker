@@ -9,8 +9,10 @@ import {
   motionForPhases,
   phaseDepths,
   phaseEfforts,
+  repGlow,
   strain,
   type MotionKind,
+  type RepGlow,
 } from '../lib/rhythmMotion'
 import { createRotation, type Rotation } from '../lib/variantRotation'
 
@@ -50,35 +52,49 @@ const SCALE_MIN = 0.55
 const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
 
 /**
- * Every shape draws from the same two-tone palette so that hitting the set's
- * target lights the whole guide up at once: the accent goes from a washed-out
- * fill to near-full opacity, which over the dark background is the difference
- * between a dim green and an unmistakably bright one.
+ * Every shape draws from the same palette so that hitting the set's target lights
+ * the whole guide up at once: the accent goes from a washed-out fill to near-full
+ * opacity, which over the dark background is the difference between a dim green
+ * and an unmistakably bright one. 'final' sits between the two — a set that ends
+ * itself lifts its closing rep just enough to notice without pre-empting the
+ * brightening that marks the set actually being done.
  */
-function shapeTone(bright: boolean) {
-  return bright
-    ? {
-        fill: 'bg-accent-bright/80',
-        ring: 'ring-1 ring-accent-bright',
-        border: 'border-accent-bright',
-        track: 'bg-accent-bright/40',
-        /** Floor for shapes that fade parts in with depth — never fully dim. */
-        dimmest: 0.5,
-      }
-    : {
-        fill: 'bg-accent-bright/40',
-        ring: 'ring-1 ring-accent-bright/70',
-        border: 'border-accent-bright/70',
-        track: 'bg-accent-bright/15',
-        dimmest: 0.2,
-      }
+const TONES: Record<RepGlow, {
+  fill: string
+  ring: string
+  border: string
+  track: string
+  /** Floor for shapes that fade parts in with depth — never fully dim. */
+  dimmest: number
+}> = {
+  base: {
+    fill: 'bg-accent-bright/40',
+    ring: 'ring-1 ring-accent-bright/70',
+    border: 'border-accent-bright/70',
+    track: 'bg-accent-bright/15',
+    dimmest: 0.2,
+  },
+  final: {
+    fill: 'bg-accent-bright/55',
+    ring: 'ring-1 ring-accent-bright/85',
+    border: 'border-accent-bright/85',
+    track: 'bg-accent-bright/25',
+    dimmest: 0.33,
+  },
+  done: {
+    fill: 'bg-accent-bright/80',
+    ring: 'ring-1 ring-accent-bright',
+    border: 'border-accent-bright',
+    track: 'bg-accent-bright/40',
+    dimmest: 0.5,
+  },
 }
 
 /** Breathing family: a shape that expands (neutral) and contracts (deep). */
-function BreatheShape({ variant, scale, bright }: { variant: Variant; scale: number; bright: boolean }) {
+function BreatheShape({ variant, scale, glow }: { variant: Variant; scale: number; glow: RepGlow }) {
   // Scale is interpolated per animation frame by the parent, so the shape needs
   // no CSS transition of its own — that would only lag behind the live value.
-  const tone = shapeTone(bright)
+  const tone = TONES[glow]
   switch (variant) {
     case 'square':
       return (
@@ -162,8 +178,8 @@ function BreatheShape({ variant, scale, bright }: { variant: Variant; scale: num
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
 /** Descent family: a shape that reaches/folds downward and settles deep. */
-function DescentShape({ variant, depth, bright }: { variant: Variant; depth: number; bright: boolean }) {
-  const tone = shapeTone(bright)
+function DescentShape({ variant, depth, glow }: { variant: Variant; depth: number; glow: RepGlow }) {
+  const tone = TONES[glow]
   switch (variant) {
     case 'fold':
       // A panel that hinges shut — upright when neutral, folded flat when deep,
@@ -297,6 +313,7 @@ export function RhythmGuide({
   startRep = 1,
   onRep,
   onTargetHit,
+  endsOnTarget = false,
 }: {
   tempo: string
   reps?: number
@@ -312,6 +329,12 @@ export function RhythmGuide({
    * auto-advance into rest). Never fired for a set resumed past its target.
    */
   onTargetHit?: () => void
+  /**
+   * The set ends on its own when the target rep does (hands-free), which the
+   * guide gives away by lighting that last rep a step brighter than the ones
+   * before it — see `repGlow`.
+   */
+  endsOnTarget?: boolean
 }) {
   const phases = useMemo(() => parseTempo(tempo), [tempo])
   const depths = useMemo(() => phaseDepths(phases), [phases])
@@ -405,8 +428,9 @@ export function RhythmGuide({
   // Once you've finished the target the shape brightens, and that is the whole of
   // how the guide says you're done — a change you catch out of the corner of your
   // eye rather than a number to read. It waits for the last rep to end, not to
-  // begin, so the brightening lands as the set closes.
-  const hitTarget = hitRepTarget(rep, reps)
+  // begin, so the brightening lands as the set closes. When the set will close
+  // itself, the last rep is already lit a step above the others on its way there.
+  const glow = repGlow(rep, reps, endsOnTarget)
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-3">
@@ -418,7 +442,7 @@ export function RhythmGuide({
                 className="absolute inset-0 flex items-center justify-center"
                 style={{ opacity: 1 - fadeIn }}
               >
-                <DescentShape variant={variant} depth={depths[depths.length - 1]} bright={hitTarget} />
+                <DescentShape variant={variant} depth={depths[depths.length - 1]} glow={glow} />
               </div>
             )}
             <div
@@ -429,11 +453,11 @@ export function RhythmGuide({
                 transform: `translateY(${tremor * STRAIN_PCT}%)`,
               }}
             >
-              <DescentShape variant={variant} depth={depth} bright={hitTarget} />
+              <DescentShape variant={variant} depth={depth} glow={glow} />
             </div>
           </>
         ) : (
-          <BreatheShape variant={variant} scale={scaleFromDepth(depth)} bright={hitTarget} />
+          <BreatheShape variant={variant} scale={scaleFromDepth(depth)} glow={glow} />
         )}
       </div>
     </div>

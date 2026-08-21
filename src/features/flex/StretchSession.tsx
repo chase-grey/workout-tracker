@@ -400,6 +400,9 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
           // Under fast-forward the last rep is the tap. Not on the closing step —
           // the core block ends the session, so nothing here logs one on a timer.
           onTargetHit={fast && !atLast ? intoRestOnTarget : undefined}
+          // Same condition: with no tap coming, the guide brightens a step on the
+          // rep that's about to roll the set into its rest.
+          endsOnTarget={fast && !atLast}
         />
       ) : (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">

@@ -118,6 +118,25 @@ export function hitRepTarget(rep: number, reps?: number): boolean {
   return reps != null && reps > 0 && rep > reps
 }
 
+/**
+ * How lit the rhythm shape is: its resting brightness, a step up for the rep
+ * that will close the set, and full brightness once the target is met.
+ */
+export type RepGlow = 'base' | 'final' | 'done'
+
+/**
+ * Brightness for the rep in progress. `endsItself` is a set that rolls into its
+ * rest the moment the target rep finishes (hands-free) — there, and only there,
+ * the last rep is worth calling out while it's still running: no tap is coming,
+ * so the shape saying "this is the one" is the only warning the set is about to
+ * close. Tapping through your own sets, that early tell would just be noise.
+ */
+export function repGlow(rep: number, reps: number | undefined, endsItself: boolean): RepGlow {
+  if (hitRepTarget(rep, reps)) return 'done'
+  if (endsItself && reps != null && reps > 0 && rep === reps) return 'final'
+  return 'base'
+}
+
 /** Seconds spent dissolving the finished rep into the new one at the loop point. */
 export const LOOP_FADE_SECONDS = 1
 
