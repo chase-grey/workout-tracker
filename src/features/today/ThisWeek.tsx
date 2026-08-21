@@ -4,7 +4,6 @@ import {
   MdCelebration,
   MdCheckCircle,
   MdEmojiEvents,
-  MdExpandMore,
   MdLocalFireDepartment,
   MdStar,
 } from 'react-icons/md'
@@ -114,12 +113,6 @@ export function ThisWeek() {
           <span className="flex items-center gap-1 text-neutral-300">
             <MdAcUnit aria-hidden /> {streaks.freezes}
           </span>
-          {streakHistory.length > 0 && (
-            <MdExpandMore
-              className={`text-neutral-500 transition-transform ${showStreak ? 'rotate-180' : ''}`}
-              aria-hidden
-            />
-          )}
         </button>
       </div>
 
