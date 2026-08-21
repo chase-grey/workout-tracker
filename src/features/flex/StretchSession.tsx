@@ -17,6 +17,7 @@ import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement } from '../../store/DataContext'
 import { canResumeRest, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
+import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { DEAD_BUG, repRangeLabel } from '../../config/plan'
@@ -156,6 +157,11 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   // switches off. Its rests and paced sets run on the wall clock, so they'd
   // otherwise keep rolling the routine forward while it's out of sight.
   useOnHidden(fast, () => setFast(false))
+
+  // And while it's on, the screen stays lit — a paced routine is one nobody is
+  // tapping, and the phone would dim mid-hold. Not under the pause curtain,
+  // where there's nothing to watch.
+  useWakeLock(fast && !paused)
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 

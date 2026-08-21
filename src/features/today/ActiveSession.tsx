@@ -55,6 +55,7 @@ import { toWeight } from '../../lib/weightField'
 import { usePressAction } from '../../lib/usePressAction'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
+import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
@@ -308,6 +309,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // in the dark and you'd come back to a run of sets logged at their targets that
   // nobody did. Coming back to a set waiting on a tap is the recoverable one.
   useOnHidden(fastMode !== 'off', () => setFastMode('off'))
+
+  // And while it's on, the screen stays lit: hands-free means nothing is being
+  // tapped, and a phone left untouched dims and locks in less time than a rest
+  // takes. Not under the pause curtain, which is the state of nobody being here —
+  // there's nothing to watch, so the phone can sleep as it normally would.
+  useWakeLock(fastMode !== 'off' && !paused)
 
   // The slot this lift is being trained in, for every read of its history: the
   // press that leads today is compared against the days it led, not against the
