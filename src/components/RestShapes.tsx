@@ -38,7 +38,9 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 const DRAIN = '260ms linear'
 
 /** `height`, `width` and the rest all take the same easing; this saves repeating it. */
-const drainOf = (property: string): CSSProperties => ({ transition: `${property} ${DRAIN}` })
+const drainOf = (property: string): CSSProperties => ({
+  transition: `${property} ${DRAIN}`,
+})
 
 const pct = (n: number) => `${n}%`
 
@@ -144,7 +146,11 @@ function DrippingTap({ fraction }: { fraction: number }) {
           glass is — the same trick the tide's risers use. */}
       <div
         className="absolute inset-x-0"
-        style={{ top: pct(GLASS.spout), height: pct(fallHeight), ...drainOf('height') }}
+        style={{
+          top: pct(GLASS.spout),
+          height: pct(fallHeight),
+          ...drainOf('height'),
+        }}
       >
         {[0, 0.5].map((phase) => (
           <div
@@ -231,7 +237,11 @@ function LoadingBar({ fraction }: { fraction: number }) {
             <div
               key={`${side}-${i}`}
               className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
-              style={{ left: pct(50 + side * centre), width: pct(PLATE_W), height: pct(height) }}
+              style={{
+                left: pct(50 + side * centre),
+                width: pct(PLATE_W),
+                height: pct(height),
+              }}
             >
               {/* An empty slot, so the bar shows how much is still to come. */}
               <div className="absolute inset-0 rounded-[22%] bg-accent-bright/8" />
@@ -510,7 +520,12 @@ function UnspoolingSpiral({ fraction }: { fraction: number }) {
         {/* The free end. Translated rather than moved by cx/cy so the position
             transitions on the compositor along with everything else. */}
         {left > 0 && (
-          <g style={{ transform: `translate(${tip.x}px, ${tip.y}px)`, ...drainOf('transform') }}>
+          <g
+            style={{
+              transform: `translate(${tip.x}px, ${tip.y}px)`,
+              ...drainOf('transform'),
+            }}
+          >
             <circle className="rest-glow" r={4.4} fill="currentColor" />
           </g>
         )}
@@ -522,7 +537,11 @@ function UnspoolingSpiral({ fraction }: { fraction: number }) {
 /* ----------------------------------------------------------------------- ice */
 
 /** The cube at full size and once it has gone, as percentages of the box. */
-const CUBE = { height: 54, width: { min: 24, max: 56 }, radius: { min: 10, max: 44 } } as const
+const CUBE = {
+  height: 54,
+  width: { min: 24, max: 56 },
+  radius: { min: 10, max: 44 },
+} as const
 
 /** The puddle it leaves, at the start and at the end. */
 const PUDDLE = { min: 18, max: 92 } as const
@@ -789,7 +808,11 @@ function IcicleGap({ fraction }: { fraction: number }) {
       {gap > 8 && grown > 3 && (
         <div
           className="absolute left-1/2 w-[8%] -translate-x-1/2"
-          style={{ top: pct(SLAB + grown), height: pct(gap), ...drainOf('height') }}
+          style={{
+            top: pct(SLAB + grown),
+            height: pct(gap),
+            ...drainOf('height'),
+          }}
         >
           <div className="rest-icicle-drip absolute inset-0">
             <div className="absolute left-1/2 top-0 aspect-square w-full -translate-x-1/2 rounded-full bg-accent-bright" />
