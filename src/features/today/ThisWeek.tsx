@@ -20,16 +20,17 @@ import { StreakHistoryPanel } from './StreakHistoryPanel'
  * left for the line to show — the numbers and the marker keep one colour, since
  * what's still owed this week is plain enough from the counts.
  *
- * A metric that's met drops its bar and keeps the count: a full track and a pace
- * marker pinned to the end say nothing the check beside the numbers doesn't, and
- * three of them crowd out the week's overall bar, which is the one still moving.
+ * A metric that's met keeps its full bar and drops only the marker: the filled
+ * track is the week's work made visible, and it's the thing worth seeing once the
+ * goal lands — a marker pinned to the end is what said nothing the check beside
+ * the numbers doesn't.
  */
 function MetricBar({ label, m }: { label: string; m: MetricPace }) {
   const over = m.done > m.goal
   const pct = Math.min(m.done / m.goal, 1) * 100
   return (
     <div>
-      <div className={`flex items-center justify-between text-sm ${m.met ? '' : 'mb-1'}`}>
+      <div className="mb-1 flex items-center justify-between text-sm">
         <span className="text-neutral-300">{label}</span>
         <span className="tabular-nums text-neutral-400">
           {m.done}/{m.goal}{' '}
@@ -40,21 +41,19 @@ function MetricBar({ label, m }: { label: string; m: MetricPace }) {
           ) : null}
         </span>
       </div>
-      {!m.met && (
-        <div className="relative h-2 overflow-hidden rounded-full bg-surface-2">
-          <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
-          {m.required > 0 && (
-            <div
-              // A metric whose window has closed has its whole goal due, putting the
-              // line on the far edge — pull it fully inside so it doesn't clip away.
-              className={`absolute inset-y-0 w-0.5 bg-white/70 ${
-                m.required >= m.goal ? '-translate-x-full' : '-translate-x-1/2'
-              }`}
-              style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
-            />
-          )}
-        </div>
-      )}
+      <div className="relative h-2 overflow-hidden rounded-full bg-surface-2">
+        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+        {!m.met && m.required > 0 && (
+          <div
+            // A metric whose window has closed has its whole goal due, putting the
+            // line on the far edge — pull it fully inside so it doesn't clip away.
+            className={`absolute inset-y-0 w-0.5 bg-white/70 ${
+              m.required >= m.goal ? '-translate-x-full' : '-translate-x-1/2'
+            }`}
+            style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
+          />
+        )}
+      </div>
     </div>
   )
 }
