@@ -309,18 +309,10 @@ describe('foodLogStatus', () => {
     { date: TODAY_ISO, calories, loggedAt: at(h).toISOString() },
   ]
 
-  it('says nothing about an empty day through the morning', () => {
+  it('says nothing about an empty day, whatever the hour', () => {
     expect(foodLogStatus([], TODAY_ISO, at(7))).toEqual({ label: '', stale: false })
-    expect(foodLogStatus([], TODAY_ISO, at(9))).toEqual({ label: '', stale: false })
-    expect(foodLogStatus([], TODAY_ISO, at(10, 59))).toEqual({ label: '', stale: false })
-  })
-
-  it('flags an empty day from 11am', () => {
-    expect(foodLogStatus([], TODAY_ISO, at(11))).toEqual({ label: 'nothing logged yet', stale: true })
-    expect(foodLogStatus([], TODAY_ISO, at(15))).toEqual({ label: 'nothing logged yet', stale: true })
-  })
-
-  it('drops the empty-day flag once the eating window closes', () => {
+    expect(foodLogStatus([], TODAY_ISO, at(11))).toEqual({ label: '', stale: false })
+    expect(foodLogStatus([], TODAY_ISO, at(15))).toEqual({ label: '', stale: false })
     expect(foodLogStatus([], TODAY_ISO, at(22))).toEqual({ label: '', stale: false })
   })
 
