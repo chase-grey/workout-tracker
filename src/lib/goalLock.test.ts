@@ -411,10 +411,29 @@ describe('adoptModel', () => {
     expect(bent.etaDate).toBe(already.etaDate)
   })
 
-  it('leaves a lock alone when it already matches, or the goal projects straight', () => {
+  it('leaves a lock alone when it already matches the goal', () => {
     const already: LockedProjection = { ...CLIMB, decayPerWeek: 0.95 }
     expect(adoptModel(already, 0.95)).toBe(already)
+    // Straight goal, straight lock: nothing to adopt.
     expect(adoptModel(CLIMB, undefined)).toBe(CLIMB)
+  })
+
+  it('straightens a lock whose goal has since given up its taper', () => {
+    // What a locked flexibility rung looks like: frozen while the ladders still
+    // tapered, and now on a goal that projects straight at a capped pace (see
+    // goals.SPLIT_GAIN_CAP). The stored decay has to go, floor and all, or the
+    // line keeps front-loading a climb the ETA beside it no longer promises.
+    const bent: LockedProjection = { ...CLIMB, decayPerWeek: 0.9, paceFloorFraction: 0.34 }
+    const straightened = adoptModel(bent, undefined)
+
+    expect(straightened.decayPerWeek).toBeUndefined()
+    expect(straightened.paceFloorFraction).toBeUndefined()
+    expect(straightened.etaDate).toBe(bent.etaDate)
+    expect(straightened.target).toBe(bent.target)
+    // Straight means exactly half the climb at half the span.
+    const midway = addDays('2026-01-01', 50)
+    expect(expectedAt(straightened, midway)).toBeCloseTo((CLIMB.startValue + CLIMB.target) / 2, 1)
+    expect(expectedAt(bent, midway)).toBeGreaterThan(expectedAt(straightened, midway))
   })
 
   it('straightens a lock whose goal has since spent its taper on training age', () => {

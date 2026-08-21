@@ -114,9 +114,15 @@ function floorFor(proj: Projection): number | undefined {
  *
  * The curve is a model assumption, not part of the commitment, so a lock always
  * reads with the goal's latest one: this covers a lock frozen before decay
- * shipped, one frozen at an older decay value since retuned, and one frozen
- * before the taper was spent against training age (whose line would otherwise
- * keep bending down to a fifth of a pace the goal now projects straight through).
+ * shipped, one frozen at an older decay value since retuned, and one frozen while
+ * its goal still tapered at all — the flexibility ladders since traded their taper
+ * for a pace ceiling (see goals.SPLIT_GAIN_CAP), and a line still bending down to
+ * a fifth of its pace would ask for a front-loaded climb the goal now projects
+ * straight through.
+ *
+ * So `decayPerWeek` is read as the goal's whole answer, not as an optional
+ * override: undefined is a goal that projects straight, and the lock drops its
+ * decay and its floor together rather than keeping the ones it was frozen with.
  * Returns the lock untouched when it already matches, so callers can run it on
  * every lock.
  */
@@ -125,12 +131,10 @@ export function adoptModel(
   decayPerWeek: number | undefined,
   paceFloorFraction?: number,
 ): LockedProjection {
-  const nextDecay = decayPerWeek ?? lock.decayPerWeek
-  // A straight lock isn't shaped by a floor, so it doesn't take one on (see floorFor).
-  const nextFloor =
-    nextDecay != null && nextDecay < 1
-      ? (paceFloorFraction ?? lock.paceFloorFraction)
-      : lock.paceFloorFraction
+  // A straight lock isn't shaped by a floor, so it doesn't carry one (see floorFor).
+  const straight = decayPerWeek == null || decayPerWeek >= 1
+  const nextDecay = straight ? undefined : decayPerWeek
+  const nextFloor = straight ? undefined : (paceFloorFraction ?? lock.paceFloorFraction)
   if (nextDecay === lock.decayPerWeek && nextFloor === lock.paceFloorFraction) return lock
   return { ...lock, decayPerWeek: nextDecay, paceFloorFraction: nextFloor }
 }

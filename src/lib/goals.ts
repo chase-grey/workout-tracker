@@ -22,36 +22,17 @@ import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './b
 import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import { project, type Projection, type TrendWindow } from './predictions'
-import { parseISODate, toISODate, weekStartISO } from './dates'
+import { toISODate, weekStartISO } from './dates'
 
 /**
  * Weekly decay of the gain rate strength projections assume (see
  * predictions.weeksToClose). Strength gains taper — a straight-line projection
  * off a few promising early sessions arrives too soon and draws a line too steep
  * to hold — so their ETAs and locked lines bend, easing ~7% off the pace each
- * week. Flexibility tapers harder still (see FLEX_GAIN_DECAY); body-composition
- * goals keep a straight line (no decay).
+ * week. The flexibility ladders take a pace ceiling instead of a taper (see
+ * SPLIT_GAIN_CAP); body-composition goals keep a straight line (no decay).
  */
 export const STRENGTH_GAIN_DECAY = 0.93
-
-/**
- * Weekly decay of the gain rate the flexibility ladders project with.
- *
- * Range of motion tapers harder than strength does. The first weeks of honest
- * stretching buy degrees cheaply — much of that early range is the nervous system
- * agreeing to relax into a position the hips could already reach — and once
- * that's spent, the rest comes out of tissue that changes on a scale of months.
- * A fortnight of the cheap range fits several degrees a week, and drawn straight
- * that line puts a full 180° split inside the year.
- *
- * Easing 10% off the pace each week, against strength's 7%, holds the taper's
- * own contribution to eight times the weekly figure, spent over about fifteen
- * weeks; past that the pace sits on its floor (see predictions.PACE_FLOOR) and
- * the rest of the ladder is bought a fifth of a good week at a time. A good
- * fortnight still pulls the next milestone closer, and the far rungs say what
- * they should: reachable, but years of it at this pace.
- */
-export const FLEX_GAIN_DECAY = 0.9
 
 /**
  * How much history the flexibility ladders read their pace from.
@@ -65,11 +46,10 @@ export const FLEX_GAIN_DECAY = 0.9
  * scales the whole ladder by that noise.
  *
  * Six weeks is enough readings for the warm-up scatter to average out, and short
- * enough to still be the pace you're on rather than the pace you were on. It also
- * makes the pace the taper carries forward one a longer history actually supports
- * (see predictions.paceFloorFraction), which is the point: a projection read off a
- * sustained six-week pace is worth straightening out, where one read off a lucky
- * fortnight is not.
+ * enough to still be the pace you're on rather than the pace you were on. It is
+ * the first of the two things holding the ladders honest — averaging the scatter
+ * out — and {@link SPLIT_GAIN_CAP} is the second, for the runs of good sessions
+ * that six weeks is not long enough to average away.
  */
 export const FLEX_TREND_WINDOW: TrendWindow = {
   windowDays: 42,
@@ -108,6 +88,43 @@ export const BODYWEIGHT_GAIN_CAP = 1
  */
 export const SQUAT_GAIN_CAP = 5
 export const BENCH_GAIN_CAP = 3
+
+/**
+ * The fastest weekly gain the flexibility ladders will project against, in degrees.
+ *
+ * The ladders were the one goal family projecting off an uncapped fit, and they are
+ * the family least able to afford it. A warm angle swings a few degrees on the
+ * warm-up alone, so a run of good sessions — a warmer room, a longer approach, a
+ * week where the hips just cooperated — fits a pace no year of training holds, and
+ * it lands twice over: once in the slope, and again in the best-of-window reading
+ * the gap is measured from (see projectGoal). Six weeks of history (see
+ * FLEX_TREND_WINDOW) averages the session-to-session scatter away but not a good
+ * three weeks, and nothing downstream was bounding what came out: three warm weeks
+ * were enough to fit 1.25°/wk, draw it straight, and promise a full 180° split
+ * inside the year.
+ *
+ * A full side split from a working straddle is a multi-year project, and honest
+ * range comes off tissue that remodels over months: half a degree a week is what a
+ * good run of real training sustains, and a week that beats it is a good week
+ * rather than a new pace. So the fit still decides the direction and is still
+ * reported as measured — the row marks the ceiling with "max" (see
+ * GoalsPanel.paceLabel) — while the ETA is projected off the cap. Tailor's is held
+ * a little tighter: it climbs on hip external rotation, which gives up less per
+ * week than the adductor length the split is mostly waiting on, over a ladder a
+ * third the height.
+ *
+ * The cap replaced the ladders' taper rather than joining it. Bounding a pace and
+ * decaying it are two ways of saying the same thing, and doing both charges for the
+ * same optimism twice — the pathology predictions.paceFloorFraction exists to undo.
+ * Worse, that taper was spent against the log's own age, which made the double
+ * charge uneven: 25° of split at a fitted 1.15°/wk priced out at two and a half
+ * years on a five-week log and one year on a year-old one, off identical recent
+ * readings. A ceiling needs no help and has no such seam — it reads the same in the
+ * first month of a log as in the twentieth, which is what a claim about physiology
+ * should do.
+ */
+export const SPLIT_GAIN_CAP = 0.5
+export const TAILORS_GAIN_CAP = 0.4
 
 /**
  * The lift the bench goal is named for and cued on, and the other press its
@@ -261,8 +278,9 @@ export type GoalSpec = {
   milestone?: boolean
   /**
    * Weekly decay of the gain rate for this goal's projection (see
-   * STRENGTH_GAIN_DECAY, FLEX_GAIN_DECAY). Omitted for goals that project as a
-   * straight line.
+   * STRENGTH_GAIN_DECAY). Omitted for goals that project as a straight line — the
+   * flexibility ladders, which take a pace ceiling instead (see SPLIT_GAIN_CAP),
+   * and the body-composition goals.
    */
   decayPerWeek?: number
   /**
@@ -276,35 +294,6 @@ export type GoalSpec = {
    * Omitted for goals that use the default window (predictions.TREND_WINDOW).
    */
   window?: TrendWindow
-  /**
-   * Spend the taper against how long this goal's series has been logged rather
-   * than against week zero (see predictions.paceFloorFraction). Set where the
-   * series is a continuous record of training the capability, so its span is a
-   * fair read on training age — the flexibility ladders, where every rung shares
-   * one series that starts the day the stretching did.
-   *
-   * Left off where the span isn't that: a 1RM series starts at whichever lift was
-   * first logged, which says when the *logging* started, not when the lifting did.
-   */
-  taperFromHistory?: boolean
-}
-
-/**
- * Weeks from a series' first reading to its last — the training age the taper is
- * spent against when the goal asks for it (see GoalSpec.taperFromHistory).
- *
- * The first logged reading is a floor on how long the capability has been trained,
- * not a measure of it: someone who stretched for a year before logging a split
- * reads as new and gets a fuller taper than they've earned. Erring that way is
- * deliberate — it makes the projection conservative for the one case it can't see,
- * rather than optimistic.
- */
-function trainingAgeWeeks(points: Point[]): number {
-  if (points.length < 2) return 0
-  const dates = points.map((p) => p.date).sort((a, b) => a.localeCompare(b))
-  const first = parseISODate(dates[0]).getTime()
-  const last = parseISODate(dates[dates.length - 1]).getTime()
-  return Math.max(0, (last - first) / (7 * 86_400_000))
 }
 
 /**
@@ -477,10 +466,6 @@ export function goalsHitInWeek(goals: GoalSpec[], today: Date = new Date()): Goa
  * says it is, while the rung that same best had already cleared stayed cleared.
  * Strength and bodyweight goals keep the newest reading: you are not squatting 300
  * because you did once.
- *
- * A goal that declares {@link GoalSpec.taperFromHistory} spends its taper against
- * the age of its own series, so a long log projects close to the pace it's holding
- * instead of being charged a beginner's taper it has already worked through.
  */
 export function projectGoal(goal: GoalSpec, today?: Date): Projection {
   return project(goal.points, goal.target, today, {
@@ -488,7 +473,6 @@ export function projectGoal(goal: GoalSpec, today?: Date): Projection {
     decayPerWeek: goal.decayPerWeek,
     capPerWeek: goal.capPerWeek,
     bestOf: goal.milestone ? (goal.direction === 'up' ? 'max' : 'min') : undefined,
-    taperSpentWeeks: goal.taperFromHistory ? trainingAgeWeeks(goal.points) : 0,
   })
 }
 
@@ -559,9 +543,8 @@ export function buildGoals({
     target: deg,
     direction: 'up',
     milestone: true,
-    decayPerWeek: FLEX_GAIN_DECAY,
+    capPerWeek: SPLIT_GAIN_CAP,
     window: FLEX_TREND_WINDOW,
-    taperFromHistory: true,
   }))
   const tailorsGoals: GoalSpec[] = TAILORS_GOALS.map((deg): GoalSpec => ({
     id: `tailors_${deg}`,
@@ -572,9 +555,8 @@ export function buildGoals({
     target: deg,
     direction: 'up',
     milestone: true,
-    decayPerWeek: FLEX_GAIN_DECAY,
+    capPerWeek: TAILORS_GAIN_CAP,
     window: FLEX_TREND_WINDOW,
-    taperFromHistory: true,
   }))
 
   // The pull-up ladder. Each rung is four sets at a rep count, measured on the

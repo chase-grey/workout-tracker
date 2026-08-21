@@ -5,7 +5,6 @@ import {
   BENCH_GAIN_CAP,
   BODYWEIGHT_GAIN_CAP,
   buildGoals,
-  FLEX_GAIN_DECAY,
   GOAL_IDS,
   type GoalSpec,
   goalsHitInWeek,
@@ -18,8 +17,10 @@ import {
   PULLUP_GOAL_SETS,
   PULLUP_KEY,
   reachedDate,
+  SPLIT_GAIN_CAP,
   SQUAT_GAIN_CAP,
   STRENGTH_GAIN_DECAY,
+  TAILORS_GAIN_CAP,
 } from './goals'
 import { LEG_PRESS_TO_SQUAT } from './liftRatios'
 import { MAX_ATTEMPT_NOTE } from './maxAttempt'
@@ -34,6 +35,9 @@ const HOT_FORTNIGHT = [
   { date: '2026-02-07', weightLbs: 167 },
   { date: '2026-02-14', weightLbs: 170 },
 ]
+
+const toISO = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 const inputs = (bodyWeights: typeof HOT_FORTNIGHT) => ({
   workouts: [],
@@ -230,58 +234,102 @@ describe('flexibility goals join the goal set', () => {
     expect([...SPLIT_GOALS]).toEqual([...SPLIT_GOALS].sort((a, b) => a - b))
   })
 
-  it('tapers every ladder rung', () => {
+  it('caps every ladder rung and tapers none of them', () => {
+    // A ceiling does what the taper was there for, and does it the same on a new
+    // log as an old one (see SPLIT_GAIN_CAP), so the ladders project straight.
     for (const deg of SPLIT_GOALS) {
-      expect(goals.find((x) => x.id === `split_${deg}`)!.decayPerWeek).toBe(FLEX_GAIN_DECAY)
+      const g = goals.find((x) => x.id === `split_${deg}`)!
+      expect(g.capPerWeek).toBe(SPLIT_GAIN_CAP)
+      expect(g.decayPerWeek).toBeUndefined()
     }
     for (const deg of TAILORS_GOALS) {
-      expect(goals.find((x) => x.id === `tailors_${deg}`)!.decayPerWeek).toBe(FLEX_GAIN_DECAY)
+      const g = goals.find((x) => x.id === `tailors_${deg}`)!
+      expect(g.capPerWeek).toBe(TAILORS_GAIN_CAP)
+      expect(g.decayPerWeek).toBeUndefined()
     }
   })
 
   it('projects an improving split on track toward a far goal', () => {
     const g = goals.find((x) => x.id === 'split_180')!
-    const p = project(g.points, g.target, new Date(2026, 0, 22), { decayPerWeek: g.decayPerWeek })
+    const p = projectGoal(g, new Date(2026, 0, 22))
     expect(p.onTrack).toBe(true)
     expect(p.etaDate! > '2026-01-22').toBe(true)
   })
 
-  it('holds the far rung back well past where a straight line would put it', () => {
-    // 10°/week off the recent window, 80° short of a full split: drawn straight
-    // that's eight weeks away. Tapering, the same pace takes twice as long.
+  it('holds the far rung back to the ceiling rather than the fitted pace', () => {
+    // 10°/week off the recent window, 80° short of a full split: at face value
+    // that's eight weeks away. Held to half a degree a week it is three years,
+    // which is what 80° of split costs.
     const g = goals.find((x) => x.id === 'split_180')!
-    const straight = project(g.points, g.target, new Date(2026, 0, 22))
-    const tapered = project(g.points, g.target, new Date(2026, 0, 22), {
-      decayPerWeek: g.decayPerWeek,
-    })
+    const unbounded = project(g.points, g.target, new Date(2026, 0, 22))
+    const capped = projectGoal(g, new Date(2026, 0, 22))
 
-    expect(straight.etaWeeks).toBeCloseTo(8, 5)
-    expect(tapered.etaWeeks).toBeGreaterThan(15)
+    expect(unbounded.etaWeeks).toBeCloseTo(8, 5)
+    expect(capped.observedSlopePerWeek).toBe(10)
+    expect(capped.slopePerWeek).toBe(SPLIT_GAIN_CAP)
+    expect(capped.etaWeeks).toBeCloseTo(160, 5)
+    expect(isPaceCapped(capped)).toBe(true)
   })
 
   it('dates the far rungs a modest pace only reaches years out', () => {
-    // 1.5°/week from 110°: the taper (see FLEX_GAIN_DECAY) buys 12° of that on
-    // its own and the floor grinds out the rest. 120 lands inside the taper, 150
-    // is a couple of years of this, 180 twice that again — each a date, because
-    // "a long way off" is what the rung should say, not a blank.
+    // 1.5°/week from 110°, held to the ceiling's half a degree: 120 is a few
+    // months, 150 is a year and a half of this, 180 nearly three — each a date,
+    // because "a long way off" is what the rung should say, not a blank.
     const creeping: FlexEntry[] = [
       { date: '2026-01-08', splitDeg: 107, tailorsLeftDeg: null, tailorsRightDeg: null },
       { date: '2026-01-15', splitDeg: 108.5, tailorsLeftDeg: null, tailorsRightDeg: null },
       { date: '2026-01-22', splitDeg: 110, tailorsLeftDeg: null, tailorsRightDeg: null },
     ]
     const slow = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: creeping })
-    const at = (id: string) => {
-      const g = slow.find((x) => x.id === id)!
-      return project(g.points, g.target, new Date(2026, 0, 22), { decayPerWeek: g.decayPerWeek })
-    }
+    const at = (id: string) => projectGoal(slow.find((g) => g.id === id)!, new Date(2026, 0, 22))
 
-    expect(at('split_120').etaWeeks!).toBeLessThan(16)
+    expect(at('split_120').etaWeeks!).toBeLessThan(24)
     expect(at('split_150').etaWeeks!).toBeGreaterThan(52 * 1.5)
     expect(at('split_180').etaWeeks!).toBeGreaterThan(at('split_150').etaWeeks!)
     for (const id of ['split_120', 'split_150', 'split_180']) {
       expect(at(id).onTrack).toBe(true)
       expect(at(id).etaDate).not.toBeNull()
     }
+  })
+
+  it('refuses to price the ladder off a good three weeks', () => {
+    // Eight months of honest creeping — 95° to 118° — and then three weeks that
+    // ran hot: warm room, long warm-up, hips cooperating. A six-week window sees
+    // half of that streak and fits well over a degree a week off it.
+    //
+    // Uncapped and drawn straight, that fit put a full 180° side split under a
+    // year out and a 90° tailor's pose inside six months. Both are held to the
+    // ceiling now, so a good three weeks moves the near rungs and leaves the
+    // claim about the far ones where the training put it.
+    const entries: FlexEntry[] = []
+    for (let day = 238; day >= 0; day -= 3) {
+      const t = (238 - day) / 238
+      const hot = day <= 21 ? 1 - day / 21 : 0
+      const settle = ((day * 37) % 7) - 3
+      const at = (from: number, span: number, bonus: number) =>
+        Math.round(from + span * (1 - Math.exp(-2.2 * t)) + bonus * hot + settle * 0.5)
+      entries.push({
+        date: toISO(new Date(2026, 1, 14 - day)),
+        splitDeg: null,
+        warmSplitDeg: at(95, 23, 6),
+        tailorsLeftDeg: null,
+        tailorsRightDeg: null,
+        tailorsWarmLeftDeg: at(52, 16, 4),
+        tailorsWarmRightDeg: at(52, 16, 4) - 1,
+      })
+    }
+    const hot = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: entries })
+    const at = (id: string) => projectGoal(hot.find((g) => g.id === id)!, new Date(2026, 1, 14))
+
+    expect(at('split_180').observedSlopePerWeek).toBeGreaterThan(1)
+    expect(at('split_180').slopePerWeek).toBe(SPLIT_GAIN_CAP)
+    expect(at('tailors_90').slopePerWeek).toBe(TAILORS_GAIN_CAP)
+    // Years, not months — and still a date on every rung.
+    expect(at('split_180').etaWeeks!).toBeGreaterThan(52 * 2)
+    expect(at('tailors_90').etaWeeks!).toBeGreaterThan(40)
+    expect(at('split_180').etaDate).not.toBeNull()
+    // The near rungs are the ones a good three weeks is allowed to move.
+    expect(at('split_135').etaWeeks!).toBeLessThan(30)
   })
 
   it('lists the flex goals with empty series when no entries are given', () => {
@@ -348,23 +396,37 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     // Read off the tight 123°, the rung is 12° away and a couple of months out.
     // Read off the 127° the same fortnight already reached, it's 8° and half that.
     const g = goals.find((x) => x.id === 'split_135')!
-    const unanchored = project(g.points, g.target, today, { decayPerWeek: g.decayPerWeek })
+    // Same ceiling and same window — the anchor is the only thing left differing.
+    const unanchored = project(g.points, g.target, today, {
+      capPerWeek: g.capPerWeek,
+      window: g.window,
+    })
 
     expect(unanchored.current).toBe(123)
     expect(at('split_135').current).toBe(127)
     expect(at('split_135').etaWeeks!).toBeLessThan(unanchored.etaWeeks!)
   })
 
-  it('still tapers and still reaches the far rungs', () => {
-    expect(at('split_180').decayPerWeek).toBe(FLEX_GAIN_DECAY)
+  it('still reaches the far rungs, at the ceiling rather than the fit', () => {
+    // A ceiling is a pace, not a wall: every rung keeps a real date, ordered by
+    // how far out it is. The fit here is 2.7°/wk off five days of good sessions,
+    // and none of the ladder is priced off it.
+    expect(at('split_180').slopePerWeek).toBe(SPLIT_GAIN_CAP)
     expect(at('split_180').onTrack).toBe(true)
+    expect(at('split_180').etaDate).not.toBeNull()
     expect(at('split_180').etaWeeks!).toBeGreaterThan(at('split_150').etaWeeks!)
+    expect(at('split_150').etaWeeks!).toBeGreaterThan(at('split_135').etaWeeks!)
   })
 
-  it('spends the flex taper against how long the log has been running', () => {
+  it('dates a rung the same however long the log behind it has run', () => {
     // The same six weeks of readings, once as the whole log and once as the tail
-    // of a year of them. The pace fitted is identical — only the training age
-    // behind it differs — so the taper is the only thing that can move the date.
+    // of a year of them. The pace fitted is identical, so the date must be too.
+    //
+    // It used to differ by years. The ladders spent a taper against their own
+    // training age (see SPLIT_GAIN_CAP on why that went), so the fresh log was
+    // charged a beginner's decay on top of the ceiling and the year-old one was
+    // charged none — the same 25° of split reading two and a half years out on
+    // one and one year on the other, off the very same recent sessions.
     const recent: FlexEntry[] = [
       { date: '2026-01-10', splitDeg: 104, tailorsLeftDeg: null, tailorsRightDeg: null },
       { date: '2026-01-24', splitDeg: 106, tailorsLeftDeg: null, tailorsRightDeg: null },
@@ -382,17 +444,16 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
       return projectGoal(set.find((g) => g.id === id)!, today)
     }
 
-    const fresh = eta(recent, 'split_180')
-    const veteran = eta(seasoned, 'split_180')
-
-    // A new log has its whole taper ahead of it; a year-old one has worked through
-    // it, so the pace it is holding is the pace it gets projected at.
-    expect(fresh.paceFloorFraction).toBeLessThan(1)
-    expect(veteran.paceFloorFraction).toBe(1)
-    expect(veteran.slopePerWeek).toBe(fresh.slopePerWeek)
-    expect(veteran.etaWeeks!).toBeLessThan(fresh.etaWeeks!)
-    // Not made cheap — still years of it — just no longer charged the taper twice.
-    expect(veteran.etaWeeks!).toBeGreaterThan(52)
+    for (const id of ['split_135', 'split_180']) {
+      const fresh = eta(recent, id)
+      const veteran = eta(seasoned, id)
+      expect(fresh.slopePerWeek).toBe(veteran.slopePerWeek)
+      expect(fresh.etaWeeks).toBe(veteran.etaWeeks)
+      expect(fresh.etaDate).toBe(veteran.etaDate)
+    }
+    // And neither is cheap: 25° of split is a year of it, 70° nearly three.
+    expect(eta(recent, 'split_135').etaWeeks).toBeCloseTo(50, 5)
+    expect(eta(recent, 'split_180').etaWeeks).toBeCloseTo(140, 5)
   })
 
   it('reads the flex pace off six weeks rather than a lucky fortnight', () => {
@@ -406,10 +467,7 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     ]
     const set = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries: spike })
     const g = set.find((x) => x.id === 'split_180')!
-    const fortnight = project(g.points, g.target, today, {
-      decayPerWeek: g.decayPerWeek,
-      bestOf: 'max',
-    })
+    const fortnight = project(g.points, g.target, today, { bestOf: 'max' })
 
     expect(g.window!.windowDays).toBe(42)
     expect(projectGoal(g, today).observedSlopePerWeek).toBeLessThan(
@@ -417,9 +475,9 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     )
   })
 
-  it('leaves the strength and bodyweight ladders on the default window and taper', () => {
-    // Training age is only read where the series is a record of training the
-    // capability. A 1RM series starts whenever that lift was first logged.
+  it('leaves the strength and bodyweight ladders on the default window', () => {
+    // The six-week window is a flexibility measurement's answer to warm-up
+    // scatter (see FLEX_TREND_WINDOW); nothing else asks for it.
     for (const id of [
       GOAL_IDS.weight180,
       GOAL_IDS.benchBodyweight,
@@ -429,7 +487,6 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     ]) {
       const g = goals.find((x) => x.id === id)!
       expect(g).toBeDefined()
-      expect(g.taperFromHistory).toBeUndefined()
       expect(g.window).toBeUndefined()
     }
   })
