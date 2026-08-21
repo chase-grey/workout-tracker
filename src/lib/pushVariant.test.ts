@@ -9,7 +9,8 @@ import {
   sessionsThisWeek,
   variantForIndex,
 } from './pushVariant'
-import { DEAD_BUG, DEFAULT_PLAN } from '../config/plan'
+import { CORE_SESSION_NOTE } from './session'
+import { DEFAULT_PLAN, STRETCH_CORE } from '../config/plan'
 
 function row(overrides: Partial<WorkoutRow>): WorkoutRow {
   return {
@@ -67,8 +68,11 @@ describe('nextVariant', () => {
   })
 
   it('ignores a supplemental core-only session', () => {
-    // Dead bugs alone don't count as training, so they can't shift the rotation.
-    const rows = [row({ session_id: 's1', exercise: DEAD_BUG.key, weight_lbs: null })]
+    // A stretch's core block isn't training, so it can't shift the rotation — even
+    // though the sit-up it logs is a movement push day trains for real.
+    const rows = [
+      row({ session_id: 's1', exercise: STRETCH_CORE.key, notes: CORE_SESSION_NOTE }),
+    ]
     expect(nextVariant(rows, 'push', WEDNESDAY)).toBe('A')
   })
 

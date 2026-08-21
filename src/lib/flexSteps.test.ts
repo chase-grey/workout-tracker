@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildDeadBugSteps, buildFlexSteps, buildSessionSteps } from './flexSteps'
+import { buildCoreSteps, buildFlexSteps, buildSessionSteps } from './flexSteps'
 import type { FlexBlock } from '../config/flexPlan'
-import { DEAD_BUG } from '../config/plan'
+import { STRETCH_CORE } from '../config/plan'
 
 const ex = (key: string, maxSets: number): FlexBlock['exercises'][number] => ({
   key,
@@ -55,20 +55,27 @@ describe('buildFlexSteps', () => {
   })
 })
 
-describe('buildDeadBugSteps', () => {
-  it('produces one core step per configured dead-bug set', () => {
-    const steps = buildDeadBugSteps()
-    expect(steps).toHaveLength(DEAD_BUG.sets)
-    expect(steps.every((s) => s.kind === 'core' && s.exKey === DEAD_BUG.key)).toBe(true)
+describe('buildCoreSteps', () => {
+  it('produces one core step per configured core set', () => {
+    const steps = buildCoreSteps()
+    expect(steps).toHaveLength(STRETCH_CORE.sets)
+    expect(steps.every((s) => s.kind === 'core' && s.exKey === STRETCH_CORE.key)).toBe(true)
     expect(steps.map((s) => s.round)).toEqual([0, 1, 2, 3])
+  })
+
+  it("carries the core movement's own rep range and rest", () => {
+    const [first] = buildCoreSteps()
+    expect(first.repMin).toBe(STRETCH_CORE.repMin)
+    expect(first.repMax).toBe(STRETCH_CORE.repMax)
+    expect(first.restSec).toBe(STRETCH_CORE.restSec)
   })
 })
 
 describe('buildSessionSteps', () => {
-  it('appends the dead-bug core block after the mobility flow', () => {
+  it('appends the core block after the mobility flow', () => {
     const plan: FlexBlock[] = [{ label: 'B', exercises: [ex('a', 2)] }]
     const steps = buildSessionSteps(plan)
-    expect(steps).toHaveLength(2 + DEAD_BUG.sets)
+    expect(steps).toHaveLength(2 + STRETCH_CORE.sets)
     expect(steps.slice(0, 2).every((s) => s.kind === 'flex')).toBe(true)
     expect(steps.slice(2).every((s) => s.kind === 'core')).toBe(true)
   })

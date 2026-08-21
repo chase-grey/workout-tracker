@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkoutRow } from '../types'
-import { hasLoggedSets, sessionToRows, trainingDates, trainingSessions } from './session'
-import { discomfortReports } from './discomfort'
+import {
+  CORE_SESSION_NOTE,
+  hasLoggedSets,
+  isSupplementalSet,
+  sessionToRows,
+  trainingDates,
+  trainingSessions,
+} from './session'
+import { discomfortReports, withDiscomfort } from './discomfort'
 
 function row(p: Partial<WorkoutRow> = {}): WorkoutRow {
   return {
@@ -32,12 +39,33 @@ describe('trainingSessions', () => {
     ])
   })
 
-  it('excludes a session made up only of supplemental (dead-bug) rows', () => {
+  it('excludes a session made up only of supplemental (retired dead-bug) rows', () => {
     const rows = [
       row({ session_id: 'core', exercise: 'deadbug', set_number: 1 }),
       row({ session_id: 'core', exercise: 'deadbug', set_number: 2 }),
     ]
     expect(trainingSessions(rows)).toEqual([])
+  })
+
+  it("excludes a stretch's core block, marked by its note rather than its key", () => {
+    const rows = [
+      row({ session_id: 'core', exercise: 'weighted_situp', notes: CORE_SESSION_NOTE }),
+      row({
+        session_id: 'core',
+        exercise: 'weighted_situp',
+        set_number: 2,
+        notes: CORE_SESSION_NOTE,
+      }),
+    ]
+    expect(trainingSessions(rows)).toEqual([])
+  })
+
+  it('counts a training day that trains the same core movement for real', () => {
+    const rows = [
+      row({ session_id: 'push', exercise: 'flat_bench' }),
+      row({ session_id: 'push', exercise: 'weighted_situp', set_number: 2 }),
+    ]
+    expect(trainingSessions(rows)).toHaveLength(1)
   })
 
   it('still counts a workout that mixes real and supplemental work', () => {
@@ -50,6 +78,23 @@ describe('trainingSessions', () => {
 
   it('ignores rows without a session_id', () => {
     expect(trainingSessions([row({ session_id: '' })])).toEqual([])
+  })
+})
+
+describe('isSupplementalSet', () => {
+  it('reads the core note as one segment of the note, not the whole of it', () => {
+    // A twinge flagged after the fact appends a segment; the row is still a
+    // stretch's core set.
+    const notes = withDiscomfort(CORE_SESSION_NOTE, ['lower back'])
+    expect(isSupplementalSet({ exercise: 'weighted_situp', notes })).toBe(true)
+  })
+
+  it('leaves an ordinary set of the same movement alone', () => {
+    expect(isSupplementalSet({ exercise: 'weighted_situp', notes: '' })).toBe(false)
+  })
+
+  it('still recognizes the retired dead bug, whose rows carry no note', () => {
+    expect(isSupplementalSet({ exercise: 'deadbug', notes: '' })).toBe(true)
   })
 })
 

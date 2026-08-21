@@ -20,8 +20,9 @@ import { useOnHidden } from '../../lib/useOnHidden'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
-import { DEAD_BUG, repRangeLabel } from '../../config/plan'
-import { nextTarget } from '../../lib/progression'
+import { STRETCH_CORE, repRangeLabel } from '../../config/plan'
+import { nextTarget, targetLabel } from '../../lib/progression'
+import { toWeight } from '../../lib/weightField'
 
 const SEC_PER_REP = 5
 
@@ -34,7 +35,7 @@ const GET_READY_SEC_BY_EX: Record<string, number> = { tailors_pose: 10 }
 /**
  * Seconds to get into position when crossing from the mobility routine into the
  * core block. The pancake hang leaves you rested enough — no recovery rest, just
- * time to set up the first dead bug.
+ * time to fetch a plate and set up the first sit-up.
  */
 const CORE_ENTRY_GET_READY_SEC = 10
 
@@ -47,8 +48,8 @@ type PendingPhotos = { gate: PhotoGate; resumeIndex: number | null }
 
 /**
  * Guided, one-set-at-a-time Stretch + Core flow: the mobility routine (with a
- * tempo rhythm animation) followed by a dead-bug core block whose reps are
- * logged as workout rows. Finishing counts as a stretch/flex day.
+ * tempo rhythm animation) followed by a core block whose sets are logged as
+ * workout rows. Finishing counts as a stretch/flex day.
  */
 export function StretchSession({ onClose }: { onClose: () => void }) {
   const {
@@ -69,6 +70,11 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState(saved?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(saved?.done ?? []))
   const [coreReps, setCoreReps] = useState<Record<number, number>>(() => saved?.coreReps ?? {})
+  // Weight per core set. A round that's absent hasn't been touched and takes the
+  // prescribed load; one present with null was deliberately cleared to bodyweight.
+  const [coreWeights, setCoreWeights] = useState<Record<number, number | null>>(
+    () => saved?.coreWeights ?? {},
+  )
   // Rep the current stretch set has reached, persisted so a refresh mid-set
   // resumes the count instead of restarting at rep 1.
   const [rep, setRep] = useState(saved?.rep ?? 1)
@@ -124,18 +130,21 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
-  // Progression target reps for the dead-bug sets (prefilled, editable).
+  // Progression target for the core sets — weight and reps both prefilled and both
+  // editable. Read from the movement's whole history, which includes the sets the
+  // push and pull days train it with: it's one lift, wherever it was done.
   const coreTarget = useMemo(
     () =>
-      nextTarget(workouts, DEAD_BUG.key, {
-        repMin: DEAD_BUG.repMin,
-        repMax: DEAD_BUG.repMax,
-        bodyweight: DEAD_BUG.bodyweight,
-        increment: DEAD_BUG.increment,
-      }).reps,
+      nextTarget(workouts, STRETCH_CORE.key, {
+        repMin: STRETCH_CORE.repMin,
+        repMax: STRETCH_CORE.repMax,
+        increment: STRETCH_CORE.increment,
+      }),
     [workouts],
   )
-  const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget
+  const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget.reps
+  const coreWeightFor = (round: number) =>
+    round in coreWeights ? coreWeights[round] : coreTarget.weightLbs
 
   useEffect(() => {
     storage.saveStretch({
@@ -143,6 +152,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       done: [...done],
       startedAt,
       coreReps,
+      coreWeights,
       rep,
       rest,
       // Written on every snapshot: `rest` flipping to null is the tick right after
@@ -151,7 +161,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, done, startedAt, coreReps, rep, rest, seenGates, fast])
+  }, [safeCurrent, done, startedAt, coreReps, coreWeights, rep, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -170,7 +180,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       .filter((s) => !done.has(s.stepKey))
       .map((s) => ({
         remainingSets: 1,
-        workSec: (s.kind === 'flex' ? s.reps : coreTarget) * SEC_PER_REP,
+        workSec: (s.kind === 'flex' ? s.reps : coreTarget.reps) * SEC_PER_REP,
         restSec: s.restSec,
       }))
     return remainingSecs({
@@ -196,15 +206,15 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     })
   }
 
-  // Finish the session: log the completed dead-bug sets as workout rows (reps)
-  // and record the stretch/flex day. `doneSet` is passed explicitly so the set
-  // just completed is included without waiting for the state update.
+  // Finish the session: log the completed core sets as workout rows (weight ×
+  // reps) and record the stretch/flex day. `doneSet` is passed explicitly so the
+  // set just completed is included without waiting for the state update.
   const finishWith = (doneSet: Set<string>) => {
     recordDuration()
-    const reps = steps
+    const coreSets = steps
       .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
-      .map((s) => coreRepsFor(s.round))
-    void logCore(reps)
+      .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
+    void logCore(coreSets)
     void logFlex({ note: 'stretch + core' })
     onClose()
   }
@@ -225,8 +235,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
 
   // Seconds to settle into the current set before its work begins: the
   // per-stretch value for a mobility set, a brief reposition when first entering
-  // the core block (round 0, reached from the pancake), and none between the
-  // dead-bug sets — those get a real rest instead.
+  // the core block (round 0, reached from the pancake), and none between the core
+  // sets — those get a real rest instead.
   const getReadySec =
     step.kind === 'flex'
       ? GET_READY_SEC_BY_EX[step.exKey] ?? GET_READY_SEC
@@ -278,7 +288,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     bankRest()
     setRest(null)
     // Hand off to the get-into-position count only when the upcoming set has one;
-    // otherwise (a between-dead-bugs set) go straight to the set.
+    // otherwise (a set inside the core block) go straight to the set.
     setPreparing(getReadySec > 0 && !(fast && expired))
   }
 
@@ -323,8 +333,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   }
 
   // Tapping the screen finishes the set — your hands are busy mid-stretch, so
-  // the whole page is the target rather than one button. Controls (the kebab,
-  // the core rep box) keep their own job, an overlay that owns the screen
+  // the whole page is the target rather than one button. Controls (the kebab, the
+  // core block's own fields) keep their own job, an overlay that owns the screen
   // swallows the tap, and the last set still needs its explicit finish button.
   const overlayUp = rest != null || photos != null || paused || showList || preparing
   const onScreenTap = (e: MouseEvent) => {
@@ -408,21 +418,39 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
           <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
             <MdTrackChanges aria-hidden />
-            target {coreTarget} reps
+            {targetLabel(coreTarget)}
           </p>
-          <label className="mx-auto flex flex-col items-center gap-1">
-            <span className="text-xs tracking-wide text-neutral-500">reps</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              placeholder="reps"
-              value={coreRepsFor(step.round) || ''}
-              onChange={(e) =>
-                setCoreReps((prev) => ({ ...prev, [step.round]: Number(e.target.value) || 0 }))
-              }
-              className="min-h-[64px] w-40 rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </label>
+          {/* The same weight-and-reps pair the guided workout logs a set with — the
+              plate is part of what was done, and prescribing the next set needs it. */}
+          <div className="flex items-end justify-center gap-3">
+            <label className="flex flex-1 flex-col items-center gap-1">
+              <span className="text-xs tracking-wide text-neutral-500">weight</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="lbs"
+                value={coreWeightFor(step.round) ?? ''}
+                onChange={(e) =>
+                  setCoreWeights((prev) => ({ ...prev, [step.round]: toWeight(e.target.value) }))
+                }
+                className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </label>
+            <span className="pb-5 text-2xl text-neutral-600">×</span>
+            <label className="flex flex-1 flex-col items-center gap-1">
+              <span className="text-xs tracking-wide text-neutral-500">reps</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="reps"
+                value={coreRepsFor(step.round) || ''}
+                onChange={(e) =>
+                  setCoreReps((prev) => ({ ...prev, [step.round]: Number(e.target.value) || 0 }))
+                }
+                className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </label>
+          </div>
         </div>
       )}
 
@@ -456,7 +484,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       )}
       {/* The get-into-position count waits its turn behind a photo screen, and
           only shows for a set that has one — mobility sets and the first core
-          set; skipped between dead-bug sets, which rest instead. */}
+          set; skipped inside the core block, which rests instead. */}
       {preparing && photos == null && getReadySec > 0 && (
         <GetReady seconds={getReadySec} label={step.exName} onDone={() => setPreparing(false)} />
       )}

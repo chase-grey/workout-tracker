@@ -63,8 +63,14 @@ export type StretchState = {
   step: number
   done: string[]
   startedAt?: string
-  /** Reps entered per dead-bug core set, keyed by 0-based set index. */
+  /** Reps entered per core set, keyed by 0-based set index. */
   coreReps?: Record<number, number>
+  /**
+   * Weight (lbs) entered per core set, keyed the same way. A key present with
+   * null is a set deliberately left unloaded, which is why it's stored rather
+   * than falling back to the prescribed weight the way a missing key does.
+   */
+  coreWeights?: Record<number, number | null>
   /** Rep the current stretch set's rhythm guide had reached (1-based). */
   rep?: number
   /** The rest countdown that was on screen, if any. */

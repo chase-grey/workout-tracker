@@ -413,6 +413,9 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   cable_crunch: { ladder: 'load', muscles: ['core'] },
   weighted_situp: { ladder: 'load', muscles: ['core'] },
   hanging_leg_raise: { ladder: 'reps', muscles: ['core'] },
+  // Retired, and kept for the reason the hip machines are: the sessions logged
+  // under it are part of what the core has to show, and the weighted sit-up that
+  // took its slot ladders by load rather than by reps.
   deadbug: { ladder: 'reps', muscles: ['core'] },
 }
 

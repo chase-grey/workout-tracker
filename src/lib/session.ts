@@ -1,16 +1,38 @@
 import type { DayType, WorkoutRow, WorkoutSession } from '../types'
-import { DEAD_BUG } from '../config/plan'
+import { DEAD_BUG_KEY } from '../config/plan'
+import { noteSegments } from './discomfort'
 import { isMaxAttempt } from './maxAttempt'
 
 /**
- * Exercise keys that are supplemental core work (dead bugs, now folded into the
- * Stretch + Core session). A workout session whose every logged row is one of
- * these is accessory work: it's charted for reps but never counts as a workout
- * toward the weekly goal — the same treatment the old standalone Core day had.
- * Keying off the exercise (not a day type) also covers legacy rows saved under
- * the removed `abs` day, since those were dead-bug rows too.
+ * The note written on the core rows a Stretch + Core session logs, marking them as
+ * that session's accessory work (see DataContext.logCore).
+ *
+ * It has to be the ROW that says so rather than the exercise: the core block trains
+ * the weighted sit-up, which is also real programmed work on push and on pull, so
+ * the key alone can't tell a stretch's four sets from a training day's.
  */
-export const SUPPLEMENTAL_EXERCISE_KEYS = new Set<string>([DEAD_BUG.key])
+export const CORE_SESSION_NOTE = 'stretch + core'
+
+/**
+ * Exercise keys that are only ever supplemental core work: the retired dead bug,
+ * which held the Stretch + Core session's core slot and which no day of the plan
+ * ever prescribed. Its rows carry no note — they predate CORE_SESSION_NOTE — so
+ * the key is what identifies them. That also covers legacy rows saved under the
+ * removed `abs` day, since those were dead-bug rows too.
+ */
+export const SUPPLEMENTAL_EXERCISE_KEYS = new Set<string>([DEAD_BUG_KEY])
+
+/**
+ * Whether a logged set is supplemental: accessory work that's charted like any
+ * other set but never counts as training. A session whose every row is one of
+ * these banks no day against the week's goal, holds no streak up, and doesn't turn
+ * over the A/B press variant or the side that leads — the same treatment the old
+ * standalone Core day had.
+ */
+export function isSupplementalSet(row: { exercise: string; notes?: string }): boolean {
+  if (SUPPLEMENTAL_EXERCISE_KEYS.has(row.exercise)) return true
+  return noteSegments(row.notes).some((s) => s.toLowerCase() === CORE_SESSION_NOTE)
+}
 
 export type TrainingSession = { sessionId: string; date: string; dayType: DayType }
 
@@ -29,7 +51,7 @@ export function trainingSessions(rows: WorkoutRow[]): TrainingSession[] {
   const meta = new Map<string, { date: string; dayType: DayType; real: boolean }>()
   for (const r of rows) {
     if (!r.session_id) continue
-    const isReal = !SUPPLEMENTAL_EXERCISE_KEYS.has(r.exercise) && !isMaxAttempt(r)
+    const isReal = !isSupplementalSet(r) && !isMaxAttempt(r)
     const prev = meta.get(r.session_id)
     if (!prev) meta.set(r.session_id, { date: r.date, dayType: r.day_type, real: isReal })
     else if (isReal) prev.real = true

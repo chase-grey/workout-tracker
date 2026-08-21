@@ -70,7 +70,7 @@ function crossedRecord(before: PeriodValue, after: PeriodValue): boolean {
 /**
  * Distinct days trained per Mon–Sun week, keeping only day types `keep` allows.
  * Two sessions on one day count once, matching the weekly goal. Supplemental
- * core-only sessions (dead bugs done with a stretch) are already excluded by
+ * core-only sessions (the core block done with a stretch) are already excluded by
  * trainingSessions.
  */
 function sessionsByWeek(workouts: WorkoutRow[], keep: (d: DayType) => boolean): Map<string, number> {

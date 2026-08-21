@@ -6,12 +6,13 @@ import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
-import { sessionToRows, trainingDates } from '../lib/session'
-import { DAY_TYPES, DEAD_BUG } from '../config/plan'
+import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
+import { DAY_TYPES, STRETCH_CORE } from '../config/plan'
 import { maxAttemptRow } from '../lib/maxAttempt'
 import { toISODate, weekStartISO } from '../lib/dates'
 import { withPlanDefaults, withRemovedFrom, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
+import type { CoreSet } from '../lib/flexSteps'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import { repairFlexAngles } from '../lib/angleRepair'
 import {
@@ -144,7 +145,8 @@ type DataContextValue = {
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   logExerciseTimes: (samples: SessionTimeSamples) => Promise<void>
-  logCore: (reps: number[]) => Promise<void>
+  /** The core sets of a Stretch + Core session — see the implementation. */
+  logCore: (sets: CoreSet[]) => Promise<void>
   /** A single at `weightLbs` on `exerciseKey`, the way a strength goal is settled. */
   logMaxAttempt: (exerciseKey: string, weightLbs: number) => Promise<void>
   logProgressPhoto: () => void
@@ -766,27 +768,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [enqueue, flush, persistExerciseAverages],
   )
 
-  // Logs the dead-bug sets done during a Stretch + Core session as workout rows
-  // (one shared session_id, reps per set) under the Dead Bug key, so they feed
-  // the reps chart and core-progress series. Silent — the stretch save toasts —
-  // and no celebration: these are supplemental and don't count as a workout
-  // (trainingSessions excludes a session whose only exercise is a supplemental
-  // core move). The day_type is cosmetic here for the same reason.
+  // Logs the core sets done during a Stretch + Core session as workout rows (one
+  // shared session_id, weight × reps per set) under the weighted sit-up's key, so
+  // they feed that movement's own history and the core-progress series alongside
+  // the sets the plan days train it with. Silent — the stretch save toasts — and no
+  // celebration.
+  //
+  // Every row carries CORE_SESSION_NOTE, which is what keeps the session out of the
+  // week's workout count, the streak, and the push variant's alternation. It has to
+  // be the note rather than the exercise: the same sit-up is real programmed work on
+  // push and pull, so the key can't say which session this was. The day_type is
+  // cosmetic for the same reason — nothing counts these rows as a push day.
   const logCore = useCallback(
-    async (reps: number[]) => {
-      const done = reps.filter((r) => r > 0)
+    async (sets: CoreSet[]) => {
+      const done = sets.filter((s) => s.reps > 0)
       if (done.length === 0) return
       const sessionId = uuid()
       const date = toISODate(new Date())
-      const rows: WorkoutRow[] = done.map((r, i) => ({
+      const rows: WorkoutRow[] = done.map((s, i) => ({
         session_id: sessionId,
         date,
         day_type: 'push',
-        exercise: DEAD_BUG.key,
+        exercise: STRETCH_CORE.key,
         set_number: i + 1,
-        weight_lbs: null,
-        reps: r,
-        notes: '',
+        weight_lbs: s.weightLbs,
+        reps: s.reps,
+        notes: CORE_SESSION_NOTE,
         is_historical: false,
       }))
       persistWorkouts([...storage.loadWorkouts(), ...rows])
@@ -846,8 +853,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Distinct dates trained — two sessions in a day count once. Supplemental
-  // core-only sessions (dead bugs done with a stretch) are excluded too, so
-  // neither inflates the weekly workout goal.
+  // core-only sessions (the core block of a stretch) are excluded too, so neither
+  // inflates the weekly workout goal.
   const workoutDates = useMemo(() => trainingDates(workouts), [workouts])
   const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
   const calHitDates = useMemo(() => calorieHitDates(calorieEntries), [calorieEntries])

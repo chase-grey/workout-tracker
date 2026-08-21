@@ -43,7 +43,8 @@ export type PlannedExercise = {
   bodyweight?: boolean
   /**
    * Never loaded with extra weight — the weight field is hidden entirely rather
-   * than offered as an empty "added lbs" box (hanging raises, dead bugs).
+   * than offered as an empty "added lbs" box (hanging raises, the Copenhagen
+   * plank).
    */
   repsOnly?: boolean
   /** Optional / do-if-energy-allows. */
@@ -239,23 +240,35 @@ export const VARIANT_DAY_TYPES: DayType[] = ['push']
 export const QUICK_LOG_KEY = '__quicklog__'
 
 /**
- * Dead Bug — core work folded into the Stretch + Core session (it no longer has
- * a standalone day). Each set is still logged as a workout row under this key so
- * historical dead-bug data and the 'reps' progress chart stay continuous, but a
- * session made up only of this move is supplemental and never counts toward the
- * weekly workout goal (see SUPPLEMENTAL_EXERCISE_KEYS).
+ * The core work at the end of the Stretch + Core session: the weighted sit-up,
+ * under the same key the push and pull days train it with, so one movement keeps
+ * one history and one progression no matter which session it was done in.
+ *
+ * Its own sets and rest, though — this is a block appended to a mobility routine
+ * rather than a copy of either day's slot. Each set is logged as a workout row of
+ * weight × reps (see DataContext.logCore), and a session made up only of those
+ * rows is supplemental: it feeds the charts and never counts toward the weekly
+ * workout goal (see session.CORE_SESSION_NOTE).
  */
-export const DEAD_BUG: PlannedExercise = {
-  key: 'deadbug',
-  name: 'dead bug',
+export const STRETCH_CORE: PlannedExercise = {
+  key: 'weighted_situp',
+  name: 'weighted sit-up',
   sets: 4,
   repMin: 10,
-  repMax: 20,
+  repMax: 15,
   restSec: 60,
-  bodyweight: true,
-  repsOnly: true,
+  increment: 5,
   group: 'core',
 }
+
+/**
+ * The dead bug, retired: it held the Stretch + Core session's core slot until the
+ * weighted sit-up took it over. A key rather than an exercise now — nothing new is
+ * logged to it, but the sets it did log still need a name, still belong in the
+ * combined core rep series, and are still supplemental (see
+ * session.SUPPLEMENTAL_EXERCISE_KEYS).
+ */
+export const DEAD_BUG_KEY = 'deadbug'
 
 /**
  * The hanging-raise slot. Starts as KNEE raises and graduates to full leg raises
@@ -549,10 +562,10 @@ export function withCircuitRoundRest(
 
 /**
  * All exercises across every day of the DEFAULT plan, for import matching + name
- * fallback. Dead Bug is appended even though it's no longer a plan day, so its
- * key still resolves to "Dead Bug" in charts, the AI prompt, and records. Keys
- * repeat across days (leg press and bench appear on Full Body too), so the first
- * occurrence of each key wins.
+ * fallback. Keys repeat across days (leg press and bench appear on Full Body too),
+ * so the first occurrence of each key wins. The Stretch + Core session's core move
+ * needs no appending — it's the weighted sit-up the plan days already train (see
+ * STRETCH_CORE).
  */
 export const ALL_EXERCISES: PlannedExercise[] = (() => {
   const seen = new Set<string>()
@@ -561,7 +574,6 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     ...DEFAULT_PLAN.push.exercises,
     ...DEFAULT_PLAN.pull.exercises,
     ...DEFAULT_PLAN.fullbody.exercises,
-    DEAD_BUG,
   ]) {
     if (seen.has(e.key)) continue
     seen.add(e.key)
@@ -883,6 +895,8 @@ const RETIRED_EXERCISE_NAMES: Record<string, string> = {
   // Spaced-out keys would read "cable row" and lose the grip, which is the part
   // that says which row the logged sessions were.
   cable_row: 'cable row (neutral grip)',
+  // Written closed up, so spacing the key out would read "deadbug".
+  [DEAD_BUG_KEY]: 'dead bug',
 }
 
 /**
@@ -929,9 +943,11 @@ function displayName(e: PlannedExercise): string {
  * added ab exercises are picked up automatically.
  */
 export function absExerciseKeys(plan: Plan): Set<string> {
-  // Dead Bug lives in the Stretch + Core session now, not the plan, so seed it
-  // explicitly to keep its reps in the combined core series.
-  const keys = new Set<string>([DEAD_BUG.key])
+  // The retired dead bug is on no day of the plan, so seed it explicitly to keep
+  // the reps it did log in the combined core series. The Stretch + Core session's
+  // own move needs no seeding: it's the weighted sit-up, which the plan days carry
+  // in an ab group already.
+  const keys = new Set<string>([DEAD_BUG_KEY])
   for (const day of Object.values(plan)) {
     for (const e of day.exercises) {
       if (/^(abs|core)$/i.test(e.group)) keys.add(e.key)

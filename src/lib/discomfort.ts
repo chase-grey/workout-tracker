@@ -84,17 +84,29 @@ function normalizeSpots(spots: readonly string[]): string[] {
 }
 
 /**
+ * A note's segments, trimmed, with the empties dropped.
+ *
+ * A note is `; `-joined text, so anything looking for a marker in one has to look
+ * segment by segment rather than at the whole string: a row can carry a marker and
+ * a discomfort flag added to it afterwards, and neither is the note entire.
+ */
+export function noteSegments(note: string | null | undefined): string[] {
+  return (note ?? '')
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/**
  * The spots flagged in a note, in the order it lists them. Anything that isn't a
  * `discomfort:` segment is ignored, so a hand-typed or imported note that merely
  * mentions a knee doesn't read as a flag.
  */
 export function parseDiscomfort(note: string | null | undefined): string[] {
-  if (!note) return []
   const spots: string[] = []
-  for (const segment of note.split(';')) {
-    const trimmed = segment.trim()
-    if (!isFlag(trimmed)) continue
-    spots.push(...trimmed.slice(MARKER.length).split(','))
+  for (const segment of noteSegments(note)) {
+    if (!isFlag(segment)) continue
+    spots.push(...segment.slice(MARKER.length).split(','))
   }
   return normalizeSpots(spots)
 }
@@ -105,10 +117,7 @@ export function parseDiscomfort(note: string | null | undefined): string[] {
  * lands last, so a note the user actually wrote still reads first.
  */
 export function withDiscomfort(note: string | null | undefined, spots: readonly string[]): string {
-  const kept = (note ?? '')
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s && !isFlag(s))
+  const kept = noteSegments(note).filter((s) => !isFlag(s))
   const flagged = normalizeSpots(spots)
   if (flagged.length > 0) kept.push(`${MARKER} ${flagged.join(', ')}`)
   return kept.join(SEP)

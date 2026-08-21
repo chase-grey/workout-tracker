@@ -1,5 +1,5 @@
 import type { WorkoutRow } from '../types'
-import { ALL_EXERCISES, QUICK_LOG_KEY, type VariantKey } from '../config/plan'
+import { ALL_EXERCISES, QUICK_LOG_KEY, exerciseName, type VariantKey } from '../config/plan'
 import { epley1RM } from './epley'
 import { leadVariantForKey, otherVariant } from './pushVariant'
 
@@ -80,7 +80,7 @@ export function exerciseSeries(
       value = g.sets.reduce((s, x) => s + (x.w ?? 0) * x.reps, 0)
     } else if (metric === 'reps') {
       // Total reps in the session — the growth signal for bodyweight work
-      // (deadbugs, hanging leg raises) where weight-based metrics stay flat.
+      // (hanging leg raises) where weight-based metrics stay flat.
       value = g.sets.reduce((s, x) => s + x.reps, 0)
     } else if (metric === 'topreps') {
       value = g.sets.reduce((s, x) => Math.max(s, x.reps), 0)
@@ -232,7 +232,8 @@ export function bestSingleSeries(
 /**
  * One point per session summing total reps across a *set* of exercise keys —
  * e.g. all core moves combined, so ab work shows up regardless of which ab
- * exercise (cable crunch, hanging leg raise, deadbug) was logged that session.
+ * exercise (cable crunch, weighted sit-up, hanging leg raise) was logged that
+ * session.
  */
 export function combinedRepsSeries(rows: WorkoutRow[], keys: Set<string>): Point[] {
   const bySession = new Map<string, { date: string; reps: number }>()
@@ -273,7 +274,11 @@ export function availableExercises(workouts: WorkoutRow[]): { key: string; name:
   }
 
   const extras = [...extraKeys]
-    .map((key) => ({ key, name: prettifyKey(key) }))
+    // Through exerciseName first, so a movement the defaults have retired charts
+    // under the name it was known by rather than under its key — "Dead Bug", not
+    // "Deadbug". A key nothing knows comes back spaced out, which prettifies the
+    // same way it always did.
+    .map((key) => ({ key, name: prettifyKey(exerciseName(key)) }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
 
   return [...planList, ...extras]

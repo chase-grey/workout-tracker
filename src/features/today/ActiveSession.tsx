@@ -854,8 +854,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             </div>
           ) : (
             <div className="flex items-end justify-center gap-3">
-              {/* A move that's never loaded (hanging raises, dead bugs) gets no
-                  weight field at all rather than an empty "added lbs" box. */}
+              {/* A move that's never loaded (hanging raises) gets no weight field
+                  at all rather than an empty "added lbs" box. */}
               {!planned.repsOnly && (
                 <>
                   <label className="flex flex-1 flex-col items-center gap-1">

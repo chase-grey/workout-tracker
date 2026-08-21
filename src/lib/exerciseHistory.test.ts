@@ -207,7 +207,7 @@ describe('exerciseHistory for reps-only work', () => {
 })
 
 describe('targetDeltaLabel', () => {
-  const last = { date: '2026-07-29', topWeight: 130, topReps: 8, sameSlot: true }
+  const last = { date: '2026-07-29', topWeight: 130, topReps: 8, heldEverySet: true, sameSlot: true }
 
   it('calls out a first session', () => {
     expect(targetDeltaLabel({ weightLbs: 135, reps: 8 }, null)).toBe('first time logging this')
@@ -228,7 +228,7 @@ describe('targetDeltaLabel', () => {
   })
 
   it('compares reps alone for reps-only work', () => {
-    const bodyweight = { date: '2026-07-29', topWeight: null, topReps: 16, sameSlot: true }
+    const bodyweight = { date: '2026-07-29', topWeight: null, topReps: 16, heldEverySet: true, sameSlot: true }
     expect(targetDeltaLabel({ weightLbs: null, reps: 17 }, bodyweight)).toBe(
       '+1 rep from last session',
     )
@@ -243,7 +243,7 @@ describe('targetDeltaLabel', () => {
   })
 
   it('compares a timed hold in seconds', () => {
-    const held = { date: '2026-07-29', topWeight: null, topReps: 30, sameSlot: true }
+    const held = { date: '2026-07-29', topWeight: null, topReps: 30, heldEverySet: true, sameSlot: true }
     expect(targetDeltaLabel({ weightLbs: null, reps: 35 }, held, true, 'sec')).toBe(
       '+5s from last session',
     )
