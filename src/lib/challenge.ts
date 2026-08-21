@@ -3,10 +3,11 @@
  * did last time, and whether you rose to it.
  *
  * The workout flow prefills each set with the progression target (see
- * progression.ts). When that target is a genuine step up from your last session
- * — heavier, or the same weight for more reps — it's a challenge. Meeting or
- * beating it on a completed set sets a new baseline the plan will build on next
- * time, which is worth a small celebration and a line on the finish recap.
+ * progression.ts). That target is a challenge when it asks for something you
+ * haven't done yet: heavier, the same weight for more reps, or the same numbers
+ * again because last time a set fell short of them. Holding it across the whole
+ * session sets a new baseline the plan will build on next time, which is worth a
+ * small celebration and a line on the finish recap.
  *
  * Pure module — no React/DOM — so it stays unit-testable.
  */
@@ -29,9 +30,17 @@ export type ChallengeOpts = {
 }
 
 /**
- * Is `target` a genuine step up from the most recent session for this exercise?
+ * Is `target` something to rise to, or just today's work?
+ *
  * A brand-new exercise (no history) is not a challenge — there's nothing to beat
- * yet. Heavier weight always counts; at the same weight, more reps counts.
+ * yet. Heavier weight always counts; at the same weight, more reps counts. So does
+ * the same weight for the same reps when the last session didn't hold them on every
+ * set: the number repeated precisely because the job was left unfinished (see
+ * progression's heldEverySet), so carrying it through all four sets is the first
+ * time it's actually been done, and it's what unlocks the next step.
+ *
+ * A repeat for any other reason isn't a challenge — stale history and a slot with
+ * nothing of its own to read from both re-ask for a number that was already held.
  */
 export function isChallenge(
   prev: WorkoutRow[],
@@ -49,26 +58,48 @@ export function isChallenge(
 ): boolean {
   const last = lastPerformance(prev, exerciseKey, repMin, variant)
   if (!last) return false
+  // Reps still owed at the weight: only an unfinished session in THIS slot leaves
+  // any. A repeat that comes of reading the other slot is a first attempt here, not
+  // a second one, so there's nothing owed to finish.
+  const owed = last.sameSlot && !last.heldEverySet
   if (target.weightLbs != null && last.topWeight != null) {
     if (target.weightLbs > last.topWeight) return true
-    return target.weightLbs === last.topWeight && target.reps > last.topReps
+    if (target.weightLbs < last.topWeight) return false
+    return target.reps > last.topReps || owed
   }
   // Bodyweight / reps-only: a step up means more reps than last time.
-  return target.reps > last.topReps
+  return target.reps > last.topReps || owed
 }
 
-/** True when a completed set met or beat the challenge target. */
-function setMeetsTarget(weightLbs: number | null, reps: number, target: Target): boolean {
+/**
+ * A set the target is speaking to: one that was performed, at the weight asked for
+ * or heavier. A lighter set is a back-off and is judged by nothing here, the same
+ * way the progression read looks at one weight's sets alone.
+ */
+function isWorkingSet(weightLbs: number | null, reps: number, target: Target): boolean {
   if (reps <= 0) return false
-  if (target.weightLbs == null) return reps >= target.reps
-  return weightLbs != null && weightLbs >= target.weightLbs && reps >= target.reps
+  if (target.weightLbs == null) return true
+  return weightLbs != null && weightLbs >= target.weightLbs
+}
+
+/**
+ * Did the session hold the target, or just touch it?
+ *
+ * Every working set has to reach the target's reps, and there has to be one. One
+ * good set among four that fell short is exactly the session a target gets repeated
+ * for — progression won't build on it (see progression's heldEverySet), so the recap
+ * shouldn't call it a new baseline either.
+ */
+function heldTarget(rows: WorkoutRow[], target: Target): boolean {
+  const working = rows.filter((r) => isWorkingSet(r.weight_lbs, r.reps, target))
+  return working.length > 0 && working.every((r) => r.reps >= target.reps)
 }
 
 export type SessionChallenge = {
   /** Exercise display name. */
   exercise: string
   target: Target
-  /** True when at least one completed set in the session met/beat the target. */
+  /** True when every working set of the session met or beat the target. */
   met: boolean
 }
 
@@ -117,7 +148,7 @@ export function sessionChallenges(
     if (!opts || !target) continue
     const variant = variantFor(key)
     if (!isChallenge(prev, key, target, opts.repMin, variant)) continue
-    const met = rows.some((r) => setMeetsTarget(r.weight_lbs, r.reps, target))
+    const met = heldTarget(rows, target)
     out.push({ exercise: exerciseName(key), target, met })
   }
   return out

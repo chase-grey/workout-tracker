@@ -64,7 +64,8 @@ describe('nextTarget', () => {
 
   it('builds off the working weight, not a heavy single (the 150x2 bug)', () => {
     // Three working sets at 135 plus one heavy single at 150. Targeting 150x2
-    // would prescribe 2 reps for an 8-12 exercise; the working set is 135x8.
+    // would prescribe 2 reps for an 8-12 exercise; the working set is 135x8. The
+    // third set fell to 7, so 8 is asked for again rather than 9.
     const rows = [
       row({ set_number: 1, weight_lbs: 135, reps: 8 }),
       row({ set_number: 2, weight_lbs: 135, reps: 8 }),
@@ -73,7 +74,7 @@ describe('nextTarget', () => {
     ]
     expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, today: TODAY })).toEqual({
       weightLbs: 135,
-      reps: 9,
+      reps: 8,
     })
   })
 
@@ -185,7 +186,8 @@ describe('nextTarget', () => {
 
   it('does not let one collapsed set erase a session that held its reps', () => {
     // Three clean sets and a fourth taken past the point of usefulness. Reading the
-    // worst set would prescribe 4 for a session that plainly trained at 8.
+    // worst set would prescribe 4 for a session that plainly trained at 8 — so 8 is
+    // what comes back, unbeaten but unlowered.
     const rows = [
       row({ exercise: 'pullup', set_number: 1, weight_lbs: null, reps: 8 }),
       row({ exercise: 'pullup', set_number: 2, weight_lbs: null, reps: 8 }),
@@ -194,6 +196,73 @@ describe('nextTarget', () => {
     ]
     expect(nextTarget(rows, 'pullup', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
       weightLbs: null,
+      reps: 8,
+    })
+  })
+
+  it('asks for the same reps again when one set fell short of them', () => {
+    // The reported case: incline bench at 100 went 8, 8, 8, 6. Three of the four
+    // sets it was asked for is not the rep earned, and moving the ask to 9 raises a
+    // bar that was just missed — so 8 comes back until all four land.
+    const rows = [
+      row({ set_number: 1, weight_lbs: 100, reps: 8 }),
+      row({ set_number: 2, weight_lbs: 100, reps: 8 }),
+      row({ set_number: 3, weight_lbs: 100, reps: 8 }),
+      row({ set_number: 4, weight_lbs: 100, reps: 6 }),
+    ]
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, today: TODAY })).toEqual({
+      weightLbs: 100,
+      reps: 8,
+    })
+  })
+
+  it('steps up the week every set lands clean', () => {
+    // The same lift, finished. Four at 8 earns the 9.
+    const rows = [1, 2, 3, 4].map((set_number) =>
+      row({ set_number, weight_lbs: 100, reps: 8 }),
+    )
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, today: TODAY })).toEqual({
+      weightLbs: 100,
+      reps: 9,
+    })
+  })
+
+  it('holds the weight when the last set of the range falls short', () => {
+    // 12, 12, 12, 10 has not conquered a 8-12 range: bumping the load here sets a
+    // weight off three sets, and the fourth set falls further behind at it.
+    const rows = [
+      row({ set_number: 1, weight_lbs: 135, reps: 12 }),
+      row({ set_number: 2, weight_lbs: 135, reps: 12 }),
+      row({ set_number: 3, weight_lbs: 135, reps: 12 }),
+      row({ set_number: 4, weight_lbs: 135, reps: 10 }),
+    ]
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, increment: 5, today: TODAY })).toEqual({
+      weightLbs: 135,
+      reps: 12,
+    })
+  })
+
+  it('bumps the weight once the whole session tops the range', () => {
+    const rows = [1, 2, 3, 4].map((set_number) =>
+      row({ set_number, weight_lbs: 135, reps: 12 }),
+    )
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, increment: 5, today: TODAY })).toEqual({
+      weightLbs: 140,
+      reps: 8,
+    })
+  })
+
+  it('ignores a back-off set when judging whether the working sets landed', () => {
+    // Four clean sets at 185 and a lighter fifth to finish. The 135 is a different
+    // load, not a set of 185 that fell short, so the step up is still earned.
+    const rows = [
+      row({ set_number: 1, weight_lbs: 185, reps: 8 }),
+      row({ set_number: 2, weight_lbs: 185, reps: 8 }),
+      row({ set_number: 3, weight_lbs: 185, reps: 8 }),
+      row({ set_number: 4, weight_lbs: 135, reps: 5 }),
+    ]
+    expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, today: TODAY })).toEqual({
+      weightLbs: 185,
       reps: 9,
     })
   })
@@ -305,6 +374,17 @@ describe('nextTarget at a load ceiling', () => {
     expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 100, reps: 24 })
   })
 
+  it('repeats rather than climbing when a set fell short of the rest', () => {
+    // The reps are the only ladder here, so the same gate applies to them: 24, 24,
+    // 20 asks for 24 again rather than 25.
+    const rows = [
+      row({ exercise: 'calf_raise', set_number: 1, weight_lbs: 100, reps: 24 }),
+      row({ exercise: 'calf_raise', set_number: 2, weight_lbs: 100, reps: 24 }),
+      row({ exercise: 'calf_raise', set_number: 3, weight_lbs: 100, reps: 20 }),
+    ]
+    expect(nextTarget(rows, 'calf_raise', CALF)).toEqual({ weightLbs: 100, reps: 24 })
+  })
+
   it('leaves an uncapped lift bounded by its range', () => {
     const rows = [row({ weight_lbs: 135, reps: 10 })]
     expect(nextTarget(rows, 'bench', { repMin: 6, repMax: 10, increment: 5, today: TODAY })).toEqual({
@@ -333,6 +413,8 @@ describe('lastPerformance', () => {
       date: '2026-01-08',
       topWeight: 145,
       topReps: 7,
+      // The 145s went 6 then 7, so the session didn't hold 7 throughout.
+      heldEverySet: false,
       sameSlot: true,
     })
   })
@@ -348,6 +430,7 @@ describe('lastPerformance', () => {
       date: '2026-01-01',
       topWeight: 135,
       topReps: 8,
+      heldEverySet: true,
       sameSlot: true,
     })
   })
@@ -372,6 +455,8 @@ describe('lastPerformance', () => {
       date: '2026-01-01',
       topWeight: 135,
       topReps: 4,
+      // 4 then 3 at the modal weight: short of its own working reps as well.
+      heldEverySet: false,
       sameSlot: true,
     })
   })
@@ -393,6 +478,7 @@ describe('lastPerformance', () => {
       date: '2026-01-01',
       topWeight: null,
       topReps: 12,
+      heldEverySet: false,
       sameSlot: true,
     })
   })
@@ -631,6 +717,7 @@ describe('a max attempt is not a working set', () => {
       date: '2026-01-05',
       topWeight: 300,
       topReps: 8,
+      heldEverySet: true,
       sameSlot: true,
     })
   })

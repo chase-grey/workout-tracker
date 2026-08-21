@@ -72,8 +72,8 @@ function repsAtWeight(
 export const STALE_HISTORY_DAYS = 21
 
 /**
- * The reps a session actually SUSTAINED: the lowest of its sets once the single
- * worst one is set aside.
+ * The reps a session was WORKING AT: the lowest of its sets once the single worst
+ * one is set aside.
  *
  * A target is a prescription for EVERY set, so reading a session by its best set
  * asks the next one to repeat, four times over, a number it managed once. Pull-ups
@@ -82,14 +82,37 @@ export const STALE_HISTORY_DAYS = 21
  * across the board, which is the set of four it was actually close to.
  *
  * The worst set is dropped so one collapsed set can't erase a good day: 8, 8, 8, 3
- * sustained 8, and the 3 was a set taken past the point of usefulness rather than
- * the story of the session. Below three sets there's nothing to drop and still have
- * a reading left, so the best set stands.
+ * was working at 8, and the 3 was a set taken past the point of usefulness rather
+ * than the story of the session. Below three sets there's nothing to drop and still
+ * have a reading left, so the best set stands.
+ *
+ * This is the number the next session is asked for; whether it's asked for that
+ * number again or one more than it is {@link heldEverySet}'s call.
  */
 function sustainedReps(reps: number[]): number {
   if (reps.length === 0) return 0
   const sorted = [...reps].sort((a, b) => a - b)
   return sorted[reps.length > 1 ? 1 : 0]
+}
+
+/**
+ * Did EVERY set hold the reps the session was working at, or did one fall short?
+ *
+ * This is the gate on stepping up, and the whole of double progression's first
+ * half: you earn the next rep by finishing all of your sets at this one. Incline
+ * bench at 100×8, 8, 8, 6 got three of the four it was asked for — moving the ask
+ * to 9 there raises a bar that was just missed, and the fourth set falls further
+ * short than it did before. Nothing is lost by waiting: the same 8 comes back, and
+ * the step up arrives the week it's hit clean across the board.
+ *
+ * The reading this is measured against already sets one bad set aside (see
+ * {@link sustainedReps}), which is what keeps the two rules from fighting. 8, 8, 8, 3
+ * is still a session working at 8 — it simply hasn't finished four sets there, so it
+ * repeats 8 rather than being credited with 9 or dropped to 4. Equivalently: at most
+ * one set may fall short, and even that one costs the step up.
+ */
+function heldEverySet(reps: number[]): boolean {
+  return reps.length > 0 && Math.min(...reps) >= sustainedReps(reps)
 }
 
 type SessionGroup = {
@@ -124,22 +147,28 @@ function daysBetween(a: string, b: string): number {
  * there's no in-range weight to read, so it falls back to the modal weight: the
  * one appearing in the most sets, which is robust to a single outlier. Ties go to
  * the heavier weight, since sets were completed there too.
+ *
+ * `heldEverySet` reports whether every set AT THAT WEIGHT held those reps, which is
+ * what decides between repeating the number and stepping up (see heldEverySet).
  */
 function workingSet(
   sets: { weight: number | null; reps: number }[],
   repMin: number,
-): { weight: number; reps: number } | null {
+): { weight: number; reps: number; heldEverySet: boolean } | null {
   const weighted = sets.filter((s): s is { weight: number; reps: number } => s.weight != null)
   if (weighted.length === 0) return null
 
-  const repsAt = (weight: number): number =>
-    sustainedReps(weighted.filter((s) => s.weight === weight).map((s) => s.reps))
+  // Read one weight's sets alone, so a back-off set at a lighter load neither
+  // lowers the working reps nor counts as a set that fell short of them.
+  const readAt = (weight: number) => {
+    const reps = weighted.filter((s) => s.weight === weight).map((s) => s.reps)
+    return { weight, reps: sustainedReps(reps), heldEverySet: heldEverySet(reps) }
+  }
 
   // Heaviest weight that carried a set into the prescribed range.
   const inRange = weighted.filter((s) => s.reps >= repMin)
   if (inRange.length > 0) {
-    const weight = Math.max(...inRange.map((s) => s.weight))
-    return { weight, reps: repsAt(weight) }
+    return readAt(Math.max(...inRange.map((s) => s.weight)))
   }
 
   // Nothing reached the range: fall back to the weight most sets used.
@@ -153,7 +182,7 @@ function workingSet(
       weight = w
     }
   }
-  return { weight, reps: repsAt(weight) }
+  return readAt(weight)
 }
 
 /**
@@ -181,6 +210,13 @@ export type LastPerformance = {
    * not to demand a step up on top of it (see nextTarget).
    */
   sameSlot: boolean
+  /**
+   * True when every set at the working weight held `topReps` — the session
+   * finished the job it was given. False when one fell short, which is what tells
+   * nextTarget to ask for the same number again rather than one more (see
+   * heldEverySet).
+   */
+  heldEverySet: boolean
 }
 
 /**
@@ -189,7 +225,8 @@ export type LastPerformance = {
  * Rows are grouped by session (session_id, falling back to date), and the group
  * with the latest date wins. `topWeight`/`topReps` describe that session's
  * WORKING set — the weight it genuinely trained at and the reps it sustained
- * there (see workingSet), rather than its single heaviest or best set. For a
+ * there (see workingSet), rather than its single heaviest or best set, and
+ * `heldEverySet` says whether it held those reps on all of them. For a
  * bodyweight exercise (every set has a null weight) topWeight is null and
  * topReps is the reps the session sustained.
  */
@@ -247,21 +284,38 @@ export function lastPerformance(
   const working = workingSet(latest.sets, repMin)
   if (working === null) {
     // Bodyweight session: no weight anywhere, so the reading is the reps alone.
-    const topReps = sustainedReps(latest.sets.map((s) => s.reps))
-    return { date: latest.date, topWeight: null, topReps, sameSlot }
+    const reps = latest.sets.map((s) => s.reps)
+    return {
+      date: latest.date,
+      topWeight: null,
+      topReps: sustainedReps(reps),
+      heldEverySet: heldEverySet(reps),
+      sameSlot,
+    }
   }
-  return { date: latest.date, topWeight: working.weight, topReps: working.reps, sameSlot }
+  return {
+    date: latest.date,
+    topWeight: working.weight,
+    topReps: working.reps,
+    heldEverySet: working.heldEverySet,
+    sameSlot,
+  }
 }
 
 /**
  * Suggest the next target for an exercise using double progression within
  * [repMin, repMax].
  *
- * The target is one prescription for every set of the exercise, so it steps up
- * from the reps the last session SUSTAINED across its sets rather than from its
+ * The target is one prescription for every set of the exercise, so it reads the
+ * last session by the reps it was WORKING AT across its sets rather than by its
  * best single set (see sustainedReps). Read the best set instead and a session
  * that drops off — 8, 6, 5, 5 — is credited with an 8 it hit once and asked for
  * four sets of 9.
+ *
+ * And it only adds a rep to that number once the session held it on every set (see
+ * heldEverySet). 100×8, 8, 8, 6 stays at 100×8 until all four sets land, because a
+ * target that climbs while a set is still being missed just widens the gap. This is
+ * the rep half of double progression: finish all your sets, then ask for more.
  *
  * Re-pacing note: the target is always derived from the MOST RECENT session, so
  * if the user logs below target one week, next week's target is computed from that
@@ -346,13 +400,15 @@ export function nextTarget(
   // layoff too rather than being asked for a rep they haven't earned in months.
   const stale = daysBetween(last.date, toISODate(today)) > STALE_HISTORY_DAYS
   /**
-   * Repeat the last working set rather than step up. Two cases share the reason:
-   * the number wasn't set under conditions this session can build on — a layoff
-   * ago, or in the day's other slot, where the lift was fresh (or tired) and this
-   * one isn't. Either way it's a starting point, not a baseline to add to; the
-   * first session in the slot sets the real one.
+   * Repeat the last working set rather than step up. Three cases share the reason:
+   * the number hasn't been earned as a baseline to add to. Either it wasn't set
+   * under conditions this session can build on — a layoff ago, or in the day's
+   * other slot, where the lift was fresh (or tired) and this one isn't — or it was
+   * set here but not on every set, so it's still the number to finish rather than
+   * the one to beat (see heldEverySet). Each is a starting point; the session that
+   * holds it clean across the board sets the real one.
    */
-  const repeat = stale || !last.sameSlot
+  const repeat = stale || !last.sameSlot || !last.heldEverySet
 
   // Bodyweight (flagged, or no weight recorded): progress reps only. Nothing to
   // lighten, so this is the one case where the target may sit below repMin.
