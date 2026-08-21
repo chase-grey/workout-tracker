@@ -377,6 +377,27 @@ input[type='number'] {
   animation: rest-charge-done 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
+/* Globe: the moment the last flake lands. The glass answers with one pulse and then
+   stays lit, so the end of a rest looks unlike the last few seconds of one — by
+   then the snow has stopped moving, and stillness alone is easy to miss. */
+@keyframes rest-globe-settled {
+  0% {
+    opacity: 0;
+    transform: scale(0.93);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+}
+.rest-globe-settled {
+  animation: rest-globe-settled 620ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
 /* Tap: a drop falling from the spout to the water. The column it rides spans the
    air gap, so travelling its own height lands the drop exactly on the surface
    however full the glass is — the same trick as the tide's risers. It stretches on
@@ -583,6 +604,7 @@ input[type='number'] {
   .rest-glow,
   .rest-charge-sweep,
   .rest-charge-done,
+  .rest-globe-settled,
   .rest-drip-ring,
   .rest-star,
   .rest-pan-sway,

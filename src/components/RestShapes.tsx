@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { type ExtraVariant } from '../lib/restShapes'
-import { createSnow, flakeLook, isAirborne, stepSnow, type Snow } from '../lib/snow'
+import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
 import { createSpiral, pointAt, shareAt, spiralPath } from '../lib/spiral'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 
@@ -617,21 +617,51 @@ function MeltingIce({ fraction }: { fraction: number }) {
 /** Flakes in the globe. Enough that the count in the air reads as a level, few enough to move on one frame budget. */
 const FLAKE_COUNT = 34
 
-/** How much of the globe's height a full drift takes. */
-const DRIFT_MAX = 0.6
+/**
+ * How much of the globe's height a full drift takes. High enough that the end state
+ * is a glass *buried* in snow rather than one half-filled: a bank that stops at the
+ * middle reads as a globe still working through its rest, whatever the flakes are
+ * doing above it.
+ */
+const DRIFT_MAX = 0.72
 
 /** How high the drift's middle stands over its edges, in the drift SVG's units. */
-const DRIFT_CROWN = 9
+const DRIFT_CROWN = 5
 
 /**
- * The 'globe' shape: a snow globe, its drift rising as the rest runs down and the
- * snow still in the air thinning out with it.
+ * How high the drift's *average* surface stands over the bottom of its box, in the
+ * same units. The bank's edges stand `DRIFT_CROWN` above the bottom and its middle
+ * `2 × DRIFT_CROWN`, and a quadratic averages a third of its rise below its peak.
  *
- * Two readings that agree — see lib/snow, which owns both: the drift's height is
- * the rest already spent, and the number of flakes still falling is the rest still
- * to come. The falling itself is texture, and it is simulated rather than
- * keyframed for the same reason the candle's flame is: a loop of snow is a loop,
- * and the eye finds it inside a couple of seconds.
+ * This is the line the countdown is put on, and the line the flakes land on, so the
+ * bank sits at the height the clock asked for on average rather than only at its
+ * peak — which is what keeps a flake landing near the side of the glass from
+ * touching down noticeably above the snow there.
+ */
+const DRIFT_MEAN = (5 * DRIFT_CROWN) / 3
+
+/**
+ * The 'globe' shape: a snow globe shaken at the start of the rest, its drift rising
+ * as the rest runs down and the snow above it settling onto that drift a flake at a
+ * time.
+ *
+ * Readings that agree — see lib/snow, which owns them all: the drift's height is
+ * the rest already spent, the snow still in the air is the rest still to come, and
+ * how low a flake floats is how close its own turn is. The floating itself is
+ * texture, and it is simulated rather than keyframed for the same reason the
+ * candle's flame is: a loop of snow is a loop, and the eye finds it inside a couple
+ * of seconds.
+ *
+ * Every flake is in the glass from the first frame and none of them recycles, so
+ * the snow fills the globe from the lid down to the drift for the whole rest rather
+ * than blowing through it as a front with a hole behind.
+ *
+ * What makes zero legible is that flakes *land*. Each one is called down by the
+ * countdown, drops the last of the way to the drift and melts into it, so the snow
+ * leaves the air at the bottom of the glass where the bank is — never by fading out
+ * halfway up, which says only that a dot went away. The last one touches down as
+ * the clock runs out, and the globe then holds a state it holds at no other point
+ * in the rest: buried in snow, with nothing moving in it.
  */
 function SnowGlobe({ fraction }: { fraction: number }) {
   const left = clamp01(fraction)
@@ -643,10 +673,21 @@ function SnowGlobe({ fraction }: { fraction: number }) {
   // rather than as `left`/`top` — 34 elements laying out every frame is a cost
   // this shape does not need to pay.
   const sizeRef = useRef({ w: 0, h: 0 })
-  // The drift is where the flakes land, and it moves over the rest; the loop reads
-  // it through a ref rather than restarting four times a second.
+  // The drift's surface is where the flakes land, and it moves over the rest; the
+  // loop reads it — and the countdown with it — through refs rather than
+  // restarting four times a second.
   const driftRef = useRef(0)
   driftRef.current = 1 - (1 - left) * DRIFT_MAX
+  const leftRef = useRef(left)
+  leftRef.current = left
+  // Whether the last flake has finished landing. Not the same moment as the clock
+  // reaching zero — the flake called down at the end is still falling for a beat
+  // after it — and the globe's own payoff belongs to the landing, not the tick.
+  const [atRest, setAtRest] = useState(false)
+  const atRestRef = useRef(false)
+  // Nothing is simulated under reduced motion, so there is no last landing to wait
+  // for; the drift arriving at full height is the whole of the reading there.
+  const settled = calm ? left <= 0 : atRest
 
   useEffect(() => {
     const dome = domeRef.current
@@ -666,22 +707,36 @@ function SnowGlobe({ fraction }: { fraction: number }) {
       snow.flakes.forEach((flake, i) => {
         const el = flakeRefs.current[i]
         if (!el) return
-        const { x, y } = flakeLook(flake, snow.t)
+        const { x, y, alpha, scale } = flakeLook(flake, snow.t)
         // The -50% centres the flake on its position; a percentage inside a
         // translate resolves against the element's own size, which is what makes
         // this work for flakes of different sizes without measuring any of them.
-        el.style.transform = `translate3d(calc(${x * w}px - 50%), calc(${y * h}px - 50%), 0)`
+        el.style.transform = `translate3d(calc(${x * w}px - 50%), calc(${y * h}px - 50%), 0) scale(${scale})`
+        // Painted here rather than left to a CSS transition, so the fade is tied to
+        // the flake touching the drift instead of to the countdown's ticks.
+        el.style.opacity = `${alpha}`
       })
     }
     // Under reduced motion there are no flakes to paint — see the render below.
     if (calm) return
     let raf = 0
     let last = performance.now()
+    // Once before the first frame: without it the flakes render for a beat at the
+    // corner they were laid out in, before any transform has been written.
+    paint()
     const frame = (now: number) => {
       const dt = (now - last) / 1000
       last = now
-      stepSnow(snow, dt, driftRef.current)
+      stepSnow(snow, dt, driftRef.current, leftRef.current)
       paint()
+      if (!atRestRef.current && snow.flakes.every((flake) => isSettled(flake, snow.t))) {
+        atRestRef.current = true
+        setAtRest(true)
+        // Nothing in the glass will move again — the drift is at its full height and
+        // every flake has melted into it — and a rest can be left overrunning for
+        // minutes. So the loop ends here rather than repainting a still globe.
+        return
+      }
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
@@ -699,7 +754,11 @@ function SnowGlobe({ fraction }: { fraction: number }) {
 
       <div
         ref={domeRef}
-        className="absolute bottom-[18%] left-1/2 aspect-square w-[76%] -translate-x-1/2 overflow-hidden rounded-full ring-2 ring-accent-bright/40"
+        className={`absolute bottom-[18%] left-1/2 aspect-square w-[76%] -translate-x-1/2 overflow-hidden rounded-full ring-2 transition-shadow duration-500 ${
+          // The glass firms up once the snow is down: a ring is a box-shadow, so the
+          // change carries on `transition-shadow` rather than on `transition-colors`.
+          settled ? 'ring-accent-bright/85' : 'ring-accent-bright/40'
+        }`}
       >
         <div className="absolute inset-0 bg-accent-bright/8" />
         {/* The drift: a bank with a crowned top, rising out of the floor. */}
@@ -712,22 +771,41 @@ function SnowGlobe({ fraction }: { fraction: number }) {
               place, rather than redrawn each tick: the crown then keeps its shape
               at every height, and the motion stays on `transform` so the
               countdown's steps smooth into one continuous rise. A quadratic only
-              reaches halfway to its control point, hence the doubled crown there. */}
-          <path
-            d={`M 0 ${100 - DRIFT_CROWN} Q 50 ${100 - 3 * DRIFT_CROWN} 100 ${100 - DRIFT_CROWN} L 100 100 L 0 100 Z`}
-            fill="currentColor"
-            fillOpacity={0.75}
+              reaches halfway to its control point, hence the doubled crown there.
+              `DRIFT_MEAN` is what puts the bank's average surface — the line the
+              flakes land on — at the height the countdown asked for. */}
+          <g
             style={{
               // px in an SVG transform is user units, so this is viewBox-relative.
-              transform: `translateY(${driftRef.current * 100 - 100 + DRIFT_CROWN}px)`,
+              transform: `translateY(${driftRef.current * 100 - 100 + DRIFT_MEAN}px)`,
               ...drainOf('transform'),
             }}
-          />
+          >
+            <path
+              d={`M 0 ${100 - DRIFT_CROWN} Q 50 ${100 - 3 * DRIFT_CROWN} 100 ${100 - DRIFT_CROWN} L 100 100 L 0 100 Z`}
+              fill="currentColor"
+              fillOpacity={settled ? 0.9 : 0.75}
+              style={drainOf('fill-opacity')}
+            />
+            {/* The surface itself, drawn bright: the bank's top edge is the reading,
+                and a solid line carries it across the glass from further away than
+                the difference between two fills does. */}
+            <path
+              d={`M 0 ${100 - DRIFT_CROWN} Q 50 ${100 - 3 * DRIFT_CROWN} 100 ${100 - DRIFT_CROWN}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+            />
+          </g>
         </svg>
         {/* The snow. Every flake stays mounted for the whole rest — its ref is its
-            place in the simulation — and fades out when its turn to settle comes.
+            place in the simulation, and no flake is ever added or removed — and
+            both its position and how solid it is are written by the loop, since the
+            melt into the drift begins when the flake touches it and not when the
+            countdown says so. Starts invisible: the first paint is what gives it a
+            place to be.
             Dropped entirely under reduced motion, the way the candle's embers and
-            the tide's bubbles are: falling *is* the snow, and a globe full of dots
+            the tide's bubbles are: floating *is* the snow, and a globe full of dots
             hanging motionless says less than the drift alone does. The drift is
             still the whole reading, so no time is lost with them. */}
         {!calm &&
@@ -741,15 +819,27 @@ function SnowGlobe({ fraction }: { fraction: number }) {
               style={{
                 width: pct(flake.size * 100),
                 aspectRatio: '1',
-                opacity: isAirborne(flake, left) ? 0.85 : 0,
-                transition: 'opacity 500ms linear',
-                willChange: 'transform',
+                opacity: 0,
+                willChange: 'transform, opacity',
               }}
             />
           ))}
         {/* A highlight down the glass, so the dome reads as glass and not a hole. */}
         <div className="absolute left-[12%] top-[10%] h-[46%] w-[26%] -rotate-[18deg] rounded-full bg-white/10" />
       </div>
+
+      {/* The payoff, once the last flake is down: one pulse around the glass, and it
+          stays lit. The same job the cell's bolt does at full charge — a rest that
+          is over should look unlike a rest that is nearly over, and a globe quietly
+          running out of moving parts is too easy to miss. Outside the dome, and in
+          a wrapper that holds the centring, because the pulse is a `transform`: in
+          the dome it would be clipped, and on the dome it would undo its own
+          position. */}
+      {settled && (
+        <div className="pointer-events-none absolute bottom-[18%] left-1/2 aspect-square w-[76%] -translate-x-1/2">
+          <div className="rest-globe-settled absolute inset-0 rounded-full ring-2 ring-accent-bright" />
+        </div>
+      )}
     </div>
   )
 }
