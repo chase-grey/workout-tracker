@@ -41,21 +41,14 @@ function MetricBar({ label, m }: { label: string; m: MetricPace }) {
           ) : null}
         </span>
       </div>
-      <div className="relative h-2 overflow-hidden rounded-full bg-surface-2">
+      {/* Nothing is clipped here: the schedule line stands taller than the track
+          it marks, the way the week bar's above does, and at either end it
+          straddles the edge rather than being tucked inside it. */}
+      <div className="relative h-2 rounded-full bg-surface-2">
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
         {!m.met && (
           <div
-            // Both ends of the track would swallow a centred line. Nothing is due
-            // through all of Monday, which puts it on 0%, and a metric whose window
-            // has closed has its whole goal due, which puts it on 100% — so at each
-            // edge the line is pushed inward rather than straddling it.
-            className={`absolute inset-y-0 w-0.5 bg-white/70 ${
-              m.required <= 0
-                ? 'translate-x-0'
-                : m.required >= m.goal
-                  ? '-translate-x-full'
-                  : '-translate-x-1/2'
-            }`}
+            className="absolute -top-0.5 h-3 w-0.5 -translate-x-1/2 rounded bg-white/70"
             style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
           />
         )}
