@@ -27,7 +27,7 @@ import { gradeSet, type SetGrade } from '../../lib/setGrade'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder, circuitStations } from '../../lib/circuit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
-import { nextFastMode, turboSetMs, type FastMode } from '../../lib/fastMode'
+import { nextFastMode, rollsThroughRest, turboSetMs, type FastMode } from '../../lib/fastMode'
 import { canSkip, resumeSkipped, toSkippedRecord, withSkipped } from '../../lib/skipped'
 import {
   bankRest,
@@ -143,6 +143,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Whether the get-into-position count is up: the beat between a rest that ran
   // itself out and the set it leads into (see closeRest).
   const [preparing, setPreparing] = useState(false)
+  // Whether a timed hold's clock is running (see HoldTimer). While it is, the
+  // clock is what says when the set is over, so turbo's own wait stands down.
+  const [holdRunning, setHoldRunning] = useState(false)
   // The flourish for a set that hit its target, keyed by a counter so consecutive
   // on-target sets each get their own play rather than reusing a mid-flight one.
   const [cheer, setCheer] = useState<{ id: number; grade: SetGrade } | null>(null)
@@ -609,9 +612,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }, [planned, nextStep, step.setIndex])
 
   // Mark the current set done and either rest into the next set or finish.
-  const completeSetAndAdvance = () => {
+  //
+  // `finalReps` is a set whose number was measured rather than typed: a timed hold
+  // that ended itself hands over the seconds the clock really ran, which go into
+  // the same field the reps do. Written with the set rather than before it, so the
+  // cheer and the carry-forward below read what's being logged instead of the
+  // prefilled prescription it replaced.
+  const completeSetAndAdvance = (finalReps?: number) => {
+    const reps = finalReps ?? set?.reps ?? 0
     recordActiveForCurrent(planned.key)
-    controls.updateSet(planned.key, step.setIndex, { done: true })
+    controls.updateSet(planned.key, step.setIndex, { done: true, ...(finalReps != null && { reps: finalReps }) })
     if (!nextStep || upcoming == null) {
       // No cheer on the last set: finishing hands the screen straight to the
       // recap, which has its own (louder) celebration to give.
@@ -620,7 +630,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     }
     // Cheer what the numbers on screen actually were — the flourish plays over the
     // rest that's about to open, so nothing waits on it (see SetCheer).
-    const grade = gradeSet(set?.weightLbs ?? null, set?.reps ?? 0, target)
+    const grade = gradeSet(set?.weightLbs ?? null, reps, target)
     if (grade) {
       cheerId.current += 1
       setCheer({ id: cheerId.current, grade })
@@ -628,7 +638,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // Carry this set's actual weight/reps forward to the next set of the same
     // exercise, so subsequent sets prefill what you just did (not the target).
     if (nextStep.ex.key === planned.key && set) {
-      controls.updateSet(planned.key, nextStep.setIndex, { weightLbs: set.weightLbs ?? null, reps: set.reps })
+      controls.updateSet(planned.key, nextStep.setIndex, { weightLbs: set.weightLbs ?? null, reps })
     }
     // The rest the header has been naming all along (see restShownSec) — one
     // computation for both, so the break you get is the one you were shown.
@@ -684,20 +694,26 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // overlay disarm it too: rest already advances itself, and reading the checklist
   // isn't standing at the bar. The get-into-position count holds it off for the
   // same reason: the wait on a set starts when you're on the set.
+  //
+  // A hold with its clock running is the last of them, and the one place an
+  // average would be wrong outright: the plank is over when its own prescribed
+  // time is up, not when a set of it usually takes, so the clock closes that set
+  // instead (see `holdEndsItself`).
   const advanceRef = useRef(completeSetAndAdvance)
   advanceRef.current = completeSetAndAdvance
+  // Nothing between you and the set: no rest, no count, no sheet, no pause. What
+  // both the turbo wait and a self-ending hold need to be true before they can
+  // close a set on their own.
+  const setScreenLive =
+    rest == null && !preparing && !paused && !showList && !showHistory && !showCircuitRest
   const turboMs = turboSetMs(exerciseAverages, planned.key)
   const turboArmed =
     fastMode === 'turbo' &&
     !awaitingStart &&
     !atLast &&
     (set?.reps ?? 0) > 0 &&
-    rest == null &&
-    !preparing &&
-    !paused &&
-    !showList &&
-    !showHistory &&
-    !showCircuitRest
+    !holdRunning &&
+    setScreenLive
   useEffect(() => {
     if (!turboArmed) return
     const id = window.setTimeout(() => {
@@ -710,6 +726,23 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // Re-armed per set, and again whenever you touch this one's numbers — the wait
     // starts over rather than logging a weight you're halfway through typing.
   }, [turboArmed, turboMs, step.stepKey, edits])
+
+  // Hands-free, a timed hold rolls into its rest the moment the prescribed time is
+  // up: the clock, not you, is what says a plank is done, so there's nothing left
+  // to tap for. Switched on partway through a hold that's already in overtime, it
+  // ends there and then — being past the time is exactly the state it was waiting
+  // for — and the seconds actually held are what get logged.
+  //
+  // Held off on the last set of all, like turbo: finishing the workout stays a
+  // deliberate press.
+  const holdEndsItself = rollsThroughRest(fastMode) && !atLast && setScreenLive
+
+  // Each set gets its own clock (see the HoldTimer's key below), so a hold left
+  // running when the flow moves on doesn't leave the next set believing one is
+  // under way.
+  useEffect(() => {
+    setHoldRunning(false)
+  }, [step.stepKey])
 
   // The stations of the circuit in play, in the order they're rotated through —
   // the whole circuit rather than just the station on screen, because "rest only
@@ -859,14 +892,33 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           {planned.timed ? (
             <div className="flex flex-col items-center gap-4">
               <HoldTimer
+                // A clock per set: a hold still running when the flow moves on is
+                // this set's, and carrying it into the next one would hand that set
+                // a hold that's already run past its time.
+                key={step.stepKey}
                 targetSec={target?.reps ?? planned.repMin}
-                onStop={(held) => editSet({ reps: held })}
+                onStop={(held) => {
+                  setHoldRunning(false)
+                  editSet({ reps: held })
+                }}
                 // The seconds on the clock aren't seconds spent standing at the set
                 // screen deciding anything, so the exercise's active-time average
                 // has nothing to learn from them (see recordActiveForCurrent).
                 onStart={() => {
                   activeStartRef.current = 0
+                  setHoldRunning(true)
                 }}
+                // Hands-free the hold logs itself and rests (see holdEndsItself).
+                // Both in one call, so what's written is the time the clock ran
+                // rather than the prescription the field was prefilled with.
+                onTargetEnd={
+                  holdEndsItself
+                    ? (held) => {
+                        setHoldRunning(false)
+                        completeSetAndAdvance(held)
+                      }
+                    : undefined
+                }
               />
               <label className="flex w-full flex-col items-center gap-1">
                 <span className="text-xs tracking-wide text-neutral-500">seconds held</span>

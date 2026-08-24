@@ -16,11 +16,17 @@ import { useEffect, useRef, useState } from 'react'
  *
  * A buzz marks the prescribed time passing, since the one place you aren't looking
  * mid-plank is the screen.
+ *
+ * Hands-free (`onTargetEnd`) the hold doesn't wait to be stopped: the prescribed
+ * time being up is what ends it, and a hold already past that when hands-free
+ * comes on ends the moment it does — with the overtime it really ran, since
+ * that's what the clock says was held.
  */
 export function HoldTimer({
   targetSec,
   onStop,
   onStart,
+  onTargetEnd,
 }: {
   /** The prescribed hold, counted down from. */
   targetSec: number
@@ -28,6 +34,12 @@ export function HoldTimer({
   onStop: (heldSec: number) => void
   /** The hold began — for a caller that wants to stand its own clocks down. */
   onStart?: () => void
+  /**
+   * Given, the hold ends itself once the prescribed time is up rather than waiting
+   * on the 'done' press, and hands over the seconds it lasted here instead of to
+   * `onStop` — so the caller can tell a hold the clock closed from one you closed.
+   */
+  onTargetEnd?: (heldSec: number) => void
 }) {
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -68,14 +80,27 @@ export function HoldTimer({
     onStart?.()
   }
 
-  const stop = () => {
+  const end = (hand: (heldSec: number) => void) => {
     // Read from the clock rather than from the last tick, so a hold ended between
     // ticks is logged to the second it really was.
     const held = startedAt == null ? 0 : Math.round((Date.now() - startedAt) / 1000)
     setStartedAt(null)
     setElapsedMs(0)
-    onStop(held)
+    hand(held)
   }
+
+  const stop = () => end(onStop)
+
+  // Hands-free, the clock closes the hold: the prescribed time running out is the
+  // whole of what the set was waiting on. Switched on mid-hold this fires on the
+  // spot, since a hold in overtime is one that's already done.
+  useEffect(() => {
+    if (startedAt == null || remaining > 0 || !onTargetEnd) return
+    end(onTargetEnd)
+    // `end` is rebuilt every render; the guard above is what keeps this to one
+    // firing, since the hold it reads is over the moment it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startedAt, remaining, onTargetEnd])
 
   const running = startedAt != null
 
