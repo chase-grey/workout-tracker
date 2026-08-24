@@ -30,7 +30,7 @@ const SEC_PER_REP = 5
 const GET_READY_SEC = 5
 
 /** Stretches that take longer than the default to settle into, by exercise key. */
-const GET_READY_SEC_BY_EX: Record<string, number> = { tailors_pose: 10 }
+const GET_READY_SEC_BY_EX: Record<string, number> = { tailors_pose: 15 }
 
 /**
  * Seconds to get into position when crossing from the mobility routine into the
@@ -90,10 +90,11 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const [rest, setRest] = useState<RestState | null>(() =>
     saved?.rest && canResumeRest(saved.rest.endsAt, Date.now()) ? saved.rest : null,
   )
-  // Hands-free: every rest rolls into the next set on its own, a paced set rolls
-  // into its rest on its last rep, and the get-into-position counts are skipped —
-  // until the fast-forward toggle is switched back off. Kept in the session's
-  // snapshot so a reload mid-routine doesn't quietly start waiting for taps again.
+  // Hands-free: every rest rolls into the next set on its own and the
+  // get-into-position counts are skipped — until the fast-forward toggle is
+  // switched back off. Stretch sets roll into their rest either way. Kept in the
+  // session's snapshot so a reload mid-routine doesn't quietly start waiting for
+  // taps again.
   const [fast, setFast] = useState(!!saved?.fast)
   // True so the routine opens with the same "get into position" countdown that
   // follows each rest — but not over a resumed rest, which owns the screen first,
@@ -439,9 +440,9 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         </div>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
-          {/* No turbo here: under hands-free every set that can advance itself
-              already does, and there's no learned per-set timing to run the core
-              block's rep entry on. */}
+          {/* No turbo here: every stretch set already advances itself, and
+              there's no learned per-set timing to run the core block's rep entry
+              on. */}
           <FastForwardToggle mode={fast ? 'on' : 'off'} onPress={() => setFast(!fast)} />
           <KebabMenu items={menuItems} />
         </div>
@@ -470,12 +471,17 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
           running={rest == null && !preparing && !paused && photos == null}
           startRep={rep}
           onRep={setRep}
-          // Under fast-forward the last rep is the tap. Not on the closing step —
-          // the core block ends the session, so nothing here logs one on a timer.
-          onTargetHit={fast && !atLast ? intoRestOnTarget : undefined}
+          // A stretch set always ends itself: the target rep rolls it into its
+          // rest whether or not the routine is running hands-free. Mid-pose there
+          // is nothing to decide — the hold is over when the reps are done, and
+          // waiting for a tap only means holding it longer than prescribed. Not on
+          // the closing step, which the core block owns: nothing there logs a
+          // session on a timer.
+          onTargetHit={!atLast ? intoRestOnTarget : undefined}
           // Same condition: with no tap coming, the guide brightens a step on the
-          // rep that's about to roll the set into its rest.
-          endsOnTarget={fast && !atLast}
+          // rep that's about to roll the set into its rest — and keeps its rep
+          // count off the screen, since there's nothing left to time by it.
+          endsOnTarget={!atLast}
         />
       ) : (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">

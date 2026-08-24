@@ -27,12 +27,12 @@ import { createRotation, type Rotation } from '../lib/variantRotation'
  * A random variant within the family is chosen per mount, so it varies from one
  * set to the next.
  *
- * When the set ends itself (hands-free), no rep count goes on screen: mid-stretch
- * you're upside down or eyes-closed, and a number you have to focus on to read is
- * worse than useless when nothing is being asked of you. The guide says it by
- * brightening once the set is done. A set you have to tap to end is the other
- * case — there the count sits under the shape, because knowing which rep you're
- * on is the only way to know when to tap.
+ * When the set ends itself, no rep count goes on screen: mid-stretch you're upside
+ * down or eyes-closed, and a number you have to focus on to read is worse than
+ * useless when nothing is being asked of you. The guide says it by brightening
+ * once the set is done. A set you have to tap to end is the other case — there the
+ * count sits under the shape, because knowing which rep you're on is the only way
+ * to know when to tap.
  */
 const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
 const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
