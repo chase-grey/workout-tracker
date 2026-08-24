@@ -30,7 +30,7 @@ export function useActiveSession() {
 
   const start = useCallback(
     // `variant` overrides the automatic A/B choice (Push + Core only); omit it to
-    // take whichever one this week's session count calls for.
+    // take whichever press the last push session didn't start with.
     (dayType: DayType, variant?: VariantKey) => {
       storage.saveActiveStep(0)
       storage.saveActiveStepKey(null)

@@ -3,14 +3,21 @@
  *
  * Push runs as two variants that differ only in which press leads (see
  * DEFAULT_PLAN.push): A puts incline first at 4 sets, B puts flat first at 4
- * sets. They alternate by position *within the week* rather than by a running
- * counter, so the first push session of any week is always A:
+ * sets. The ask is simply to start with a different press each time, so they
+ * alternate off the last one actually trained:
  *
- *   1st push of the week → A, 2nd → B, 3rd → A, …
+ *   incline-first → flat-first → incline-first → …
  *
- * That means a week with a single push session gets A, and so does the next
- * week's single session — the alternation resets at each Monday instead of
- * drifting. Pure module: no React/DOM, no storage.
+ * Read off the variant recorded on the logged session rather than off a session
+ * count, so an override ("give me the other one today") is what the next session
+ * turns over from — the alternation follows what was pressed first, not what was
+ * scheduled. A count per week was the earlier rule, and it pinned a once-a-week
+ * schedule to incline forever, since the week's first session was always A.
+ *
+ * Counted off logged history rather than a stored toggle, so it survives a
+ * reinstall and stays consistent across devices. Only completed sessions count:
+ * starting a workout and abandoning it doesn't burn a turn. Pure module: no
+ * React/DOM, no storage.
  */
 
 import type { DayType, WorkoutRow } from '../types'
@@ -21,44 +28,48 @@ import {
   type DayPlan,
   type VariantKey,
 } from '../config/plan'
-import { toISODate, weekStartISO } from './dates'
 import { trainingSessions } from './session'
 
 /** Every variant a variant day runs, in order. */
 export const VARIANT_KEYS: VariantKey[] = ['A', 'B']
 
-/** The variant for the nth push session of a week, counting n from 0. */
-export function variantForIndex(index: number): VariantKey {
-  return index % 2 === 0 ? 'A' : 'B'
+/**
+ * The variant the most recent logged `dayType` session trained, or null if none
+ * recorded one.
+ *
+ * Only training sessions are eligible, so a supplemental core-only session never
+ * turns the alternation over. Sessions that recorded no variant at all are
+ * skipped rather than treated as a break in the chain: imported history and
+ * anything logged before the A/B split have none, and the last session that does
+ * say which press led is still the right thing to alternate from. Dates are
+ * YYYY-MM-DD, so a plain string compare orders them, and `>=` lets a later row
+ * win a same-day tie since rows are appended chronologically.
+ */
+export function lastVariant(workouts: WorkoutRow[], dayType: DayType): VariantKey | null {
+  const dates = new Map(
+    trainingSessions(workouts)
+      .filter((s) => s.dayType === dayType)
+      .map((s) => [s.sessionId, s.date]),
+  )
+  let latest: { date: string; variant: VariantKey } | null = null
+  for (const r of workouts) {
+    if (!r.session_id || !r.variant) continue
+    const date = dates.get(r.session_id)
+    if (date === undefined) continue
+    if (!latest || date >= latest.date) latest = { date, variant: r.variant }
+  }
+  return latest?.variant ?? null
 }
 
 /**
- * How many sessions of `dayType` are already logged in the week containing
- * `today`. Counts distinct training sessions, so a supplemental core-only
- * session never shifts the alternation.
+ * The variant to start for `dayType` right now — whichever one the last session
+ * didn't train, and A (incline first) when there's no variant on record to turn
+ * over from. Days that don't run variants get null.
  */
-export function sessionsThisWeek(
-  workouts: WorkoutRow[],
-  dayType: DayType,
-  today: Date = new Date(),
-): number {
-  const week = weekStartISO(toISODate(today))
-  return trainingSessions(workouts).filter(
-    (s) => s.dayType === dayType && weekStartISO(s.date) === week,
-  ).length
-}
-
-/**
- * The variant to start for `dayType` right now — A for the week's first session,
- * B for its second, and so on. Days that don't run variants get null.
- */
-export function nextVariant(
-  workouts: WorkoutRow[],
-  dayType: DayType,
-  today: Date = new Date(),
-): VariantKey | null {
+export function nextVariant(workouts: WorkoutRow[], dayType: DayType): VariantKey | null {
   if (dayType !== 'push') return null
-  return variantForIndex(sessionsThisWeek(workouts, dayType, today))
+  const last = lastVariant(workouts, dayType)
+  return last ? otherVariant(last) : VARIANT_KEYS[0]
 }
 
 /** The other variant — for the "actually, give me the other one" override. */

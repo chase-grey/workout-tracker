@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import type { WorkoutRow } from '../types'
 import {
+  lastVariant,
   leadVariant,
   leadVariantForKey,
   nextVariant,
   otherVariant,
   progressionVariant,
-  sessionsThisWeek,
-  variantForIndex,
 } from './pushVariant'
 import { CORE_SESSION_NOTE } from './session'
 import { DEFAULT_PLAN, STRETCH_CORE } from '../config/plan'
@@ -27,70 +26,88 @@ function row(overrides: Partial<WorkoutRow>): WorkoutRow {
   }
 }
 
-// Week of Mon 2026-01-05 … Sun 2026-01-11.
-const WEDNESDAY = new Date(2026, 0, 7)
-const NEXT_WEEK = new Date(2026, 0, 14)
-
-describe('variantForIndex', () => {
-  it('alternates A, B, A, B by position', () => {
-    expect([0, 1, 2, 3].map(variantForIndex)).toEqual(['A', 'B', 'A', 'B'])
-  })
-})
-
 describe('nextVariant', () => {
-  it("starts the week's first push session on A", () => {
-    expect(nextVariant([], 'push', WEDNESDAY)).toBe('A')
+  it('starts the very first push session on A', () => {
+    expect(nextVariant([], 'push')).toBe('A')
   })
 
-  it('gives B once one push session is logged this week', () => {
-    const rows = [row({ session_id: 's1', date: '2026-01-05' })]
-    expect(nextVariant(rows, 'push', WEDNESDAY)).toBe('B')
+  it('flips to flat-first after an incline-first session', () => {
+    const rows = [row({ session_id: 's1', date: '2026-01-05', variant: 'A' })]
+    expect(nextVariant(rows, 'push')).toBe('B')
   })
 
-  it('comes back around to A for a third push session in one week', () => {
+  it('flips back to incline-first after a flat-first session', () => {
+    const rows = [row({ session_id: 's1', date: '2026-01-05', variant: 'B' })]
+    expect(nextVariant(rows, 'push')).toBe('A')
+  })
+
+  it('keeps alternating across a week boundary', () => {
+    // The old rule reset each Monday, so a once-a-week schedule started with
+    // incline every single time. It now turns over regardless of the week.
+    const rows = [row({ session_id: 's1', date: '2026-01-05', variant: 'A' })]
+    expect(nextVariant(rows, 'push')).toBe('B')
+    const next = [...rows, row({ session_id: 's2', date: '2026-01-12', variant: 'B' })]
+    expect(nextVariant(next, 'push')).toBe('A')
+  })
+
+  it('turns over from the variant actually trained, not the one due', () => {
+    // Two sessions in a week both pressed flat first (the second an override);
+    // incline is what's owed next, rather than the count's turn.
     const rows = [
-      row({ session_id: 's1', date: '2026-01-05' }),
-      row({ session_id: 's2', date: '2026-01-07' }),
+      row({ session_id: 's1', date: '2026-01-05', variant: 'B' }),
+      row({ session_id: 's2', date: '2026-01-07', variant: 'B' }),
     ]
-    expect(nextVariant(rows, 'push', WEDNESDAY)).toBe('A')
-  })
-
-  it('resets to A next week rather than continuing the alternation', () => {
-    // One push session last week; the new week starts from A again, so a
-    // once-a-week schedule is always variant A instead of drifting.
-    const rows = [row({ session_id: 's1', date: '2026-01-05' })]
-    expect(nextVariant(rows, 'push', NEXT_WEEK)).toBe('A')
+    expect(nextVariant(rows, 'push')).toBe('A')
   })
 
   it('ignores other day types', () => {
-    const rows = [row({ session_id: 's1', day_type: 'pull', exercise: 'barbell_squat' })]
-    expect(nextVariant(rows, 'push', WEDNESDAY)).toBe('A')
+    const rows = [
+      row({ session_id: 's1', day_type: 'pull', exercise: 'barbell_squat', variant: 'A' }),
+    ]
+    expect(nextVariant(rows, 'push')).toBe('A')
   })
 
   it('ignores a supplemental core-only session', () => {
     // A stretch's core block isn't training, so it can't shift the rotation — even
     // though the sit-up it logs is a movement push day trains for real.
     const rows = [
-      row({ session_id: 's1', exercise: STRETCH_CORE.key, notes: CORE_SESSION_NOTE }),
+      row({
+        session_id: 's1',
+        exercise: STRETCH_CORE.key,
+        notes: CORE_SESSION_NOTE,
+        variant: 'A',
+      }),
     ]
-    expect(nextVariant(rows, 'push', WEDNESDAY)).toBe('A')
+    expect(nextVariant(rows, 'push')).toBe('A')
   })
 
   it('has no variant for days that do not run A/B', () => {
-    expect(nextVariant([], 'pull', WEDNESDAY)).toBeNull()
-    expect(nextVariant([], 'fullbody', WEDNESDAY)).toBeNull()
+    expect(nextVariant([], 'pull')).toBeNull()
+    expect(nextVariant([], 'fullbody')).toBeNull()
   })
 })
 
-describe('sessionsThisWeek', () => {
-  it('counts distinct sessions inside the current week only', () => {
+describe('lastVariant', () => {
+  it('reads the most recent session that recorded one', () => {
     const rows = [
-      row({ session_id: 's1', date: '2026-01-05', set_number: 1 }),
-      row({ session_id: 's1', date: '2026-01-05', set_number: 2 }),
-      row({ session_id: 's2', date: '2026-01-07' }),
-      row({ session_id: 's0', date: '2025-12-29' }), // previous week
+      row({ session_id: 's1', date: '2026-01-05', variant: 'B' }),
+      row({ session_id: 's2', date: '2026-01-12', variant: 'A' }),
     ]
-    expect(sessionsThisWeek(rows, 'push', WEDNESDAY)).toBe(2)
+    expect(lastVariant(rows, 'push')).toBe('A')
+  })
+
+  it('skips past sessions that recorded none', () => {
+    // Imported history and anything logged before the A/B split carry no variant;
+    // the last session that names a press is still what to alternate from.
+    const rows = [
+      row({ session_id: 's1', date: '2026-01-05', variant: 'B' }),
+      row({ session_id: 's2', date: '2026-01-12' }),
+    ]
+    expect(lastVariant(rows, 'push')).toBe('B')
+  })
+
+  it('has nothing to report with no history at all', () => {
+    expect(lastVariant([], 'push')).toBeNull()
   })
 })
 

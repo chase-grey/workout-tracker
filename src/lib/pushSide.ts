@@ -9,10 +9,10 @@
  *
  *   1st push session ever → left, 2nd → right, 3rd → left, …
  *
- * A straight running count, unlike the A/B press variant, which resets each week
- * (see lib/pushVariant). The ask here is simply "a different side each time", and
- * a per-week reset would repeat a side across every week boundary with an odd
- * number of sessions in it.
+ * A straight running count, where the A/B press variant turns over off the
+ * variant its last session recorded (see lib/pushVariant). Same intent — a
+ * different one each time — reached differently: the side isn't stored on the
+ * session's rows, so there's nothing to read back and flip.
  *
  * Counted off logged history rather than a stored toggle, so it survives a
  * reinstall and stays consistent across devices. Only completed sessions count:
