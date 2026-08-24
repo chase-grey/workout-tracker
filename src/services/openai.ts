@@ -113,14 +113,12 @@ export async function chatCompleteRaw(
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-chat-token': chatToken() },
           body: proxyBody,
-        }).catch((err: unknown) => {
+        }).catch(() => {
           // A dead tunnel (laptop asleep, or restarted onto a new hostname) fails
           // at the network layer. Drop the cached address so the next send looks
           // the current one up instead of retrying a hostname that's gone.
           forgetChatEndpoint()
-          throw new Error(
-            `can't reach the coach on your computer — is it awake and running dev:tunnel? (${String(err)})`,
-          )
+          throw new Error("Your computer isn't answering. Start dev:tunnel.")
         })
       : await fetch(ENDPOINT, {
           method: 'POST',
