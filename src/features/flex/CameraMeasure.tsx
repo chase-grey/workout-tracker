@@ -7,6 +7,7 @@ import {
   SEGMENTS,
   ROLE_COLOR,
   MEASURE_LABEL,
+  MEASURE_MODES,
   angleMarks,
   defaultHandles,
   handlesFromLandmarks,
@@ -32,7 +33,7 @@ const TIMER_CHOICES = [10, 20, 30, 45] as const
 const DETECT_NOTE = {
   model: "couldn't load the pose model — these dots are a rough guess.",
   'no-pose': "couldn't find a body in this photo — these dots are a rough guess.",
-  partial: "couldn't make out your legs clearly — these dots are a rough guess.",
+  partial: "couldn't make out your body clearly — these dots are a rough guess.",
 } as const
 
 /**
@@ -599,13 +600,14 @@ export function CameraMeasure({
       >
         {phase === 'setup' && (
           <>
-            {/* What we're measuring */}
-            <div className="flex gap-2">
-              {(['split', 'tailors'] as const).map((m) => (
+            {/* What we're measuring. Wrapping rather than one row: there are
+                five poses now, and five labels across a phone are unreadable. */}
+            <div className="flex flex-wrap gap-2">
+              {MEASURE_MODES.map((m) => (
                 <button
                   key={m}
                   onClick={() => setMode(m)}
-                  className={`min-h-[40px] flex-1 rounded-xl text-sm font-semibold ${
+                  className={`min-h-[40px] flex-1 basis-[30%] rounded-xl px-2 text-sm font-semibold ${
                     mode === m ? 'bg-accent text-black' : 'bg-white/10 text-neutral-200'
                   }`}
                 >

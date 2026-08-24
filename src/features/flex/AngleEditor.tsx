@@ -5,6 +5,7 @@ import {
   ROLE_COLOR,
   MEASURE_LABEL,
   anglesFromHandles,
+  resultReadings,
   hasSides,
   swapSides,
   verticalGuide,
@@ -67,6 +68,7 @@ export function AngleEditor({
   const specs = HANDLES[mode]
   const segments = SEGMENTS[mode]
   const result = anglesFromHandles(mode, handles, aspect)
+  const readings = resultReadings(mode, result)
   // Tailor's angles are read off straight up, so the vertical has to be on screen
   // too — otherwise the lines being dragged have nothing to be judged against.
   const guide = verticalGuide(mode, handles)
@@ -213,23 +215,22 @@ export function AngleEditor({
         </div>
 
         <div className="mt-4 rounded-2xl bg-surface p-4 text-center">
-          {mode === 'split' ? (
-            <>
-              <p className="text-xs tracking-wide text-neutral-500">side split</p>
-              <p className="text-5xl font-bold tabular-nums">{result.splitDeg ?? 0}°</p>
-            </>
-          ) : (
-            <div className="flex justify-around">
-              <div>
-                <p className="text-xs tracking-wide text-neutral-500">left</p>
-                <p className="text-4xl font-bold tabular-nums">{result.tailorsLeftDeg ?? 0}°</p>
+          {/* One reading gets the whole width and the big type; a pose that
+              produces a pair splits it between them. */}
+          <div className="flex justify-around">
+            {readings.map((r) => (
+              <div key={r.label}>
+                <p className="text-xs tracking-wide text-neutral-500">{r.label}</p>
+                <p
+                  className={`font-bold tabular-nums ${
+                    readings.length > 1 ? 'text-4xl' : 'text-5xl'
+                  }`}
+                >
+                  {r.deg}°
+                </p>
               </div>
-              <div>
-                <p className="text-xs tracking-wide text-neutral-500">right</p>
-                <p className="text-4xl font-bold tabular-nums">{result.tailorsRightDeg ?? 0}°</p>
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
           {hasSides(mode) && (
             <button
               onClick={() => setHandles((prev) => swapSides(mode, prev))}

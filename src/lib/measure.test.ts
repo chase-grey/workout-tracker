@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   HANDLES,
+  MEASURE_MODES,
   SEGMENTS,
   VERTICAL_REF,
   angleMarks,
@@ -8,6 +9,7 @@ import {
   defaultHandles,
   handlesFromLandmarks,
   hasSides,
+  resultReadings,
   summarizeResult,
   swapSides,
   verticalGuide,
@@ -286,5 +288,207 @@ describe('summarizeResult', () => {
   it('formats split and tailors results', () => {
     expect(summarizeResult('split', { splitDeg: 92 })).toBe('92°')
     expect(summarizeResult('tailors', { tailorsLeftDeg: 55, tailorsRightDeg: 54 })).toBe('L 55° · R 54°')
+  })
+})
+
+describe('the head-to-toe poses', () => {
+  /** 33 landmarks, all confidently seen, at the same spot until overridden. */
+  const lms = (): Landmark[] =>
+    Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.9 }))
+
+  it('declares every handle its segments name, for every mode', () => {
+    for (const mode of MEASURE_MODES) {
+      const keys = new Set(HANDLES[mode].map((s) => s.key))
+      const h = defaultHandles(mode)
+      for (const spec of HANDLES[mode]) expect(h[spec.key]).toBeDefined()
+      for (const seg of SEGMENTS[mode]) {
+        expect(keys.has(seg.from)).toBe(true)
+        expect(keys.has(seg.to)).toBe(true)
+      }
+    }
+  })
+
+  it('hands out a fresh copy of the defaults each time', () => {
+    const a = defaultHandles('toe_touch')
+    a.hip = { x: 0, y: 0 }
+    expect(defaultHandles('toe_touch').hip).not.toEqual({ x: 0, y: 0 })
+  })
+
+  describe('toe_touch', () => {
+    // Standing upright, side-on: the torso runs straight up from the hip and the
+    // legs straight down, which is the widest the hip angle ever gets.
+    it('reads 180° standing upright', () => {
+      const h: Handles = {
+        shoulder: { x: 0.5, y: 0.2 },
+        hip: { x: 0.5, y: 0.5 },
+        ankle: { x: 0.5, y: 0.9 },
+      }
+      expect(anglesFromHandles('toe_touch', h, 0.75).toeTouchDeg).toBeCloseTo(180, 0)
+    })
+
+    it('reads 90° folded to horizontal', () => {
+      const h: Handles = {
+        shoulder: { x: 0.1, y: 0.5 },
+        hip: { x: 0.5, y: 0.5 },
+        ankle: { x: 0.5, y: 0.9 },
+      }
+      expect(anglesFromHandles('toe_touch', h, 1).toeTouchDeg).toBeCloseTo(90, 0)
+    })
+
+    // Chest folded down onto the legs — the deep end of the pose, and the small
+    // end of the number. This is the one reading where smaller is better.
+    it('closes toward 0° as the fold deepens', () => {
+      const upright = anglesFromHandles('toe_touch', {
+        shoulder: { x: 0.5, y: 0.2 },
+        hip: { x: 0.5, y: 0.5 },
+        ankle: { x: 0.5, y: 0.9 },
+      }, 1).toeTouchDeg!
+      const deep = anglesFromHandles('toe_touch', {
+        shoulder: { x: 0.5, y: 0.85 },
+        hip: { x: 0.5, y: 0.5 },
+        ankle: { x: 0.5, y: 0.9 },
+      }, 1).toeTouchDeg!
+      expect(deep).toBeLessThan(upright)
+      expect(deep).toBeCloseTo(0, 0)
+    })
+
+    it('opens its arc at the hip, in the neutral color', () => {
+      const h: Handles = {
+        shoulder: { x: 0.1, y: 0.5 },
+        hip: { x: 0.5, y: 0.5 },
+        ankle: { x: 0.5, y: 0.9 },
+      }
+      const r = anglesFromHandles('toe_touch', h, 1)
+      const marks = angleMarks('toe_touch', h, r)
+      expect(marks).toHaveLength(1)
+      expect(marks[0].vertex).toEqual(h.hip)
+      expect(marks[0].role).toBe('ref')
+      expect(marks[0].deg).toBe(r.toeTouchDeg)
+    })
+
+    it('places its handles on the body midlines', () => {
+      const l = lms()
+      l[POSE.LEFT_SHOULDER] = { x: 0.4, y: 0.3, visibility: 0.9 }
+      l[POSE.RIGHT_SHOULDER] = { x: 0.6, y: 0.3, visibility: 0.9 }
+      l[POSE.LEFT_HIP] = { x: 0.4, y: 0.5, visibility: 0.9 }
+      l[POSE.RIGHT_HIP] = { x: 0.6, y: 0.5, visibility: 0.9 }
+      l[POSE.LEFT_ANKLE] = { x: 0.45, y: 0.9, visibility: 0.9 }
+      l[POSE.RIGHT_ANKLE] = { x: 0.55, y: 0.9, visibility: 0.9 }
+      const h = handlesFromLandmarks('toe_touch', l)!
+      expect(h.shoulder).toEqual({ x: 0.5, y: 0.3 })
+      expect(h.hip).toEqual({ x: 0.5, y: 0.5 })
+      expect(h.ankle).toEqual({ x: 0.5, y: 0.9 })
+    })
+
+    // Built from midpoints, so a mirror image is the same fold.
+    it('measures a mirrored shot identically', () => {
+      const l = lms()
+      l[POSE.LEFT_SHOULDER] = { x: 0.3, y: 0.3, visibility: 0.9 }
+      l[POSE.RIGHT_SHOULDER] = { x: 0.7, y: 0.3, visibility: 0.9 }
+      expect(handlesFromLandmarks('toe_touch', l, true)).toEqual(
+        handlesFromLandmarks('toe_touch', l, false),
+      )
+    })
+
+    it('needs the shoulders as well as the hips and ankles', () => {
+      const l = lms()
+      expect(handlesFromLandmarks('toe_touch', l)).not.toBeNull()
+      l[POSE.LEFT_SHOULDER] = { x: 0.4, y: 0.3, visibility: 0.1 }
+      expect(handlesFromLandmarks('toe_touch', l)).toBeNull()
+    })
+  })
+
+  describe('leg_lift_left / leg_lift_right', () => {
+    const lifted: Handles = {
+      hip: { x: 0.5, y: 0.5 },
+      ankleStand: { x: 0.5, y: 0.9 },
+      ankleLift: { x: 0.1, y: 0.5 },
+    }
+
+    it('reads the angle between the two legs, 0° with both down', () => {
+      expect(anglesFromHandles('leg_lift_left', lifted, 1).legLiftLeftDeg).toBeCloseTo(90, 0)
+      const down = { ...lifted, ankleLift: { x: 0.5, y: 0.85 } }
+      expect(anglesFromHandles('leg_lift_left', down, 1).legLiftLeftDeg).toBeCloseTo(0, 0)
+    })
+
+    it('opens wider as the leg comes up — bigger is better here', () => {
+      const low = anglesFromHandles('leg_lift_left', {
+        ...lifted,
+        ankleLift: { x: 0.2, y: 0.8 },
+      }, 1).legLiftLeftDeg!
+      expect(anglesFromHandles('leg_lift_left', lifted, 1).legLiftLeftDeg!).toBeGreaterThan(low)
+    })
+
+    it('writes to the field its own side names, and nothing else', () => {
+      expect(anglesFromHandles('leg_lift_left', lifted, 1)).toEqual({
+        legLiftLeftDeg: expect.any(Number),
+      })
+      expect(anglesFromHandles('leg_lift_right', lifted, 1)).toEqual({
+        legLiftRightDeg: expect.any(Number),
+      })
+    })
+
+    it('colors each side’s arc as its own line, opening at the hip', () => {
+      const [left] = angleMarks('leg_lift_left', lifted, { legLiftLeftDeg: 90 })
+      const [right] = angleMarks('leg_lift_right', lifted, { legLiftRightDeg: 90 })
+      expect(left.vertex).toEqual(lifted.hip)
+      expect(left.role).toBe('a')
+      expect(right.role).toBe('b')
+    })
+
+    it('takes the lifted ankle from its own side and the standing one from the other', () => {
+      const l = lms()
+      l[POSE.LEFT_HIP] = { x: 0.4, y: 0.5, visibility: 0.9 }
+      l[POSE.RIGHT_HIP] = { x: 0.6, y: 0.5, visibility: 0.9 }
+      l[POSE.LEFT_ANKLE] = { x: 0.2, y: 0.5, visibility: 0.9 }
+      l[POSE.RIGHT_ANKLE] = { x: 0.6, y: 0.9, visibility: 0.9 }
+
+      const left = handlesFromLandmarks('leg_lift_left', l)!
+      expect(left.hip).toEqual({ x: 0.5, y: 0.5 })
+      expect(left.ankleLift).toEqual({ x: 0.2, y: 0.5 })
+      expect(left.ankleStand).toEqual({ x: 0.6, y: 0.9 })
+
+      const right = handlesFromLandmarks('leg_lift_right', l)!
+      expect(right.ankleLift).toEqual({ x: 0.6, y: 0.9 })
+      expect(right.ankleStand).toEqual({ x: 0.2, y: 0.5 })
+    })
+
+    it('reads a mirrored shot onto the leg the body calls lifted', () => {
+      const l = lms()
+      l[POSE.LEFT_ANKLE] = { x: 0.2, y: 0.5, visibility: 0.9 }
+      l[POSE.RIGHT_ANKLE] = { x: 0.6, y: 0.9, visibility: 0.9 }
+      const h = handlesFromLandmarks('leg_lift_left', l, true)!
+      expect(h.ankleLift).toEqual({ x: 0.6, y: 0.9 })
+      expect(h.ankleStand).toEqual({ x: 0.2, y: 0.5 })
+    })
+  })
+
+  // You can only lift one leg per photo, so the side is the shot rather than a
+  // pair within it — which leaves nothing for the editor's swap control to trade.
+  it('offers no side swap on any of the three', () => {
+    for (const mode of ['toe_touch', 'leg_lift_left', 'leg_lift_right'] as const) {
+      expect(hasSides(mode)).toBe(false)
+      const h = defaultHandles(mode)
+      expect(swapSides(mode, h)).toBe(h)
+      expect(VERTICAL_REF[mode]).toBeNull()
+      expect(verticalGuide(mode, h)).toBeNull()
+    }
+  })
+
+  it('summarises each as its one reading', () => {
+    expect(summarizeResult('toe_touch', { toeTouchDeg: 96 })).toBe('96°')
+    expect(summarizeResult('leg_lift_left', { legLiftLeftDeg: 84 })).toBe('84°')
+    expect(summarizeResult('leg_lift_right', { legLiftRightDeg: 80 })).toBe('80°')
+  })
+
+  it('names every reading the editor spells out', () => {
+    for (const mode of MEASURE_MODES) {
+      const rs = resultReadings(mode, anglesFromHandles(mode, defaultHandles(mode), 0.75))
+      expect(rs.length).toBeGreaterThan(0)
+      for (const r of rs) {
+        expect(r.label).not.toBe('')
+        expect(Number.isFinite(r.deg)).toBe(true)
+      }
+    }
   })
 })
