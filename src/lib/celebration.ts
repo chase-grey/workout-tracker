@@ -237,21 +237,18 @@ export function achievementCelebration(
       return {
         tier: 'medium',
         title: 'checkpoint reached',
-        subtitle: "halfway to the week's goal — keep it rolling.",
         icon: 'flag',
       }
     case 'fullGoal':
       return {
         tier: 'large',
         title: 'weekly goal complete!',
-        subtitle: 'every target hit this week.',
         icon: 'stars',
       }
     case 'exceeded':
       return {
         tier: 'large',
         title: 'above and beyond!',
-        subtitle: 'you blew past your weekly goal.',
         icon: 'stars',
       }
   }
@@ -265,7 +262,6 @@ export function workoutDoneCelebration(_dayType: WorkoutRow['day_type']): Celebr
   return {
     tier: 'small',
     title: 'workout complete',
-    subtitle: 'logged and done. nice work.',
     icon: 'check',
     ack: true,
   }
@@ -274,7 +270,6 @@ export function workoutDoneCelebration(_dayType: WorkoutRow['day_type']): Celebr
 export const stretchDoneCelebration: Celebration = {
   tier: 'small',
   title: 'stretch + core done',
-  subtitle: 'loose, limber, and braced. well done.',
   icon: 'check',
   ack: true,
 }

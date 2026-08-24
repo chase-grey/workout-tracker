@@ -176,7 +176,6 @@ function calStreakMilestone(days: number): Celebration {
   return {
     tier: 'medium',
     title: `${days}-day calorie streak`,
-    subtitle: 'consistency is compounding — keep it going.',
     icon: 'flame',
   }
 }
