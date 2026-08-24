@@ -4,8 +4,9 @@ A second flexibility routine, alongside the existing side-splits one. The two
 alternate the way push and pull do: Today dims whichever was done last, so the
 other reads as up next.
 
-Status: **spec only, not implemented.** Goal ladders for the two new angles are
-deliberately out of scope — see [Deferred](#deferred).
+Status: **implemented.** Goal ladders for the two new angles are deliberately out
+of scope — see [Deferred](#deferred). Where the build diverged from what is
+written below, see [As built](#as-built).
 
 ## Contents
 
@@ -25,6 +26,7 @@ deliberately out of scope — see [Deferred](#deferred).
 - [Deferred](#deferred)
 - [File-by-file change list](#file-by-file-change-list)
 - [Open questions](#open-questions)
+- [As built](#as-built)
 
 ## The routine
 
@@ -718,3 +720,53 @@ keeps a change this wide reviewable.
 3. **Warm gate placement.** All three warm shots after the last pike lift set. The
    alternative is toe touch after the block crush and leg lift after the pike lift,
    splitting the camera work across two screens. Specced as one screen.
+
+All three were built as specced. The rolling-feet hold and the block crush's rest
+are what was asked for, and the three warm shots share one screen.
+
+## As built
+
+Four places where the implementation departs from the spec above, each because
+the spec's own reasoning pointed past what it wrote.
+
+**`COLD_GATE` became `coldGate(routine)`.** Spec: "`COLD_GATE` becomes
+per-routine." A constant can't be, so it is a function. `photoSteps.test` was
+updated accordingly — the only existing test this change had to touch.
+
+**`applyFlexEdits` kept its signature; `applyFlexPlanEdits` was added beside it.**
+Spec: "`applyFlexEdits` takes the routine map rather than one array." One edit can
+only ever touch one routine, so the map-level job is purely routing — and widening
+the engine's signature would have rewritten all thirty-odd assertions in
+`flexTools.test` for no behavioural gain. The engine still takes one routine's
+blocks; the new dispatcher sends each edit to the routine it names and tags every
+message with which one it was, since a single chat reply can now propose changes
+to both.
+
+**`coreDoneToday` reads the note through `isSupplementalSet`, not `===`.** Spec:
+"`notes === CORE_SESSION_NOTE`." A discomfort flag tapped mid-session appends to
+that note (see `lib/discomfort.withDiscomfort`), so a literal compare would have
+missed exactly the sets it was meant to find.
+
+**`anglePRs` sorts by improvement, not by degrees.** The spec asked for
+direction-aware comparison and left the "deepest first" sort alone, but raw
+degrees stop being comparable the moment one metric counts down: a 96° fold and a
+120° split can't be ranked against each other, and the fold would always have come
+last. The headline now goes to the pose that moved furthest.
+
+### Beyond the spec
+
+**Per-routine session length (`SessionDuration.routine`).** Not in the file list,
+but without it the feature ships a clock that lies. `remainingSecs` scales the
+median of past *comparable* sessions, and comparable was `kind: 'stretch'` — which
+pools a 40-minute routine with a 20-minute one and would have reported "~20 min
+left" at the top of every head-to-toe session, forever, however many of them were
+logged. The duration now carries which routine it was, `matching` filters on it,
+and an untagged stretch counts as a side split so the split keeps every sample it
+has ever had. One appended column on the durations tab, which `sheet()` widens by
+itself.
+
+**`stepWorkSec` reads the tempo.** The structural fallback priced every rep at a
+flat five seconds. The tempos actually prescribed run from six seconds a rep to
+twenty — a pike lift set is five reps of twenty — so the first-ever session's
+estimate came out at little over half the real length. It now sums the tempo's own
+phases, falling back to the flat assumption when there is nothing to parse.

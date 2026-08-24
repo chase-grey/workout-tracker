@@ -150,3 +150,67 @@ describe('celebrations', () => {
     expect(anglePRCelebration(anglePRs(entries, TODAY))!.details).toEqual(["tailor's left — 65°"])
   })
 })
+
+describe('anglePRs — the head-to-toe poses', () => {
+  const h2t = (date: string, fields: Partial<FlexEntry>): FlexEntry => ({
+    date,
+    splitDeg: null,
+    tailorsLeftDeg: null,
+    tailorsRightDeg: null,
+    ...fields,
+  })
+
+  // The fold gets deeper by getting smaller, so a bare max would have cheered
+  // the shallowest fold of the week and stayed silent on the deepest.
+  it('cheers a deeper fold, which is a lower number', () => {
+    const prs = anglePRs(
+      [h2t('2026-07-29', { warmToeTouchDeg: 104 }), h2t('2026-08-05', { warmToeTouchDeg: 96 })],
+      TODAY,
+    )
+    expect(prs).toEqual([{ pose: 'toe touch', deg: 96 }])
+  })
+
+  it('stays quiet on a shallower fold', () => {
+    const prs = anglePRs(
+      [h2t('2026-07-29', { warmToeTouchDeg: 96 }), h2t('2026-08-05', { warmToeTouchDeg: 104 })],
+      TODAY,
+    )
+    expect(prs).toEqual([])
+  })
+
+  it('cheers a higher leg lift, per side', () => {
+    const prs = anglePRs(
+      [
+        h2t('2026-07-29', { warmLegLiftLeftDeg: 70, warmLegLiftRightDeg: 74 }),
+        h2t('2026-08-05', { warmLegLiftLeftDeg: 80, warmLegLiftRightDeg: 72 }),
+      ],
+      TODAY,
+    )
+    expect(prs).toEqual([{ pose: 'left leg lift', deg: 80 }])
+  })
+
+  it('needs a baseline — the first fold ever logged is not a PR', () => {
+    expect(anglePRs([h2t('2026-08-05', { warmToeTouchDeg: 96 })], TODAY)).toEqual([])
+  })
+
+  it('ignores the cold readings', () => {
+    const prs = anglePRs(
+      [h2t('2026-07-29', { coldToeTouchDeg: 130 }), h2t('2026-08-05', { coldToeTouchDeg: 110 })],
+      TODAY,
+    )
+    expect(prs).toEqual([])
+  })
+
+  // With the fold counted down and the lift counted up, the raw degrees aren't
+  // comparable — so the headline goes to the pose that moved furthest.
+  it('leads with the biggest improvement rather than the biggest number', () => {
+    const prs = anglePRs(
+      [
+        h2t('2026-07-29', { warmToeTouchDeg: 120, warmLegLiftLeftDeg: 79 }),
+        h2t('2026-08-05', { warmToeTouchDeg: 96, warmLegLiftLeftDeg: 80 }),
+      ],
+      TODAY,
+    )
+    expect(prs.map((p) => p.pose)).toEqual(['toe touch', 'left leg lift'])
+  })
+})

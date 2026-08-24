@@ -1,4 +1,6 @@
 import { weekStartISO, toISODate } from './dates'
+import { HIGHER_IS_BETTER, LOWER_IS_BETTER, type MetricDir } from './flexMetrics'
+import type { FlexRoutineKey } from '../config/flexRoutines'
 
 /** A single flexibility log entry, tracking multiple stretch angles. */
 export type FlexEntry = {
@@ -12,6 +14,20 @@ export type FlexEntry = {
   tailorsColdRightDeg?: number | null /* tailor's right measured cold, at the start */
   tailorsWarmLeftDeg?: number | null /* tailor's left measured warm, after the last set */
   tailorsWarmRightDeg?: number | null /* tailor's right measured warm, after the last set */
+  /* The head-to-toe angles. No untagged legacy variant of any of them, unlike
+   * splitDeg / tailorsLeftDeg: nothing has ever written these, so cold and warm
+   * are the only two readings that exist. */
+  coldToeTouchDeg?: number | null
+  warmToeTouchDeg?: number | null
+  coldLegLiftLeftDeg?: number | null
+  coldLegLiftRightDeg?: number | null
+  warmLegLiftLeftDeg?: number | null
+  warmLegLiftRightDeg?: number | null
+  /**
+   * Routines completed on this date, in completion order. Absent on legacy
+   * entries, which were all side splits (see lib/stretchRotation).
+   */
+  routines?: FlexRoutineKey[]
   note?: string
 }
 
@@ -26,6 +42,12 @@ const ANGLE_FIELDS = [
   'tailorsColdRightDeg',
   'tailorsWarmLeftDeg',
   'tailorsWarmRightDeg',
+  'coldToeTouchDeg',
+  'warmToeTouchDeg',
+  'coldLegLiftLeftDeg',
+  'coldLegLiftRightDeg',
+  'warmLegLiftLeftDeg',
+  'warmLegLiftRightDeg',
 ] as const
 
 /**
@@ -50,10 +72,27 @@ export const coldTailorsLeftOf = (e: FlexEntry): number | null => e.tailorsColdL
 export const coldTailorsRightOf = (e: FlexEntry): number | null => e.tailorsColdRightDeg ?? null
 
 /**
+ * The head-to-toe readings. Nothing untagged has ever been written for these, so
+ * each fallback chain is one link long.
+ */
+export const coldToeTouchOf = (e: FlexEntry): number | null => e.coldToeTouchDeg ?? null
+export const warmToeTouchOf = (e: FlexEntry): number | null => e.warmToeTouchDeg ?? null
+export const coldLegLiftLeftOf = (e: FlexEntry): number | null => e.coldLegLiftLeftDeg ?? null
+export const coldLegLiftRightOf = (e: FlexEntry): number | null => e.coldLegLiftRightDeg ?? null
+export const warmLegLiftLeftOf = (e: FlexEntry): number | null => e.warmLegLiftLeftDeg ?? null
+export const warmLegLiftRightOf = (e: FlexEntry): number | null => e.warmLegLiftRightDeg ?? null
+
+/**
  * Collapse to one merged entry per date. For each angle field, keep the latest
- * non-null value seen for that date; keep the latest non-empty note. A date's
- * entries are merged in input order, so later entries win. Sorted ascending by
- * date.
+ * non-null value seen for that date; keep the latest non-empty note; union the
+ * routines. A date's entries are merged in input order, so later entries win.
+ * Sorted ascending by date.
+ *
+ * `routines` unions rather than overwriting, and that matters: two stretch
+ * sessions in one day is not a corner case here — it's precisely the case the
+ * core-skip rule exists for. Overwriting would leave a day that did both reading
+ * as having done only the second, and the alternation would then hand back the
+ * routine that was already finished.
  */
 export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
   const byDate = new Map<string, FlexEntry>()
@@ -71,12 +110,24 @@ export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
         tailorsColdRightDeg: e.tailorsColdRightDeg ?? null,
         tailorsWarmLeftDeg: e.tailorsWarmLeftDeg ?? null,
         tailorsWarmRightDeg: e.tailorsWarmRightDeg ?? null,
+        coldToeTouchDeg: e.coldToeTouchDeg ?? null,
+        warmToeTouchDeg: e.warmToeTouchDeg ?? null,
+        coldLegLiftLeftDeg: e.coldLegLiftLeftDeg ?? null,
+        coldLegLiftRightDeg: e.coldLegLiftRightDeg ?? null,
+        warmLegLiftLeftDeg: e.warmLegLiftLeftDeg ?? null,
+        warmLegLiftRightDeg: e.warmLegLiftRightDeg ?? null,
+        ...(e.routines?.length ? { routines: [...new Set(e.routines)] } : {}),
         ...(e.note != null && e.note !== '' ? { note: e.note } : {}),
       })
       continue
     }
     for (const f of ANGLE_FIELDS) {
       if (e[f] != null) prev[f] = e[f]
+    }
+    if (e.routines?.length) {
+      // First-seen order preserved, and input order is completion order — so the
+      // last element is the routine that finished most recently.
+      prev.routines = [...new Set([...(prev.routines ?? []), ...e.routines])]
     }
     if (e.note != null && e.note !== '') prev.note = e.note
   }
@@ -95,17 +146,33 @@ export type FlexStats = {
   /** Warm tailor's readings — the headline numbers, as with the split. */
   tailorsLeft: MetricStats
   tailorsRight: MetricStats
+  coldToeTouch: MetricStats
+  /** The warm fold — and remember its best is its *lowest* (see flexMetrics). */
+  warmToeTouch: MetricStats
+  coldLegLiftLeft: MetricStats
+  coldLegLiftRight: MetricStats
+  /** Warm leg lifts — the headline pair for that pose. */
+  legLiftLeft: MetricStats
+  legLiftRight: MetricStats
 }
 
-/** latest = value from the newest-dated entry with a non-null value; best = max non-null value. */
-function metricStats(entries: FlexEntry[], value: (e: FlexEntry) => number | null): MetricStats {
+/**
+ * latest = value from the newest-dated entry with a non-null value; best = the
+ * deepest non-null value, which is the *smallest* one for a metric that improves
+ * downward (the toe touch). Hence the direction rather than a bare `>`.
+ */
+function metricStats(
+  entries: FlexEntry[],
+  value: (e: FlexEntry) => number | null,
+  dir: MetricDir = HIGHER_IS_BETTER,
+): MetricStats {
   let latest: number | null = null
   let latestDate: string | null = null
   let best: number | null = null
   for (const e of entries) {
     const v = value(e)
     if (v == null) continue
-    if (best == null || v > best) best = v
+    if (best == null || dir.beats(v, best)) best = v
     if (latestDate === null || e.date > latestDate) {
       latestDate = e.date
       latest = v
@@ -136,6 +203,12 @@ export function flexStats(
     coldTailorsRight: metricStats(entries, coldTailorsRightOf),
     tailorsLeft: metricStats(entries, warmTailorsLeftOf),
     tailorsRight: metricStats(entries, warmTailorsRightOf),
+    coldToeTouch: metricStats(entries, coldToeTouchOf, LOWER_IS_BETTER),
+    warmToeTouch: metricStats(entries, warmToeTouchOf, LOWER_IS_BETTER),
+    coldLegLiftLeft: metricStats(entries, coldLegLiftLeftOf),
+    coldLegLiftRight: metricStats(entries, coldLegLiftRightOf),
+    legLiftLeft: metricStats(entries, warmLegLiftLeftOf),
+    legLiftRight: metricStats(entries, warmLegLiftRightOf),
   }
 }
 
@@ -219,6 +292,55 @@ export function tailorsAvgSeries(
       date: e.date,
       value: vals.reduce((s, v) => s + v, 0) / vals.length,
     })
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/** One toe-touch chart row per date — shaped like SplitPoint, and read the same way. */
+export type ToeTouchPoint = { date: string; cold: number | null; warm: number | null }
+
+/**
+ * Cold + warm toe touch per date. Entries with neither reading are dropped.
+ * Sorted ascending by date — and note the line descends as the fold deepens.
+ */
+export function toeTouchSeries(entries: FlexEntry[]): ToeTouchPoint[] {
+  const out: ToeTouchPoint[] = []
+  for (const e of entries) {
+    const cold = coldToeTouchOf(e)
+    const warm = warmToeTouchOf(e)
+    if (cold == null && warm == null) continue
+    out.push({ date: e.date, cold, warm })
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/** One leg-lift chart row per date, carrying both cold and warm left/right. */
+export type LegLiftPoint = {
+  date: string
+  coldLeft: number | null
+  coldRight: number | null
+  warmLeft: number | null
+  warmRight: number | null
+}
+
+/**
+ * Cold + warm leg-lift readings per date. Entries with no reading at all are
+ * dropped. Sorted ascending by date.
+ */
+export function legLiftSeries(entries: FlexEntry[]): LegLiftPoint[] {
+  const out: LegLiftPoint[] = []
+  for (const e of entries) {
+    const row = {
+      date: e.date,
+      coldLeft: coldLegLiftLeftOf(e),
+      coldRight: coldLegLiftRightOf(e),
+      warmLeft: warmLegLiftLeftOf(e),
+      warmRight: warmLegLiftRightOf(e),
+    }
+    if (row.coldLeft == null && row.coldRight == null && row.warmLeft == null && row.warmRight == null) {
+      continue
+    }
+    out.push(row)
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1))
 }

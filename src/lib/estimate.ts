@@ -1,6 +1,7 @@
 /** Rough time estimates for the guided session UIs. */
 
 import type { DayType } from '../types'
+import type { FlexRoutineKey } from '../config/flexRoutines'
 
 /** Assumed working time per set when we have nothing better (lifting). */
 export const WORK_PER_SET_SEC = 40
@@ -23,12 +24,26 @@ export type SessionDuration = {
   date: string // YYYY-MM-DD
   kind: SessionKind
   dayType?: DayType // push/pull for workouts; omitted for stretches
+  /**
+   * Which stretch routine this was; omitted for workouts, and absent on a
+   * stretch logged before there were two of them (which was a side split).
+   *
+   * It's here because the two routines are not the same length — head to toe
+   * runs about twice the side split — so a median pooled across both would
+   * tell you twenty minutes were left in a forty-minute routine, and keep
+   * telling you that no matter how many of them you did.
+   */
+  routine?: FlexRoutineKey
   totalSec: number
   restSec: number
 }
 
 /** Selects the comparable subset of history for an estimate. */
-export type DurationSelector = { kind: SessionKind; dayType?: DayType }
+export type DurationSelector = {
+  kind: SessionKind
+  dayType?: DayType
+  routine?: FlexRoutineKey
+}
 
 export type RemainingItem = { remainingSets: number; workSec: number; restSec: number }
 
@@ -277,7 +292,10 @@ export function mergeDurations(
   const byKey = new Map<string, SessionDuration>()
   for (const d of [...local, ...fetched]) {
     if (!d || !d.date) continue
-    byKey.set(`${d.date}|${d.kind}|${d.dayType ?? ''}|${Math.round(d.totalSec)}`, d)
+    byKey.set(
+      `${d.date}|${d.kind}|${d.dayType ?? ''}|${d.routine ?? ''}|${Math.round(d.totalSec)}`,
+      d,
+    )
   }
   return [...byKey.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 }
@@ -287,12 +305,20 @@ export function isSaneDuration(totalSec: number): boolean {
   return totalSec >= MIN_SANE_DURATION_SEC && totalSec <= MAX_SANE_DURATION_SEC
 }
 
-/** History entries comparable to `sel`: same kind, and same day type when one is given. */
+/**
+ * History entries comparable to `sel`: same kind, and same day type or stretch
+ * routine when one is given.
+ *
+ * An untagged stretch counts as a side split rather than being skipped — those
+ * sessions predate the second routine and are factually what they were, so the
+ * split keeps every sample it has ever had while head to toe starts fresh.
+ */
 function matching(history: SessionDuration[], sel: DurationSelector): SessionDuration[] {
   return history.filter(
     (d) =>
       d.kind === sel.kind &&
       (sel.dayType == null || d.dayType === sel.dayType) &&
+      (sel.routine == null || (d.routine ?? 'side_split') === sel.routine) &&
       isSaneDuration(d.totalSec),
   )
 }

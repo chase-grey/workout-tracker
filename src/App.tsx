@@ -23,6 +23,9 @@ import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
 import { MdFitnessCenter } from 'react-icons/md'
+import { coreDoneToday } from './lib/stretchCore'
+import { toISODate } from './lib/dates'
+import type { FlexRoutineKey } from './config/flexRoutines'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
 
@@ -52,11 +55,16 @@ function AppShell() {
   const [resumedTab] = useState(takeResumeTab)
   const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
-  const { saveSession, settings, updateSettings } = useData()
+  const { saveSession, settings, updateSettings, workouts } = useData()
   const showChat = chatEnabled(settings)
   const { celebrate } = useCelebrate()
   const controls = useActiveSession()
-  const [stretching, setStretching] = useState(() => storage.loadStretch() != null)
+  // Which stretch routine is on screen, or null for none. A session restored from
+  // storage that predates the two routines was necessarily a side split.
+  const [stretching, setStretching] = useState<FlexRoutineKey | null>(() => {
+    const saved = storage.loadStretch()
+    return saved ? saved.routine ?? 'side_split' : null
+  })
   const [review, setReview] = useState<Review | null>(null)
   const [finishSummary, setFinishSummary] = useState<WorkoutFinishSummary | null>(null)
   // A session set aside — the rest of the app is usable while it keeps running.
@@ -66,7 +74,7 @@ function AppShell() {
   // the full-screen session would otherwise cover the tab you came back for,
   // which reads as the update check throwing you into your workout.
   const [minimized, setMinimized] = useState(resumedTab != null)
-  const sessionActive = controls.session != null || stretching
+  const sessionActive = controls.session != null || stretching != null
   // Filed issues, polled app-wide rather than only while Settings is open: the
   // point of the dot is to tell you a question is waiting when you weren't
   // looking for one. Settings reads the same shared list.
@@ -129,11 +137,25 @@ function AppShell() {
   // already set a height are never prompted.
   if (!settings.setupComplete && settings.heightIn == null) return <HeightSetup />
 
-  const startStretch = () => {
-    if (!storage.loadStretch())
-      storage.saveStretch({ step: 0, done: [], startedAt: new Date().toISOString() })
+  const startStretch = (routine: FlexRoutineKey) => {
+    // A routine already in progress is picked back up rather than restarted, so
+    // the button that was tapped doesn't matter — including which routine it was.
+    const saved = storage.loadStretch()
+    if (saved) {
+      setStretching(saved.routine ?? 'side_split')
+    } else {
+      storage.saveStretch({
+        step: 0,
+        done: [],
+        startedAt: new Date().toISOString(),
+        routine,
+        // Both routines end with the same sit-ups, so the second stretch of a day
+        // skips them. Decided here, at the start, and pinned into the session.
+        core: !coreDoneToday(workouts, toISODate(new Date())),
+      })
+      setStretching(routine)
+    }
     setMinimized(false)
-    setStretching(true)
   }
 
   const startWorkout = (dayType: DayType, variant?: VariantKey) => {
@@ -178,9 +200,10 @@ function AppShell() {
   } else if (stretching) {
     session = (
       <StretchSession
+        routine={stretching}
         onClose={() => {
           storage.saveStretch(null)
-          setStretching(false)
+          setStretching(null)
           // A finished routine lands you home, under the celebration screen.
           setTab('today')
         }}

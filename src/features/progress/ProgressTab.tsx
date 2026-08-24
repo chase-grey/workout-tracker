@@ -35,6 +35,7 @@ import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
+import { FlexLadderBlock } from './FlexLadderBlock'
 import { MetricChart } from './MetricChart'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
@@ -312,6 +313,26 @@ export function ProgressTab() {
       ) : (
         <MetricChart data={series} unit={unit} label={exerciseLabel} offSlot={offSeries} />
       )}
+
+      {/* The head-to-toe angles. Here rather than in the goals panel because a
+          ladder block up there is only ever reached through one of its own goal
+          rows — and these two have no goals yet, so a block with no rungs would
+          render nowhere at all. When their ladders land, these move up beside
+          the split and tailor's blocks and this section goes away. */}
+      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">
+        flexibility
+      </h3>
+      {(['toeTouch', 'legLift'] as const).map((ladder) => (
+        <FlexLadderBlock
+          key={ladder}
+          ladder={ladder}
+          entries={flexEntries}
+          rungs={[]}
+          locked={{}}
+          ring=""
+          renderRow={() => null}
+        />
+      ))}
 
       <div className="mt-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold tracking-wider text-neutral-500">

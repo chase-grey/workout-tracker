@@ -117,7 +117,7 @@ function renderTools(skills: CoachSkills): string[] {
   if (skills.planEdits) {
     uses.push(
       'update_plan to edit the workout plan',
-      'update_flex_routine to edit the stretch routine',
+      'update_flex_routine to edit either of the two stretch routines',
     )
   }
   uses.push('flag_discomfort to note that a joint felt off during a logged exercise')
@@ -144,7 +144,7 @@ function renderTools(skills: CoachSkills): string[] {
     )
   } else {
     lines.push(
-      'Plan editing is switched off in this conversation. You cannot change the workout plan or the stretch routine, and must not describe a change to either as made or proposed. If the user asks for one, tell them to turn on the "edit plan" button above the message box and ask again.',
+      'Plan editing is switched off in this conversation. You cannot change the workout plan or the stretch routines, and must not describe a change to either as made or proposed. If the user asks for one, tell them to turn on the "edit plan" button above the message box and ask again.',
       ``,
     )
   }

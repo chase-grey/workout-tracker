@@ -3,7 +3,7 @@ import { useData } from '../../store/DataContext'
 import { buildSystemPrompt, type CoachSkills } from '../../lib/chatPrompt'
 import { chatCompleteRaw, type RawMessage, type Tool } from '../../services/openai'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
-import { applyFlexEdits, type FlexEdit } from '../../lib/flexTools'
+import { applyFlexPlanEdits, type FlexEdit } from '../../lib/flexTools'
 import {
   answerIssue,
   fetchIssueThread,
@@ -23,6 +23,11 @@ import {
 } from '../../lib/discomfort'
 import { fmtSessionDate } from '../../lib/exerciseHistory'
 import type { FlexBlock } from '../../config/flexPlan'
+import {
+  FLEX_ROUTINES,
+  FLEX_ROUTINE_KEYS,
+  type FlexRoutineKey,
+} from '../../config/flexRoutines'
 import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
 import { Markdown } from './Markdown'
 
@@ -43,7 +48,9 @@ type Proposal = {
   // The first two carry the whole plan/routine the edits produce, saved verbatim
   // on approval; the third carries the finished note for one logged exercise
   // (see lib/discomfort).
-  { kind: 'plan'; next: Plan } | { kind: 'flex'; next: FlexBlock[] } | { kind: 'discomfort'; edit: NotesEdit }
+  | { kind: 'plan'; next: Plan }
+  | { kind: 'flex'; next: Record<FlexRoutineKey, FlexBlock[]> }
+  | { kind: 'discomfort'; edit: NotesEdit }
 )
 
 type Turn = {
@@ -142,7 +149,7 @@ const UPDATE_FLEX_TOOL: Tool = {
   function: {
     name: 'update_flex_routine',
     description:
-      "Propose an edit to the user's side-splits stretch routine: change/add/remove a stretch, add/remove a block, or set a block note. Blocks are matched by label. Only call when the user asks to change which stretches they do. Nothing is saved until the user approves the proposal in the app. This tool does not create flexibility goals or change their target angles — a request for a goal at some number of degrees is not a request for a new stretch, so file it with report_issue instead.",
+      "Propose an edit to one of the user's two stretch routines: change/add/remove a stretch, add/remove a block, or set a block note. Every edit must name the routine it applies to — 'side_split' or 'head_to_toe' — and blocks are matched by label within that routine. Only call when the user asks to change which stretches they do. Nothing is saved until the user approves the proposal in the app. This tool does not create flexibility goals or change their target angles — a request for a goal at some number of degrees is not a request for a new stretch, so file it with report_issue instead.",
     parameters: {
       type: 'object',
       properties: {
@@ -156,11 +163,16 @@ const UPDATE_FLEX_TOOL: Tool = {
                 type: 'string',
                 enum: ['setExercise', 'addExercise', 'removeExercise', 'addBlock', 'removeBlock', 'setBlockNote'],
               },
+              routine: {
+                type: 'string',
+                enum: [...FLEX_ROUTINE_KEYS],
+                description: 'which routine this edit applies to; defaults to side_split',
+              },
               block: { type: 'string', description: 'block label' },
               key: { type: 'string', description: 'stretch key (setExercise / removeExercise)' },
               label: { type: 'string', description: 'new block label (addBlock)' },
               note: { type: 'string', description: 'block note (setBlockNote / addBlock)' },
-              fields: { type: 'object', description: 'fields to change (setExercise): name, sets, maxSets, reps, tempo, restSec' },
+              fields: { type: 'object', description: 'fields to change (setExercise): name, sets, maxSets, reps, tempo, holdSec, restSec, sideSwitchSec' },
               exercise: { type: 'object', description: 'new stretch (addExercise): name, sets, maxSets, reps, tempo, restSec' },
             },
             required: ['op'],
@@ -262,7 +274,11 @@ function capNote(e: PlannedExercise): string {
  * It goes even with plan editing switched off: flag_discomfort takes a key from
  * here too, and the stretch routine appears nowhere else in the context.
  */
-function planSnapshot(plan: Plan, flexPlan: FlexBlock[], planEdits: boolean): string {
+function planSnapshot(
+  plan: Plan,
+  flexPlans: Record<FlexRoutineKey, FlexBlock[]>,
+  planEdits: boolean,
+): string {
   const lines = [
     `CURRENT WORKOUT PLAN (use these exact keys${planEdits ? ' with update_plan' : ''}):`,
   ]
@@ -281,13 +297,32 @@ function planSnapshot(plan: Plan, flexPlan: FlexBlock[], planEdits: boolean): st
   lines.push(
     '',
     planEdits
-      ? 'CURRENT STRETCH ROUTINE (use block label + stretch key with update_flex_routine):'
-      : 'CURRENT STRETCH ROUTINE:',
+      ? 'CURRENT STRETCH ROUTINES (use routine key + block label + stretch key with update_flex_routine):'
+      : 'CURRENT STRETCH ROUTINES:',
+    'The two alternate: whichever was done last, the app offers the other next. Both end with the same four weighted sit-ups — except that the second stretch of a day skips them, because the first one already did them.',
   )
-  for (const b of flexPlan) {
-    lines.push(`${b.label}:`)
-    for (const e of b.exercises) {
-      lines.push(`  key=${e.key} — ${e.name}, ${e.sets}x${e.reps}, ${e.tempo}, rest ${e.restSec}s`)
+  for (const r of FLEX_ROUTINE_KEYS) {
+    lines.push('', `routine=${r} — the ${FLEX_ROUTINES[r].label} routine:`)
+    for (const b of flexPlans[r] ?? []) {
+      lines.push(`${b.label}:`)
+      for (const e of b.exercises) {
+        // A hold is seconds spent in the pose, not repetitions of anything, and a
+        // per-side stretch is done one leg at a time — both change what a set of
+        // it even is, so both are said outright rather than left to be inferred
+        // from a rep count of 1.
+        const work = e.holdSec
+          ? `${e.holdSec}s hold`
+          : `${e.reps} reps${e.tempo ? `, ${e.tempo}` : ''}`
+        const sides = e.perSide
+          ? `, one side at a time (${e.sideSwitchSec ?? 5}s to switch legs${e.restAfterSides ? ', and the rest comes after both sides' : ''})`
+          : ''
+        const variations = e.setLabels?.length
+          ? `, its sets are variations rather than rounds: ${e.setLabels.join(' / ')}`
+          : ''
+        lines.push(
+          `  key=${e.key} — ${e.name}, ${e.sets}x${work}, rest ${e.restSec}s${sides}${variations}`,
+        )
+      }
     }
   }
   return lines.join('\n')
@@ -336,7 +371,7 @@ export function ChatTab({
     settings,
     plan,
     updatePlan,
-    flexPlan,
+    flexPlans,
     updateFlexPlan,
     flagDiscomfort,
   } = useData()
@@ -448,7 +483,13 @@ export function ChatTab({
     if (!proposal || proposal.status !== 'pending') return
     if (approve) {
       if (proposal.kind === 'plan') updatePlan(proposal.next)
-      else if (proposal.kind === 'flex') updateFlexPlan(proposal.next)
+      else if (proposal.kind === 'flex') {
+        // The proposal carries every routine, so approving saves each one that
+        // actually moved — a single reply can propose changes to both.
+        for (const r of FLEX_ROUTINE_KEYS) {
+          if (proposal.next[r] !== flexPlans[r]) updateFlexPlan(r, proposal.next[r])
+        }
+      }
       else void flagDiscomfort(proposal.edit)
     }
     const next = [...turns]
@@ -491,7 +532,7 @@ export function ChatTab({
         role: 'system',
         content: buildSystemPrompt({ today: new Date(), workouts, bodyWeights, streaks, skills }),
       },
-      { role: 'system', content: planSnapshot(plan, flexPlan, skills.planEdits) },
+      { role: 'system', content: planSnapshot(plan, flexPlans, skills.planEdits) },
       ...priorTurns
         .filter((t) => t.role !== 'system')
         .map((t) => ({ role: t.role, content: t.content }) as RawMessage),
@@ -507,7 +548,7 @@ export function ChatTab({
     ]
 
     let workingPlan = plan
-    let workingFlex = flexPlan
+    let workingFlex = flexPlans
     const newTurns: Turn[] = []
     const show = () => setTurns([...base, ...newTurns])
     try {
@@ -552,13 +593,13 @@ export function ChatTab({
               })
             } else if (call.name === 'update_flex_routine') {
               const parsed = JSON.parse(call.arguments) as { edits: FlexEdit[] }
-              const res = applyFlexEdits(workingFlex, parsed.edits ?? [])
-              workingFlex = res.routine
+              const res = applyFlexPlanEdits(workingFlex, parsed.edits ?? [])
+              workingFlex = res.plans
               if (res.applied.length) {
                 newTurns.push({
                   role: 'system',
                   content: 'the coach wants to change your stretch routine',
-                  proposal: { kind: 'flex', next: res.routine, changes: res.applied, status: 'pending' },
+                  proposal: { kind: 'flex', next: res.plans, changes: res.applied, status: 'pending' },
                 })
               }
               resultMsg = JSON.stringify({

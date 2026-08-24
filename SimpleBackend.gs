@@ -18,7 +18,9 @@
  *                 trained in; blank for every other day and for imports)
  *   body_weight:  date, weight_lbs
  *   measurements: date, waist_in, neck_in, note
- *   durations:    date, kind, day_type, total_sec, rest_sec  (per-session; feeds Time-spent report)
+ *   durations:    date, kind, day_type, total_sec, rest_sec, routine  (per-session;
+ *                 feeds Time-spent and the time-left estimate; `routine` names
+ *                 which stretch routine a stretch session was)
  *   exercise_times: exercise, avg_active_sec, n  (per-exercise rolling averages
  *                 for time-left estimates; a sentinel exercise "__rest_ratio__"
  *                 row holds the pooled observed÷prescribed rest ratio, and the
@@ -55,7 +57,7 @@
  *   POST ?route=calories      body: { date, calories, label, loggedAt } (upsert by date; calories = running daily total,
  *                 loggedAt = ISO time of the last tap made ON that date; omitted on a backfill, which keeps the stored one)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
- *   POST ?route=durations     body: { date, kind, dayType, totalSec, restSec } (append)
+ *   POST ?route=durations     body: { date, kind, dayType, routine, totalSec, restSec } (append)
  *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
  *                 (folds a finished session's per-set active times + rests into the rolling averages)
  */
@@ -87,11 +89,24 @@ const FLEX_HEADERS = [
   'tailors_warm_left_deg',
   'tailors_warm_right_deg',
   'note',
+  // The head-to-toe columns, appended after `note` so every index above is
+  // untouched. `routines` is a comma-joined list of the routines completed that
+  // day, in completion order.
+  'routines',
+  'cold_toe_touch_deg',
+  'warm_toe_touch_deg',
+  'cold_leg_lift_left_deg',
+  'cold_leg_lift_right_deg',
+  'warm_leg_lift_left_deg',
+  'warm_leg_lift_right_deg',
 ]
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
-const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec']
+// `routine` is which stretch routine a stretch session was, blank for a workout
+// and for a stretch logged before there were two. Appended, and the generic
+// sheet() helper fills a missing header cell in on its own, so no migration.
+const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec', 'routine']
 const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
@@ -352,13 +367,17 @@ function flexSheet() {
   }
   const header = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0]
 
-  // Rewrite every data row through `map` into the current column layout.
+  // Rewrite every data row through `map` into the current column layout. Each
+  // map returns the columns it knows about; the rest are blank, so a map doesn't
+  // have to be rewritten every time the sheet gains a column.
   function migrate(map) {
     const data = sh.getDataRange().getValues()
     const migrated = [FLEX_HEADERS]
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue
-      migrated.push(map(data[i]))
+      const row = map(data[i])
+      while (row.length < FLEX_HEADERS.length) row.push('')
+      migrated.push(row)
     }
     sh.clearContents()
     sh.getRange(1, 1, migrated.length, FLEX_HEADERS.length).setValues(migrated)
@@ -386,7 +405,47 @@ function flexSheet() {
     })
   }
 
+  // Layout before the head-to-toe routine: the eleven columns up to `note`, and
+  // nothing after it. Every existing column keeps its index, so the rows come
+  // through as they are and only widen.
+  if (header[11] !== 'routines') {
+    return migrate(function (r) {
+      return r.slice(0, 11)
+    })
+  }
+
   return sh
+}
+
+/** Comma-joined routine list, deduped, first-seen order kept — see below. */
+function joinRoutines(list) {
+  const seen = {}
+  const out = []
+  ;(list || []).forEach(function (r) {
+    const k = String(r || '').trim()
+    if (!k || seen[k]) return
+    seen[k] = true
+    out.push(k)
+  })
+  return out.join(',')
+}
+
+/**
+ * Union of a stored routine list and an incoming one, first-seen order kept.
+ *
+ * `keep` semantics are wrong for this column: a day that runs both routines syncs
+ * twice, and last-write-wins would drop the first routine off the row — leaving
+ * the alternation reading a day that did both as having done only the second.
+ * This matches dedupeFlexByDate on the client.
+ */
+function mergeRoutines(current, incoming) {
+  if (!incoming || !incoming.length) return current || ''
+  const had = String(current || '')
+    .split(',')
+    .map(function (s) {
+      return s.trim()
+    })
+  return joinRoutines(had.concat(incoming))
 }
 
 function numOrBlank(v) {
@@ -417,6 +476,20 @@ function getFlex(since) {
       tailorsWarmLeftDeg: numOrNull(r[8]),
       tailorsWarmRightDeg: numOrNull(r[9]),
       note: String(r[10] || ''),
+      routines: String(r[11] || '')
+        .split(',')
+        .map(function (s) {
+          return s.trim()
+        })
+        .filter(function (s) {
+          return s !== ''
+        }),
+      coldToeTouchDeg: numOrNull(r[12]),
+      warmToeTouchDeg: numOrNull(r[13]),
+      coldLegLiftLeftDeg: numOrNull(r[14]),
+      coldLegLiftRightDeg: numOrNull(r[15]),
+      warmLegLiftLeftDeg: numOrNull(r[16]),
+      warmLegLiftRightDeg: numOrNull(r[17]),
     })
   }
   return out
@@ -459,6 +532,13 @@ function appendFlex(body) {
             keep(e.tailorsWarmLeftDeg, 8),
             keep(e.tailorsWarmRightDeg, 9),
             e.note ? e.note : cur[10] || '',
+            mergeRoutines(cur[11], e.routines),
+            keep(e.coldToeTouchDeg, 12),
+            keep(e.warmToeTouchDeg, 13),
+            keep(e.coldLegLiftLeftDeg, 14),
+            keep(e.coldLegLiftRightDeg, 15),
+            keep(e.warmLegLiftLeftDeg, 16),
+            keep(e.warmLegLiftRightDeg, 17),
           ],
         ])
       } else {
@@ -474,6 +554,13 @@ function appendFlex(body) {
           numOrBlank(e.tailorsWarmLeftDeg),
           numOrBlank(e.tailorsWarmRightDeg),
           e.note || '',
+          joinRoutines(e.routines),
+          numOrBlank(e.coldToeTouchDeg),
+          numOrBlank(e.warmToeTouchDeg),
+          numOrBlank(e.coldLegLiftLeftDeg),
+          numOrBlank(e.coldLegLiftRightDeg),
+          numOrBlank(e.warmLegLiftLeftDeg),
+          numOrBlank(e.warmLegLiftRightDeg),
         ])
         rowByDate[e.date] = sh.getLastRow()
       }
@@ -621,6 +708,7 @@ function getDurations(since) {
       restSec: Number(r[4]) || 0,
     }
     if (r[2]) entry.dayType = String(r[2]) // omit for stretches
+    if (r[5]) entry.routine = String(r[5]) // omit for workouts
     out.push(entry)
   }
   return out
@@ -635,7 +723,14 @@ function appendDurations(body) {
       return e && e.date && isFinite(Number(e.totalSec)) && Number(e.totalSec) > 0
     })
     .map(function (e) {
-      return [e.date, e.kind || 'workout', e.dayType || '', Number(e.totalSec), Number(e.restSec) || 0]
+      return [
+        e.date,
+        e.kind || 'workout',
+        e.dayType || '',
+        Number(e.totalSec),
+        Number(e.restSec) || 0,
+        e.routine || '',
+      ]
     })
   if (values.length) {
     sh.getRange(sh.getLastRow() + 1, 1, values.length, DURATION_HEADERS.length).setValues(values)

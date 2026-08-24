@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid'
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
 import { DEFAULT_PLAN, PLAN_REVISION, withPlanDefaults, type Plan } from '../config/plan'
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
+import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../config/flexRoutines'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
@@ -36,7 +37,11 @@ const KEYS = {
   queue: 'wt.queue',
   plan: 'wt.plan',
   planRevision: 'wt.planRevision',
+  // The single side-splits routine, from before there were two. Still read (it's
+  // where a customised routine lives on a device that's never run this build) and
+  // deliberately never deleted — a rollback shouldn't lose an edited routine.
   flexPlan: 'wt.flexplan',
+  flexPlans: 'wt.flexplans',
   activeStep: 'wt.activeStep',
   activeStepKey: 'wt.activeStepKey',
   activeRest: 'wt.activeRest',
@@ -63,6 +68,18 @@ export type StretchState = {
   step: number
   done: string[]
   startedAt?: string
+  /**
+   * Which routine is in progress. Absent on a session started before this
+   * shipped, which was necessarily a side split.
+   */
+  routine?: FlexRoutineKey
+  /**
+   * Whether this session includes the core block, decided at start and pinned
+   * here for the same reason WorkoutSession.variant is: a session resumed after
+   * another one logged core has to keep the shape it began with, or the checklist
+   * and the step count would change under you mid-routine.
+   */
+  core?: boolean
   /** Reps entered per core set, keyed by 0-based set index. */
   coreReps?: Record<number, number>
   /**
@@ -247,8 +264,26 @@ export const storage = {
   },
   loadPlanRevision: (): number => read<number>(KEYS.planRevision, 0),
 
-  loadFlexPlan: (): FlexBlock[] => read(KEYS.flexPlan, DEFAULT_FLEX_ROUTINE),
-  saveFlexPlan: (r: FlexBlock[]) => write(KEYS.flexPlan, r),
+  /**
+   * The blocks of every routine, keyed by routine.
+   *
+   * Migrated on read rather than in a one-shot upgrade step: with nothing stored
+   * under the new key, the side split takes whatever the single-routine key holds
+   * — so a customised routine survives — and head to toe takes the shipped
+   * default. A routine missing from a stored map (one added in a later build)
+   * falls back the same way.
+   */
+  loadFlexPlans: (): Record<FlexRoutineKey, FlexBlock[]> => {
+    const stored = read<Partial<Record<FlexRoutineKey, FlexBlock[]>>>(KEYS.flexPlans, {})
+    const legacy = read<FlexBlock[]>(KEYS.flexPlan, DEFAULT_FLEX_ROUTINE)
+    const out = {} as Record<FlexRoutineKey, FlexBlock[]>
+    for (const key of FLEX_ROUTINE_KEYS) {
+      out[key] =
+        stored[key] ?? (key === 'side_split' ? legacy : FLEX_ROUTINES[key].blocks)
+    }
+    return out
+  },
+  saveFlexPlans: (p: Record<FlexRoutineKey, FlexBlock[]>) => write(KEYS.flexPlans, p),
 
   loadActiveStep: (): number => read(KEYS.activeStep, 0),
   saveActiveStep: (n: number) => write(KEYS.activeStep, n),

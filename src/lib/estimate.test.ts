@@ -94,9 +94,35 @@ describe('medianTotalSec', () => {
     ]
     expect(medianTotalSec(history, { kind: 'workout', dayType: 'push' })).toBe(3600)
   })
-  it('pools all stretches (no day type)', () => {
+  it('pools all stretches when no routine is asked for', () => {
     const history = [sd(600), sd(900), sd(1200), wd('push', 3600)]
     expect(medianTotalSec(history, { kind: 'stretch' })).toBe(900)
+  })
+
+  // The two routines are not the same length — head to toe runs about twice the
+  // side split — so pooling them would report half the truth in either one.
+  describe('by stretch routine', () => {
+    const h2t = (totalSec: number): SessionDuration => ({ ...sd(totalSec), routine: 'head_to_toe' })
+    const split = (totalSec: number): SessionDuration => ({ ...sd(totalSec), routine: 'side_split' })
+
+    it('keeps the two routines apart', () => {
+      const history = [h2t(2400), h2t(2280), h2t(2520), split(1200), split(1080), split(1320)]
+      expect(medianTotalSec(history, { kind: 'stretch', routine: 'head_to_toe' })).toBe(2400)
+      expect(medianTotalSec(history, { kind: 'stretch', routine: 'side_split' })).toBe(1200)
+    })
+
+    // Those sessions predate the second routine, so the split keeps every sample
+    // it has ever had rather than starting over.
+    it('counts an untagged stretch as a side split', () => {
+      const history = [sd(600), sd(900), sd(1200)]
+      expect(medianTotalSec(history, { kind: 'stretch', routine: 'side_split' })).toBe(900)
+      expect(medianTotalSec(history, { kind: 'stretch', routine: 'head_to_toe' })).toBeNull()
+    })
+
+    it('is null for a routine with nothing on record yet', () => {
+      const history = [split(1200), split(1080), split(1320), h2t(2400)]
+      expect(medianTotalSec(history, { kind: 'stretch', routine: 'head_to_toe' })).toBeNull()
+    })
   })
 })
 
@@ -372,6 +398,14 @@ describe('mergeDurations', () => {
 
   it('keeps two workouts of the same day type but different lengths apart', () => {
     expect(mergeDurations([a], [{ ...a, totalSec: 2400 }])).toHaveLength(2)
+  })
+
+  // Two stretches of the same day and the same length, one of each routine: the
+  // day both were run is the case the core-skip rule exists for.
+  it('keeps two same-day stretches of different routines apart', () => {
+    const one: SessionDuration = { ...b, routine: 'side_split' }
+    const two: SessionDuration = { ...b, routine: 'head_to_toe' }
+    expect(mergeDurations([one], [two])).toHaveLength(2)
   })
 })
 

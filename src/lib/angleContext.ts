@@ -1,12 +1,19 @@
 import {
+  coldLegLiftLeftOf,
+  coldLegLiftRightOf,
   coldSplitOf,
   coldTailorsLeftOf,
   coldTailorsRightOf,
+  coldToeTouchOf,
+  warmLegLiftLeftOf,
+  warmLegLiftRightOf,
   warmSplitOf,
   warmTailorsLeftOf,
   warmTailorsRightOf,
+  warmToeTouchOf,
   type FlexEntry,
 } from './flex'
+import { HIGHER_IS_BETTER, LOWER_IS_BETTER, bestOf, nextGoal, type MetricDir } from './flexMetrics'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 import type { MeasureResult, MeasureTemp } from './measure'
 
@@ -18,10 +25,21 @@ import type { MeasureResult, MeasureTemp } from './measure'
  *
  * "Previous" always means earlier *dates*: same-day entries are the session
  * being measured, so they'd otherwise compare a reading against itself.
+ *
+ * Every comparison here runs through the metric's own direction (see
+ * lib/flexMetrics) rather than a bare `>`: the toe touch improves downward, so a
+ * hardcoded max would report its shallowest fold as its best and its deepest one
+ * as a step backwards.
  */
 
 /** The angle each row tracks — one per value a measurement can produce. */
-export type AngleMetric = 'split' | 'tailorsLeft' | 'tailorsRight'
+export type AngleMetric =
+  | 'split'
+  | 'tailorsLeft'
+  | 'tailorsRight'
+  | 'toeTouch'
+  | 'legLiftLeft'
+  | 'legLiftRight'
 
 /** How many readings the trend line carries, newest reading included. */
 export const TREND_POINTS = 6
@@ -34,7 +52,8 @@ export type AngleTrend = {
   value: number
   /** Newest reading of this metric/temp from an earlier date. */
   prev: { date: string; value: number } | null
-  /** value − prev.value, or null with no earlier reading. */
+  /** Progress from prev.value to value — positive is an improvement whichever
+   *  way the metric runs — or null with no earlier reading. */
   delta: number | null
   /** Best earlier reading of this metric/temp. */
   priorBest: number | null
@@ -44,7 +63,7 @@ export type AngleTrend = {
   coldToday: number | null
   /** Up to {@link TREND_POINTS} readings, oldest first, ending in this one. */
   history: { date: string; value: number }[]
-  /** Lowest goal this reading hasn't cleared; null once they're all cleared. */
+  /** Nearest goal this reading hasn't cleared; null once they're all cleared. */
   goal: { target: number; toGo: number } | null
 }
 
@@ -57,9 +76,17 @@ type MetricSpec = {
    *  way the charts resolve it. */
   read: Record<MeasureTemp, (e: FlexEntry) => number | null>
   goals: readonly number[]
+  /** Which way this reading improves. Higher unless said otherwise. */
+  dir?: MetricDir
 }
 
-/** Display order: the split first, then tailor's left/right. */
+/**
+ * Display order: the side-splits poses first, then the head-to-toe ones.
+ *
+ * The two new poses have no goal ladders yet — those wait until the first real
+ * measurements are in and the gap is known — so their `goals` are empty and the
+ * goal line is simply absent from their cards.
+ */
 const METRICS: MetricSpec[] = [
   {
     metric: 'split',
@@ -82,18 +109,38 @@ const METRICS: MetricSpec[] = [
     read: { cold: coldTailorsRightOf, warm: warmTailorsRightOf },
     goals: TAILORS_GOALS,
   },
+  {
+    metric: 'toeTouch',
+    label: 'toe touch',
+    field: 'toeTouchDeg',
+    read: { cold: coldToeTouchOf, warm: warmToeTouchOf },
+    goals: [],
+    // The hip angle of a forward fold: 180° standing, 0° flat. Deeper is smaller.
+    dir: LOWER_IS_BETTER,
+  },
+  {
+    metric: 'legLiftLeft',
+    label: 'left leg lift',
+    field: 'legLiftLeftDeg',
+    read: { cold: coldLegLiftLeftOf, warm: warmLegLiftLeftOf },
+    goals: [],
+  },
+  {
+    metric: 'legLiftRight',
+    label: 'right leg lift',
+    field: 'legLiftRightDeg',
+    read: { cold: coldLegLiftRightOf, warm: warmLegLiftRightOf },
+    goals: [],
+  },
 ]
 
 const COLD_READER: Record<AngleMetric, (e: FlexEntry) => number | null> = {
   split: coldSplitOf,
   tailorsLeft: coldTailorsLeftOf,
   tailorsRight: coldTailorsRightOf,
-}
-
-/** The lowest goal still ahead of `value`, with the degrees left to it. */
-function nextGoal(goals: readonly number[], value: number): { target: number; toGo: number } | null {
-  const target = [...goals].sort((a, b) => a - b).find((g) => g > value)
-  return target == null ? null : { target, toGo: Math.round((target - value) * 10) / 10 }
+  toeTouch: coldToeTouchOf,
+  legLiftLeft: coldLegLiftLeftOf,
+  legLiftRight: coldLegLiftRightOf,
 }
 
 /**
@@ -111,6 +158,7 @@ export function angleTrends(
   for (const spec of METRICS) {
     const value = result[spec.field]
     if (value == null) continue
+    const dir = spec.dir ?? HIGHER_IS_BETTER
 
     const earlier: { date: string; value: number }[] = []
     for (const e of entries) {
@@ -121,7 +169,10 @@ export function angleTrends(
     earlier.sort((a, b) => (a.date < b.date ? -1 : 1))
 
     const prev = earlier.length > 0 ? earlier[earlier.length - 1] : null
-    const priorBest = earlier.length > 0 ? Math.max(...earlier.map((p) => p.value)) : null
+    const priorBest = bestOf(
+      earlier.map((p) => p.value),
+      dir,
+    )
     // A warm reading is worth reading against the cold one it started from.
     let coldToday: number | null = null
     if (temp === 'warm') {
@@ -141,12 +192,12 @@ export function angleTrends(
       temp,
       value,
       prev,
-      delta: prev ? Math.round((value - prev.value) * 10) / 10 : null,
+      delta: prev ? Math.round(dir.gain(prev.value, value) * 10) / 10 : null,
       priorBest,
-      isBest: priorBest != null && value > priorBest,
+      isBest: priorBest != null && dir.beats(value, priorBest),
       coldToday,
       history: [...earlier.slice(-(TREND_POINTS - 1)), { date: today, value }],
-      goal: nextGoal(spec.goals, value),
+      goal: nextGoal(spec.goals, value, dir),
     })
   }
 

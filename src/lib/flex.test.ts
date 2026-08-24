@@ -1,10 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import {
+  coldLegLiftLeftOf,
+  coldLegLiftRightOf,
+  coldToeTouchOf,
   dedupeFlexByDate,
   flexStats,
+  legLiftSeries,
   splitSeries,
   tailorsAvgSeries,
   tailorsSeries,
+  toeTouchSeries,
+  warmLegLiftLeftOf,
+  warmLegLiftRightOf,
+  warmToeTouchOf,
   type FlexEntry,
 } from './flex'
 
@@ -208,5 +216,136 @@ describe('tailorsAvgSeries', () => {
       entry({ date: '2026-07-09', tailorsColdLeftDeg: 41, tailorsWarmLeftDeg: 58 }),
     ]
     expect(tailorsAvgSeries(entries)).toEqual([{ date: '2026-07-09', value: 58 }])
+  })
+})
+
+describe('the head-to-toe angle fields', () => {
+  it('reads cold and warm apart, with no legacy fallback', () => {
+    const e = entry({ date: '2026-08-24',
+      coldToeTouchDeg: 118,
+      warmToeTouchDeg: 96,
+      coldLegLiftLeftDeg: 70,
+      warmLegLiftLeftDeg: 84,
+      coldLegLiftRightDeg: 68,
+      warmLegLiftRightDeg: 80,
+    })
+    expect(coldToeTouchOf(e)).toBe(118)
+    expect(warmToeTouchOf(e)).toBe(96)
+    expect(coldLegLiftLeftOf(e)).toBe(70)
+    expect(warmLegLiftLeftOf(e)).toBe(84)
+    expect(coldLegLiftRightOf(e)).toBe(68)
+    expect(warmLegLiftRightOf(e)).toBe(80)
+  })
+
+  it('is null on an entry that never carried one', () => {
+    const e = entry({ date: '2026-08-24', splitDeg: 120 })
+    expect(warmToeTouchOf(e)).toBeNull()
+    expect(warmLegLiftLeftOf(e)).toBeNull()
+  })
+})
+
+describe('dedupeFlexByDate — the head-to-toe fields', () => {
+  it('keeps the latest non-null reading per field, like the rest', () => {
+    const merged = dedupeFlexByDate([
+      entry({ date: '2026-08-24', coldToeTouchDeg: 118 }),
+      entry({ date: '2026-08-24', warmToeTouchDeg: 96, warmLegLiftLeftDeg: 84 }),
+    ])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].coldToeTouchDeg).toBe(118)
+    expect(merged[0].warmToeTouchDeg).toBe(96)
+    expect(merged[0].warmLegLiftLeftDeg).toBe(84)
+  })
+})
+
+describe('dedupeFlexByDate — routines', () => {
+  it('unions a day that ran both, in completion order', () => {
+    const merged = dedupeFlexByDate([
+      entry({ date: '2026-08-24', routines: ['head_to_toe'] }),
+      entry({ date: '2026-08-24', routines: ['side_split'] }),
+    ])
+    expect(merged[0].routines).toEqual(['head_to_toe', 'side_split'])
+  })
+
+  it('does not let a second sync of the same routine duplicate it', () => {
+    const merged = dedupeFlexByDate([
+      entry({ date: '2026-08-24', routines: ['side_split'] }),
+      entry({ date: '2026-08-24', routines: ['side_split'] }),
+    ])
+    expect(merged[0].routines).toEqual(['side_split'])
+  })
+
+  // A measurement logged after the session must not wipe the routine off the day.
+  it('keeps the routine through an untagged entry on the same date', () => {
+    const merged = dedupeFlexByDate([
+      entry({ date: '2026-08-24', routines: ['head_to_toe'] }),
+      entry({ date: '2026-08-24', note: 'measurement', coldToeTouchDeg: 118 }),
+    ])
+    expect(merged[0].routines).toEqual(['head_to_toe'])
+  })
+
+  it('leaves the field off a date that recorded none', () => {
+    expect(dedupeFlexByDate([entry({ date: '2026-08-24' })])[0].routines).toBeUndefined()
+  })
+})
+
+describe('toeTouchSeries', () => {
+  it('carries cold and warm per date, oldest first', () => {
+    const series = toeTouchSeries([
+      entry({ date: '2026-08-24', coldToeTouchDeg: 110, warmToeTouchDeg: 92 }),
+      entry({ date: '2026-08-20', warmToeTouchDeg: 99 }),
+    ])
+    expect(series).toEqual([
+      { date: '2026-08-20', cold: null, warm: 99 },
+      { date: '2026-08-24', cold: 110, warm: 92 },
+    ])
+  })
+
+  it('drops a date with neither reading', () => {
+    expect(toeTouchSeries([entry({ date: '2026-08-24', splitDeg: 120 })])).toEqual([])
+  })
+})
+
+describe('legLiftSeries', () => {
+  it('carries all four readings per date, oldest first', () => {
+    const series = legLiftSeries([
+      entry({ date: '2026-08-24', warmLegLiftLeftDeg: 84, coldLegLiftRightDeg: 66 }),
+      entry({ date: '2026-08-20', coldLegLiftLeftDeg: 62 }),
+    ])
+    expect(series).toEqual([
+      { date: '2026-08-20', coldLeft: 62, coldRight: null, warmLeft: null, warmRight: null },
+      { date: '2026-08-24', coldLeft: null, coldRight: 66, warmLeft: 84, warmRight: null },
+    ])
+  })
+
+  it('drops a date with no leg-lift reading at all', () => {
+    expect(legLiftSeries([entry({ date: '2026-08-24', warmToeTouchDeg: 92 })])).toEqual([])
+  })
+})
+
+describe('flexStats — which way each pose improves', () => {
+  const entries = [
+    entry({ date: '2026-08-20', warmToeTouchDeg: 104, warmLegLiftLeftDeg: 70 }),
+    entry({ date: '2026-08-24', warmToeTouchDeg: 96, warmLegLiftLeftDeg: 84 }),
+    entry({ date: '2026-08-22', warmToeTouchDeg: 112, warmLegLiftLeftDeg: 62 }),
+  ]
+
+  // The fold's best is its smallest reading — a max would report the shallowest
+  // fold of the week as the personal best.
+  it('takes the toe touch’s best as its lowest', () => {
+    const s = flexStats(entries)
+    expect(s.warmToeTouch.best).toBe(96)
+    expect(s.warmToeTouch.latest).toBe(96)
+  })
+
+  it('takes the leg lift’s best as its highest', () => {
+    const s = flexStats(entries)
+    expect(s.legLiftLeft.best).toBe(84)
+    expect(s.legLiftLeft.latest).toBe(84)
+  })
+
+  it('reports the cold readings apart from the warm ones', () => {
+    const s = flexStats([entry({ date: '2026-08-24', coldToeTouchDeg: 130, warmToeTouchDeg: 96 })])
+    expect(s.coldToeTouch.latest).toBe(130)
+    expect(s.warmToeTouch.latest).toBe(96)
   })
 })

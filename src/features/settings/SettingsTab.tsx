@@ -13,7 +13,7 @@ import { PlanEditor } from './PlanEditor'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { stashResumeTab } from '../../lib/resumeTab'
-import { DEFAULT_FLEX_ROUTINE } from '../../config/flexPlan'
+import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
@@ -89,9 +89,10 @@ export function SettingsTab({
   onAnswer: (number: number) => void
 }) {
   const { settings, updateSettings, sync, lastSync, pendingWrites, updateFlexPlan, refresh } = useData()
-  // Two taps to restore the routine: it throws away every coach edit ever made
-  // to it, which is the point after a bad one, but not something to do by brush.
-  const [confirmRestore, setConfirmRestore] = useState(false)
+  // Two taps to restore a routine: it throws away every coach edit ever made to
+  // it, which is the point after a bad one, but not something to do by brush.
+  // Held per routine, so arming one doesn't arm the other.
+  const [confirmRestore, setConfirmRestore] = useState<FlexRoutineKey | null>(null)
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [keySaved, setKeySaved] = useState(false)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
@@ -236,21 +237,26 @@ export function SettingsTab({
       <PlanEditor />
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">stretch routine</label>
-        <button
-          onClick={() => {
-            if (!confirmRestore) {
-              setConfirmRestore(true)
-              return
-            }
-            updateFlexPlan(DEFAULT_FLEX_ROUTINE)
-            setConfirmRestore(false)
-          }}
-          onBlur={() => setConfirmRestore(false)}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          {confirmRestore ? 'tap again to restore' : 'restore default routine'}
-        </button>
+        <label className="text-sm font-medium text-neutral-300">stretch routines</label>
+        {FLEX_ROUTINE_KEYS.map((r) => (
+          <button
+            key={r}
+            onClick={() => {
+              if (confirmRestore !== r) {
+                setConfirmRestore(r)
+                return
+              }
+              updateFlexPlan(r, FLEX_ROUTINES[r].blocks)
+              setConfirmRestore(null)
+            }}
+            onBlur={() => setConfirmRestore(null)}
+            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+          >
+            {confirmRestore === r
+              ? 'tap again to restore'
+              : `restore default ${FLEX_ROUTINES[r].label} routine`}
+          </button>
+        ))}
       </section>
 
       <PhoneLink />

@@ -1,12 +1,19 @@
 import { useMemo } from 'react'
-import { flexStats, splitSeries, tailorsSeries, type FlexEntry } from '../../lib/flex'
+import {
+  flexStats,
+  legLiftSeries,
+  splitSeries,
+  tailorsSeries,
+  toeTouchSeries,
+  type FlexEntry,
+} from '../../lib/flex'
 import { isReached, type GoalSpec } from '../../lib/goals'
 import type { LockedProjections } from '../../lib/goalLock'
 import { LINE_COLD, LINE_COLD_2, LINE_PRIMARY, LINE_SECONDARY } from '../../lib/chart'
 import { LadderChart, type LadderReading, type LadderSeries } from './LadderChart'
 
 /** Which ladder a block is drawing. */
-export type Ladder = 'split' | 'tailors'
+export type Ladder = 'split' | 'tailors' | 'toeTouch' | 'legLift'
 
 const LADDERS: Record<
   Ladder,
@@ -30,37 +37,72 @@ const LADDERS: Record<
     ],
     empty: "log tailor's-pose measurements to see progression",
   },
+  // The one reading in the app that improves by getting smaller — the hip
+  // angle of a standing fold, 180° upright and 0° flat. Said in the title
+  // rather than left to be worked out from a line that runs downhill.
+  toeTouch: {
+    title: 'toe touch (lower is deeper)',
+    series: [
+      { key: 'cold', name: 'cold', color: LINE_COLD, dashed: true },
+      { key: 'warm', name: 'warm', color: LINE_PRIMARY },
+    ],
+    empty: 'log toe-touch measurements to see progression',
+  },
+  legLift: {
+    title: 'leg lift',
+    series: [
+      { key: 'coldLeft', name: 'cold L', color: LINE_COLD, dashed: true },
+      { key: 'coldRight', name: 'cold R', color: LINE_COLD_2, dashed: true },
+      { key: 'warmLeft', name: 'warm L', color: LINE_PRIMARY },
+      { key: 'warmRight', name: 'warm R', color: LINE_SECONDARY },
+    ],
+    empty: 'log leg-lift measurements to see progression',
+  },
 }
+
+/** One number to spell out beside the ladder's name, and what to call it. */
+type Reading = [value: number | null, label: string]
 
 /** The latest readings, spelled out beside the ladder's name. */
 function headline(ladder: Ladder, entries: FlexEntry[]): string {
   const s = flexStats(entries)
-  const parts =
-    ladder === 'split'
-      ? [
-          [s.warmSplit.latest, 'warm'],
-          [s.coldSplit.latest, 'cold'],
-        ]
-      : [
-          [s.tailorsLeft.latest, 'left'],
-          [s.tailorsRight.latest, 'right'],
-        ]
-  return (parts as [number | null, string][])
+  const parts: Record<Ladder, Reading[]> = {
+    split: [
+      [s.warmSplit.latest, 'warm'],
+      [s.coldSplit.latest, 'cold'],
+    ],
+    tailors: [
+      [s.tailorsLeft.latest, 'left'],
+      [s.tailorsRight.latest, 'right'],
+    ],
+    toeTouch: [
+      [s.warmToeTouch.latest, 'warm'],
+      [s.coldToeTouch.latest, 'cold'],
+    ],
+    legLift: [
+      [s.legLiftLeft.latest, 'left'],
+      [s.legLiftRight.latest, 'right'],
+    ],
+  }
+  return parts[ladder]
     .filter(([v]) => v != null)
     .map(([v, label]) => `${v}° ${label}`)
     .join(' · ')
 }
 
 /**
- * One flexibility ladder — the side split or tailor's pose — as a single block:
- * every measurement taken on one chart, with the angles being aimed at reading
- * off it underneath.
+ * One flexibility ladder — a side-splits pose or a head-to-toe one — as a single
+ * block: every measurement taken on one chart, with the angles being aimed at
+ * reading off it underneath.
  *
  * The ladder used to be one row per rung, each re-plotting the same stretch log
  * under a target line of its own, and a second copy of that log further down the
  * tab as a section in its own right. This is both of those at once: the cold and
  * warm history that section carried, with the goals it was really about attached
  * to it.
+ *
+ * A ladder with no rungs still draws — see `rungs` — which is what lets the
+ * Progress tab plot the two poses whose goals haven't been set yet.
  */
 export function FlexLadderBlock({
   ladder,
@@ -72,7 +114,11 @@ export function FlexLadderBlock({
 }: {
   ladder: Ladder
   entries: FlexEntry[]
-  /** The ladder's rungs, ascending. */
+  /**
+   * The ladder's rungs, ascending. Empty is a real case: the toe touch and the
+   * leg lift have no goals set yet, and the block draws their history without
+   * a target line or a rung row under it.
+   */
   rungs: GoalSpec[]
   locked: LockedProjections
   /** The box drawn around the whole block — see goalRing in the goals panel. */
@@ -84,10 +130,12 @@ export function FlexLadderBlock({
   // Cold and warm readings per date. The rungs are measured on the warm series
   // (for tailor's pose, the average of its left and right), which is the line
   // that runs at the goals; the cold readings ride along as the day's floor.
-  const readings = useMemo<LadderReading[]>(
-    () => (ladder === 'split' ? splitSeries(entries) : tailorsSeries(entries)),
-    [ladder, entries],
-  )
+  const readings = useMemo<LadderReading[]>(() => {
+    if (ladder === 'split') return splitSeries(entries)
+    if (ladder === 'tailors') return tailorsSeries(entries)
+    if (ladder === 'toeTouch') return toeTouchSeries(entries)
+    return legLiftSeries(entries)
+  }, [ladder, entries])
 
   // Which rungs the chart draws a line for: the one being worked on, plus any
   // rung already committed to. All of them would frame the axis on 180° and

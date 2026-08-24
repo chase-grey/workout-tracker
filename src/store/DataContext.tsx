@@ -12,6 +12,7 @@ import { maxAttemptRow } from '../lib/maxAttempt'
 import { toISODate, weekStartISO } from '../lib/dates'
 import { withPlanDefaults, withRemovedFrom, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
+import type { FlexRoutineKey } from '../config/flexRoutines'
 import type { CoreSet } from '../lib/flexSteps'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import {
@@ -97,6 +98,14 @@ export type FlexMeasurement = {
   tailorsColdRightDeg?: number | null
   tailorsWarmLeftDeg?: number | null
   tailorsWarmRightDeg?: number | null
+  coldToeTouchDeg?: number | null
+  warmToeTouchDeg?: number | null
+  coldLegLiftLeftDeg?: number | null
+  coldLegLiftRightDeg?: number | null
+  warmLegLiftLeftDeg?: number | null
+  warmLegLiftRightDeg?: number | null
+  /** The routine(s) this log completes — omitted by a pure measurement. */
+  routines?: FlexRoutineKey[]
   note?: string
 }
 
@@ -111,6 +120,12 @@ const FLEX_ANGLE_KEYS = [
   'tailorsColdRightDeg',
   'tailorsWarmLeftDeg',
   'tailorsWarmRightDeg',
+  'coldToeTouchDeg',
+  'warmToeTouchDeg',
+  'coldLegLiftLeftDeg',
+  'coldLegLiftRightDeg',
+  'warmLegLiftLeftDeg',
+  'warmLegLiftRightDeg',
 ] as const
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
@@ -127,7 +142,8 @@ type DataContextValue = {
   exerciseAverages: ExerciseAverages
   settings: Settings
   plan: Plan
-  flexPlan: FlexBlock[]
+  /** The blocks of each stretch routine, keyed by routine. */
+  flexPlans: Record<FlexRoutineKey, FlexBlock[]>
   sync: SyncState
   lastSync: string | null
   toast: Toast | null
@@ -152,7 +168,7 @@ type DataContextValue = {
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
   updatePlan: (p: Plan) => void
-  updateFlexPlan: (r: FlexBlock[]) => void
+  updateFlexPlan: (routine: FlexRoutineKey, blocks: FlexBlock[]) => void
   refresh: () => Promise<void>
 }
 
@@ -173,7 +189,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
-  const [flexPlan, setFlexPlan] = useState<FlexBlock[]>(() => storage.loadFlexPlan())
+  const [flexPlans, setFlexPlans] = useState<Record<FlexRoutineKey, FlexBlock[]>>(() =>
+    storage.loadFlexPlans(),
+  )
   const [queue, setQueue] = useState<QueuedWrite[]>(() => storage.loadQueue())
   const [sync, setSync] = useState<SyncState>('idle')
   const [lastSync, setLastSync] = useState<string | null>(() => storage.loadLastSync())
@@ -614,6 +632,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         tailorsColdRightDeg: m.tailorsColdRightDeg ?? null,
         tailorsWarmLeftDeg: m.tailorsWarmLeftDeg ?? null,
         tailorsWarmRightDeg: m.tailorsWarmRightDeg ?? null,
+        coldToeTouchDeg: m.coldToeTouchDeg ?? null,
+        warmToeTouchDeg: m.warmToeTouchDeg ?? null,
+        coldLegLiftLeftDeg: m.coldLegLiftLeftDeg ?? null,
+        coldLegLiftRightDeg: m.coldLegLiftRightDeg ?? null,
+        warmLegLiftLeftDeg: m.warmLegLiftLeftDeg ?? null,
+        warmLegLiftRightDeg: m.warmLegLiftRightDeg ?? null,
+        ...(m.routines?.length ? { routines: m.routines } : {}),
         note: m.note,
       }
       const isMeasurement = FLEX_ANGLE_KEYS.some((k) => m[k] != null)
@@ -818,10 +843,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [deliver, enqueue, notify],
   )
 
-  // Flex routine persists per-device for now (not yet synced to the Sheet).
-  const updateFlexPlan = useCallback((r: FlexBlock[]) => {
-    setFlexPlan(r)
-    storage.saveFlexPlan(r)
+  // Flex routines persist per-device for now (not yet synced to the Sheet).
+  const updateFlexPlan = useCallback((routine: FlexRoutineKey, blocks: FlexBlock[]) => {
+    setFlexPlans((prev) => {
+      const next = { ...prev, [routine]: blocks }
+      storage.saveFlexPlans(next)
+      return next
+    })
   }, [])
 
   // Distinct dates trained — two sessions in a day count once. Supplemental
@@ -871,7 +899,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     exerciseAverages,
     settings,
     plan,
-    flexPlan,
+    flexPlans,
     sync,
     lastSync,
     toast,

@@ -9,6 +9,10 @@
  * after snapshot the way `detectPRs` and `newRecords` do: by the time the
  * session ends, today's reading is already in the log.
  *
+ * Each pose carries which way it improves (see lib/flexMetrics), because the toe
+ * touch improves downward: a hardcoded max would have announced a PR for the
+ * shallowest fold of the week.
+ *
  * Pure module — no React/DOM — so it stays unit-testable.
  */
 
@@ -16,12 +20,16 @@ import type { Celebration } from './celebration'
 import { toISODate } from './dates'
 import {
   tailorsAvgSeries,
+  warmLegLiftLeftOf,
+  warmLegLiftRightOf,
   warmSplitOf,
   warmSplitSeries,
   warmTailorsLeftOf,
   warmTailorsRightOf,
+  warmToeTouchOf,
   type FlexEntry,
 } from './flex'
+import { HIGHER_IS_BETTER, LOWER_IS_BETTER, type MetricDir } from './flexMetrics'
 import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
@@ -37,23 +45,27 @@ export type CompletedFlexGoal = { label: string; target: number; deg: number }
  * track, and a cold reading is a starting point rather than an achievement.
  * Left and right count separately — one hip opening up is its own win.
  */
-const PR_POSES: { pose: string; value: (e: FlexEntry) => number | null }[] = [
-  { pose: 'side split', value: warmSplitOf },
-  { pose: "tailor's left", value: warmTailorsLeftOf },
-  { pose: "tailor's right", value: warmTailorsRightOf },
+const PR_POSES: { pose: string; value: (e: FlexEntry) => number | null; dir: MetricDir }[] = [
+  { pose: 'side split', value: warmSplitOf, dir: HIGHER_IS_BETTER },
+  { pose: "tailor's left", value: warmTailorsLeftOf, dir: HIGHER_IS_BETTER },
+  { pose: "tailor's right", value: warmTailorsRightOf, dir: HIGHER_IS_BETTER },
+  { pose: 'toe touch', value: warmToeTouchOf, dir: LOWER_IS_BETTER },
+  { pose: 'left leg lift', value: warmLegLiftLeftOf, dir: HIGHER_IS_BETTER },
+  { pose: 'right leg lift', value: warmLegLiftRightOf, dir: HIGHER_IS_BETTER },
 ]
 
-/** Best value on `date`, and best on any day before it. */
+/** Best value on `date`, and best on any day before it, the metric's own way round. */
 function todayVsPrior(
   points: { date: string; value: number }[],
   date: string,
+  dir: MetricDir = HIGHER_IS_BETTER,
 ): { today: number | null; prior: number | null } {
   let today: number | null = null
   let prior: number | null = null
   for (const p of points) {
     if (p.date === date) {
-      if (today == null || p.value > today) today = p.value
-    } else if (p.date < date && (prior == null || p.value > prior)) {
+      if (today == null || dir.beats(p.value, today)) today = p.value
+    } else if (p.date < date && (prior == null || dir.beats(p.value, prior))) {
       prior = p.value
     }
   }
@@ -77,15 +89,21 @@ function poseSeries(
  * Poses whose all-time best was beaten by today's reading, deepest first.
  * A prior reading is required, so the first angle ever logged for a pose isn't
  * a PR — there's no baseline to beat yet.
+ *
+ * "Deepest first" is by how far each PR moved rather than by the raw degrees:
+ * with the fold counted down and everything else up, the biggest number on the
+ * list is no longer the biggest achievement on it.
  */
 export function anglePRs(entries: FlexEntry[], today: Date = new Date()): AnglePR[] {
   const date = toISODate(today)
-  const prs: AnglePR[] = []
-  for (const { pose, value } of PR_POSES) {
-    const { today: now, prior } = todayVsPrior(poseSeries(entries, value), date)
-    if (now != null && prior != null && now > prior) prs.push({ pose, deg: round1(now) })
+  const prs: (AnglePR & { by: number })[] = []
+  for (const { pose, value, dir } of PR_POSES) {
+    const { today: now, prior } = todayVsPrior(poseSeries(entries, value), date, dir)
+    if (now != null && prior != null && dir.beats(now, prior)) {
+      prs.push({ pose, deg: round1(now), by: dir.gain(prior, now) })
+    }
   }
-  return prs.sort((a, b) => b.deg - a.deg)
+  return prs.sort((a, b) => b.by - a.by).map(({ pose, deg }) => ({ pose, deg }))
 }
 
 /**
@@ -93,6 +111,10 @@ export function anglePRs(entries: FlexEntry[], today: Date = new Date()): AngleP
  * Measured on the same series the Goals panel projects — the warm split, and the
  * average of the warm tailor's pair — so a cheer here can't disagree with what
  * the panel shows.
+ *
+ * The toe touch and the leg lifts have no ladder yet (see HEAD-TO-TOE.md's
+ * deferred list), so nothing here reads them: a goal set can only be cheered
+ * once there is one.
  */
 export function completedFlexGoals(
   entries: FlexEntry[],

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { dueGate, shotsThisWeek } from './photoCadence'
-import { COLD_GATE, type PhotoGate } from './photoSteps'
+import { coldGate, type PhotoGate } from './photoSteps'
 import type { FlexEntry } from './flex'
 
 const entry = (date: string, fields: Partial<FlexEntry> = {}): FlexEntry => ({
@@ -16,6 +16,8 @@ const MON = '2026-08-03'
 const WED = '2026-08-05'
 const SUN = '2026-08-09'
 const NEXT_MON = '2026-08-10'
+
+const COLD_GATE = coldGate('side_split')
 
 const WARM_GATE: PhotoGate = {
   id: 'warm-split',

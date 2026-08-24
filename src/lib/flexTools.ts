@@ -1,24 +1,47 @@
 /**
- * Pure, structured-edit engine for the side-splits stretch routine. Lets the AI
- * chat (or any caller) transform a FLEX_ROUTINE via a list of declarative edits
- * without mutating the input. All ops are validated; invalid edits/fields are
- * skipped and reported rather than throwing.
+ * Pure, structured-edit engine for the stretch routines. Lets the AI chat (or any
+ * caller) transform a routine's blocks via a list of declarative edits without
+ * mutating the input. All ops are validated; invalid edits/fields are skipped and
+ * reported rather than throwing.
+ *
+ * Every edit names the routine it applies to, since there are two of them now.
+ * It defaults to the side split when absent, so a prompt or transcript already in
+ * flight — written when there was only one routine to edit — still resolves to
+ * the routine it meant.
  */
 import type { FlexBlock, FlexExercise } from '../config/flexPlan'
+import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../config/flexRoutines'
 import { unslugKey } from '../config/plan'
 
-export type FlexEdit =
-  | {
-      op: 'setExercise'
-      block: string
-      key: string
-      fields: Partial<Pick<FlexExercise, 'name' | 'sets' | 'maxSets' | 'reps' | 'tempo' | 'restSec'>>
-    }
-  | { op: 'addExercise'; block: string; exercise: Partial<Omit<FlexExercise, 'key'>> & { key?: string } }
-  | { op: 'removeExercise'; block: string; key: string }
-  | { op: 'addBlock'; label: string; note?: string }
-  | { op: 'removeBlock'; block: string }
-  | { op: 'setBlockNote'; block: string; note: string }
+/** Which routine an edit applies to; see the module comment for the default. */
+type Scoped = { routine?: FlexRoutineKey }
+
+export type FlexEdit = Scoped &
+  (
+    | {
+        op: 'setExercise'
+        block: string
+        key: string
+        fields: Partial<
+          Pick<
+            FlexExercise,
+            | 'name'
+            | 'sets'
+            | 'maxSets'
+            | 'reps'
+            | 'tempo'
+            | 'restSec'
+            | 'holdSec'
+            | 'sideSwitchSec'
+          >
+        >
+      }
+    | { op: 'addExercise'; block: string; exercise: Partial<Omit<FlexExercise, 'key'>> & { key?: string } }
+    | { op: 'removeExercise'; block: string; key: string }
+    | { op: 'addBlock'; label: string; note?: string }
+    | { op: 'removeBlock'; block: string }
+    | { op: 'setBlockNote'; block: string; note: string }
+  )
 
 export const FLEX_EDIT_OPS = [
   'setExercise',
@@ -30,7 +53,7 @@ export const FLEX_EDIT_OPS = [
 ] as const
 
 const STRING_FIELDS = ['name', 'sets', 'tempo'] as const
-const NUMERIC_FIELDS = ['maxSets', 'reps', 'restSec'] as const
+const NUMERIC_FIELDS = ['maxSets', 'reps', 'restSec', 'holdSec', 'sideSwitchSec'] as const
 
 type StringField = (typeof STRING_FIELDS)[number]
 type NumericField = (typeof NUMERIC_FIELDS)[number]
@@ -75,6 +98,11 @@ function uniqueKey(block: FlexBlock, base: string): string {
   return `${base}_${n}`
 }
 
+/**
+ * Apply edits to one routine's blocks. The engine every caller ends up in — see
+ * {@link applyFlexPlanEdits} for the version that takes all the routines at once
+ * and sends each edit to the one it names.
+ */
 export function applyFlexEdits(
   routine: FlexBlock[],
   edits: FlexEdit[],
@@ -221,4 +249,36 @@ export function applyFlexEdits(
   }
 
   return { routine: next, applied, errors }
+}
+
+/**
+ * Apply edits across every routine, each one going to the routine it names (or
+ * to the side split, when it names none).
+ *
+ * Kept apart from {@link applyFlexEdits} rather than replacing it: the engine
+ * works on one routine's blocks, and one edit can only ever touch one routine —
+ * so the map-level job is purely routing. Messages are tagged with the routine
+ * they came from, since a single reply can now propose changes to both and
+ * "removed the pancake block" would otherwise not say from where.
+ */
+export function applyFlexPlanEdits(
+  plans: Record<FlexRoutineKey, FlexBlock[]>,
+  edits: FlexEdit[],
+): { plans: Record<FlexRoutineKey, FlexBlock[]>; applied: string[]; errors: string[] } {
+  const applied: string[] = []
+  const errors: string[] = []
+  const next = { ...plans }
+
+  for (const key of FLEX_ROUTINE_KEYS) {
+    // An edit with no routine named was written when there was only one to edit.
+    const mine = edits.filter((e) => (e.routine ?? 'side_split') === key)
+    if (mine.length === 0) continue
+    const res = applyFlexEdits(next[key] ?? [], mine)
+    next[key] = res.routine
+    const tag = FLEX_ROUTINES[key].label
+    applied.push(...res.applied.map((m) => `${tag} · ${m}`))
+    errors.push(...res.errors.map((m) => `${tag} · ${m}`))
+  }
+
+  return { plans: next, applied, errors }
 }

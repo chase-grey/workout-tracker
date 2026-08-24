@@ -8,16 +8,19 @@ import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
 import { dayOrder, type VariantKey } from '../../config/plan'
 import { lastTrainingSession } from '../../lib/session'
+import { lastStretchRoutine } from '../../lib/stretchRotation'
+import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 
 type Props = {
   onStart: (dayType: DayType, variant?: VariantKey) => void
-  onStartStretch: () => void
+  onStartStretch: (routine: FlexRoutineKey) => void
 }
 
 export function TodayTab({ onStart, onStartStretch }: Props) {
-  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan } = useData()
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries } =
+    useData()
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
 
@@ -48,6 +51,10 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
   // is only a hint — the button still starts the session.
   const lastDay = lastTrainingSession(workouts)?.dayType ?? null
   const dimmedDay: DayType | null = lastDay === 'push' || lastDay === 'pull' ? lastDay : null
+
+  // The two stretch routines dim the same way and for the same reason: whichever
+  // was done last steps back so the other reads as up next.
+  const dimmedStretch = lastStretchRoutine(flexEntries)
 
   return (
     // No bottom padding of its own: `main` already pads below the scroll area, and
@@ -90,16 +97,25 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
 
       <WeightCard />
 
-      {/* Two across rather than four stacked rows: full-width buttons took a
-          third of the screen on their own, which is what pushed the rest of the
-          page into scrolling. */}
+      {/* Two across rather than stacked rows: full-width buttons took a third of
+          the screen on their own, which is what pushed the rest of the page into
+          scrolling. Two grids rather than one five-cell flow, so each dimming
+          pair sits side by side — the stretches on their own row, the lift days
+          on theirs. */}
       <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={onStartStretch}
-          className="min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2"
-        >
-          stretch + core
-        </button>
+        {FLEX_ROUTINE_KEYS.map((r) => (
+          <button
+            key={r}
+            onClick={() => onStartStretch(r)}
+            className={`min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2 ${
+              r === dimmedStretch ? 'opacity-50' : ''
+            }`}
+          >
+            {FLEX_ROUTINES[r].label}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
         {dayOrder(plan).map((t) => (
           <button
             key={t}

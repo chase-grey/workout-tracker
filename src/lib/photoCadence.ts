@@ -1,10 +1,16 @@
 import {
+  coldLegLiftLeftOf,
+  coldLegLiftRightOf,
   coldSplitOf,
   coldTailorsLeftOf,
   coldTailorsRightOf,
+  coldToeTouchOf,
+  warmLegLiftLeftOf,
+  warmLegLiftRightOf,
   warmSplitOf,
   warmTailorsLeftOf,
   warmTailorsRightOf,
+  warmToeTouchOf,
   type FlexEntry,
 } from './flex'
 import { weekStartISO } from './dates'
@@ -23,6 +29,14 @@ const CAPTURED: Record<PhotoKind, (e: FlexEntry) => boolean> = {
   'cold-tailors': (e) => coldTailorsLeftOf(e) != null || coldTailorsRightOf(e) != null,
   'warm-tailors': (e) => warmTailorsLeftOf(e) != null || warmTailorsRightOf(e) != null,
   'warm-split': (e) => warmSplitOf(e) != null,
+  // Each leg lift is a shot of its own, so each is owed on its own schedule —
+  // one lifted leg per photo means one reading per capture.
+  'cold-toe-touch': (e) => coldToeTouchOf(e) != null,
+  'warm-toe-touch': (e) => warmToeTouchOf(e) != null,
+  'cold-leg-lift-left': (e) => coldLegLiftLeftOf(e) != null,
+  'cold-leg-lift-right': (e) => coldLegLiftRightOf(e) != null,
+  'warm-leg-lift-left': (e) => warmLegLiftLeftOf(e) != null,
+  'warm-leg-lift-right': (e) => warmLegLiftRightOf(e) != null,
 }
 
 /** The shots already logged in the Mon–Sun week containing `today`. */

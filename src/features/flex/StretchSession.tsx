@@ -4,17 +4,25 @@ import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { GetReady } from '../../components/GetReady'
+import { HoldTimer } from '../../components/HoldTimer'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { PhotoStep } from './PhotoStep'
 import { formatDuration, remainingSecs } from '../../lib/estimate'
-import { buildSessionSteps, type CoreSetStep } from '../../lib/flexSteps'
-import { COLD_GATE, PHOTO_SHOT, gateAfterStep, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
+import {
+  buildSessionSteps,
+  stepWorkSec,
+  SEC_PER_REP,
+  type CoreSetStep,
+  type SessionStep,
+} from '../../lib/flexSteps'
+import { coldGate, PHOTO_SHOT, gateAfterStep, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
 import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement } from '../../store/DataContext'
+import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import { canResumeRest, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useWakeLock } from '../../lib/useWakeLock'
@@ -24,13 +32,20 @@ import { STRETCH_CORE, repRangeLabel } from '../../config/plan'
 import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 
-const SEC_PER_REP = 5
-
 /** Seconds to get into position at the start and after each rest, before the pace starts. */
 const GET_READY_SEC = 5
 
-/** Stretches that take longer than the default to settle into, by exercise key. */
-const GET_READY_SEC_BY_EX: Record<string, number> = { tailors_pose: 15 }
+/**
+ * Stretches that take longer than the default to settle into, by exercise key.
+ * The pike positions take real setting up — a block under the leg, a strap, the
+ * whole shape squared away before anything is worth timing.
+ */
+const GET_READY_SEC_BY_EX: Record<string, number> = {
+  tailors_pose: 15,
+  pike_block_crush: 15,
+  pike_lift: 15,
+  rolling_feet: 10,
+}
 
 /**
  * Seconds to get into position when crossing from the mobility routine into the
@@ -47,20 +62,57 @@ const CORE_ENTRY_GET_READY_SEC = 10
 const POST_PHOTO_GET_READY_SEC = 15
 
 /**
- * A photo screen waiting to be shown, plus the set it interrupts. `resumeIndex`
- * is the step whose rest starts once the screen is dismissed, or null for the
- * cold screen, which runs before the routine has started.
+ * A photo screen waiting to be shown, and what the routine does once it closes:
+ *   - 'start'   — the cold screen, which runs before the routine has begun: settle
+ *                 in and go into the first stretch.
+ *   - 'advance' — mid-routine: the set at `index` starts its rest and hands on.
+ *   - 'stay'    — the closing stretch set ended itself on its own clock, and the
+ *                 finish button is what comes next. A routine shouldn't file
+ *                 itself away while you're still in the pose.
  */
-type PendingPhotos = { gate: PhotoGate; resumeIndex: number | null }
+type PendingPhotos = { gate: PhotoGate; index: number | null; then: 'start' | 'advance' | 'stay' }
+
+/**
+ * The settle-in a step gets before its work begins: the per-stretch value for a
+ * mobility set, a brief reposition on the way into the core block, and none
+ * between the core sets — those get a real rest instead.
+ */
+function getReadySecFor(s: SessionStep): number {
+  if (s.kind !== 'flex') return s.round === 0 ? CORE_ENTRY_GET_READY_SEC : 0
+  return GET_READY_SEC_BY_EX[s.exKey] ?? GET_READY_SEC
+}
+
+/** The side and the variation, as the header and the checklist name them. */
+function stepDetail(s: SessionStep): string {
+  const parts = [`set ${s.round + 1} of ${s.maxSets}`]
+  if (s.kind === 'flex') {
+    if (s.setLabel) parts.push(s.setLabel)
+    if (s.side) parts.push(s.side)
+  }
+  return parts.join(' · ')
+}
 
 /**
  * Guided, one-set-at-a-time Stretch + Core flow: the mobility routine (with a
- * tempo rhythm animation) followed by a core block whose sets are logged as
- * workout rows. Finishing counts as a stretch/flex day.
+ * tempo rhythm animation, or a hold clock for a static stretch) followed by a
+ * core block whose sets are logged as workout rows. Finishing counts as a
+ * stretch/flex day.
+ *
+ * Which routine is running — side split or head to toe — comes in as a prop and
+ * decides the blocks, the photos offered and what gets logged at the end. Whether
+ * the core block is appended was decided when the session started and rides in the
+ * saved snapshot: pinned, so a session resumed after another one logged core keeps
+ * the shape it began with rather than growing four steps mid-routine.
  */
-export function StretchSession({ onClose }: { onClose: () => void }) {
+export function StretchSession({
+  routine,
+  onClose,
+}: {
+  routine: FlexRoutineKey
+  onClose: () => void
+}) {
   const {
-    flexPlan,
+    flexPlans,
     workouts,
     flexEntries,
     logFlex,
@@ -74,6 +126,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   // The whole flow resumes from this snapshot, read once on mount: an app switch
   // or accidental refresh drops you back where you were, not at the top.
   const [saved] = useState(() => storage.loadStretch())
+  // A session started before the core-skip rule shipped always had its core.
+  const [withCore] = useState(saved?.core ?? true)
   const [current, setCurrent] = useState(saved?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(saved?.done ?? []))
   const [coreReps, setCoreReps] = useState<Record<number, number>>(() => saved?.coreReps ?? {})
@@ -102,7 +156,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const [preparing, setPreparing] = useState(rest == null && !fast)
   const [showList, setShowList] = useState(false)
   // A one-off, longer get-into-position count that replaces the upcoming set's
-  // own — set when a photo screen hands the routine straight to a stretch.
+  // own — set when a photo screen hands the routine straight to a stretch, and
+  // when a side switch replaces the settle-in with a reposition.
   const [readyOverrideSec, setReadyOverrideSec] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
   // Photo screens already offered this session, so resuming doesn't re-ask.
@@ -111,11 +166,12 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   // that's already past the first set is past that moment, so it doesn't re-ask,
   // and neither does a week that already has the readings.
   const [photos, setPhotos] = useState<PendingPhotos | null>(() => {
-    if (seenGates.has(COLD_GATE.id) || (saved?.step ?? 0) > 0 || (saved?.done?.length ?? 0) > 0) {
+    const cold = coldGate(routine)
+    if (seenGates.has(cold.id) || (saved?.step ?? 0) > 0 || (saved?.done?.length ?? 0) > 0) {
       return null
     }
-    const gate = dueGate(COLD_GATE, flexEntries, today)
-    return gate ? { gate, resumeIndex: null } : null
+    const gate = dueGate(cold, flexEntries, today)
+    return gate ? { gate, index: null, then: 'start' } : null
   })
   // When the routine began (persisted so a resumed session still measures its
   // full length) and accumulated time spent on the rest screen.
@@ -137,7 +193,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     restStartRef.current = 0
   }
 
-  const steps = useMemo(() => buildSessionSteps(flexPlan), [flexPlan])
+  const plan = flexPlans[routine] ?? FLEX_ROUTINES[routine].blocks
+  const steps = useMemo(() => buildSessionSteps(plan, { core: withCore }), [plan, withCore])
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
@@ -162,6 +219,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       step: safeCurrent,
       done: [...done],
       startedAt,
+      routine,
+      core: withCore,
       coreReps,
       coreWeights,
       rep,
@@ -172,7 +231,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, done, startedAt, coreReps, coreWeights, rep, rest, seenGates, fast])
+  }, [safeCurrent, done, startedAt, routine, withCore, coreReps, coreWeights, rep, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -191,12 +250,15 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       .filter((s) => !done.has(s.stepKey))
       .map((s) => ({
         remainingSets: 1,
-        workSec: (s.kind === 'flex' ? s.reps : coreTarget.reps) * SEC_PER_REP,
+        // A ninety-second hold is ninety seconds of work, not eighteen reps of it.
+        workSec: s.kind === 'flex' ? stepWorkSec(s) : coreTarget.reps * SEC_PER_REP,
         restSec: s.restSec,
       }))
     return remainingSecs({
       history: durations,
-      sel: { kind: 'stretch' },
+      // Scoped to this routine: head to toe runs about twice the side split, so
+      // a median pooled across both would tell you half the truth in either one.
+      sel: { kind: 'stretch', routine },
       doneSteps: completed,
       totalSteps: N,
       fallbackItems,
@@ -212,6 +274,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     void logSessionDuration({
       date: toISODate(new Date()),
       kind: 'stretch',
+      routine,
       totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,
       restSec: restAccumSec.current,
     })
@@ -226,7 +289,10 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
       .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
     void logCore(coreSets)
-    void logFlex({ note: 'stretch + core' })
+    // Which routine was done is what the alternation reads off the log. The note
+    // says whether the core block was part of it, since with it skipped "stretch
+    // + core" would be a plain misstatement of what happened.
+    void logFlex({ note: withCore ? 'stretch + core' : 'stretch', routines: [routine] })
     onClose()
   }
 
@@ -243,17 +309,11 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
 
   const step = steps[safeCurrent]
   const atLast = safeCurrent >= N - 1
+  // A static hold has nothing to animate, so it runs on a clock of its own with
+  // its own start and done — see HoldTimer.
+  const holdSec = step.kind === 'flex' ? step.holdSec : undefined
 
-  // Seconds to settle into the current set before its work begins: the
-  // per-stretch value for a mobility set, a brief reposition when first entering
-  // the core block (round 0, reached from the pancake), and none between the core
-  // sets — those get a real rest instead.
-  const getReadySec =
-    step.kind === 'flex'
-      ? GET_READY_SEC_BY_EX[step.exKey] ?? GET_READY_SEC
-      : step.round === 0
-        ? CORE_ENTRY_GET_READY_SEC
-        : 0
+  const getReadySec = getReadySecFor(step)
 
   // Route a captured angle into the right field. The shot fixes cold vs warm;
   // which pose it lands in follows the angles the camera actually returned, so
@@ -272,6 +332,18 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     if (result.tailorsRightDeg != null) {
       if (cold) m.tailorsColdRightDeg = result.tailorsRightDeg
       else m.tailorsWarmRightDeg = result.tailorsRightDeg
+    }
+    if (result.toeTouchDeg != null) {
+      if (cold) m.coldToeTouchDeg = result.toeTouchDeg
+      else m.warmToeTouchDeg = result.toeTouchDeg
+    }
+    if (result.legLiftLeftDeg != null) {
+      if (cold) m.coldLegLiftLeftDeg = result.legLiftLeftDeg
+      else m.warmLegLiftLeftDeg = result.legLiftLeftDeg
+    }
+    if (result.legLiftRightDeg != null) {
+      if (cold) m.coldLegLiftRightDeg = result.legLiftRightDeg
+      else m.warmLegLiftRightDeg = result.legLiftRightDeg
     }
     void logFlex(m)
   }
@@ -303,35 +375,76 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     setPreparing(getReadySec > 0 && !(fast && expired))
   }
 
+  /**
+   * Hand the screen to a count of `sec` before the coming set, with no rest.
+   *
+   * Hands-free there is no count, and no override is left behind either — a stale
+   * one would still be on the clock when the next rest ended. A count of zero is
+   * refused for a harder reason: `preparing` is what stands the rhythm guide and
+   * the screen tap down, so a count that renders nothing would leave the routine
+   * with no way forward at all.
+   */
+  const straightToGetReady = (sec: number) => {
+    if (fast || sec <= 0) {
+      setPreparing(false)
+      return
+    }
+    setReadyOverrideSec(sec)
+    setPreparing(true)
+  }
+
   // Start the finished set's rest and move on — or wrap up, on the last step.
   const advanceFrom = (index: number, doneSet: Set<string>) => {
     if (index >= N - 1) {
       finishWith(doneSet)
       return
     }
+    const finished = steps[index]
+    goToStep(index + 1)
+
     // Crossing from the mobility routine into the core block skips the rest — the
-    // pancake hang leaves you rested, so go straight to a get-into-position count
+    // last stretch leaves you rested, so go straight to a get-into-position count
     // (or, running hands-free, straight to the set).
-    if (steps[index].kind === 'flex' && steps[index + 1].kind === 'core') {
-      goToStep(index + 1)
-      setPreparing(!fast)
+    if (finished.kind === 'flex' && steps[index + 1].kind === 'core') {
+      straightToGetReady(CORE_ENTRY_GET_READY_SEC)
+      return
+    }
+    // The other side of the same round: a reposition, not a rest, so it must not
+    // be banked into the rest tally — the session's time-left estimate reads that
+    // number, and counting every leg swap as rest would drift it badly.
+    if (finished.kind === 'flex' && finished.sideSwitchSec) {
+      straightToGetReady(finished.sideSwitchSec)
+      return
+    }
+    // A stretch that prescribes no rest at all (the feet and calf holds) hands
+    // straight to the next set's own settle-in rather than flashing a rest screen
+    // that's already over.
+    if (finished.restSec <= 0) {
+      straightToGetReady(getReadySecFor(steps[index + 1]))
       return
     }
     restStartRef.current = Date.now()
-    setRest({ seconds: steps[index].restSec, endsAt: Date.now() + steps[index].restSec * 1000 })
-    goToStep(index + 1)
+    setRest({ seconds: finished.restSec, endsAt: Date.now() + finished.restSec * 1000 })
   }
 
-  const completeSetAndAdvance = () => {
+  /**
+   * Mark the set on screen done and move on. `auto` means its own clock ended it
+   * rather than a tap: on the closing set that stops at the photo screen and the
+   * finish button, because a routine shouldn't log itself while you're still in
+   * the pose.
+   */
+  const completeSetAndAdvance = (auto = false) => {
     const nextDone = new Set(done).add(step.stepKey)
     setDone(nextDone)
     // A photo moment holds the flow on its own screen first: the rest clock only
     // starts once you're through with the camera.
-    const gate = dueGate(gateAfterStep(steps, safeCurrent), flexEntries, today)
+    const gate = dueGate(gateAfterStep(steps, safeCurrent, routine), flexEntries, today)
+    const closing = auto && atLast
     if (gate && !seenGates.has(gate.id)) {
-      setPhotos({ gate, resumeIndex: safeCurrent })
+      setPhotos({ gate, index: safeCurrent, then: closing ? 'stay' : 'advance' })
       return
     }
+    if (closing) return
     advanceFrom(safeCurrent, nextDone)
   }
 
@@ -342,40 +455,42 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   const closePhotos = (tookAny: boolean) => {
     if (!photos) return
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
+    const { then, index } = photos
     setPhotos(null)
-    if (photos.resumeIndex != null) {
-      advanceFrom(photos.resumeIndex, done)
+    if (then === 'advance' && index != null) {
+      advanceFrom(index, done)
       return
     }
-    if (tookAny && !fast) {
-      setReadyOverrideSec(POST_PHOTO_GET_READY_SEC)
-      setPreparing(true)
-    }
+    if (then === 'start' && tookAny && !fast) straightToGetReady(POST_PHOTO_GET_READY_SEC)
   }
 
   // Tapping the screen finishes the set — your hands are busy mid-stretch, so
   // the whole page is the target rather than one button. Controls (the kebab, the
   // core block's own fields) keep their own job, an overlay that owns the screen
   // swallows the tap, and the last set still needs its explicit finish button.
+  // A timed hold is exempt: it has a start and a done of its own, and a stray tap
+  // shouldn't cut ninety seconds of it short.
   const overlayUp = rest != null || photos != null || paused || showList || preparing
   const onScreenTap = (e: MouseEvent) => {
-    if (atLast || overlayUp) return
+    if (atLast || overlayUp || holdSec) return
     if ((e.target as HTMLElement).closest('button, input, label, a')) return
     completeSetAndAdvance()
   }
 
   // The set ending itself is worth a buzz: mid-stretch you're rarely looking at
   // the screen, so rest starting would otherwise be silent (the rest timer buzzes
-  // when it runs out for the same reason).
+  // when it runs out for the same reason). Not for a hold, which buzzes at its
+  // own target already.
   const intoRestOnTarget = () => {
     navigator.vibrate?.(200)
-    completeSetAndAdvance()
+    completeSetAndAdvance(true)
   }
 
   // The rest that led into the set on screen: the one the step before it
   // prescribed (see advanceFrom). Zero when there wasn't one — the routine's
-  // first set, and the crossing out of the mobility routine into the core block,
-  // which hands you to the sit-ups already rested off the pancake hang.
+  // first set, a side switch, a stretch that rests not at all, and the crossing
+  // out of the mobility routine into the core block, which hands you to the
+  // sit-ups already rested off the last stretch.
   const prevStep = steps[safeCurrent - 1]
   const restBeforeSec =
     !prevStep || (prevStep.kind === 'flex' && step.kind === 'core') ? 0 : prevStep.restSec
@@ -434,9 +549,9 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-xl font-bold">{step.exName}</h2>
-          <p className="text-sm text-neutral-500">
-            set {step.round + 1} of {step.maxSets}
-          </p>
+          {/* The variation and the side, when the stretch has them: which of the
+              calf stretch's three shapes this is, and which leg it's on. */}
+          <p className="text-sm text-neutral-500">{stepDetail(step)}</p>
         </div>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
@@ -464,25 +579,37 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       {topBar}
 
       {step.kind === 'flex' ? (
-        <RhythmGuide
-          key={step.stepKey}
-          tempo={step.tempo}
-          reps={step.reps}
-          running={rest == null && !preparing && !paused && photos == null}
-          startRep={rep}
-          onRep={setRep}
-          // A stretch set always ends itself: the target rep rolls it into its
-          // rest whether or not the routine is running hands-free. Mid-pose there
-          // is nothing to decide — the hold is over when the reps are done, and
-          // waiting for a tap only means holding it longer than prescribed. Not on
-          // the closing step, which the core block owns: nothing there logs a
-          // session on a timer.
-          onTargetHit={!atLast ? intoRestOnTarget : undefined}
-          // Same condition: with no tap coming, the guide brightens a step on the
-          // rep that's about to roll the set into its rest — and keeps its rep
-          // count off the screen, since there's nothing left to time by it.
-          endsOnTarget={!atLast}
-        />
+        holdSec ? (
+          <HoldTimer
+            key={step.stepKey}
+            targetSec={holdSec}
+            // A hold you kept going on is worth keeping, so stopping it by hand
+            // is what ends the set — and hands-free the clock closes it instead.
+            onStop={() => completeSetAndAdvance(true)}
+            onTargetEnd={fast ? () => completeSetAndAdvance(true) : undefined}
+          />
+        ) : (
+          <RhythmGuide
+            key={step.stepKey}
+            tempo={step.tempo}
+            reps={step.reps}
+            running={rest == null && !preparing && !paused && photos == null}
+            startRep={rep}
+            onRep={setRep}
+            // A stretch set always ends itself: the target rep rolls it into its
+            // rest whether or not the routine is running hands-free. Mid-pose there
+            // is nothing to decide — the hold is over when the reps are done, and
+            // waiting for a tap only means holding it longer than prescribed. On
+            // the closing set (core skipped, so a stretch closes the routine) it
+            // still ends itself, and then waits on the finish button rather than
+            // logging the session on a timer.
+            onTargetHit={intoRestOnTarget}
+            // Same either way: with no tap coming, the guide brightens a step on
+            // the rep that's about to end the set — and keeps its rep count off
+            // the screen, since there's nothing left to time by it.
+            endsOnTarget
+          />
+        )
       ) : (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
           <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
@@ -524,14 +651,16 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       )}
 
       {/* Every other set advances on a tap anywhere; ending the whole routine is
-          worth an explicit button, pinned where a thumb can reach it. */}
+          worth an explicit button, pinned where a thumb can reach it. With the
+          core block skipped it sits under the closing stretch's guide or hold
+          clock rather than under the core fields. */}
       {atLast && (
         <div
           className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex flex-col gap-2 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur"
           style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
         >
           <button
-            onClick={completeSetAndAdvance}
+            onClick={() => completeSetAndAdvance()}
             className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
           >
             finish &amp; log session
@@ -552,8 +681,8 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
         />
       )}
       {/* The get-into-position count waits its turn behind a photo screen, and
-          only shows for a set that has one — mobility sets and the first core
-          set; skipped inside the core block, which rests instead. */}
+          only shows for a set that has one — mobility sets, a side switch, and the
+          first core set; skipped inside the core block, which rests instead. */}
       {preparing && photos == null && (readyOverrideSec ?? getReadySec) > 0 && (
         <GetReady
           seconds={readyOverrideSec ?? getReadySec}
@@ -600,7 +729,7 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
                     >
                       <span className="text-[10px] tracking-wide text-neutral-500">{s.blockLabel}</span>
                       <span className="block font-medium">
-                        {s.exName} · set {s.round + 1}
+                        {s.exName} · {stepDetail(s)}
                       </span>
                     </button>
                     <button
