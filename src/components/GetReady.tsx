@@ -3,7 +3,9 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
 
 /**
  * Brief full-screen "get into position" countdown shown after rest, before the
- * next stretch's rhythm begins — time to settle in before the pace starts.
+ * set it leads into — time to settle in, or to walk back to the bar, before the
+ * work starts. Used by the stretch routine ahead of a stretch's rhythm, and by
+ * the workout when a hands-free rest ends itself.
  * Wall-clock based (tracks a target end time) so it stays accurate if the app is
  * backgrounded. Tap anywhere to start immediately.
  *
@@ -12,7 +14,7 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
  * behind renders up there, laid out in the app shell's own content box (see
  * lib/shell), so the progress bar, the stretch named, the set coming and the
  * session's controls all stay put and stay reachable while you settle in. The
- * stretch is named up there, so this doesn't name it again.
+ * move is named up there, so this doesn't name it again.
  */
 export function GetReady({
   seconds,

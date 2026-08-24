@@ -59,6 +59,7 @@ import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
+import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { PauseOverlay } from '../../components/PauseOverlay'
@@ -90,6 +91,16 @@ const MAX_SET_ACTIVE_SEC = 20 * 60
  * turbo once it stops on the last set, which it leaves for you to finish.
  */
 const IDLE_PAUSE_MS = 5 * 60 * 1000
+
+/**
+ * How long the get-into-position count runs after a rest that ended itself.
+ *
+ * Hands-free, the moment rest is up is the moment you're still walking back to
+ * the bar — so instead of the live set appearing under your hands, a short count
+ * covers the walk (the same screen the stretch routine settles in on, see
+ * components/GetReady).
+ */
+const GET_READY_SEC = 5
 
 /** One set of one exercise — the unit the guided workout flow steps through. */
 type SetStep = {
@@ -129,6 +140,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const [showCircuitRest, setShowCircuitRest] = useState(false)
   // The first set of a workout waits on a start press (see `awaitingStart`).
   const [started, setStarted] = useState(false)
+  // Whether the get-into-position count is up: the beat between a rest that ran
+  // itself out and the set it leads into (see closeRest).
+  const [preparing, setPreparing] = useState(false)
   // The flourish for a set that hit its target, keyed by a counter so consecutive
   // on-target sets each get their own play rather than reusing a mid-flight one.
   const [cheer, setCheer] = useState<{ id: number; grade: SetGrade } | null>(null)
@@ -293,7 +307,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // left alone, nor under an open sheet: a sheet sits above the pause curtain, and
   // reading one isn't being away.
   useIdleTimeout(
-    rest == null && !paused && !showList && !showHistory && !showCircuitRest,
+    rest == null && !preparing && !paused && !showList && !showHistory && !showCircuitRest,
     IDLE_PAUSE_MS,
     () => {
       // Drop this set's active-time slice rather than carry it into the pause: it
@@ -481,12 +495,24 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     onFinish(cleaned, { totalSec, restSec })
   }
 
-  // Accumulate the just-ended rest slice, then dismiss the overlay. The next set
-  // screen is now active, so start its active-time clock.
-  const closeRest = () => {
+  // Accumulate the just-ended rest slice, then dismiss the overlay.
+  //
+  // `expired` is a rest that ran its own clock out hands-free, and that one lands
+  // on a brief get-into-position count instead of straight on the live set: nobody
+  // tapped, so you're still walking back to the bar when rest ends. A rest cut
+  // short by a tap goes straight through — you asked to move on, so you're already
+  // in position.
+  //
+  // The count's seconds are charged to neither side of the session: rest has just
+  // been banked, and the exercise's active average is what turbo's own wait is
+  // priced from (see turboSetMs), so folding the count into it would push every
+  // later wait out by the length of the count, workout after workout. The active
+  // clock starts when the count ends instead.
+  const closeRest = (expired?: boolean) => {
     commitTally(bankRest(tally.current, restStartRef.current, Date.now()))
     restStartRef.current = 0
-    activeStartRef.current = Date.now()
+    setPreparing(!!expired)
+    activeStartRef.current = expired ? 0 : Date.now()
     setRest(null)
   }
 
@@ -656,7 +682,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // set with no reps in it yet (there'd be nothing to log), and the last set of
   // all, which finishes the workout — that stays a deliberate press. Rest and any
   // overlay disarm it too: rest already advances itself, and reading the checklist
-  // isn't standing at the bar.
+  // isn't standing at the bar. The get-into-position count holds it off for the
+  // same reason: the wait on a set starts when you're on the set.
   const advanceRef = useRef(completeSetAndAdvance)
   advanceRef.current = completeSetAndAdvance
   const turboMs = turboSetMs(exerciseAverages, planned.key)
@@ -666,6 +693,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     !atLast &&
     (set?.reps ?? 0) > 0 &&
     rest == null &&
+    !preparing &&
     !paused &&
     !showList &&
     !showHistory &&
@@ -917,6 +945,20 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           upNextTarget={upNextTargetLabel(step.setIndex, targetNumbers)}
           fastMode={fastMode}
           onClose={closeRest}
+        />
+      )}
+
+      {/* The beat after a rest that ended itself (see closeRest). The same top of
+          the screen once more, so the bar, the lift and the set coming don't move
+          between rest, count and set. A tap gets on with it. */}
+      {preparing && (
+        <GetReady
+          seconds={GET_READY_SEC}
+          header={topBar}
+          onDone={() => {
+            setPreparing(false)
+            activeStartRef.current = Date.now()
+          }}
         />
       )}
 
