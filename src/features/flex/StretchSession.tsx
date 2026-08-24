@@ -371,9 +371,36 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     completeSetAndAdvance()
   }
 
+  // The rest that led into the set on screen: the one the step before it
+  // prescribed (see advanceFrom). Zero when there wasn't one — the routine's
+  // first set, and the crossing out of the mobility routine into the core block,
+  // which hands you to the sit-ups already rested off the pancake hang.
+  const prevStep = steps[safeCurrent - 1]
+  const restBeforeSec =
+    !prevStep || (prevStep.kind === 'flex' && step.kind === 'core') ? 0 : prevStep.restSec
+
+  // Rest again before the set on screen — for the rest that was cut short, or the
+  // one hands-free rolled straight through. It runs and banks like any other, and
+  // the get-into-position count follows it as usual, so you settle back into the
+  // pose before the pace picks up again.
+  const reopenRest = (sec: number) => {
+    // Whatever count is on screen gives way to the rest, and the walk back from
+    // the camera is already behind you: what follows this rest is the ordinary
+    // settle-in for the coming set.
+    setPreparing(false)
+    setReadyOverrideSec(null)
+    restStartRef.current = Date.now()
+    setRest({ seconds: sec, endsAt: Date.now() + sec * 1000 })
+  }
+
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
+    // Off the rest screen only — there's nothing to go back to while it's up, and
+    // nothing to go back to before a set that never had a rest ahead of it.
+    ...(rest == null && restBeforeSec > 0
+      ? [{ label: 'back to rest', onClick: () => reopenRest(restBeforeSec) }]
+      : []),
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'routine checklist', onClick: () => setShowList(true) },
     {
