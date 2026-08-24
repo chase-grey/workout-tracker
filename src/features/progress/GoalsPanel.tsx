@@ -28,6 +28,7 @@ import {
 import { exerciseName } from '../../config/plan'
 import { setsByDate, type DaySets } from '../../lib/goalSets'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
+import { isLiftLadder } from '../../lib/liftLadder'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptModel,
@@ -57,6 +58,7 @@ import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
 import { CommitChart } from './CommitChart'
 import { FlexLadderBlock, type Ladder } from './FlexLadderBlock'
+import { LiftLadderBlock } from './LiftLadderBlock'
 import { GoalTooltip } from './GoalTooltip'
 import { MdBolt, MdCelebration, MdEditCalendar, MdLockOutline } from 'react-icons/md'
 
@@ -996,18 +998,22 @@ export function GoalsPanel() {
 
   // A block wears one box around its whole group — the chart and every row —
   // rather than a box per row with the chart they read off left outside it. It
-  // takes the strongest state any of its goals is in: the bright ask if one is
-  // within reach, otherwise the committed green.
+  // takes the strongest state any of its goals is in: an attempt waiting to be
+  // taken first, then the bright ask if one is within reach, otherwise the
+  // committed green. A grouped row draws no box of its own, so a rung asking for
+  // its single would go unmarked if the block didn't wear that state for it.
   const blockRing = (block: GoalSpec[]): string => {
     let lockable = false
     let committed = false
+    let ready = false
     for (const g of block) {
       if (isReached(g)) continue
       const proj = projections.get(g.id)
-      if (locked[g.id]) committed = true
+      if (isReadyToAttempt(g)) ready = true
+      else if (locked[g.id]) committed = true
       else if (proj && withinHorizon(proj)) lockable = true
     }
-    return goalRing(lockable, committed)
+    return goalRing(lockable, committed, false, ready)
   }
 
   const weightRing = useMemo(
@@ -1067,6 +1073,44 @@ export function GoalsPanel() {
     [goals, flexEntries, locked, projections],
   )
 
+  // The lift ladders — the two squat targets, and the four pull-up rungs — each
+  // collapsed into one block the way the bodyweight pair and the stretch ladders
+  // are: every rung reading off a single chart of the lift's own history, in place
+  // of a row per rung that drew that history over again apiece.
+  const liftLadders = useMemo(() => {
+    const byLift = new Map<string, GoalSpec[]>()
+    for (const g of goals) {
+      if (!isLiftLadder(g.exerciseKey)) continue
+      const rungs = byLift.get(g.exerciseKey!) ?? []
+      rungs.push(g)
+      byLift.set(g.exerciseKey!, rungs)
+    }
+    return (
+      [...byLift]
+        // A ladder with every rung cleared holds nothing left to chase, and unlike
+        // a stretch log its history is drawn again in the lifts section below the
+        // panel — so the block goes rather than standing as a chart on its own.
+        // The cleared rungs are up in the reached band either way.
+        .filter(([, rungs]) => rungs.some((g) => !isReached(g)))
+        .map(([lift, rungs]) => ({
+          lift,
+          rungs,
+          node: (
+            <LiftLadderBlock
+              key={lift}
+              lift={lift}
+              rungs={rungs}
+              sets={setsFor(rungs[0])}
+              locked={locked}
+              ring={blockRing(rungs)}
+              renderRow={(g) => goalRow(g, true)}
+            />
+          ),
+        }))
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals, locked, projections])
+
   // The date a goal has committed to, or null if it isn't a locked, still-open
   // commitment — reached goals and unlocked ones don't count as commitments.
   const committedEta = (g: GoalSpec): string | null => {
@@ -1100,6 +1144,8 @@ export function GoalsPanel() {
     if (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) {
       return { key: 'bodyweight', goals: weightGoals, node: <Fragment key="bodyweight">{bodyWeightBlock}</Fragment> }
     }
+    const lift = liftLadders.find((l) => l.rungs.some((r) => r.id === g.id))
+    if (lift) return { key: `lift:${lift.lift}`, goals: lift.rungs, node: lift.node }
     const ladder = ladders.find((l) => l.rungs.some((r) => r.id === g.id))
     return ladder ? { key: `flex:${ladder.ladder}`, goals: ladder.rungs, node: ladder.node } : null
   }
@@ -1189,7 +1235,7 @@ export function GoalsPanel() {
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, locked, projections, settings, ladders])
+  }, [goals, locked, projections, settings, ladders, liftLadders])
 
   const ordered = useMemo(() => orderGoalUnits(units).map((u) => u.node), [units])
 

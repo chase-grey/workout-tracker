@@ -3,14 +3,14 @@ import { flexStats, splitSeries, tailorsSeries, type FlexEntry } from '../../lib
 import { isReached, type GoalSpec } from '../../lib/goals'
 import type { LockedProjections } from '../../lib/goalLock'
 import { LINE_COLD, LINE_COLD_2, LINE_PRIMARY, LINE_SECONDARY } from '../../lib/chart'
-import { AngleChart, type AngleReading, type AngleSeries } from './AngleChart'
+import { LadderChart, type LadderReading, type LadderSeries } from './LadderChart'
 
 /** Which ladder a block is drawing. */
 export type Ladder = 'split' | 'tailors'
 
 const LADDERS: Record<
   Ladder,
-  { title: string; series: AngleSeries[]; empty: string }
+  { title: string; series: LadderSeries[]; empty: string }
 > = {
   split: {
     title: 'side split',
@@ -84,7 +84,7 @@ export function FlexLadderBlock({
   // Cold and warm readings per date. The rungs are measured on the warm series
   // (for tailor's pose, the average of its left and right), which is the line
   // that runs at the goals; the cold readings ride along as the day's floor.
-  const readings = useMemo<AngleReading[]>(
+  const readings = useMemo<LadderReading[]>(
     () => (ladder === 'split' ? splitSeries(entries) : tailorsSeries(entries)),
     [ladder, entries],
   )
@@ -112,7 +112,7 @@ export function FlexLadderBlock({
         {title}
         {latest ? ` · ${latest}` : ''}
       </h4>
-      <AngleChart readings={readings} series={series} goals={goalLines} empty={empty} />
+      <LadderChart readings={readings} series={series} goals={goalLines} unit="°" empty={empty} />
       {/* Only the rungs still being climbed. A cleared one has left for the
           reached band at the top of the panel, where it sits by the date it was
           cleared rather than buried under the rungs still open. */}
