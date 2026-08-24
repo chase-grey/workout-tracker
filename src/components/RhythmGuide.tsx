@@ -68,6 +68,13 @@ const TONES: Record<RepGlow, {
   track: string
   /** Floor for shapes that fade parts in with depth — never fully dim. */
   dimmest: number
+  /**
+   * Ceiling for those same shapes. Their parts are drawn at full colour and lit by
+   * opacity alone, so without a ceiling below 1 a fully lit part looks the same in
+   * every tone and the set closing goes by unseen — the whole point of the palette.
+   * Tracks the ring alphas above, since a lit part reads like a solid stroke.
+   */
+  brightest: number
 }> = {
   base: {
     fill: 'bg-accent-bright/40',
@@ -75,6 +82,7 @@ const TONES: Record<RepGlow, {
     border: 'border-accent-bright/70',
     track: 'bg-accent-bright/15',
     dimmest: 0.2,
+    brightest: 0.7,
   },
   final: {
     fill: 'bg-accent-bright/55',
@@ -82,6 +90,7 @@ const TONES: Record<RepGlow, {
     border: 'border-accent-bright/85',
     track: 'bg-accent-bright/25',
     dimmest: 0.33,
+    brightest: 0.85,
   },
   done: {
     fill: 'bg-accent-bright/80',
@@ -89,8 +98,13 @@ const TONES: Record<RepGlow, {
     border: 'border-accent-bright',
     track: 'bg-accent-bright/40',
     dimmest: 0.5,
+    brightest: 1,
   },
 }
+
+/** Opacity of a part that's `lit` (0–1) of the way in, within its tone's range. */
+const litOpacity = (tone: (typeof TONES)[RepGlow], lit: number) =>
+  tone.dimmest + lit * (tone.brightest - tone.dimmest)
 
 /** Breathing family: a shape that expands (neutral) and contracts (deep). */
 function BreatheShape({ variant, scale, glow }: { variant: Variant; scale: number; glow: RepGlow }) {
@@ -208,7 +222,7 @@ function DescentShape({ variant, depth, glow }: { variant: Variant; depth: numbe
                 aria-hidden
                 className="-my-[6%] text-accent-bright"
                 style={{
-                  opacity: tone.dimmest + lit * (1 - tone.dimmest),
+                  opacity: litOpacity(tone, lit),
                   transform: `translateY(${lit * 10}%)`,
                 }}
               />
@@ -249,7 +263,7 @@ function DescentShape({ variant, depth, glow }: { variant: Variant; depth: numbe
                 style={{
                   left: `${18 + i * 12}%`,
                   top: `${24 + i * 15}%`,
-                  opacity: tone.dimmest + lit * (1 - tone.dimmest),
+                  opacity: litOpacity(tone, lit),
                 }}
               />
             )
