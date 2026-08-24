@@ -324,6 +324,31 @@ describe('paceAgainstLock', () => {
   const HALFWAY_ISO = '2026-02-20' // 50 days in; the line expects 150
   const halfway = new Date(2026, 1, 20)
 
+  it('counts the revised date from the reading, not from today', () => {
+    // 50 lbs left at 7 lbs/wk is 50 days, and they run from the reading — so the
+    // same reading quotes the same date however long ago the session was.
+    const fresh = paceAgainstLock(CLIMB, 150, HALFWAY_ISO, 7, halfway)
+    const stale = paceAgainstLock(CLIMB, 150, HALFWAY_ISO, 7, new Date(2026, 2, 6))
+    expect(fresh.revisedEta).toBe('2026-04-11')
+    expect(stale.revisedEta).toBe(fresh.revisedEta)
+  })
+
+  it('no longer spends the rest days since the reading twice', () => {
+    // A fortnight of rest walks the ahead figure down, because the line keeps
+    // climbing under a standing number. It must not also push the date out.
+    const onLine = paceAgainstLock(CLIMB, 150, HALFWAY_ISO, 7, halfway)
+    const rested = paceAgainstLock(CLIMB, 150, '2026-02-06', 7, halfway)
+    expect(rested.aheadBy > onLine.aheadBy).toBe(true)
+    expect(rested.revisedEta! < onLine.revisedEta!).toBe(true)
+  })
+
+  it('will not quote a date already gone', () => {
+    // An old reading whose pace closed the gap long ago lands in the past; the
+    // soonest honest answer is now.
+    const pace = paceAgainstLock(CLIMB, 199, '2026-02-01', 7, new Date(2026, 5, 1))
+    expect(pace.revisedEta).toBe('2026-06-01')
+  })
+
   it('calls beating the line ahead', () => {
     const pace = paceAgainstLock(CLIMB, 160, HALFWAY_ISO, undefined, halfway)
     expect(pace.status).toBe('ahead')

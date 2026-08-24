@@ -430,6 +430,14 @@ export type Pace = {
  * the metric moves — losing body fat faster and adding squat weight faster both
  * count as ahead.
  *
+ * The revised date is counted from that same reading, so both halves of the
+ * answer describe one moment. Counting it from today instead charged the rest days
+ * since the last session twice — the line kept climbing under a standing number,
+ * which walked the ahead figure down, and the same days were then added to the
+ * date as flat delay. One reading of 108.5 could report itself 0.4 ahead and
+ * 1.3 behind depending only on how stale it was, while the date it quoted never
+ * moved at all.
+ *
  * `recentSlopePerWeek` is the pace to revise the ETA from — pass the live
  * projection's slope (see predictions.TREND_WINDOW). Without it the revision
  * averages the whole stretch since the lock, which a month lost to illness skews
@@ -462,8 +470,15 @@ export function paceAgainstLock(
   if (weeksLeft != null) {
     const daysLeft = Math.round(weeksLeft * 7)
     if (daysLeft <= MAX_REVISED_ETA_DAYS) {
-      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysLeft)
-      revisedEta = toISODate(d)
+      // Counted from the reading, the same moment the ahead/behind figure is
+      // judged at — the gap being closed is the one that reading left. Counted
+      // from today instead, the rest days since it get spent twice: once in the
+      // ahead figure, which a line still climbing under a standing number turns
+      // steadily against you, and again as pure delay added to the date. Held to
+      // today at the near end, since a date already gone is no longer an estimate.
+      const todayIso = toISODate(today)
+      const landing = addDays(actualDate, daysLeft)
+      revisedEta = landing < todayIso ? todayIso : landing
     }
   }
 
