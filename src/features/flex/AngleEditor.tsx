@@ -114,10 +114,6 @@ export function AngleEditor({
       </header>
 
       <div className="flex-1 overflow-y-auto p-4">
-        <p className="mb-3 text-sm text-neutral-400">
-          drag the tabs so the lines trace your body. the angle updates live.
-        </p>
-
         {note && (
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-surface p-3 text-sm text-neutral-300">
             <span className="flex-1">{note}</span>
