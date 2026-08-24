@@ -6,6 +6,7 @@ import {
   createFission,
   createGathering,
   createShedding,
+  gapBetween,
   type BeadPlan,
   type LiveBead,
 } from '../lib/beads'
@@ -955,6 +956,14 @@ function IcicleGap({ fraction }: { fraction: number }) {
  * makes a join *the* event of the shape: nothing pops in or flashes, the surfaces
  * simply reach and the two become one, and a bead pinching off the mass in `shed`
  * tears away from it the same way.
+ *
+ * And liquid this size is never still, so two things move that the schedule knows
+ * nothing about: every blob wanders a little of its own accord (see {@link WANDER}), and
+ * in the two shapes that can afford it the whole field turns slowly about the middle of
+ * the pane as well (see {@link BeadPane}'s `swirl`). Between them they are what has a
+ * join read as two blobs finding each other rather than as two markers closing a
+ * measured gap. Neither can reach the count: the wander is quieted to nothing wherever
+ * a reading lives, and a turn about the centre moves no blob relative to another at all.
  */
 
 /**
@@ -985,6 +994,10 @@ function useBeadPlan(make: () => BeadPlan, fraction: number) {
  * pane, its sheen and the glow all sit outside, where a crushed alpha would flatten
  * them.
  *
+ * Each blob then carries a wander of its own on top of its scheduled place (see
+ * {@link wanderOf}), which is what has the pane read as liquid between one join and the
+ * next rather than as an arrangement being held.
+ *
  * `settled` is the shape's payoff — the pane holding the one arrangement it holds at
  * no other point in the rest — and everything it changes is a light coming up: the
  * pane's edge firms and the liquid's glow widens.
@@ -1013,14 +1026,130 @@ const GOO_FLOOR = -9
 const BLOB_FILL =
   'radial-gradient(circle at 34% 28%, #bbf7d0 0%, var(--color-accent-bright) 46%, #15803d 100%)'
 
+/**
+ * How far a blob wanders off the place the schedule has it, as a share of the pane.
+ *
+ * Without this, a pane between one join and the next is seven blobs holding still, which
+ * reads as a diagram of a merge rather than as liquid — and the join itself reads as two
+ * markers closing a measured gap instead of two blobs finding each other. Four percent
+ * of the pane is a blob shifting about a fifth of its own width: plenty to read as
+ * alive, nowhere near enough to be taken for the countdown moving it.
+ *
+ * It is the smaller of the shape's two idle motions, and the fiddlier, because it is the
+ * one that can change the glass between two blobs. The other is a turn of the whole
+ * field, which can't (see {@link BeadPane}'s `swirl`).
+ */
+const WANDER = 0.04
+
+/**
+ * The glass a blob keeps to itself: near enough this much between its surface and its
+ * nearest neighbour's and the goo filter starts to reach across (see {@link GOO_BLUR}),
+ * so this is where a neck begins. A share of the pane rather than the pixels the filter
+ * actually works in, which is the conservative way round — the pane is at its smallest
+ * on the narrowest phone, and that is where the two agree.
+ */
+const WANDER_REACH = 0.05
+
+/**
+ * And the window above that across which the wander comes up to full: touching its
+ * neighbour a blob doesn't wander at all, a whole clearance clear of one it wanders as
+ * far as it likes, and in between it goes as the square of how far through the window
+ * it is.
+ *
+ * Wider than twice {@link WANDER} on purpose, and that is the whole guarantee: a blob's
+ * stray is scaled by the glass it has to spare, and at more than twice the stray the
+ * window can never scale it up to more than that spare glass. Two blobs the schedule
+ * kept clear of each other therefore *cannot* be wandered into a neck, however their
+ * loops happen to line up — which matters because a neck that grows and then breaks
+ * reads as a join that didn't take, and the beads that squeeze past each other on their
+ * way across the pane do it with about two pixels to spare (see lib/beads).
+ */
+const WANDER_CLEARANCE = 0.09
+
+/**
+ * The last of a blob's life, across which the wander bleeds away — again as the square,
+ * so it is barely quieted at the top of the window and still by the end of it.
+ *
+ * Where a blob *ends up* is the whole of the reading: the pair touching on the tick, the
+ * shed bead exactly clear of the pane, the one blob dead centre at zero. So a blob
+ * wanders on its way and arrives on its mark. Measured against the clock rather than
+ * against how far along its path it has got, because it is the moment that has to be
+ * exact — a blob eased out quickly and left to creep the last of the way is nearly
+ * arrived for most of its life, and quieting it that early would leave the pane holding
+ * still again.
+ */
+const WANDER_ARRIVAL = 0.15
+
+/** How long one of a blob's two wander loops takes, in seconds, before its own tempo. */
+const WANDER_PERIOD = 15
+
+/** The least glass between this blob's surface and any other blob's, in pane units. */
+function clearanceOf(bead: LiveBead, beads: LiveBead[]): number {
+  let least = Infinity
+  for (const other of beads) {
+    if (other.id !== bead.id) least = Math.min(least, gapBetween(bead, bead, other, other))
+  }
+  return least
+}
+
+/**
+ * The wander one blob is doing: how far it strays, how fast, and where in the loop it
+ * has got to.
+ *
+ * Two loops of different lengths, one across the pane and one down it, so together
+ * they trace a slow wandering figure rather than a circle the eye can follow — and
+ * both are offset by the blob's own id, so no two blobs on a pane are ever doing the
+ * same thing at the same time. The timing is wall-clock and knows nothing about the
+ * countdown, which is what keeps this texture; the only say the countdown gets is over
+ * the distance (see {@link WANDER_CLEARANCE} and {@link WANDER_ARRIVAL}), and all it
+ * ever does with it is shut the wander down.
+ */
+function wanderOf(bead: LiveBead, beads: LiveBead[]): CSSProperties {
+  const room = clamp01((clearanceOf(bead, beads) - WANDER_REACH) / WANDER_CLEARANCE)
+  const landing = clamp01((1 - bead.spent) / WANDER_ARRIVAL)
+  // Bigger blobs are more of a job to shift, so they stir less — the reach goes as the
+  // radius does, which leaves every blob wandering the same share of itself.
+  const reach = WANDER * room * room * landing * landing * Math.cbrt(1 / bead.mass)
+  const across = WANDER_PERIOD * (1 + ((bead.id * 3) % 5) * 0.12)
+  // Not a whole multiple of the other, or the two would keep falling back into step and
+  // the wander would flatten into a line.
+  const down = across * 1.618
+  return {
+    '--rest-wander': pct(reach * 100),
+    animation:
+      `rest-bead-wander-x ${across}s ease-in-out ${-bead.id * 2.3}s infinite, ` +
+      `rest-bead-wander-y ${down}s ease-in-out ${-bead.id * 3.7}s infinite`,
+  } as CSSProperties
+}
+
 function BeadPane({
   beads,
   opening,
   settled,
+  swirl,
 }: {
   beads: LiveBead[]
   opening: Set<number>
   settled: boolean
+  /**
+   * Whether the whole field may turn slowly about the middle of the pane, a few
+   * degrees either way, on top of what each blob is doing (see `rest-bead-swirl`).
+   *
+   * Worth having because the wander is bounded by how tightly the beads are laid out,
+   * and they are laid out tightly — the ring is only just wider than the beads standing
+   * on it (see lib/beads), so a blob on it has a fifth of its own width to move in and
+   * no more. A turn about the centre has no such bound, because it is rigid: it changes
+   * no gap between any two blobs and no blob's distance from the middle either, so it
+   * can neither grow a neck nor carry anything into the rim, and it leaves the blob a
+   * coalescence ends on exactly centred, a turn about a point being the one motion that
+   * lets whatever sits on that point alone.
+   *
+   * Which is also the whole of why `shed` and `gather` go without it. Their reading is a
+   * bead crossing the rim on its tick, and a turn that can't take a bead any *nearer*
+   * the rim does still slide it along one — moving the one moment those two shapes are
+   * built to land.
+   */
+  swirl?: boolean
 }) {
   const calm = usePrefersReducedMotion()
   const goo = useId().replace(/\W/g, '')
@@ -1036,9 +1165,9 @@ function BeadPane({
             surface the liquid is lying on rather than a hole cut in the screen. It
             also cuts off everything crossing it, which is how a blob leaves. */}
         <div className="absolute inset-0 bg-gradient-to-b from-accent-bright/7 to-accent-bright/2" />
-        {/* One band of light crossing it, slowly. Texture, and the only loop in the
-            shape: it touches nothing that tells the time. Dropped under reduced
-            motion, where the blobs' own drift is the whole of the reading. */}
+        {/* One band of light crossing it, slowly. Texture, like the blobs' wander: it
+            passes behind them and touches nothing that tells the time. Dropped under
+            reduced motion, where the schedule is all that is left moving. */}
         {!calm && (
           <div
             className="rest-bead-sheen absolute -inset-y-1/3 -left-1/3 w-1/3"
@@ -1064,7 +1193,7 @@ function BeadPane({
             rides on the end of the same filter chain, which puts it around the
             merged silhouette rather than around each blob that went into it. */}
         <div
-          className="absolute inset-0"
+          className={`absolute inset-0 ${swirl && !calm ? 'rest-bead-swirl' : ''}`}
           style={{
             filter: `url(#${goo}) drop-shadow(0 0 ${settled ? 16 : 8}px rgba(74, 222, 128, ${
               settled ? 0.5 : 0.3
@@ -1089,18 +1218,24 @@ function BeadPane({
                   ...drainOf('transform'),
                 }}
               >
-                <div
-                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                  style={{ width: pct(bead.r * 200), aspectRatio: '1' }}
-                >
-                  {/* The blob itself sits in its own box so the wobble it does on
-                      arriving is a scale on nothing but the blob — the centring
-                      translate above is a transform too, and one element can only
-                      carry one. */}
+                {/* And the wander it is doing about that place, on a box of its own so
+                    the two can't overwrite each other. Not rendered at all under
+                    reduced motion: an inline animation is the one thing the
+                    stylesheet's `animation: none` can't reach. */}
+                <div className="absolute inset-0" style={calm ? undefined : wanderOf(bead, beads)}>
                   <div
-                    className={`absolute inset-0 rounded-full ${arrived ? 'rest-bead-born' : ''}`}
-                    style={{ backgroundImage: BLOB_FILL }}
-                  />
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                    style={{ width: pct(bead.r * 200), aspectRatio: '1' }}
+                  >
+                    {/* The blob itself sits in its own box so the wobble it does on
+                        arriving is a scale on nothing but the blob — the centring
+                        translate above is a transform too, and one element can only
+                        carry one. */}
+                    <div
+                      className={`absolute inset-0 rounded-full ${arrived ? 'rest-bead-born' : ''}`}
+                      style={{ backgroundImage: BLOB_FILL }}
+                    />
+                  </div>
                 </div>
               </div>
             )
@@ -1125,7 +1260,7 @@ function GlassBeads({ fraction }: { fraction: number }) {
   const { beads, opening } = useBeadPlan(createCoalescence, fraction)
   // One bead on the pane happens at exactly one moment, the last join, and that lands
   // on zero: this is the shape's payoff, not a state it passes through.
-  return <BeadPane beads={beads} opening={opening} settled={beads.length === 1} />
+  return <BeadPane beads={beads} opening={opening} settled={beads.length === 1} swirl />
 }
 
 /**
@@ -1144,7 +1279,9 @@ function GlassBeads({ fraction }: { fraction: number }) {
  */
 function GlassSplit({ fraction }: { fraction: number }) {
   const { beads, opening } = useBeadPlan(createFission, fraction)
-  return <BeadPane beads={beads} opening={opening} settled={beads.length === BEAD_COUNT} />
+  return (
+    <BeadPane beads={beads} opening={opening} settled={beads.length === BEAD_COUNT} swirl />
+  )
 }
 
 /**

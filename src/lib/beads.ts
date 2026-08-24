@@ -357,6 +357,14 @@ export type LiveBead = {
   /** Centre, in the same pane units — 0.5, 0.5 is the middle of the glass. */
   x: number
   y: number
+  /**
+   * The share of its own life that has gone by: 0 as it appears, 1 as it merges away
+   * or as the rest ends. By the clock, not by the path — the path is eased, and this
+   * is the one a bead's *moment* can be read off. What wants it is the drawing (see
+   * RestShapes' wander), which needs to know when a bead is about to land, because
+   * landing is the one part of a bead's life that has to be exact.
+   */
+  spent: number
 }
 
 /**
@@ -399,13 +407,15 @@ export function beadsAt({ beads, ease }: BeadPlan, fraction: number): LiveBead[]
     // zero — which is what carries the beads of a run coming apart out to where they
     // finish rather than leaving them stood at the point they came apart at.
     const life = bead.bornAt - (bead.mergesAt ?? 0)
-    const p = life > 0 ? curve(clamp01((bead.bornAt - left) / life)) : 0
+    const spent = life > 0 ? clamp01((bead.bornAt - left) / life) : 0
+    const p = curve(spent)
     live.push({
       id: bead.id,
       mass: bead.mass,
       r: bead.r,
       x: bead.from.x + (bead.to.x - bead.from.x) * p,
       y: bead.from.y + (bead.to.y - bead.from.y) * p,
+      spent,
     })
   }
   return live
