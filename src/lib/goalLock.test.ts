@@ -11,6 +11,8 @@ import {
   lockProjectionByDate,
   paceAgainstLock,
   projectedSeries,
+  relaxToCap,
+  soonestReachable,
   withinHorizon,
   type LockedProjection,
 } from './goalLock'
@@ -47,6 +49,13 @@ const CLIMBING = [
   { date: '2025-12-01', value: 100 },
   { date: '2026-01-01', value: 120 },
 ]
+
+/**
+ * An uncapped projection, for the commit-window tests that are about the window's
+ * own arithmetic rather than about a pace ceiling. Nothing bounds the pace, so
+ * every date the window used to offer is still reachable (see soonestReachable).
+ */
+const UNCAPPED = project(CLIMBING, 140, TODAY)
 
 /** Effectively stalled: 2 lbs over two months. */
 const STALLED = [
@@ -87,7 +96,7 @@ describe('dateWithinHorizon', () => {
 
 describe('clampToRange', () => {
   it('holds a date inside the commit window', () => {
-    const range = commitRange('2026-04-11', TODAY)
+    const range = commitRange(UNCAPPED, '2026-04-11', TODAY)
     expect(clampToRange('2026-03-01', range)).toBe('2026-03-01')
     // A commitment made from further out than the window now reaches — the shape
     // the old one-tap re-lock left behind — comes back to the window's own edge
@@ -157,7 +166,7 @@ describe('lockProjectionByDate', () => {
 describe('commitRange', () => {
   it('opens a week out and reaches twice the projected span', () => {
     // 100 days projected → 200 days of room to push it out.
-    const { soonest, latest } = commitRange('2026-04-11', TODAY)
+    const { soonest, latest } = commitRange(UNCAPPED, '2026-04-11', TODAY)
     expect(soonest).toBe('2026-01-08')
     expect(latest).toBe('2026-07-20')
   })
@@ -165,10 +174,113 @@ describe('commitRange', () => {
   it('leaves room to give even when the projected date is close', () => {
     // Twice a fortnight is still inside the earliest date allowed, so the window
     // opens on the slack instead — a near goal can always be pushed back.
-    const { soonest, latest } = commitRange('2026-01-15', TODAY)
+    const { soonest, latest } = commitRange(UNCAPPED, '2026-01-15', TODAY)
     expect(soonest).toBe('2026-01-08')
     expect(latest > soonest).toBe(true)
     expect(latest).toBe('2026-02-14')
+  })
+})
+
+describe('soonestReachable', () => {
+  it('closes the gap at the pace ceiling, not at the fit', () => {
+    // 20 lbs left at a 1 lb/wk ceiling is 20 weeks, whatever the fit says — and
+    // the fit here is 20 lbs a month, well over it.
+    const proj = project(CLIMBING, 140, TODAY, { capPerWeek: 1 })
+    expect(soonestReachable(proj, TODAY)).toBe('2026-05-21')
+  })
+
+  it('has nothing to say about a goal with no ceiling', () => {
+    expect(soonestReachable(project(CLIMBING, 140, TODAY), TODAY)).toBeNull()
+  })
+
+  it('is the projected date itself once the fit is at the ceiling', () => {
+    // A capped projection is already projected off the ceiling, so the soonest a
+    // commitment may be set for is exactly the date it was offered.
+    const proj = project(CLIMBING, 140, TODAY, { capPerWeek: 1 })
+    expect(soonestReachable(proj, TODAY)).toBe(proj.etaDate)
+  })
+})
+
+describe('commitRange with a pace ceiling', () => {
+  it('refuses to open sooner than the ceiling can reach', () => {
+    const proj = project(CLIMBING, 140, TODAY, { capPerWeek: 1 })
+    const { soonest } = commitRange(proj, proj.etaDate!, TODAY)
+    // Not the bare week out an uncapped goal offers: 20 weeks of ceiling.
+    expect(soonest).toBe('2026-05-21')
+    expect(soonest > '2026-01-08').toBe(true)
+  })
+
+  it('still opens a week out when the fit is under the ceiling', () => {
+    // Committing to better than the pace you are holding is the whole point of
+    // picking the date; the ceiling only bars what physiology bars.
+    const slow = [
+      { date: '2025-11-01', value: 130 },
+      { date: '2025-12-01', value: 132 },
+      { date: '2026-01-01', value: 134 },
+    ]
+    const proj = project(slow, 136, TODAY, { capPerWeek: 5 })
+    expect(commitRange(proj, proj.etaDate!, TODAY).soonest).toBe('2026-01-08')
+  })
+
+  it('leaves a lock made through the window unable to contradict itself', () => {
+    // The reported bug: ahead of the line and late for the date at once. With the
+    // window holding the commitment to the ceiling, every reading ahead of the
+    // line revises to a date on or before the one committed to.
+    const proj = project(CLIMBING, 140, TODAY, { capPerWeek: 1 })
+    const range = commitRange(proj, proj.etaDate!, TODAY)
+    const lock = lockProjectionByDate('squat', proj, range.soonest, TODAY)!
+    const read = '2026-03-12' // ten weeks in
+    const expected = expectedAt(lock, read)
+    const pace = paceAgainstLock(lock, expected + 3, read, 1, new Date(2026, 2, 12))
+    expect(pace.status).toBe('ahead')
+    expect(pace.revisedEta! <= lock.etaDate).toBe(true)
+  })
+})
+
+describe('relaxToCap', () => {
+  it('pushes a date the ceiling cannot reach out to the one it can', () => {
+    // CLIMB asks 100 lbs in 100 days — 7 lbs/wk. At a 1 lb/wk ceiling that same
+    // climb from the same origin takes 100 weeks.
+    const relaxed = relaxToCap(CLIMB, 1)
+    expect(relaxed.etaDate).toBe('2027-12-02')
+    expect(relaxed.slopePerWeek).toBe(1)
+    expect(relaxed.startValue).toBe(CLIMB.startValue)
+    expect(relaxed.lockedAt).toBe(CLIMB.lockedAt)
+  })
+
+  it('keeps its sign on a falling goal', () => {
+    const relaxed = relaxToCap(FALL, 0.5)
+    expect(relaxed.slopePerWeek).toBe(-0.5)
+    expect(relaxed.etaDate > FALL.etaDate).toBe(true)
+  })
+
+  it('leaves a commitment gentler than the ceiling alone', () => {
+    expect(relaxToCap(CLIMB, 20)).toBe(CLIMB)
+  })
+
+  it('leaves a goal with no ceiling alone', () => {
+    expect(relaxToCap(CLIMB, null)).toBe(CLIMB)
+    expect(relaxToCap(CLIMB, undefined)).toBe(CLIMB)
+  })
+
+  it('is idempotent, so the effect that applies it can run every rebuild', () => {
+    const once = relaxToCap(CLIMB, 1)
+    expect(relaxToCap(once, 1)).toBe(once)
+  })
+
+  it('never pulls a date sooner, however far past the ceiling the pace is', () => {
+    const relaxed = relaxToCap({ ...CLIMB, etaDate: '2030-01-01' }, 1)
+    expect(relaxed.etaDate).toBe('2030-01-01')
+  })
+
+  it('leaves the relaxed commitment unable to contradict itself', () => {
+    // The whole point: after relaxing, ahead of the line implies on or before the
+    // date, at the ceiling pace.
+    const relaxed = relaxToCap(CLIMB, 1)
+    const read = '2026-07-01'
+    const pace = paceAgainstLock(relaxed, expectedAt(relaxed, read) + 5, read, 1, new Date(2026, 6, 1))
+    expect(pace.status).toBe('ahead')
+    expect(pace.revisedEta! <= relaxed.etaDate).toBe(true)
   })
 })
 

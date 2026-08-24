@@ -139,6 +139,44 @@ export function adoptModel(
   return { ...lock, decayPerWeek: nextDecay, paceFloorFraction: nextFloor }
 }
 
+/**
+ * Push a committed date out to the soonest its goal's pace ceiling can reach,
+ * for a lock that was frozen when nothing bounded the pace.
+ *
+ * The flexibility ladders projected off an uncapped fit until they traded their
+ * taper for a ceiling (see goals.SPLIT_GAIN_CAP), and three warm weeks fitted
+ * 1.2°/wk readily enough — so the dates committed to back then can ask for well
+ * over the half a degree a week the row's revised ETA is now projected from. That
+ * combination is unwinnable and says so out loud: the line reports you ahead of it
+ * while the date reports you late, because the pace the date needs is one the
+ * projection refuses to quote. {@link commitRange} stops new commitments landing
+ * there; this brings the standing ones back inside.
+ *
+ * The relaxation is measured from the commitment's own origin — `lockedAt` and
+ * `startValue`, the two things a lock exists to hold still — and not from today's
+ * reading. Re-deriving it against the latest number would hand the goal the
+ * sliding ETA that {@link LockedProjection} was introduced to take away, and a
+ * date that steps back after a cold session is not a commitment. Measured from
+ * the origin it's idempotent instead, so the effect that applies it can run on
+ * every rebuild.
+ *
+ * Only ever later: a commitment already gentler than the ceiling is its own, and
+ * a goal with no ceiling has nothing to be held to.
+ */
+export function relaxToCap(lock: LockedProjection, capPerWeek?: number | null): LockedProjection {
+  if (capPerWeek == null) return lock
+  const gap = lock.target - lock.startValue
+  const pace = Math.sign(gap) * capPerWeek
+  const weeks = weeksToClose(gap, pace, decayOf(lock), floorOf(lock))
+  if (weeks == null) return lock
+  const etaDate = addDays(lock.lockedAt, Math.round(weeks * 7))
+  if (etaDate <= lock.etaDate) return lock
+  // The ceiling *is* the pace the new span was computed from, so it's the pace the
+  // lock stores — for a tapering line that's its starting pace, which the span
+  // already tapers away from, and for a straight one it's the whole line.
+  return { ...lock, etaDate, slopePerWeek: round1(pace) }
+}
+
 /** Days from `from` to `to` (negative when `to` precedes `from`). */
 function daysBetween(from: string, to: string): number {
   return Math.round((parseISODate(to).getTime() - parseISODate(from).getTime()) / MS_PER_DAY)
@@ -213,6 +251,29 @@ const MIN_COMMIT_SLACK_DAYS = 30
 export type CommitRange = { soonest: string; latest: string }
 
 /**
+ * The soonest date the goal's own model can reach its target: the remaining gap
+ * closed at the pace ceiling the projection is held to (see
+ * predictions.capSlope), through the same taper the ETA is read with. null for a
+ * goal with no ceiling, whose pace nothing bounds, and for one with nothing left
+ * to close.
+ *
+ * This is the floor under every committed date, and it is a claim about
+ * physiology rather than about ambition: a ladder that gains half a degree a week
+ * cannot be talked into a fortnight by picking a nearer date. When the fitted
+ * pace is already at or above the ceiling this *is* the projected date, so the
+ * bound only bites on a goal being committed harder than its own model allows.
+ */
+export function soonestReachable(proj: Projection, today: Date = new Date()): string | null {
+  const cap = proj.capPerWeek
+  if (cap == null || !Number.isFinite(proj.current)) return null
+  const gap = proj.target - proj.current
+  if (gap === 0) return null
+  const weeks = weeksToClose(gap, Math.sign(gap) * cap, proj.decayPerWeek, proj.paceFloorFraction)
+  if (weeks == null) return null
+  return addDays(toISODate(today), Math.round(weeks * 7))
+}
+
+/**
  * How far either side of the projected date a commitment may be set.
  *
  * The point of choosing the date is to be able to make the goal harder or easier
@@ -220,11 +281,27 @@ export type CommitRange = { soonest: string; latest: string }
  * limit. A date next week isn't a plan, and one four times the projected span out
  * isn't a commitment. Every control that sets the date shares this range, so they
  * can't disagree about what they'll accept.
+ *
+ * The near edge is also where a commitment stops being able to contradict itself.
+ * A date sooner than {@link soonestReachable} asks for an average pace above the
+ * ceiling the revised ETA is projected from — and a pace that can't be projected
+ * can't beat the date either, so the row reads "ahead of the line" and "on pace
+ * for" a *later* date at the same time, for as long as the commitment stands.
+ * Holding the window to what the ceiling can reach makes that impossible rather
+ * than merely unlikely: once the line asks no more than the ceiling, being ahead
+ * of it means the gap left is smaller than the ceiling's own remaining span, so
+ * the revised date lands on or before the committed one.
  */
-export function commitRange(etaDate: string, today: Date = new Date()): CommitRange {
+export function commitRange(
+  proj: Projection,
+  etaDate: string,
+  today: Date = new Date(),
+): CommitRange {
   const todayIso = toISODate(today)
   const projected = Math.max(1, daysBetween(todayIso, etaDate))
-  const soonest = addDays(todayIso, SOONEST_COMMIT_DAYS)
+  const reachable = soonestReachable(proj, today)
+  const earliest = addDays(todayIso, SOONEST_COMMIT_DAYS)
+  const soonest = reachable && reachable > earliest ? reachable : earliest
   const latest = addDays(
     todayIso,
     Math.max(projected * LATEST_COMMIT_MULTIPLE, projected + MIN_COMMIT_SLACK_DAYS),
@@ -244,6 +321,12 @@ export function clampToRange(iso: string, range: CommitRange): string {
  * value to the goal's target, but over the span the user picked, and the stored
  * slope is re-derived to match that span so the snapshot stays self-consistent.
  *
+ * The date is held inside {@link commitRange} on the way in. Every control that
+ * offers a date already clamps to that window, so this changes nothing they can
+ * do — it's here so the window is a property of a lock rather than of the widgets
+ * that happen to make one, and no caller can mint a commitment steeper than the
+ * goal's own pace ceiling by skipping the picker.
+ *
  * Returns null when there's nothing to freeze (no data) or the chosen date isn't
  * in the future — a line that ends today or earlier can't be tracked against.
  */
@@ -255,15 +338,18 @@ export function lockProjectionByDate(
 ): LockedProjection | null {
   if (!Number.isFinite(proj.current) || proj.current === proj.target) return null
   const lockedAt = toISODate(today)
-  const days = daysBetween(lockedAt, etaDate)
-  if (days <= 0) return null
-  const weeks = days / 7
+  // Judged on the date asked for, before the window gets to move it: a date
+  // already gone is a caller with nothing to commit, and clamping it up to the
+  // window's edge would answer a question that wasn't asked.
+  if (daysBetween(lockedAt, etaDate) <= 0) return null
+  const held = clampToRange(etaDate, commitRange(proj, etaDate, today))
+  const weeks = daysBetween(lockedAt, held) / 7
   return {
     goalId,
     lockedAt,
     startValue: round1(proj.current),
     target: proj.target,
-    etaDate,
+    etaDate: held,
     slopePerWeek: round1((proj.target - proj.current) / weeks),
     decayPerWeek: proj.decayPerWeek,
     paceFloorFraction: floorFor(proj),

@@ -38,6 +38,7 @@ import {
   lockProjectionByDate,
   paceAgainstLock,
   projectedSeries,
+  relaxToCap,
   withinHorizon,
   type LockedProjection,
   type LockedProjections,
@@ -324,7 +325,7 @@ function LockInPrompt({
   onLock: (etaDate: string) => void
 }) {
   const [date, setDate] = useState(proj.etaDate ?? '')
-  const range = useMemo(() => commitRange(proj.etaDate!), [proj.etaDate])
+  const range = useMemo(() => commitRange(proj, proj.etaDate!), [proj])
   const valid = date >= range.soonest && date <= range.latest
 
   return (
@@ -398,9 +399,9 @@ function RecommitPrompt({
   const estimate = proj.onTrack ? proj.etaDate : revisedEta
   const inReach = estimate != null && dateWithinHorizon(estimate)
   const range = useMemo(
-    () => (inReach ? commitRange(estimate!) : null),
+    () => (inReach ? commitRange(proj, estimate!) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [estimate, inReach],
+    [proj, estimate, inReach],
   )
   // The date in force is where the handle starts — held inside the window, so a
   // commitment made from further out than the window now reaches opens on a date
@@ -885,6 +886,13 @@ export function GoalsPanel() {
   // tapered carries no decay and would draw dead straight, so it adopts the
   // goal's decay without touching the ETA it committed to. Done as an effect
   // because it writes settings, and only when something changed so it can't loop.
+  //
+  // Adopting the shape can leave the date behind it, which is the one case where
+  // a committed date does move: a lock frozen off an uncapped fit can be
+  // committed to a pace its goal now refuses to project from, and reads ahead of
+  // its own line and late for its own date at once (see relaxToCap). Relaxing
+  // runs after the bend, since the span the ceiling buys depends on the taper it
+  // just adopted, and only ever pushes a date later.
   useEffect(() => {
     const next: LockedProjections = { ...locked }
     let changed = false
@@ -892,8 +900,9 @@ export function GoalsPanel() {
       const existing = next[g.id]
       if (!existing) continue
       const bent = adoptModel(existing, g.decayPerWeek, projections.get(g.id)?.paceFloorFraction)
-      if (bent !== existing) {
-        next[g.id] = bent
+      const relaxed = relaxToCap(bent, g.capPerWeek)
+      if (relaxed !== existing) {
+        next[g.id] = relaxed
         changed = true
       }
     }

@@ -122,7 +122,7 @@ export function CommitChart({
   const [today] = useState(() => now ?? new Date())
 
   const eta = estimate ?? proj.etaDate!
-  const range = useMemo(() => commitRange(eta, today), [eta, today])
+  const range = useMemo(() => commitRange(proj, eta, today), [proj, eta, today])
 
   // The machine's answer, frozen once: it must not move while the handle does,
   // or there'd be nothing steady to bargain against.
