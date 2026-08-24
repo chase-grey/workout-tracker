@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
   BEAD_COUNT,
-  beadsAt,
+  BEAD_R,
+  bodyR,
   createCoalescence,
   createFission,
   createGathering,
   createShedding,
+  fieldAt,
   gapBetween,
-  type Bead,
+  type BeadField,
   type BeadPlan,
   type LiveBead,
+  type LiveBody,
 } from './beads'
 
 /** A repeatable stand-in for Math.random, so a failure can be re-run. */
@@ -24,337 +27,348 @@ function seeded(seed: number): () => number {
   }
 }
 
-/** Fractions across a whole rest, fine enough to catch a bead crossing another one. */
+/** Fractions across a whole rest, fine enough to catch a drop crossing another one. */
 const SWEEP = Array.from({ length: 601 }, (_, i) => 1 - i / 600)
 
-/** Seeds enough to say the layout holds in general and not just for one arrangement. */
+/** Seeds enough to say a layout holds in general and not just for one arrangement. */
 const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1)
 
-const centreDistance = (bead: LiveBead) => Math.hypot(bead.x - 0.5, bead.y - 0.5)
+const offCentre = (at: { x: number; y: number }) => Math.hypot(at.x - 0.5, at.y - 0.5)
 
-/** The two beads of a join, given the bead they became. */
-function parentsOf(beads: Bead[], joined: Bead): [Bead, Bead] {
-  const [a, b] = beads.filter((bead) => bead.mergesAt === joined.bornAt)
-  return [a, b]
-}
+/** The body holding the most, which in three of the four runs is the reading. */
+const biggest = (field: BeadField): LiveBody | undefined =>
+  field.bodies.reduce<LiveBody | undefined>(
+    (most, body) => (most && most.mass >= body.mass ? most : body),
+    undefined,
+  )
 
 /**
- * The closest two beads on the pane come to each other, surface to surface, not
- * counting the pair that is on its way to joining — those are *meant* to reach
- * nothing between them.
+ * The closest two drops on the pane come to each other, surface to surface, ignoring pairs
+ * that are *meant* to be in contact: two drops of one body, and the pair whose glass an
+ * event is closing.
  */
-function tightestGap(live: LiveBead[], partners: Map<number, number | null>): number {
+function tightestGap(beads: LiveBead[]): number {
   let least = Infinity
-  for (let i = 0; i < live.length; i++) {
-    for (let j = i + 1; j < live.length; j++) {
-      if (partners.get(live[i].id) === partners.get(live[j].id)) continue
-      least = Math.min(least, gapBetween(live[i], live[i], live[j], live[j]))
+  for (let i = 0; i < beads.length; i++) {
+    for (let j = i + 1; j < beads.length; j++) {
+      const one = beads[i]
+      const other = beads[j]
+      if (one.body === other.body) continue
+      if (one.mate === other.body || other.mate === one.body) continue
+      least = Math.min(least, gapBetween(one, other))
     }
   }
   return least
 }
 
-/** Where the mass on the pane sits, which is the thing no join is allowed to move. */
-function centreOfMass(live: LiveBead[]) {
-  const mass = live.reduce((sum, bead) => sum + bead.mass, 0)
-  return {
-    x: live.reduce((sum, bead) => sum + bead.x * bead.mass, 0) / mass,
-    y: live.reduce((sum, bead) => sum + bead.y * bead.mass, 0) / mass,
+/** Where the liquid on the pane sits, which is the thing no join is allowed to move. */
+const centreOfMass = (beads: LiveBead[]) => ({
+  x: beads.reduce((sum, bead) => sum + bead.x, 0) / beads.length,
+  y: beads.reduce((sum, bead) => sum + bead.y, 0) / beads.length,
+})
+
+/** How the count reads across a whole rest, as the sequence of distinct values it takes. */
+const runOf = (plan: BeadPlan, count: (field: BeadField) => number) => {
+  const seen: number[] = []
+  for (const left of SWEEP) {
+    const now = count(fieldAt(plan, left))
+    if (seen[seen.length - 1] !== now) seen.push(now)
   }
+  return seen
+}
+
+/**
+ * Every drop's speed across the rest, sampled finely: what a jump in here would mean is a
+ * drop changing pace in a step, which is the one thing none of these runs may do.
+ */
+function speedJump(plan: BeadPlan, steps = 2400): number {
+  let worst = 0
+  let previous: Map<number, LiveBead> | null = null
+  const speeds = new Map<number, number>()
+  for (let i = 0; i <= steps; i++) {
+    const { beads } = fieldAt(plan, 1 - i / steps)
+    const now = new Map(beads.map((bead) => [bead.id, bead]))
+    if (previous) {
+      for (const [id, bead] of now) {
+        const was = previous.get(id)
+        if (!was) continue
+        const speed = Math.hypot(bead.x - was.x, bead.y - was.y) * steps
+        const before = speeds.get(id)
+        if (before !== undefined) worst = Math.max(worst, Math.abs(speed - before))
+        speeds.set(id, speed)
+      }
+    }
+    previous = now
+  }
+  return worst
+}
+
+/**
+ * The share of the pane the liquid covers, on a grid, counting the reach of the goo filter
+ * as covered — so a neck between two drops counts the same way the screen draws it.
+ */
+function coveredGlass(plan: BeadPlan, left: number, grid = 100, reach = 0.02): number {
+  const { beads } = fieldAt(plan, left)
+  const span = (BEAD_R + reach) ** 2
+  let hit = 0
+  for (let i = 0; i < grid; i++) {
+    for (let j = 0; j < grid; j++) {
+      const x = (i + 0.5) / grid
+      const y = (j + 0.5) / grid
+      if (beads.some((bead) => (bead.x - x) ** 2 + (bead.y - y) ** 2 <= span)) hit++
+    }
+  }
+  return hit / (grid * grid)
+}
+
+/**
+ * The most the silhouette changes between two neighbouring frames, as a share of the pane.
+ *
+ * This is the whole complaint the four shapes were rebuilt to answer, stated as a number.
+ * A run that swaps a touching pair for a single wider body loses a chunk of covered glass in
+ * one frame, however prettily it is animated afterwards; a run where the pair simply carries
+ * on into itself cannot, because every drop is where it was a moment ago.
+ */
+function biggestFlicker(plan: BeadPlan, steps = 200): number {
+  let worst = 0
+  let previous = -1
+  for (let i = 0; i <= steps; i++) {
+    const now = coveredGlass(plan, 1 - i / steps)
+    if (previous >= 0) worst = Math.max(worst, Math.abs(now - previous))
+    previous = now
+  }
+  return worst
 }
 
 describe('createCoalescence', () => {
-  it('plans every bead the rest will hold, ending on one that holds them all', () => {
+  it('holds seven drops of one size for the whole rest', () => {
     const plan = createCoalescence(seeded(1))
-    // The beads it starts with, plus one for each join.
-    expect(plan.beads).toHaveLength(2 * BEAD_COUNT - 1)
     expect(plan.count).toBe(BEAD_COUNT)
-    expect(plan.beads.slice(0, BEAD_COUNT).every((b) => b.mass === 1 && b.bornAt === 1)).toBe(true)
-    const root = plan.beads[plan.beads.length - 1]
-    expect(root.mass).toBe(BEAD_COUNT)
-    // Exactly one bead never merges, and it is the one the pane ends on.
-    expect(plan.beads.filter((b) => b.mergesAt === null)).toEqual([root])
+    expect(plan.beads).toHaveLength(BEAD_COUNT)
+    // Nothing is ever created or destroyed, so nothing has to pop in or out to say so.
+    for (const left of SWEEP) expect(fieldAt(plan, left).beads).toHaveLength(BEAD_COUNT)
   })
 
-  it('spaces the joins evenly and lands the last one exactly on zero', () => {
+  it('drops the count by one at each sixth, from seven bodies to one', () => {
     const plan = createCoalescence(seeded(2))
-    const merges = [...new Set(plan.beads.map((b) => b.mergesAt))]
-      .filter((at): at is number => at !== null)
-      .sort((a, b) => b - a)
-    expect(merges).toHaveLength(BEAD_COUNT - 1)
-    merges.forEach((at, i) => expect(at).toBeCloseTo(1 - (i + 1) / (BEAD_COUNT - 1), 10))
-    expect(merges[merges.length - 1]).toBe(0)
-    // Two beads to a join, and the bead they become appears as they go.
-    for (const at of merges) {
-      expect(plan.beads.filter((b) => b.mergesAt === at)).toHaveLength(2)
-      expect(plan.beads.filter((b) => b.bornAt === at)).toHaveLength(1)
+    // Seven readings, each once, in order: no count is skipped and none comes back.
+    expect(runOf(plan, (field) => field.bodies.length)).toEqual([7, 6, 5, 4, 3, 2, 1])
+    // And each of them holds the beat it belongs to, so the count falls in step with the
+    // clock rather than merely getting there.
+    for (let beat = 0; beat < BEAD_COUNT - 1; beat++) {
+      const left = 1 - (beat + 0.5) / (BEAD_COUNT - 1)
+      expect(fieldAt(plan, left).bodies).toHaveLength(BEAD_COUNT - beat)
     }
+    // One body on the pane happens at exactly one moment, and that moment is zero.
+    expect(fieldAt(plan, 1e-4).bodies).toHaveLength(2)
+    expect(fieldAt(plan, 0).bodies).toHaveLength(1)
   })
 
-  it('brings each pair to exactly touching', () => {
+  it('brings each pair to exactly touching on its own tick', () => {
     for (const seed of SEEDS) {
       const plan = createCoalescence(seeded(seed))
-      for (const joined of plan.beads.filter((b) => b.mass > 1)) {
-        const [a, b] = parentsOf(plan.beads, joined)
-        // Surfaces meeting, not centres: the glass between them closes to nothing.
-        expect(gapBetween(a, a.to, b, b.to)).toBeCloseTo(0, 10)
-      }
-    }
-  })
-
-  it('has each pair close the gap against its own mass, and puts the bead they become where that mass was', () => {
-    for (const seed of SEEDS) {
-      const plan = createCoalescence(seeded(seed))
-      for (const joined of plan.beads.filter((b) => b.mass > 1)) {
-        const [a, b] = parentsOf(plan.beads, joined)
-        const travelled = {
-          a: Math.hypot(a.to.x - a.from.x, a.to.y - a.from.y),
-          b: Math.hypot(b.to.x - b.from.x, b.to.y - b.from.y),
+      for (let join = 1; join < BEAD_COUNT; join++) {
+        // A hair before the join the pair is still two bodies, and their surfaces meet.
+        const { bodies } = fieldAt(plan, 1 - join / (BEAD_COUNT - 1) + 1e-9)
+        let least = Infinity
+        for (const one of bodies) {
+          for (const other of bodies) {
+            if (one.id >= other.id) continue
+            least = Math.min(least, Math.hypot(one.x - other.x, one.y - other.y) - one.r - other.r)
+          }
         }
-        // A bead twice the mass of its partner comes half as far to meet it.
-        expect(travelled.a * a.mass).toBeCloseTo(travelled.b * b.mass, 10)
-        // And the bead they become takes over the pair's centre of mass, which is
-        // inside the two of them rather than out on the boundary between them.
-        expect(joined.from.x).toBeCloseTo((a.to.x * a.mass + b.to.x * b.mass) / joined.mass, 10)
-        expect(joined.from.y).toBeCloseTo((a.to.y * a.mass + b.to.y * b.mass) / joined.mass, 10)
+        expect(least).toBeCloseTo(0, 6)
       }
     }
   })
 
-  it('grows beads by volume, so joining two makes one about a quarter wider', () => {
+  it('grows a body by gathering drops into it, never by swelling one', () => {
     const plan = createCoalescence(seeded(3))
-    const single = plan.beads[0].r
-    for (const bead of plan.beads) {
-      expect(bead.r).toBeCloseTo(single * Math.cbrt(bead.mass), 10)
+    for (const left of SWEEP) {
+      const field = fieldAt(plan, left)
+      expect(field.bodies.reduce((sum, body) => sum + body.mass, 0)).toBe(BEAD_COUNT)
+      for (const body of field.bodies) expect(body.r).toBeCloseTo(BEAD_R * Math.cbrt(body.mass), 10)
     }
-    expect(plan.beads.find((b) => b.mass === 2)!.r / single).toBeCloseTo(1.26, 2)
+    // Which is where the quarter comes from: two drops together read a quarter wider.
+    expect(bodyR(2) / bodyR(1)).toBeCloseTo(1.26, 2)
   })
 
-  it('plans the same rest twice from the same seed', () => {
+  it('leaves the last body dead centre, exactly', () => {
+    for (const seed of SEEDS) {
+      const plan = createCoalescence(seeded(seed))
+      // No join moves the mass of the pair that made it and no pour moves one at all, so
+      // the field ends where it began — and it began in the middle.
+      for (const left of [1, 0]) {
+        expect(offCentre(centreOfMass(fieldAt(plan, left).beads))).toBeCloseTo(0, 9)
+      }
+      expect(offCentre(fieldAt(plan, 0).bodies[0])).toBeCloseTo(0, 9)
+      // And never more than a fiftieth of the pane off it in between: a pair closes against
+      // its own mass, but the two of them are not always the same distance into their beat.
+      for (const left of SWEEP) {
+        expect(offCentre(centreOfMass(fieldAt(plan, left).beads))).toBeLessThan(0.02)
+      }
+    }
+  })
+
+  it('never lets two bodies share glass, only the pair that is joining', () => {
+    for (const seed of SEEDS.slice(0, 20)) {
+      const plan = createCoalescence(seeded(seed))
+      for (const left of SWEEP) {
+        // Wide enough that the goo filter cannot reach across it either: a neck that grows
+        // between two bodies and then breaks reads as a join that did not take.
+        expect(tightestGap(fieldAt(plan, left).beads)).toBeGreaterThan(0.03)
+      }
+    }
+  })
+
+  it('keeps every drop over the glass', () => {
+    for (const seed of SEEDS) {
+      const plan = createCoalescence(seeded(seed))
+      for (const left of SWEEP) {
+        for (const bead of fieldAt(plan, left).beads) {
+          expect(Math.abs(bead.x - 0.5) + BEAD_R).toBeLessThan(0.5)
+          expect(Math.abs(bead.y - 0.5) + BEAD_R).toBeLessThan(0.5)
+        }
+      }
+    }
+  })
+
+  it('never changes a drop pace in a step', () => {
+    // The whole point of planning velocities rather than easing positions: a pair is drawn
+    // together, and what it is doing when it touches is what pours it into the body it has
+    // joined. A jump here would be a drop teleporting into a new speed.
+    expect(speedJump(createCoalescence(seeded(7)))).toBeLessThan(0.5)
+  })
+
+  it('never changes what the pane covers in a step either, which is what popping is', () => {
+    // Under a hundredth of the pane between neighbouring frames, at a join as much as
+    // anywhere else. Nothing is swapped for anything, so there is nothing to pop.
+    expect(biggestFlicker(createCoalescence(seeded(4)))).toBeLessThan(0.01)
+    expect(biggestFlicker(createFission(seeded(4)))).toBeLessThan(0.01)
+    expect(biggestFlicker(createShedding(seeded(4)))).toBeLessThan(0.015)
+    expect(biggestFlicker(createGathering(seeded(4)))).toBeLessThan(0.015)
+  })
+
+  it('draws each pair together, quickest as it lands, then pours it home', () => {
+    const plan = createCoalescence(seeded(8))
+    const speedAt = (left: number, id: number) => {
+      const step = 1e-5
+      const before = fieldAt(plan, left + step).beads.find((bead) => bead.id === id)!
+      const after = fieldAt(plan, left - step).beads.find((bead) => bead.id === id)!
+      return Math.hypot(after.x - before.x, after.y - before.y) / (2 * step)
+    }
+    const first = 1 - 1 / (BEAD_COUNT - 1)
+    const moving = fieldAt(plan, first + 1e-6).beads.reduce((quickest, bead) =>
+      speedAt(first + 1e-6, bead.id) > speedAt(first + 1e-6, quickest.id) ? bead : quickest,
+    )
+    // Faster on the approach than at the top of it, and still moving after the join: the
+    // closing motion becomes the pour rather than stopping at the surface.
+    expect(speedAt(first + 1e-6, moving.id)).toBeGreaterThan(speedAt(1 - 1e-6, moving.id))
+    expect(speedAt(first - 1e-6, moving.id)).toBeGreaterThan(0.1)
+  })
+
+  it('plans the same rest twice from the same seed, and a different one from another', () => {
     expect(createCoalescence(seeded(9))).toEqual(createCoalescence(seeded(9)))
-  })
-
-  it('scatters the opening layout rather than repeating one arrangement', () => {
     const opens = SEEDS.map((seed) =>
-      createCoalescence(seeded(seed))
-        .beads.slice(0, BEAD_COUNT)
-        .map((b) => `${b.from.x.toFixed(3)},${b.from.y.toFixed(3)}`)
+      fieldAt(createCoalescence(seeded(seed)), 1)
+        .beads.map((bead) => `${bead.x.toFixed(3)},${bead.y.toFixed(3)}`)
         .join(' '),
     )
     expect(new Set(opens).size).toBe(SEEDS.length)
   })
+
+  it('holds its opening arrangement above the rest and its closing one through overtime', () => {
+    const plan = createCoalescence(seeded(5))
+    expect(fieldAt(plan, 2).bodies).toHaveLength(BEAD_COUNT)
+    expect(fieldAt(plan, -0.4).bodies).toHaveLength(1)
+  })
 })
 
-describe('beadsAt', () => {
-  it('drops the count by one at each join, from all of them to one', () => {
-    const plan = createCoalescence(seeded(4))
-    expect(beadsAt(plan, 1)).toHaveLength(BEAD_COUNT)
-    expect(beadsAt(plan, 0)).toHaveLength(1)
-    // The count is the reading, so it has to fall in step with the clock: a sixth
-    // of the rest gone is a sixth of the pane's beads gone into another.
-    for (const left of SWEEP) {
-      expect(beadsAt(plan, left)).toHaveLength(1 + Math.ceil(left * (BEAD_COUNT - 1) - 1e-9))
+describe('createShedding', () => {
+  it('loses one drop at every seventh of the rest, and ends on clear glass', () => {
+    for (const seed of SEEDS.slice(0, 8)) {
+      const plan = createShedding(seeded(seed))
+      for (const left of SWEEP) {
+        expect(fieldAt(plan, left).beads.length).toBe(Math.max(0, Math.ceil(left * BEAD_COUNT - 1e-9)))
+      }
+      // Including on the tick itself, which is the moment a drop finishes leaving.
+      for (let step = 1; step <= BEAD_COUNT; step++) {
+        expect(fieldAt(plan, 1 - step / BEAD_COUNT).beads).toHaveLength(BEAD_COUNT - step)
+      }
+      expect(fieldAt(plan, 0).beads).toHaveLength(0)
     }
   })
 
-  it('holds the last bead through overtime, and never more than the pane started with', () => {
-    const plan = createCoalescence(seeded(5))
-    expect(beadsAt(plan, -0.4)).toHaveLength(1)
-    expect(beadsAt(plan, 2)).toHaveLength(BEAD_COUNT)
-  })
-
-  it('keeps the mass on the pane whole', () => {
+  it('keeps the mass in the middle, and finds it exactly centred at every tear', () => {
     for (const seed of SEEDS) {
-      const plan = createCoalescence(seeded(seed))
-      for (const left of SWEEP) {
-        // No bead is ever lost or counted twice.
-        const live = beadsAt(plan, left)
-        expect(live.reduce((sum, bead) => sum + bead.mass, 0)).toBe(BEAD_COUNT)
+      const plan = createShedding(seeded(seed))
+      expect(offCentre(biggest(fieldAt(plan, 1))!)).toBeCloseTo(0, 9)
+      for (let step = 1; step <= BEAD_COUNT; step++) {
+        // A tear is three quarters of a beat before the leaving it causes. The whole mass is
+        // dead centre as it starts, whatever the last recoil did and whatever the drops in it
+        // are doing of their own accord.
+        const field = fieldAt(plan, 1 - (step - 0.75) / BEAD_COUNT + 1e-9)
+        expect(offCentre(centreOfMass(field.beads.filter((bead) => !bead.loose)))).toBeCloseTo(0, 8)
       }
     }
   })
 
-  it('holds the mass in the middle of the pane, which is what centres the last bead', () => {
-    for (const seed of SEEDS) {
-      const plan = createCoalescence(seeded(seed))
-      // Exactly, at both ends of the rest: no join moves the mass of the pair that
-      // made it, so the bead the pane is left with sits where they all started —
-      // dead centre.
-      for (const left of [1, 0]) {
-        const middle = centreOfMass(beadsAt(plan, left))
-        expect(middle.x).toBeCloseTo(0.5, 10)
-        expect(middle.y).toBeCloseTo(0.5, 10)
-      }
-      // And never more than a fiftieth of the pane off it in between. A pair closes
-      // its gap against its own mass, but the older bead of the two is further along
-      // that approach than its partner, so the mass they share drifts a little
-      // while they are travelling.
-      for (const left of SWEEP) {
-        const middle = centreOfMass(beadsAt(plan, left))
-        expect(Math.hypot(middle.x - 0.5, middle.y - 0.5)).toBeLessThan(0.02)
+  it('tears a drop out of the mass rather than putting one beside it', () => {
+    for (const seed of SEEDS.slice(0, 8)) {
+      const plan = createShedding(seeded(seed))
+      for (let step = 1; step < BEAD_COUNT; step++) {
+        const field = fieldAt(plan, 1 - (step - 0.7) / BEAD_COUNT)
+        const leaving = field.beads.find((bead) => bead.mate !== null && bead.body !== 0)
+        const mass = biggest(field)!
+        // Just after the tear starts the drop is still inside what it is leaving, so the two
+        // of them are one silhouette with a neck: the pane never shows it appearing.
+        expect(leaving).toBeDefined()
+        expect(Math.hypot(leaving!.x - mass.x, leaving!.y - mass.y)).toBeLessThan(mass.r + BEAD_R)
       }
     }
   })
 
-  it('never lets two beads share glass, only touch as they join', () => {
-    for (const seed of SEEDS) {
-      const plan = createCoalescence(seeded(seed))
-      const partners = new Map(plan.beads.map((b) => [b.id, b.mergesAt]))
-      for (const left of SWEEP) {
-        // Beads squeezing past each other is the pane's tightest constraint, and
-        // what the layout constants were settled against: two of them sharing glass
-        // reads as a join that didn't take.
-        expect(tightestGap(beadsAt(plan, left), partners)).toBeGreaterThan(0)
+  it('answers a tear with a recoil, the harder the emptier the middle is', () => {
+    const plan = createShedding(seeded(11))
+    const drift = (step: number) => {
+      let worst = 0
+      for (let i = 0; i <= 60; i++) {
+        const left = 1 - (step - 0.75 + (0.75 * i) / 60) / BEAD_COUNT
+        const mass = biggest(fieldAt(plan, left))
+        if (mass && mass.mass > 1) worst = Math.max(worst, offCentre(mass))
       }
+      return worst
     }
+    // A mass six times the weight of what it lets go barely moves; by the end it is one drop
+    // pushing off another and it goes as far as what it throws.
+    expect(drift(1)).toBeLessThan(0.06)
+    expect(drift(5)).toBeGreaterThan(drift(1))
   })
 
-  it('keeps every bead inside the pane', () => {
-    for (const seed of SEEDS) {
-      const plan = createCoalescence(seeded(seed))
+  it('sees each drop wholly off the pane, and keeps the rest of them on it', () => {
+    for (const seed of SEEDS.slice(0, 20)) {
+      const plan = createShedding(seeded(seed))
       for (const left of SWEEP) {
-        for (const bead of beadsAt(plan, left)) {
-          expect(centreDistance(bead) + bead.r).toBeLessThan(0.5)
+        const field = fieldAt(plan, left)
+        expect(tightestGap(field.beads)).toBeGreaterThan(0)
+        for (const bead of field.beads) {
+          if (bead.loose) continue
+          expect(Math.abs(bead.x - 0.5) + BEAD_R).toBeLessThan(0.5)
+          expect(Math.abs(bead.y - 0.5) + BEAD_R).toBeLessThan(0.5)
         }
       }
     }
   })
 
-  it('moves beads continuously, so the countdown has nothing to jump over', () => {
-    const plan = createCoalescence(seeded(7))
-    let previous = new Map(beadsAt(plan, 1).map((bead) => [bead.id, bead]))
-    for (const left of SWEEP.slice(1)) {
-      const live = beadsAt(plan, left)
-      for (const bead of live) {
-        const was = previous.get(bead.id)
-        // A bead that was already here has crept, not hopped. One that has just
-        // appeared is exempt: it appears where the pair it came from was.
-        if (was) expect(Math.hypot(bead.x - was.x, bead.y - was.y)).toBeLessThan(0.01)
-      }
-      previous = new Map(live.map((bead) => [bead.id, bead]))
-    }
+  it('never changes a drop pace in a step', () => {
+    expect(speedJump(createShedding(seeded(12)))).toBeLessThan(1)
   })
 
-  it('draws each pair together over its whole life, quickest as it lands', () => {
-    const plan = createCoalescence(seeded(8))
-    const bead = plan.beads[0]
-    const travel = Math.hypot(bead.to.x - bead.from.x, bead.to.y - bead.from.y)
-    const life = bead.bornAt - bead.mergesAt!
-    const gone = (share: number) => {
-      const at = beadsAt(plan, bead.bornAt - life * share).find((b) => b.id === bead.id)!
-      return Math.hypot(at.x - bead.from.x, at.y - bead.from.y)
-    }
-    // Squared: half its life gone and it is a quarter of the way there, so the
-    // last stretch of the approach is the quickest part of it.
-    expect(gone(0.5)).toBeCloseTo(travel / 4, 8)
-    expect(gone(0.9)).toBeCloseTo(travel * 0.81, 8)
-    expect(gone(1 - 1e-9)).toBeCloseTo(travel, 6)
-  })
-})
-
-/** The mass in the middle of a shedding: the one thing on the pane that never moves. */
-const massOf = (plan: BeadPlan) =>
-  plan.beads.filter((bead) => bead.from.x === bead.to.x && bead.from.y === bead.to.y)
-
-/** And the beads on their way off it. */
-const shedOf = (plan: BeadPlan) =>
-  plan.beads.filter((bead) => bead.from.x !== bead.to.x || bead.from.y !== bead.to.y)
-
-/** How far past the nearest edge of the pane a bead ends up — negative until it is wholly off it. */
-const clearOf = (bead: Bead) =>
-  Math.max(Math.abs(bead.to.x - 0.5), Math.abs(bead.to.y - 0.5)) - 0.5 - bead.r
-
-/** A plan's beads keyed by the field that marks the pair an event joins or parts. */
-const pairedBy = (plan: BeadPlan, field: 'bornAt' | 'mergesAt') =>
-  new Map(plan.beads.map((bead) => [bead.id, bead[field]]))
-
-const totalMass = (live: LiveBead[]) => live.reduce((sum, bead) => sum + bead.mass, 0)
-
-/** Every gap on the pane, tightest first. */
-function gapsBetween(live: LiveBead[]): number[] {
-  const gaps: number[] = []
-  for (let i = 0; i < live.length; i++) {
-    for (let j = i + 1; j < live.length; j++) {
-      gaps.push(gapBetween(live[i], live[i], live[j], live[j]))
-    }
-  }
-  return gaps.sort((a, b) => a - b)
-}
-
-describe('createShedding', () => {
-  it('plans a mass in the middle that empties itself, a bead at a time', () => {
-    const plan = createShedding(seeded(21))
-    // Every size the mass holds on the way down, and every bead it lets go of.
-    expect(plan.beads).toHaveLength(2 * BEAD_COUNT)
-    expect(massOf(plan).map((bead) => bead.mass)).toEqual([7, 6, 5, 4, 3, 2, 1])
-    expect(massOf(plan).every((bead) => bead.from.x === 0.5 && bead.from.y === 0.5)).toBe(true)
-    expect(shedOf(plan).map((bead) => bead.mass)).toEqual(Array(BEAD_COUNT).fill(1))
-    expect(plan.count).toBe(BEAD_COUNT)
-  })
-
-  it('spaces the leavings evenly and lands the last one exactly on zero', () => {
-    const plan = createShedding(seeded(22))
-    const goes = shedOf(plan).map((bead) => bead.mergesAt!)
-    goes.forEach((at, i) => expect(at).toBeCloseTo(1 - (i + 1) / BEAD_COUNT, 10))
-    expect(goes[goes.length - 1]).toBe(0)
-    // And each one pinches off three quarters of a beat before it goes, so a bead
-    // coming off the mass and a bead clearing the rim are two events and not one.
-    for (const bead of shedOf(plan)) {
-      expect(bead.bornAt - bead.mergesAt!).toBeCloseTo(0.75 / BEAD_COUNT, 10)
-    }
-  })
-
-  it('pinches each bead off the mass it came from, in view, and sees it wholly off', () => {
-    for (const seed of SEEDS) {
-      const plan = createShedding(seeded(seed))
-      for (const bead of shedOf(plan)) {
-        const mass = massOf(plan).find((m) => m.bornAt === bead.bornAt)
-        // Touching what the mass has just become — or standing in the middle itself,
-        // for the last bead, which has no mass left to come off.
-        if (mass) expect(gapBetween(bead, bead.from, mass, mass.from)).toBeCloseTo(0, 10)
-        else expect(bead.from).toEqual({ x: 0.5, y: 0.5 })
-        // It starts where it can be seen and ends just past where it can't: the pane
-        // loses the last of it on its own tick rather than a moment either side.
-        expect(Math.hypot(bead.from.x - 0.5, bead.from.y - 0.5) + bead.r).toBeLessThan(0.5)
-        expect(clearOf(bead)).toBeCloseTo(0, 10)
-      }
-    }
-  })
-
-  it('loses one bead of glass at every seventh of the rest', () => {
-    for (const seed of SEEDS.slice(0, 8)) {
-      const plan = createShedding(seeded(seed))
-      // What the pane holds is the reading, whether it is sitting in the middle or on
-      // its way out through the rim.
-      for (const left of SWEEP) {
-        expect(totalMass(beadsAt(plan, left))).toBe(
-          Math.max(0, Math.ceil(left * BEAD_COUNT - 1e-9)),
-        )
-      }
-      // Including on the tick itself, which is the moment a bead finishes leaving.
-      shedOf(plan).forEach((bead, i) => {
-        expect(totalMass(beadsAt(plan, bead.mergesAt!))).toBe(BEAD_COUNT - (i + 1))
-      })
-    }
-  })
-
-  it('never lets two beads share glass', () => {
-    for (const seed of SEEDS) {
-      const plan = createShedding(seeded(seed))
-      const partners = pairedBy(plan, 'mergesAt')
-      for (const left of SWEEP) {
-        // A bead comes off the mass exactly touching it and heads straight out from
-        // there, so that one moment of contact is as tight as the pane ever gets.
-        expect(tightestGap(beadsAt(plan, left), partners)).toBeGreaterThan(-1e-9)
-      }
-    }
-  })
-
-  it('plans the same rest twice from one seed, and sends the beads out elsewhere on another', () => {
+  it('plans the same rest twice from one seed, and throws the drops elsewhere on another', () => {
     expect(createShedding(seeded(23))).toEqual(createShedding(seeded(23)))
     const ways = SEEDS.map((seed) =>
-      shedOf(createShedding(seeded(seed)))
-        .map((bead) => bead.to.x.toFixed(3))
+      fieldAt(createShedding(seeded(seed)), 1 - 0.5 / BEAD_COUNT)
+        .beads.map((bead) => bead.x.toFixed(3))
         .join(' '),
     )
     expect(new Set(ways).size).toBe(SEEDS.length)
@@ -362,93 +376,106 @@ describe('createShedding', () => {
 })
 
 describe('reversePlan', () => {
-  it('turns a coalescence into one bead coming apart into seven', () => {
-    const plan = createFission(seeded(31))
-    expect(plan.ease).toBe('opening')
-    const opens = beadsAt(plan, 1)
-    expect(opens).toHaveLength(1)
-    expect(opens[0].mass).toBe(BEAD_COUNT)
-    expect(centreDistance(opens[0])).toBeCloseTo(0, 10)
-    const ends = beadsAt(plan, 0)
-    expect(ends).toHaveLength(BEAD_COUNT)
-    expect(ends.every((bead) => bead.mass === 1)).toBe(true)
-    // One more bead at every sixth of the way through: the coalescence's count, the
-    // other way up.
-    for (const left of SWEEP) {
-      const count = BEAD_COUNT - Math.ceil(left * (BEAD_COUNT - 1) - 1e-9)
-      expect(beadsAt(plan, left)).toHaveLength(count)
+  it('turns a coalescence into one body coming apart into seven', () => {
+    for (const seed of SEEDS.slice(0, 8)) {
+      const plan = createFission(seeded(seed))
+      const opens = fieldAt(plan, 1)
+      expect(opens.bodies).toHaveLength(1)
+      expect(opens.bodies[0].mass).toBe(BEAD_COUNT)
+      // Sitting still and dead centre: the payoff of a coalescence, read as an opening.
+      expect(offCentre(opens.bodies[0])).toBeCloseTo(0, 9)
+      expect(runOf(plan, (field) => field.bodies.length)).toEqual([1, 2, 3, 4, 5, 6, 7])
+      for (let beat = 0; beat < BEAD_COUNT - 1; beat++) {
+        const left = 1 - (beat + 0.5) / (BEAD_COUNT - 1)
+        expect(fieldAt(plan, left).bodies).toHaveLength(beat + 1)
+      }
+      expect(fieldAt(plan, 0).bodies).toHaveLength(BEAD_COUNT)
     }
   })
 
-  it('lands the seventh bead exactly on zero, with the last pair still touching', () => {
+  it('lands the seventh body exactly on zero, with the last pair still touching', () => {
     for (const seed of SEEDS) {
-      const gaps = gapsBetween(beadsAt(createFission(seeded(seed)), 0))
-      // The pair that has just come apart is still in contact on the tick — the mirror
-      // of the two beads that touch at the end of a coalescence — and nothing else on
-      // the pane is anywhere near touching.
-      expect(gaps[0]).toBeCloseTo(0, 10)
-      expect(gaps[1]).toBeGreaterThan(0.01)
+      const field = fieldAt(createFission(seeded(seed)), 0)
+      const gaps: number[] = []
+      for (let i = 0; i < field.beads.length; i++) {
+        for (let j = i + 1; j < field.beads.length; j++) {
+          gaps.push(gapBetween(field.beads[i], field.beads[j]))
+        }
+      }
+      gaps.sort((a, b) => a - b)
+      // The pair that has just parted is still in contact — the mirror of the two drops that
+      // touch at the end of a coalescence — and nothing else is anywhere near.
+      expect(gaps[0]).toBeCloseTo(0, 6)
+      expect(gaps[1]).toBeGreaterThan(0.03)
     }
   })
 
   it('keeps a fission as sound as the coalescence it came from', () => {
-    for (const seed of SEEDS) {
+    for (const seed of SEEDS.slice(0, 12)) {
       const plan = createFission(seeded(seed))
-      const partners = pairedBy(plan, 'bornAt')
       for (const left of SWEEP) {
-        const live = beadsAt(plan, left)
-        expect(tightestGap(live, partners)).toBeGreaterThan(-1e-9)
-        expect(totalMass(live)).toBe(BEAD_COUNT)
-        for (const bead of live) expect(centreDistance(bead) + bead.r).toBeLessThan(0.5)
+        const field = fieldAt(plan, left)
+        expect(field.beads).toHaveLength(BEAD_COUNT)
+        expect(tightestGap(field.beads)).toBeGreaterThan(0.03)
+        expect(offCentre(centreOfMass(field.beads))).toBeLessThan(0.02)
+        for (const bead of field.beads) {
+          expect(Math.abs(bead.x - 0.5) + BEAD_R).toBeLessThan(0.5)
+          expect(Math.abs(bead.y - 0.5) + BEAD_R).toBeLessThan(0.5)
+        }
       }
     }
   })
 
-  it('turns a shedding into beads arriving, the last of them landing on zero', () => {
+  it('turns a shedding into drops arriving, the last of them landing on zero', () => {
     for (const seed of SEEDS.slice(0, 8)) {
       const plan = createGathering(seeded(seed))
-      expect(plan.ease).toBe('opening')
-      // The one shape here that opens on an empty pane, with its first bead already on
-      // the way in from beyond the rim.
-      expect(beadsAt(plan, 1)).toHaveLength(0)
-      const ends = beadsAt(plan, 0)
-      expect(ends).toHaveLength(1)
-      expect(ends[0].mass).toBe(BEAD_COUNT)
-      expect(centreDistance(ends[0])).toBeCloseTo(0, 10)
+      // The one run here that opens on an empty pane, with its first drop already on the way
+      // in from beyond the rim.
+      expect(fieldAt(plan, 1).beads).toHaveLength(0)
+      const done = fieldAt(plan, 0)
+      expect(done.bodies).toHaveLength(1)
+      expect(done.bodies[0].mass).toBe(BEAD_COUNT)
+      expect(offCentre(done.bodies[0])).toBeCloseTo(0, 9)
+      // What the middle has gathered is the reading, and it goes up by one at every
+      // seventh — the drop crossing the rim is not in the middle yet.
+      for (let beat = 0; beat < BEAD_COUNT; beat++) {
+        const left = 1 - (beat + 0.5) / BEAD_COUNT
+        const settled = fieldAt(plan, left).beads.filter((bead) => !bead.loose)
+        expect(settled).toHaveLength(beat)
+      }
       for (const left of SWEEP) {
-        const live = beadsAt(plan, left)
-        // What the middle has gathered goes up by one at every seventh, and the only
-        // other glass on the pane is the one bead on its way in.
-        const gathered = live.find((bead) => centreDistance(bead) < 1e-9)
-        expect(gathered?.mass ?? 0).toBe(BEAD_COUNT - Math.ceil(left * BEAD_COUNT - 1e-9))
-        expect(live.length - (gathered ? 1 : 0)).toBeLessThanOrEqual(1)
+        const field = fieldAt(plan, left)
+        // And the only other glass on the pane is the one drop on its way in.
+        expect(field.bodies.length).toBeLessThanOrEqual(2)
+        expect(field.beads.length).toBeLessThanOrEqual(BEAD_COUNT)
       }
     }
   })
 
-  it('holds the end of the run through overtime rather than the start of it', () => {
-    const fission = createFission(seeded(32))
-    expect(beadsAt(fission, -0.4)).toHaveLength(BEAD_COUNT)
-    expect(beadsAt(fission, 2)).toHaveLength(1)
-    const gathering = createGathering(seeded(33))
-    expect(beadsAt(gathering, -0.4)).toHaveLength(1)
-    expect(beadsAt(gathering, 2)).toHaveLength(0)
+  it('reverses the physics along with the schedule', () => {
+    const plan = createGathering(seeded(13))
+    expect(speedJump(plan)).toBeLessThan(1)
+    const speedAt = (left: number) => {
+      const step = 1e-5
+      const one = fieldAt(plan, left + step).beads
+      const two = fieldAt(plan, left - step).beads
+      const moved = two.filter((bead) => one.some((was) => was.id === bead.id))
+      return Math.max(
+        ...moved.map((bead) => {
+          const was = one.find((other) => other.id === bead.id)!
+          return Math.hypot(bead.x - was.x, bead.y - was.y) / (2 * step)
+        }),
+      )
+    }
+    // A drop arriving is a drop leaving run backwards, so it comes in quickest and settles
+    // into the mass rather than starting slowly and slamming in.
+    expect(speedAt(1 - 0.4 / BEAD_COUNT)).toBeGreaterThan(speedAt(1 - 0.95 / BEAD_COUNT))
   })
 
-  it('eases a run backwards as well as timing it backwards', () => {
-    const plan = createFission(seeded(34))
-    // The first bead to come apart that has further to go itself.
-    const live = beadsAt(plan, 5 / 6 - 1e-9).find((bead) => bead.mass > 1)!
-    const planned = plan.beads.find((bead) => bead.id === live.id)!
-    const travel = Math.hypot(planned.to.x - planned.from.x, planned.to.y - planned.from.y)
-    const life = planned.bornAt - planned.mergesAt!
-    const gone = (share: number) => {
-      const at = beadsAt(plan, planned.bornAt - life * share).find((b) => b.id === live.id)!
-      return Math.hypot(at.x - planned.from.x, at.y - planned.from.y)
-    }
-    // Quickest as it leaves: a tenth of its life gone and it is a fifth of the way,
-    // where a bead being drawn *in* would be a hundredth of the way.
-    expect(gone(0.1)).toBeCloseTo(travel * 0.19, 8)
-    expect(gone(0.5)).toBeCloseTo(travel * 0.75, 8)
+  it('holds the end of a mirrored run through overtime rather than the start of it', () => {
+    expect(fieldAt(createFission(seeded(32)), -0.4).bodies).toHaveLength(BEAD_COUNT)
+    expect(fieldAt(createFission(seeded(32)), 2).bodies).toHaveLength(1)
+    expect(fieldAt(createGathering(seeded(33)), -0.4).bodies).toHaveLength(1)
+    expect(fieldAt(createGathering(seeded(33)), 2).beads).toHaveLength(0)
   })
 })

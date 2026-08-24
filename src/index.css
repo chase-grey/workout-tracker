@@ -398,61 +398,13 @@ input[type='number'] {
   animation: rest-globe-settled 620ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* Beads: the blob taking on the one it just absorbed — a drop that has swallowed
-   another overshoots before it is a sphere again. Mounted with the blob they became,
-   so it runs once, on the join, and never again. The goo filter carries the merge
-   itself (see RestShapes), so this is only the settling that follows it. */
-@keyframes rest-bead-born {
-  0% {
-    transform: scale(0.9);
-  }
-  45% {
-    transform: scale(1.07);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-.rest-bead-born {
-  animation: rest-bead-born 560ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
-/* Beads: the wander each blob does about wherever the schedule has put it, so a pane
-   between two joins reads as liquid and not as an arrangement being held. Two loops of
-   different lengths, one across and one down, composed on the same box by giving each
-   its own property — `transform` and `translate` both move an element, but only one
-   animation can own a property, and a single loop would be a circle the eye can
-   follow. RestShapes sets `--rest-wander` per blob and takes it to nothing as the blob
-   closes on a neighbour or arrives where it was headed, so this can never shift a bead
-   off a mark that tells the time. It attaches these inline, which is also where it
-   drops them under reduced motion — an inline animation is the one thing the
-   `animation: none` below couldn't switch off. */
-@keyframes rest-bead-wander-x {
-  0%,
-  100% {
-    transform: translateX(var(--rest-wander));
-  }
-  50% {
-    transform: translateX(calc(var(--rest-wander) * -1));
-  }
-}
-@keyframes rest-bead-wander-y {
-  0%,
-  100% {
-    translate: 0 calc(var(--rest-wander) * -1);
-  }
-  50% {
-    translate: 0 var(--rest-wander);
-  }
-}
-
 /* Beads: the whole field of them turning slowly about the middle of the pane, which is
    the one motion here with nothing to answer to — a turn about a point changes no gap
-   between two blobs and no blob's distance from that point, so it can't grow a neck,
-   can't reach the rim, and leaves a blob sitting dead centre exactly where it is. That
-   is what lets it be the big movement the wander can't be, the beads being laid out too
-   tightly for one. The stops are deliberately uneven, so the field wanders back and
-   forth instead of keeping time. Only `beads` and `split` wear it (see RestShapes). */
+   between two drops and no drop's distance from that point, so it can't grow a neck,
+   can't reach the rim, and leaves a body sitting dead centre exactly where it is. The
+   stir the drops do themselves belongs to the schedule (see lib/beads); this is the one
+   movement laid over the top of it. The stops are deliberately uneven, so the field
+   wanders back and forth instead of keeping time. Only `beads` and `split` wear it. */
 @keyframes rest-bead-swirl {
   0% {
     rotate: -6deg;
@@ -713,12 +665,9 @@ input[type='number'] {
   .rest-pan-sway,
   .rest-frost,
   .rest-fuse-head,
-  /* The beads keep closing and joining — that is the reading, not decoration — so what
-     goes here is the field's slow turn, and the wobble the bead they became would do on
-     arriving. Each blob's own wander goes too, but RestShapes has to drop that one
-     itself: it attaches it inline, which is the one thing this can't switch off. */
-  .rest-bead-swirl,
-  .rest-bead-born {
+  /* The drops keep closing and joining — that is the reading, not decoration — so all
+     that goes here is the field's slow turn about the middle of the pane. */
+  .rest-bead-swirl {
     animation: none;
   }
   /* Everything airborne is hidden rather than frozen: a spark or a drop parked
