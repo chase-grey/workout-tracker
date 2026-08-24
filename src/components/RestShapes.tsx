@@ -948,10 +948,13 @@ function IcicleGap({ fraction }: { fraction: number }) {
  * looks like no other moment of any of them: one bead dead centre, seven spread
  * across the glass, nothing at all, or one bead holding all seven.
  *
- * Drawn as black glass because that is what the rest screen already is: a black
- * field, and beads with nothing in them but a rim, a highlight and the light
- * gathering inside their own edge. A bead here is defined by what it catches, so it
- * grows by taking in another bead's light rather than by any fill going up.
+ * Drawn as liquid rather than as glass, through the same goo filter a lava lamp is
+ * made of (blur the field, then crush the alpha back to an edge — see
+ * {@link BeadPane}). A blob is one opaque body lit from its upper left, and two of
+ * them that come near enough grow a neck and pour into each other. That is what
+ * makes a join *the* event of the shape: nothing pops in or flashes, the surfaces
+ * simply reach and the two become one, and a bead pinching off the mass in `shed`
+ * tears away from it the same way.
  */
 
 /**
@@ -973,10 +976,43 @@ function useBeadPlan(make: () => BeadPlan, fraction: number) {
 /**
  * The pane the four of them share, and the beads standing on it.
  *
+ * The blobs all sit in one filtered layer so any two of them can merge, whatever
+ * their sizes: {@link GOO_BLUR} spreads each one into a haze, and the alpha crush
+ * that follows throws away everything below half-opaque and takes the rest to
+ * solid. A lone blob comes back the size it started, because the middle of it never
+ * left full opacity; two whose hazes overlap come back joined, because the glass
+ * between them crossed the threshold together. Only the blobs go through it — the
+ * pane, its sheen and the glow all sit outside, where a crushed alpha would flatten
+ * them.
+ *
  * `settled` is the shape's payoff — the pane holding the one arrangement it holds at
  * no other point in the rest — and everything it changes is a light coming up: the
- * pane's edge firms, and every bead left on it takes a harder rim and a wider halo.
+ * pane's edge firms and the liquid's glow widens.
  */
+/**
+ * How far the goo filter spreads a blob before it is crushed back, in CSS pixels.
+ * This alone sets how close two blobs have to get before they reach for each other:
+ * about twice this much glass between their surfaces. Sized against the smallest
+ * blob a pane holds (a fifth of the pane, so ~60px on a phone) so a merge is a
+ * quick pour and not a long rubbery stretch — and comfortably under the gap the
+ * ring's neighbours keep, which is what stops seven beads sitting still from
+ * fusing into a doughnut.
+ */
+const GOO_BLUR = 8
+
+/**
+ * The alpha crush that turns the blur back into a liquid: `alpha * SLOPE - FLOOR`,
+ * clamped. Everything under about 0.41 opacity goes to nothing and everything over
+ * 0.46 goes to solid, so a blob keeps its own size and only the narrow band where
+ * two hazes have added together becomes the neck between them.
+ */
+const GOO_SLOPE = 22
+const GOO_FLOOR = -9
+
+/** The blob's own lighting: pale at the upper left, bright through it, deep at the rim. */
+const BLOB_FILL =
+  'radial-gradient(circle at 34% 28%, #bbf7d0 0%, var(--color-accent-bright) 46%, #15803d 100%)'
+
 function BeadPane({
   beads,
   opening,
@@ -987,6 +1023,7 @@ function BeadPane({
   settled: boolean
 }) {
   const calm = usePrefersReducedMotion()
+  const goo = useId().replace(/\W/g, '')
   return (
     <div className="absolute inset-0" aria-hidden>
       <div
@@ -995,13 +1032,13 @@ function BeadPane({
           settled ? 'ring-accent-bright/60' : 'ring-accent-bright/20'
         }`}
       >
-        {/* The glass: barely lit, and a shade brighter at the top, so the pane reads
-            as a surface the beads are lying on rather than a hole cut in the screen.
-            It also cuts off everything crossing it, which is how a bead leaves. */}
+        {/* The pane: barely lit, and a shade brighter at the top, so it reads as a
+            surface the liquid is lying on rather than a hole cut in the screen. It
+            also cuts off everything crossing it, which is how a blob leaves. */}
         <div className="absolute inset-0 bg-gradient-to-b from-accent-bright/7 to-accent-bright/2" />
         {/* One band of light crossing it, slowly. Texture, and the only loop in the
             shape: it touches nothing that tells the time. Dropped under reduced
-            motion, where the beads' own drift is the whole of the reading. */}
+            motion, where the blobs' own drift is the whole of the reading. */}
         {!calm && (
           <div
             className="rest-bead-sheen absolute -inset-y-1/3 -left-1/3 w-1/3"
@@ -1011,67 +1048,64 @@ function BeadPane({
             }}
           />
         )}
-        {beads.map((bead) => {
-          // A bead the pane didn't open with is a bead an event brought here, and it
-          // is mounting at the moment of that event.
-          const arrived = !opening.has(bead.id) && !calm
-          return (
-            <div
-              key={bead.id}
-              // Positioned by translating a pane-sized box, so a percentage here is
-              // a share of the pane and no element has to be measured. A bead's own
-              // size never changes — beads grow by joining, not by swelling — so the
-              // only thing the countdown moves is this transform.
-              className="absolute inset-0"
-              style={{
-                transform: `translate(${(bead.x - 0.5) * 100}%, ${(bead.y - 0.5) * 100}%)`,
-                ...drainOf('transform'),
-              }}
-            >
+        <svg className="absolute h-0 w-0" aria-hidden>
+          <defs>
+            <filter id={goo} x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation={GOO_BLUR} result="haze" />
+              <feColorMatrix
+                in="haze"
+                mode="matrix"
+                values={`1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${GOO_SLOPE} ${GOO_FLOOR}`}
+              />
+            </filter>
+          </defs>
+        </svg>
+        {/* Every blob in one filtered layer, so any pair of them can merge. The glow
+            rides on the end of the same filter chain, which puts it around the
+            merged silhouette rather than around each blob that went into it. */}
+        <div
+          className="absolute inset-0"
+          style={{
+            filter: `url(#${goo}) drop-shadow(0 0 ${settled ? 16 : 8}px rgba(74, 222, 128, ${
+              settled ? 0.5 : 0.3
+            }))`,
+            transition: 'filter 500ms linear',
+          }}
+        >
+          {beads.map((bead) => {
+            // A blob the pane didn't open with is one an event brought here, and it
+            // is mounting at the moment of that event.
+            const arrived = !opening.has(bead.id) && !calm
+            return (
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                style={{ width: pct(bead.r * 200), aspectRatio: '1' }}
+                key={bead.id}
+                // Positioned by translating a pane-sized box, so a percentage here is
+                // a share of the pane and no element has to be measured. A blob's own
+                // size never changes — they grow by joining, not by swelling — so the
+                // only thing the countdown moves is this transform.
+                className="absolute inset-0"
+                style={{
+                  transform: `translate(${(bead.x - 0.5) * 100}%, ${(bead.y - 0.5) * 100}%)`,
+                  ...drainOf('transform'),
+                }}
               >
-                {/* The light the rim throws onto the glass around it. `closest-side`
-                    so the fade is measured against the circle and not against the
-                    corners of the box it is drawn in. */}
                 <div
-                  className="absolute -inset-[18%] rounded-full"
-                  style={{
-                    backgroundImage:
-                      'radial-gradient(circle closest-side, var(--color-accent-bright) 62%, transparent 100%)',
-                    opacity: settled ? 0.24 : 0.12,
-                    transition: 'opacity 500ms linear',
-                  }}
-                />
-                <div
-                  className={`absolute inset-0 rounded-full bg-accent-bright/10 ring-2 transition-shadow duration-500 ${
-                    settled ? 'ring-accent-bright/90' : 'ring-accent-bright/45'
-                  } ${arrived ? 'rest-bead-born' : ''}`}
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                  style={{ width: pct(bead.r * 200), aspectRatio: '1' }}
                 >
-                  {/* Light gathering inside the rim, which is what a bead of glass
-                      does and a flat disc doesn't. */}
+                  {/* The blob itself sits in its own box so the wobble it does on
+                      arriving is a scale on nothing but the blob — the centring
+                      translate above is a transform too, and one element can only
+                      carry one. */}
                   <div
-                    className="absolute inset-0 rounded-full"
-                    style={{
-                      backgroundImage:
-                        'radial-gradient(circle closest-side, transparent 55%, var(--color-accent-bright) 100%)',
-                      opacity: 0.3,
-                    }}
+                    className={`absolute inset-0 rounded-full ${arrived ? 'rest-bead-born' : ''}`}
+                    style={{ backgroundImage: BLOB_FILL }}
                   />
-                  {/* And the one hard highlight it catches. Every bead catches it in
-                      the same place, because one light is lighting all of them. */}
-                  <div className="absolute left-[18%] top-[13%] h-[16%] w-[26%] -rotate-[24deg] rounded-full bg-accent-bright/70" />
-                  <div className="absolute bottom-[15%] right-[17%] h-[9%] w-[18%] rotate-[20deg] rounded-full bg-accent-bright/25" />
                 </div>
-                {/* The event: one ring going out from where it happened. */}
-                {arrived && (
-                  <div className="rest-bead-flash absolute -inset-[6%] rounded-full ring-2 ring-accent-bright" />
-                )}
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )

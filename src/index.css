@@ -398,30 +398,10 @@ input[type='number'] {
   animation: rest-globe-settled 620ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* Beads: the ring that answers two beads joining. Mounted with the bead they became
-   — so it runs once, at the moment their surfaces met, and never again. The count
-   dropping by one is the reading here, and a join that only removed a bead would
-   read as one going out rather than two becoming one. */
-@keyframes rest-bead-flash {
-  0% {
-    transform: scale(0.86);
-    opacity: 0;
-  }
-  25% {
-    opacity: 0.85;
-  }
-  100% {
-    transform: scale(1.55);
-    opacity: 0;
-  }
-}
-.rest-bead-flash {
-  animation: rest-bead-flash 620ms ease-out both;
-}
-
-/* And the bead itself taking on the one it just absorbed: a drop that has swallowed
-   another overshoots before it is a sphere again. Mounted the same way, so it lands
-   on the join and not on a tick near it. */
+/* Beads: the blob taking on the one it just absorbed — a drop that has swallowed
+   another overshoots before it is a sphere again. Mounted with the blob they became,
+   so it runs once, on the join, and never again. The goo filter carries the merge
+   itself (see RestShapes), so this is only the settling that follows it. */
 @keyframes rest-bead-born {
   0% {
     transform: scale(0.9);
@@ -690,11 +670,10 @@ input[type='number'] {
   .rest-ice-drip,
   .rest-icicle-drip,
   .rest-fuse-spark,
-  /* Same for the ring a join throws and the band of light crossing the pane: a ring
-     frozen mid-flight, or a sheen parked halfway over the glass, reads as a mistake.
-     Neither is rendered at all under reduced motion (see RestShapes) — this is only
-     here so they can't come back by being rendered again. */
-  .rest-bead-flash,
+  /* Same for the band of light crossing the bead pane: a sheen parked halfway over
+     the glass reads as a mistake, where its absence reads as nothing at all. It is
+     not rendered at all under reduced motion (see RestShapes) — this is only here so
+     it can't come back by being rendered again. */
   .rest-bead-sheen {
     display: none;
   }
