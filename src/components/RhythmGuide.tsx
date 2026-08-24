@@ -27,10 +27,12 @@ import { createRotation, type Rotation } from '../lib/variantRotation'
  * A random variant within the family is chosen per mount, so it varies from one
  * set to the next.
  *
- * No rep count on screen: mid-stretch you're upside down or eyes-closed, and a
- * number you have to focus on to read is worse than useless there. The reps are
- * still counted (the caller persists them, and the target still ends the set) —
- * the guide just says it by brightening once the set is done.
+ * When the set ends itself (hands-free), no rep count goes on screen: mid-stretch
+ * you're upside down or eyes-closed, and a number you have to focus on to read is
+ * worse than useless when nothing is being asked of you. The guide says it by
+ * brightening once the set is done. A set you have to tap to end is the other
+ * case — there the count sits under the shape, because knowing which rep you're
+ * on is the only way to know when to tap.
  */
 const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
 const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
@@ -460,6 +462,18 @@ export function RhythmGuide({
           <BreatheShape variant={variant} scale={scaleFromDepth(depth)} glow={glow} />
         )}
       </div>
+
+      {/* Only for a set that waits on a tap — see the note up top. It brightens
+          with the shape, so the target being met reads the same in both. */}
+      {!endsOnTarget && (
+        <p
+          className={`text-2xl font-bold tabular-nums ${
+            glow === 'done' ? 'text-accent-bright' : 'text-neutral-500'
+          }`}
+        >
+          {reps ? `${rep} / ${reps}` : rep}
+        </p>
+      )}
     </div>
   )
 }
