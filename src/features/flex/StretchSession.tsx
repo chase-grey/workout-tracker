@@ -383,13 +383,16 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
     { label: 'exit without logging', danger: true, onClick: onClose },
   ]
 
-  // The top of the screen, built once and rendered on both the set screen and the
-  // rest screen over it, so resting changes nothing above the fold: the same
+  // The top of the screen, built once and rendered on the set screen and on every
+  // screen that covers it — the rest timer, the get-into-position count — so
+  // nothing above the fold changes as the routine moves between them: the same
   // progress bar, the same stretch named, the same set of it coming, and the same
-  // controls — reachable while you sit down as much as while you're in the pose.
+  // controls — reachable while you sit down or settle in as much as while you're
+  // in the pose.
   //
-  // Which set it names is right either way: the flow advances *before* resting (see
-  // advanceFrom), so through a rest `step` is already the set the rest leads into.
+  // Which set it names is right on all three: the flow advances *before* resting
+  // (see advanceFrom), so through a rest and the count that follows it `step` is
+  // already the set they lead into.
   const topBar = (
     <div className="flex flex-col gap-3">
       {/* How much of the whole routine is still ahead of you. */}
@@ -521,7 +524,10 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       {preparing && photos == null && (readyOverrideSec ?? getReadySec) > 0 && (
         <GetReady
           seconds={readyOverrideSec ?? getReadySec}
-          label={step.exName}
+          // The same top of the screen the set behind it has, exactly as rest
+          // does — the bar, the stretch coming and the session's controls all
+          // stay put and stay tappable while you settle into position.
+          header={topBar}
           onDone={() => {
             setPreparing(false)
             setReadyOverrideSec(null)
