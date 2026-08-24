@@ -43,12 +43,18 @@ function MetricBar({ label, m }: { label: string; m: MetricPace }) {
       </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-surface-2">
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
-        {!m.met && m.required > 0 && (
+        {!m.met && (
           <div
-            // A metric whose window has closed has its whole goal due, putting the
-            // line on the far edge — pull it fully inside so it doesn't clip away.
+            // Both ends of the track would swallow a centred line. Nothing is due
+            // through all of Monday, which puts it on 0%, and a metric whose window
+            // has closed has its whole goal due, which puts it on 100% — so at each
+            // edge the line is pushed inward rather than straddling it.
             className={`absolute inset-y-0 w-0.5 bg-white/70 ${
-              m.required >= m.goal ? '-translate-x-full' : '-translate-x-1/2'
+              m.required <= 0
+                ? 'translate-x-0'
+                : m.required >= m.goal
+                  ? '-translate-x-full'
+                  : '-translate-x-1/2'
             }`}
             style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
           />
