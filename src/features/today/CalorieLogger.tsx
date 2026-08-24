@@ -34,7 +34,7 @@ export function CalorieLogger() {
   const isToday = selDate === today
   const pace = isToday ? caloriePaceFraction(now) : null
 
-  const { label: selLabel, stale } = foodLogStatus(calorieEntries, selDate, now)
+  const { label: selLabel } = foodLogStatus(calorieEntries, selDate, now)
 
   const add = (cal: number) => {
     if (cal === 0) return
@@ -46,7 +46,7 @@ export function CalorieLogger() {
       <div className="flex items-baseline justify-between">
         <p className="text-xs tracking-wider text-neutral-500">
           calories
-          {selLabel && <> · <span className={stale ? 'text-amber-400' : undefined}>{selLabel}</span></>}
+          {selLabel && <> · {selLabel}</>}
         </p>
         <p className="text-sm tabular-nums text-neutral-400">
           <span className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}>
