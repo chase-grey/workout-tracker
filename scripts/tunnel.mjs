@@ -13,10 +13,21 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import net from 'node:net'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
-const PORT = Number(process.env.PORT || 5173)
+/**
+ * The dev server port, and the port the tunnel is aimed at.
+ *
+ * Deliberately not `PORT`: that name is ambient on a dev box. Epic's Session
+ * Runner sets PORT=3991 for everything it launches and serves its own app on
+ * 127.0.0.1:3991, so inheriting it aimed the tunnel at that app rather than this
+ * dev server, and nothing complained — see loopbackPortTaken for why --strictPort
+ * sails past it. The phone was then handed a coach address that answered every
+ * request with a 404.
+ */
+const PORT = Number(process.env.WT_PORT || 5173)
 
 // cloudflared usually isn't on PATH on Windows — it's often just an .exe dropped
 // in the home directory. Try the obvious places before giving up.
@@ -67,7 +78,10 @@ function reclaimStaleProcesses() {
     const ourVite =
       cmd.includes(path.join(root, 'node_modules', 'vite', 'bin', 'vite.js').toLowerCase()) &&
       cmd.includes(`--port ${PORT}`)
-    const ourTunnel = cmd.includes('cloudflared') && cmd.includes(`--url http://localhost:${PORT}`)
+    const ourTunnel =
+      cmd.includes('cloudflared') &&
+      (cmd.includes(`--url http://127.0.0.1:${PORT}`) ||
+        cmd.includes(`--url http://localhost:${PORT}`))
     return ourVite || ourTunnel
   })
 
@@ -111,6 +125,46 @@ process.on('exit', shutdown)
 
 reclaimStaleProcesses()
 
+/**
+ * Is something already answering on the loopback address the tunnel will dial?
+ *
+ * `--strictPort` cannot see this one. A server bound to the specific address
+ * 127.0.0.1 and a Vite bound to the wildcard 0.0.0.0 sit on the same port without
+ * either failing to start, and a loopback connection goes to the specific one. So
+ * the dev server comes up clean, the tunnel comes up clean, and every request
+ * through the tunnel lands on the other server. Check the address the tunnel will
+ * actually dial, not the one Vite reports.
+ */
+function loopbackPortTaken(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port })
+    const settle = (taken) => {
+      socket.destroy()
+      resolve(taken)
+    }
+    socket.setTimeout(1500)
+    socket.once('connect', () => settle(true))
+    socket.once('timeout', () => settle(false))
+    socket.once('error', () => settle(false))
+  })
+}
+
+// A process reclaimed a moment ago can hold its socket a little longer, so wait
+// out our own leftovers rather than refusing to start over them.
+let portFree = false
+for (let i = 0; i < 5 && !portFree; i++) {
+  if (i) await new Promise((resolve) => setTimeout(resolve, 400))
+  portFree = !(await loopbackPortTaken(PORT))
+}
+if (!portFree) {
+  console.error(
+    `\n  Something else is already serving http://127.0.0.1:${PORT}. The tunnel would` +
+      `\n  reach that instead of this dev server, and the phone would be handed an` +
+      `\n  address that isn't the coach. Stop it, or run with WT_PORT=<other> set.\n`,
+  )
+  process.exit(1)
+}
+
 // --- the dev server -------------------------------------------------------
 // Run Vite's JS entry under this Node rather than the `vite` shim: Node on
 // Windows refuses to spawn .cmd wrappers without a shell, and this skips the
@@ -134,7 +188,7 @@ vite.on('exit', (code) => {
   if (portTaken) {
     console.error(
       `\n  Something is already serving port ${PORT} — often a dev server from an earlier` +
-        `\n  run that outlived its terminal. Stop it, or run with PORT=<other> set.\n`,
+        `\n  run that outlived its terminal. Stop it, or run with WT_PORT=<other> set.\n`,
     )
   }
   shutdown()
@@ -143,7 +197,9 @@ vite.on('exit', (code) => {
 
 // --- the tunnel -----------------------------------------------------------
 const bin = resolveCloudflared()
-const cf = run(bin, ['tunnel', '--url', `http://localhost:${PORT}`])
+// 127.0.0.1 rather than localhost: this is the address checked for a squatter
+// above, and `localhost` can also resolve to ::1, where nothing is listening.
+const cf = run(bin, ['tunnel', '--url', `http://127.0.0.1:${PORT}`])
 cf.on('error', (err) => {
   console.error(
     `\n  cloudflared failed to start (${err.code ?? err.message}).` +

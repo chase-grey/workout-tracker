@@ -397,7 +397,19 @@ function shareLink(
       } else if (publish.apiUrl && publish.secret) {
         let tries = 0
         const timer = setInterval(() => {
-          if (published || ++tries > 40) return clearInterval(timer)
+          if (published) return clearInterval(timer)
+          if (++tries > 40) {
+            clearInterval(timer)
+            // Say so out loud. Giving up quietly looks exactly like success from
+            // here — the tunnel is up, the terminal is clean — and only the phone
+            // ever finds out that no address was published.
+            console.warn(
+              '\n  No tunnel to THIS dev server was verified, so no address was published' +
+                '\n  and the phone will not find the coach. Either cloudflared never came' +
+                '\n  up, or its tunnel is pointed at something else on this port.\n',
+            )
+            return
+          }
           void detect()
             .catch(() => null)
             .then((found) => {
