@@ -57,9 +57,10 @@ describe('variantExercises', () => {
 })
 
 describe('the push + core day', () => {
-  it('runs overhead press before chest isolation', () => {
-    const keys = variantExercises(DEFAULT_PLAN.push, 'A').map((e) => e.key)
-    expect(keys.indexOf('machine_overhead_press')).toBeLessThan(keys.indexOf('iso_chest'))
+  it('trains no chest isolation — the presses carry the chest', () => {
+    for (const v of ['A', 'B'] as const) {
+      expect(variantExercises(DEFAULT_PLAN.push, v).map((e) => e.key)).not.toContain('iso_chest')
+    }
   })
 
   it('presses overhead on the machine, not the dumbbells', () => {

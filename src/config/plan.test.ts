@@ -326,9 +326,8 @@ describe('withPlanDefaults', () => {
       expect(keys).toContain('machine_overhead_press')
     })
 
-    it('moves overhead press ahead of chest isolation', () => {
-      const keys = merged.push.exercises.map((e) => e.key)
-      expect(keys.indexOf('machine_overhead_press')).toBeLessThan(keys.indexOf('iso_chest'))
+    it('retires the chest fly along with the other movements this day dropped', () => {
+      expect(merged.push.exercises.map((e) => e.key)).not.toContain('iso_chest')
     })
 
     it('drops the retired finisher and refreshes the day label', () => {

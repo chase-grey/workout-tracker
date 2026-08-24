@@ -210,17 +210,17 @@ describe('applyPlanEdits', () => {
     // The editor sends the row's own index ± 1, counted in the list the exercise
     // is still part of.
     const before = keys(DEFAULT_PLAN, 'push')
-    const i = before.indexOf('iso_chest')
+    const i = before.indexOf('machine_overhead_press')
     const { plan: down } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'moveExercise', day: 'push', key: 'iso_chest', toIndex: i + 1 },
+      { op: 'moveExercise', day: 'push', key: 'machine_overhead_press', toIndex: i + 1 },
     ])
     expect(keys(down, 'push')[i]).toBe(before[i + 1])
-    expect(keys(down, 'push')[i + 1]).toBe('iso_chest')
+    expect(keys(down, 'push')[i + 1]).toBe('machine_overhead_press')
 
     const { plan: up } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'moveExercise', day: 'push', key: 'iso_chest', toIndex: i - 1 },
+      { op: 'moveExercise', day: 'push', key: 'machine_overhead_press', toIndex: i - 1 },
     ])
-    expect(keys(up, 'push')[i - 1]).toBe('iso_chest')
+    expect(keys(up, 'push')[i - 1]).toBe('machine_overhead_press')
     expect(keys(up, 'push')[i]).toBe(before[i - 1])
   })
 
@@ -287,7 +287,7 @@ describe('applyPlanEdits', () => {
     const before = keys(DEFAULT_PLAN, 'push')
     applyPlanEdits(DEFAULT_PLAN, [
       { op: 'moveExercise', day: 'push', key: 'flat_bench', toIndex: 0 },
-      { op: 'reorderDay', day: 'push', keys: ['iso_chest'] },
+      { op: 'reorderDay', day: 'push', keys: ['machine_overhead_press'] },
     ])
     expect(keys(DEFAULT_PLAN, 'push')).toEqual(before)
   })

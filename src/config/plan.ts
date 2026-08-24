@@ -329,9 +329,9 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'incline_bench', name: 'incline bench press', sets: 4, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest', byVariant: { B: { sets: 3 } } },
       { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'chest', byVariant: { B: { sets: 4, swapWith: 'incline_bench' } } },
 
-      // Overhead press is a compound, so it goes before chest isolation — three
-      // sets done fresh beat four done after flys, and front delts already take
-      // heavy work from seven press sets above.
+      // Overhead press follows the presses directly now that the fly is gone —
+      // front delts already take heavy work from seven press sets above, so three
+      // sets is what the shoulders are here for rather than a fourth press.
       //
       // The machine rather than the dumbbells: coming off seven sets of pressing,
       // what limits the dumbbell version is getting them overhead and holding the
@@ -340,7 +340,6 @@ export const DEFAULT_PLAN: Plan = {
       // resolution on the movement that needs it most. The dumbbell press keeps
       // its place on full body, where it's pressed fresh.
       { key: 'machine_overhead_press', name: 'machine overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders' },
-      { key: 'iso_chest', name: 'chest fly / pec deck', sets: 3, repMin: 12, repMax: 15, restSec: 75, increment: 2.5, group: 'chest finisher' },
 
       // Circuit: pushdown → one arm's raise → overhead extension → the other arm's
       // raise, rotating. Alternating delt and tricep the whole way round is the
@@ -624,7 +623,6 @@ const LEGACY_EXERCISE_INCREMENTS: Record<string, number[]> = {
 /** Same idea as LEGACY_EXERCISE_NAMES, for the display group. */
 const LEGACY_EXERCISE_GROUPS: Record<string, string[]> = {
   db_overhead_press: ['shoulders & triceps'],
-  iso_chest: ['chest'],
   tricep_pushdown: ['shoulders & triceps'],
   overhead_tricep_ext: ['shoulders & triceps'],
 }
@@ -647,6 +645,11 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'lateral_raise',
     HANGING_RAISE_KEY,
     'db_overhead_press',
+    // The chest fly / pec deck. Seven sets of pressing across two variants, plus
+    // three more on full body, is already more chest work than the fly was adding
+    // to — and it was the slot that made the day run long. Its logged history
+    // stays; only the plan entry goes.
+    'iso_chest',
   ],
   pull: [
     // The barbell squat, replaced by the leg press on both leg days: there's no
@@ -895,6 +898,7 @@ const RETIRED_EXERCISE_NAMES: Record<string, string> = {
   // Spaced-out keys would read "cable row" and lose the grip, which is the part
   // that says which row the logged sessions were.
   cable_row: 'cable row (neutral grip)',
+  iso_chest: 'chest fly / pec deck',
   // Written closed up, so spacing the key out would read "deadbug".
   [DEAD_BUG_KEY]: 'dead bug',
 }
