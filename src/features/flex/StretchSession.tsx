@@ -40,6 +40,13 @@ const GET_READY_SEC_BY_EX: Record<string, number> = { tailors_pose: 10 }
 const CORE_ENTRY_GET_READY_SEC = 10
 
 /**
+ * Seconds to get into position after taking a photo on the way into the first
+ * stretch. A shot means the phone was propped up somewhere across the room, so
+ * this is the walk back and the settle in, not just the settle in.
+ */
+const POST_PHOTO_GET_READY_SEC = 15
+
+/**
  * A photo screen waiting to be shown, plus the set it interrupts. `resumeIndex`
  * is the step whose rest starts once the screen is dismissed, or null for the
  * cold screen, which runs before the routine has started.
@@ -93,6 +100,9 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   // and not when the session is already running itself forward.
   const [preparing, setPreparing] = useState(rest == null && !fast)
   const [showList, setShowList] = useState(false)
+  // A one-off, longer get-into-position count that replaces the upcoming set's
+  // own — set when a photo screen hands the routine straight to a stretch.
+  const [readyOverrideSec, setReadyOverrideSec] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
   // Photo screens already offered this session, so resuming doesn't re-ask.
   const [seenGates, setSeenGates] = useState<Set<string>>(() => new Set(saved?.photoGates ?? []))
@@ -325,11 +335,21 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
   }
 
   // Leave a photo screen (shots taken or skipped) and pick the routine back up.
-  const closePhotos = () => {
+  // The cold screen opens the session, so the routine goes straight into its
+  // first stretch from here — and if a shot was taken, the get-into-position
+  // count is stretched to cover retrieving the phone.
+  const closePhotos = (tookAny: boolean) => {
     if (!photos) return
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
     setPhotos(null)
-    if (photos.resumeIndex != null) advanceFrom(photos.resumeIndex, done)
+    if (photos.resumeIndex != null) {
+      advanceFrom(photos.resumeIndex, done)
+      return
+    }
+    if (tookAny && !fast) {
+      setReadyOverrideSec(POST_PHOTO_GET_READY_SEC)
+      setPreparing(true)
+    }
   }
 
   // Tapping the screen finishes the set — your hands are busy mid-stretch, so
@@ -498,8 +518,15 @@ export function StretchSession({ onClose }: { onClose: () => void }) {
       {/* The get-into-position count waits its turn behind a photo screen, and
           only shows for a set that has one — mobility sets and the first core
           set; skipped inside the core block, which rests instead. */}
-      {preparing && photos == null && getReadySec > 0 && (
-        <GetReady seconds={getReadySec} label={step.exName} onDone={() => setPreparing(false)} />
+      {preparing && photos == null && (readyOverrideSec ?? getReadySec) > 0 && (
+        <GetReady
+          seconds={readyOverrideSec ?? getReadySec}
+          label={step.exName}
+          onDone={() => {
+            setPreparing(false)
+            setReadyOverrideSec(null)
+          }}
+        />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
       {photos && <PhotoStep gate={photos.gate} onCapture={logMeasurement} onDone={closePhotos} />}

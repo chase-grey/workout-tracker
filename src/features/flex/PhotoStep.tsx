@@ -12,7 +12,9 @@ import { toISODate } from '../../lib/dates'
  * A photo screen in the stretch flow: one row per shot the moment calls for,
  * each opening the camera. It owns the screen while it's up — the routine's
  * rhythm and rest clock are both held — and every shot is optional, so the
- * footer button moves on whether or not any were taken.
+ * footer button moves on whether or not any were taken. `onDone` is told whether
+ * any shot was actually taken, so the routine can allow for the time it takes to
+ * put the phone down and get back into position.
  */
 export function PhotoStep({
   gate,
@@ -21,7 +23,7 @@ export function PhotoStep({
 }: {
   gate: PhotoGate
   onCapture: (kind: PhotoKind, result: MeasureResult) => void
-  onDone: () => void
+  onDone: (tookAny: boolean) => void
 }) {
   const { flexEntries } = useData()
   const [open, setOpen] = useState<PhotoKind | null>(null)
@@ -64,7 +66,7 @@ export function PhotoStep({
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
         <button
-          onClick={onDone}
+          onClick={() => onDone(anyTaken)}
           className="flex min-h-[56px] w-full items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
         >
           {anyTaken ? 'continue' : 'skip'}
@@ -95,7 +97,7 @@ export function PhotoStep({
             // The measurement gets its own card first; only then does the screen
             // move on — automatically, once every shot it asked for is in.
             if (trends.length > 0) setContext({ trends, last })
-            else if (last) onDone()
+            else if (last) onDone(true)
           }}
         />
       )}
@@ -105,7 +107,7 @@ export function PhotoStep({
           trends={context.trends}
           onDismiss={() => {
             setContext(null)
-            if (context.last) onDone()
+            if (context.last) onDone(true)
           }}
         />
       )}
