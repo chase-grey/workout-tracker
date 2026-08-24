@@ -340,7 +340,10 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
   // 'curtain': the whole viewport is the vessel, and the level falls from the top
   // of the screen to the bottom over the rest.
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+    // Pulled out past the rest screen's own padding, like the fuse: a surface line
+    // that stops short of both edges reads as a bar sitting on the screen instead
+    // of as the level of something the screen is full of.
+    <div className="pointer-events-none absolute inset-y-0 -left-6 -right-6 overflow-hidden" aria-hidden>
       <div
         className="absolute inset-x-0 top-0 bg-accent-bright/20"
         style={{ height: `${fraction * 100}%`, transition: 'height 260ms linear' }}
