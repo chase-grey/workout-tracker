@@ -510,7 +510,12 @@ export default defineConfig(({ mode }) => {
               options: {
                 cacheName: 'pose-detector',
                 expiration: { maxEntries: WASM_FILES.length + 1 },
-                cacheableResponse: { statuses: [0, 200] },
+                // A full 200 only. These are same-origin, so an opaque (status
+                // 0) response means something answered that we can't read —
+                // storing it would pin an unusable runtime in the cache, and
+                // cache-first would keep serving it back. See getLandmarker in
+                // src/lib/pose.ts for the other half of this.
+                cacheableResponse: { statuses: [200] },
               },
             },
           ],

@@ -40,15 +40,41 @@ type VisionModule = {
 
 let cached: Landmarker | null = null
 
-async function getLandmarker(): Promise<Landmarker> {
-  if (cached) return cached
+/** Matches the runtimeCaching cacheName in vite.config.ts. */
+const ASSET_CACHE = 'pose-detector'
+
+async function build(): Promise<Landmarker> {
   const vision = (await import('@mediapipe/tasks-vision')) as unknown as VisionModule
   const fileset = await vision.FilesetResolver.forVisionTasks(WASM_URL)
-  cached = await vision.PoseLandmarker.createFromOptions(fileset, {
+  return vision.PoseLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: MODEL_URL },
     runningMode: 'IMAGE',
     numPoses: 1,
   })
+}
+
+/**
+ * Build the detector, and give a poisoned cache one chance to heal.
+ *
+ * The service worker holds the runtime and model cache-first, which is what
+ * lets measuring work offline — but it also makes the first download the only
+ * one. A fetch cut short on gym wifi leaves a truncated wasm or model in there,
+ * and every later measurement reads that same wreckage and fails the same way,
+ * because a cache hit is never revalidated. Dropping the cache before a second
+ * attempt is what turns that dead end back into a plain retry over the network.
+ */
+async function getLandmarker(): Promise<Landmarker> {
+  if (cached) return cached
+  try {
+    cached = await build()
+  } catch {
+    try {
+      await caches.delete(ASSET_CACHE)
+    } catch {
+      // No Cache Storage to clear; the retry just repeats over the network.
+    }
+    cached = await build()
+  }
   return cached
 }
 
