@@ -58,6 +58,9 @@
  *                 loggedAt = ISO time of the last tap made ON that date and lastAmount = how many calories that tap added;
  *                 both omitted on a backfill, which keeps the stored pair)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
+ *   GET  ?route=vitamins[&since=YYYY-MM-DD]
+ *   POST ?route=vitamins      body: { date, vitamins, iron, loggedAt } (upsert by date; a day is
+ *                                   stored whole, so a new row for a date replaces it)
  *   POST ?route=durations     body: { date, kind, dayType, routine, totalSec, restSec } (append)
  *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
  *                 (folds a finished session's per-set active times + rests into the rolling averages)
@@ -104,6 +107,9 @@ const FLEX_HEADERS = [
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
+// The daily pills: the multivitamin, and the iron that rides along every other
+// day. Booleans, stored as TRUE/FALSE and read back through boolOf.
+const VITAMIN_HEADERS = ['date', 'vitamins', 'iron', 'logged_at']
 // `routine` is which stretch routine a stretch session was, blank for a workout
 // and for a stretch logged before there were two. Appended, and the generic
 // sheet() helper fills a missing header cell in on its own, so no migration.
@@ -132,6 +138,8 @@ function doGet(e) {
         return json(getCalories(e.parameter.since))
       case 'measurements':
         return json(getMeasurements(e.parameter.since))
+      case 'vitamins':
+        return json(getVitamins(e.parameter.since))
       case 'durations':
         return json(getDurations(e.parameter.since))
       case 'exercise_times':
@@ -194,6 +202,8 @@ function doPost(e) {
         return json(withLock(function () { return appendCalories(body) }))
       case 'measurements':
         return json(withLock(function () { return appendMeasurements(body) }))
+      case 'vitamins':
+        return json(withLock(function () { return appendVitamins(body) }))
       case 'durations':
         return json(withLock(function () { return appendDurations(body) }))
       case 'exercise_times':
@@ -702,6 +712,68 @@ function appendMeasurements(body) {
   // as saved and dropped by the client.
   if (saved === 0 && list.length) {
     throw new Error('No valid measurement rows among ' + list.length + ' submitted')
+  }
+  return { saved: saved }
+}
+
+function getVitamins(since) {
+  const sh = sheet('vitamins', VITAMIN_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0]) continue
+    const date = isoDate(r[0])
+    if (since && date < since) continue
+    const entry = { date: date, vitamins: boolOf(r[1]), iron: boolOf(r[2]) }
+    // Only send a log time when one was actually recorded — a blank cell has to
+    // reach the client as "unknown", not as an unparseable empty string.
+    const loggedAt = String(r[3] || '')
+    if (loggedAt) entry.loggedAt = loggedAt
+    out.push(entry)
+  }
+  return out
+}
+
+// Upsert by date: a day's pills are stored as one row holding both doses, so a
+// new value for a date overwrites that date's row rather than appending to it.
+function appendVitamins(body) {
+  const sh = sheet('vitamins', VITAMIN_HEADERS)
+  const list = Array.isArray(body.entries) ? body.entries : [body]
+  const rows = sh.getDataRange().getValues()
+
+  const rowByDate = {}
+  const loggedAtByDate = {}
+  for (let i = 1; i < rows.length; i++) {
+    const d = isoDate(rows[i][0])
+    if (d && !(d in rowByDate)) {
+      rowByDate[d] = i + 1
+      loggedAtByDate[d] = String(rows[i][3] || '')
+    }
+  }
+
+  let saved = 0
+  list
+    .filter(function (e) {
+      return e && e.date
+    })
+    .forEach(function (e) {
+      // A backfill sends no log time; keep the one already stored rather than
+      // blanking a real same-day timestamp with the correction's silence.
+      const at = e.loggedAt || loggedAtByDate[e.date] || ''
+      const values = [e.date, boolOf(e.vitamins), boolOf(e.iron), at]
+      const existingRow = rowByDate[e.date]
+      if (existingRow) {
+        sh.getRange(existingRow, 1, 1, VITAMIN_HEADERS.length).setValues([values])
+      } else {
+        sh.appendRow(values)
+        rowByDate[e.date] = sh.getLastRow()
+        loggedAtByDate[e.date] = at
+      }
+      saved++
+    })
+  if (saved === 0 && list.length) {
+    throw new Error('No valid vitamin rows among ' + list.length + ' submitted')
   }
   return { saved: saved }
 }
@@ -1241,6 +1313,16 @@ function sheet(name, headers) {
     sh.getRange(1, width + 1, 1, missing.length).setValues([missing])
   }
   return sh
+}
+
+// A sheet cell as a boolean. A checkbox comes back as a real boolean, but a
+// hand-typed cell is the string "TRUE"/"true"/"1" — and everything else, blank
+// included, is false.
+function boolOf(value) {
+  if (value === true) return true
+  if (value === false || value === '' || value === null || value === undefined) return false
+  const s = String(value).trim().toLowerCase()
+  return s === 'true' || s === 'yes' || s === '1'
 }
 
 function isoDate(value) {

@@ -35,37 +35,53 @@ const WK3 = '2026-06-29'
 // The week TODAY sits in, still in progress.
 const CUR = '2026-07-06'
 
-// Defaults: full = w>=2, f>=2, cal>=6; half = w>=1, f>=1, cal>=5.
+// Defaults: full = w>=2, f>=2, cal>=6, pills>=6; half = w>=1, f>=1, cal>=5, pills>=5.
 
 describe('classifyWeek', () => {
   it('classifies a full week (exactly at goal, not exceeded)', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 6 }),
+      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 6 }),
     ).toEqual({ tier: 'full', exceeded: false })
   })
 
   it('classifies an exceeded full week', () => {
     expect(
-      classifyWeek({ workouts: 3, flex: 2, calDays: 6 }),
+      classifyWeek({ workouts: 3, flex: 2, calDays: 6, vitaminDays: 6 }),
     ).toEqual({ tier: 'full', exceeded: true })
   })
 
   it('classifies a half week', () => {
     expect(
-      classifyWeek({ workouts: 1, flex: 1, calDays: 5 }),
+      classifyWeek({ workouts: 1, flex: 1, calDays: 5, vitaminDays: 5 }),
     ).toEqual({ tier: 'half', exceeded: false })
   })
 
   it('classifies an under week', () => {
     expect(
-      classifyWeek({ workouts: 0, flex: 0, calDays: 0 }),
+      classifyWeek({ workouts: 0, flex: 0, calDays: 0, vitaminDays: 0 }),
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
   it('is under when one dimension misses the half threshold', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 4 }),
+      classifyWeek({ workouts: 2, flex: 2, calDays: 4, vitaminDays: 6 }),
     ).toEqual({ tier: 'under', exceeded: false })
+  })
+
+  it('is under when the pills miss the half threshold', () => {
+    expect(
+      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 4 }),
+    ).toEqual({ tier: 'under', exceeded: false })
+  })
+
+  it('leaves a goal of zero unjudged', () => {
+    expect(
+      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 0 }, {
+        ...DEFAULT_WEEKLY_GOALS,
+        vitaminDays: 0,
+        halfVitaminDays: 0,
+      }),
+    ).toEqual({ tier: 'full', exceeded: false })
   })
 })
 
@@ -248,7 +264,7 @@ describe('weeklyStreakHistory', () => {
       today: TODAY,
     })
     expect(wk1.week).toBe(WK1)
-    expect(wk1.counts).toEqual({ workouts: 2, flex: 2, calDays: 6 })
+    expect(wk1.counts).toEqual({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 0 })
     expect(wk1.tier).toBe('full')
     expect(wk1.outcome).toBe('advanced')
     expect(wk1.streakAfter).toBe(1)
@@ -263,7 +279,7 @@ describe('weeklyStreakHistory', () => {
       calorieHitDates: daysInWeek(WK1, 6),
       today: TODAY,
     })
-    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6 })
+    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6, vitaminDays: 0 })
     expect(wk1.tier).toBe('half')
   })
 
@@ -331,6 +347,48 @@ describe('weeklyStreakHistory', () => {
       today: TODAY,
     })
     expect(rows.every((r) => r.week < CUR)).toBe(true)
+  })
+
+  it('leaves the weeks before the pills were tracked unjudged', () => {
+    // Full weeks all round, but the pill log only starts in WK3 — so WK1 and WK2
+    // advance the run rather than resetting it for a habit that wasn't tracked.
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6), ...daysInWeek(WK3, 6)],
+      vitaminDates: daysInWeek(WK3, 3),
+      today: TODAY,
+    })
+    expect(rows.map((r) => r.outcome)).toEqual(['advanced', 'advanced', 'advanced'])
+    expect(rows[2].counts.vitaminDays).toBe(3)
+  })
+
+  it('judges the pills from the week after the first one logged', () => {
+    // The pills start in WK1, so WK1 is spared and WK2 — three days short of the
+    // goal, and under the half threshold — breaks the run.
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6)],
+      vitaminDates: [...daysInWeek(WK1, 3), ...daysInWeek(WK2, 3)],
+      today: TODAY,
+    })
+    expect(rows[0]).toMatchObject({ week: WK1, tier: 'full', outcome: 'advanced' })
+    expect(rows[1]).toMatchObject({ week: WK2, tier: 'under', outcome: 'reset' })
+  })
+
+  it('counts a full pill week toward the run', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6)],
+      vitaminDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6)],
+      today: TODAY,
+    })
+    // WK3 has no data at all and is replayed as an empty week, so only the two
+    // logged weeks are asserted here.
+    expect(rows[0]).toMatchObject({ week: WK1, tier: 'full', outcome: 'advanced' })
+    expect(rows[1]).toMatchObject({ week: WK2, tier: 'full', outcome: 'advanced', streakAfter: 2 })
   })
 
   it('agrees with computeWeeklyStreak', () => {

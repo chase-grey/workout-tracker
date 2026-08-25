@@ -52,6 +52,8 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=import` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=notes` | `{ session, exercise, notes }` | `{ saved }` |
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
+| GET | `?route=vitamins&since=YYYY-MM-DD` | — | `{date, vitamins, iron, loggedAt?}[]` |
+| POST | `?route=vitamins` | `{ date, vitamins, iron, loggedAt }` | `{ saved }` |
 | GET | `?route=settings` | — | settings blob, or `null` |
 | POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
 | GET | `?route=chat_endpoint&secret=…` | — | `{ url, updatedAt }` |
@@ -60,6 +62,13 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=report_issue` | `{ secret, title, body, area, context }` | `{ number, url }` |
 | GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |
 | POST | `?route=answer_issue` | `{ secret, number, answer }` | `{ answered }` |
+
+### Vitamins
+
+A `vitamins` tab, one row per date, holding the day's two doses as booleans: the
+multivitamin and the iron that rides along every other day. Upserted by date — a
+day is sent whole, so a new row for a date replaces it rather than appending, and
+a backfill that carries no `loggedAt` keeps the timestamp already stored.
 
 ### Notes
 

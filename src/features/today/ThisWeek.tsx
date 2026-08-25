@@ -12,6 +12,7 @@ import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
 import { weekPace, type MetricPace } from '../../lib/weekPace'
+import { checkpointFraction, overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
 
 /**
@@ -79,13 +80,12 @@ export function ThisWeek() {
     [workouts, bodyWeights, measurements, heightIn, flexEntries],
   )
 
-  const overallToGoal =
-    (Math.min(wp.workouts, goals.workouts) / goals.workouts +
-      Math.min(wp.flex, goals.flex) / goals.flex +
-      Math.min(wp.calDays, goals.calDays) / goals.calDays) /
-    3
-  const checkpointFrac =
-    (goals.halfWorkouts / goals.workouts + goals.halfFlex / goals.flex + goals.halfCalDays / goals.calDays) / 3
+  // Read from the same two functions the cheers are judged by, rather than
+  // recomputed here: the bar and the celebration that fires when it fills have to
+  // agree about what "the week" averages, and a fourth metric added to one and
+  // not the other is exactly how they'd drift.
+  const overallToGoal = overallProgress(wp, goals)
+  const checkpointFrac = checkpointFraction(goals)
 
   // The pace marker used to track elapsed time, which demanded fractions of a
   // workout mid-Monday; it now follows the schedule in whole units, reaching the
@@ -138,6 +138,7 @@ export function ThisWeek() {
         <MetricBar label="workouts" m={byKey.get('workouts')!} />
         <MetricBar label="flex sessions" m={byKey.get('flex')!} />
         <MetricBar label="calorie days" m={byKey.get('calDays')!} />
+        <MetricBar label="vitamins" m={byKey.get('vitaminDays')!} />
       </div>
 
       {summary.weightTrend !== null && (

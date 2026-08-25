@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { MdAcUnit, MdLocalFireDepartment, MdStar } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { parseISODate } from '../../lib/dates'
-import { splitAtCurrentRun, type WeekResult, type WeeklyGoalConfig } from '../../lib/weeklyStreak'
+import { splitAtCurrentRun, type WeekResult } from '../../lib/weeklyStreak'
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
@@ -47,7 +47,12 @@ function Outcome({ row }: { row: WeekResult }) {
   return <span className="shrink-0 text-sm font-semibold text-amber-400">streak lost</span>
 }
 
-function Row({ row, goals }: { row: WeekResult; goals: WeeklyGoalConfig }) {
+function Row({ row }: { row: WeekResult }) {
+  // Each week against the bar it was actually held to, not today's: a goal a week
+  // predates was zeroed out for it (see weeklyStreak.weeklyStreakHistory), and
+  // reporting it here as missed would blame the week for a habit that wasn't
+  // being tracked yet.
+  const goals = row.goals
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0">
       <div className="min-w-0">
@@ -58,6 +63,9 @@ function Row({ row, goals }: { row: WeekResult; goals: WeeklyGoalConfig }) {
           <Count label="workouts" value={row.counts.workouts} goal={goals.workouts} />
           <Count label="flex" value={row.counts.flex} goal={goals.flex} />
           <Count label="cal days" value={row.counts.calDays} goal={goals.calDays} />
+          {goals.vitaminDays > 0 && (
+            <Count label="pills" value={row.counts.vitaminDays} goal={goals.vitaminDays} />
+          )}
         </div>
       </div>
       <Outcome row={row} />
@@ -77,7 +85,7 @@ function Row({ row, goals }: { row: WeekResult; goals: WeeklyGoalConfig }) {
  * history doesn't push the week's bars off the screen they were opened from.
  */
 export function StreakHistoryPanel() {
-  const { streakHistory, goals } = useData()
+  const { streakHistory } = useData()
   const { earlier, run } = splitAtCurrentRun(streakHistory)
   const [showEarlier, setShowEarlier] = useState(run.length === 0)
 
@@ -88,7 +96,7 @@ export function StreakHistoryPanel() {
   return (
     <div className="mb-3 max-h-[45vh] overflow-y-auto rounded-xl bg-surface-2 px-3 py-1">
       {runRows.map((row) => (
-        <Row key={row.week} row={row} goals={goals} />
+        <Row key={row.week} row={row} />
       ))}
 
       {earlierRows.length > 0 && (
@@ -104,7 +112,7 @@ export function StreakHistoryPanel() {
           {showEarlier && (
             <div className="opacity-70">
               {earlierRows.map((row) => (
-                <Row key={row.week} row={row} goals={goals} />
+                <Row key={row.week} row={row} />
               ))}
             </div>
           )}

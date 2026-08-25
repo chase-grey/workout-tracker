@@ -2,6 +2,7 @@ import type { BodyWeightEntry, WorkoutRow } from '../types'
 import type { Plan } from '../config/plan'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
+import type { VitaminEntry } from '../lib/vitamins'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { ExerciseAverages, SessionDuration, SessionTimeSamples } from '../lib/estimate'
 import type { SyncedSettings } from '../lib/settingsSync'
@@ -89,6 +90,8 @@ export const api = {
     post<{ saved: number; stale?: boolean }>('settings', { settings }),
   fetchCalories: (since?: string) => get<CalorieEntry[]>('calories', since ? { since } : {}),
   postCalorie: (entry: CalorieEntry) => post<{ saved: number }>('calories', entry),
+  fetchVitamins: (since?: string) => get<VitaminEntry[]>('vitamins', since ? { since } : {}),
+  postVitamin: (entry: VitaminEntry) => post<{ saved: number }>('vitamins', entry),
   fetchMeasurements: (since?: string) =>
     get<MeasurementEntry[]>('measurements', since ? { since } : {}),
   postMeasurement: (entry: MeasurementEntry) => post<{ saved: number }>('measurements', entry),

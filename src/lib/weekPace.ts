@@ -101,6 +101,7 @@ export const METRIC_WINDOW: Record<MetricKey, number> = {
   workouts: DAYS_IN_WEEK,
   flex: 5,
   calDays: DAYS_IN_WEEK,
+  vitaminDays: DAYS_IN_WEEK,
 }
 
 /** One metric's standing against both the schedule and the days left. */
@@ -150,15 +151,15 @@ export type WeekPace = {
 }
 
 /** Metric order for display and for breaking buffer ties. */
-export const METRIC_KEYS: MetricKey[] = ['workouts', 'flex', 'calDays']
+export const METRIC_KEYS: MetricKey[] = ['workouts', 'flex', 'calDays', 'vitaminDays']
 
 /**
  * The week's pace: each metric against its schedule, plus the buffer on whichever
  * one has the least room.
  *
  * The buffer is a MINIMUM rather than an average because the week isn't finished
- * until all three goals are, so the tightest metric is the one that decides
- * whether it's still on time.
+ * until every goal is, so the tightest metric is the one that decides whether
+ * it's still on time.
  */
 export function weekPace(
   counts: WeekCounts,
