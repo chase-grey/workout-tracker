@@ -66,6 +66,9 @@ function Row({ row }: { row: WeekResult }) {
           {goals.vitaminDays > 0 && (
             <Count label="pills" value={row.counts.vitaminDays} goal={goals.vitaminDays} />
           )}
+          {goals.whiteningDays > 0 && (
+            <Count label="strips" value={row.counts.whiteningDays} goal={goals.whiteningDays} />
+          )}
         </div>
       </div>
       <Outcome row={row} />

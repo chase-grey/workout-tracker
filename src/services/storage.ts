@@ -6,6 +6,7 @@ import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../config
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { VitaminEntry } from '../lib/vitamins'
+import type { WhiteningEntry } from '../lib/whitening'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { LockedProjections } from '../lib/goalLock'
 import type { TrackedIssue } from './issues'
@@ -23,6 +24,7 @@ const KEYS = {
   cacheFlex: 'wt.cache.flex',
   cacheCalories: 'wt.cache.calories',
   cacheVitamins: 'wt.cache.vitamins',
+  cacheWhitening: 'wt.cache.whitening',
   cacheMeasurements: 'wt.cache.measurements',
   cacheDurations: 'wt.cache.durations',
   cacheIssues: 'wt.cache.issues',
@@ -219,6 +221,9 @@ export const storage = {
 
   loadVitamins: (): VitaminEntry[] => read(KEYS.cacheVitamins, []),
   saveVitamins: (entries: VitaminEntry[]) => write(KEYS.cacheVitamins, entries),
+
+  loadWhitening: (): WhiteningEntry[] => read(KEYS.cacheWhitening, []),
+  saveWhitening: (entries: WhiteningEntry[]) => write(KEYS.cacheWhitening, entries),
 
   caloriesRepaired: (): boolean => read(KEYS.caloriesRepaired, false),
   markCaloriesRepaired: () => write(KEYS.caloriesRepaired, true),

@@ -2,16 +2,19 @@
 
 import { weekStartISO, toISODate, parseISODate, enumerateWeeks } from './dates'
 import { HALF_VITAMIN_DAYS, VITAMIN_DAYS_GOAL } from './vitamins'
+import { HALF_WHITENING_DAYS, WHITENING_DAYS_GOAL } from './whitening'
 
 export type WeeklyGoalConfig = {
   workouts: number
   flex: number
   calDays: number
   vitaminDays: number
+  whiteningDays: number
   halfWorkouts: number
   halfFlex: number
   halfCalDays: number
   halfVitaminDays: number
+  halfWhiteningDays: number
 }
 
 export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig = {
@@ -19,15 +22,23 @@ export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig = {
   flex: 2,
   calDays: 6,
   vitaminDays: VITAMIN_DAYS_GOAL,
+  whiteningDays: WHITENING_DAYS_GOAL,
   halfWorkouts: 1,
   halfFlex: 1,
   halfCalDays: 5,
   halfVitaminDays: HALF_VITAMIN_DAYS,
+  halfWhiteningDays: HALF_WHITENING_DAYS,
 }
 
 export type WeekTier = 'full' | 'half' | 'under'
 
-export type WeekCounts = { workouts: number; flex: number; calDays: number; vitaminDays: number }
+export type WeekCounts = {
+  workouts: number
+  flex: number
+  calDays: number
+  vitaminDays: number
+  whiteningDays: number
+}
 
 /**
  * Classify a single week's counts against the goal config.
@@ -44,14 +55,16 @@ export function classifyWeek(
     counts.workouts >= config.workouts &&
     counts.flex >= config.flex &&
     counts.calDays >= config.calDays &&
-    counts.vitaminDays >= config.vitaminDays
+    counts.vitaminDays >= config.vitaminDays &&
+    counts.whiteningDays >= config.whiteningDays
 
   if (isFull) {
     const exceeded =
       counts.workouts > config.workouts ||
       counts.flex > config.flex ||
       counts.calDays > config.calDays ||
-      counts.vitaminDays > config.vitaminDays
+      counts.vitaminDays > config.vitaminDays ||
+      counts.whiteningDays > config.whiteningDays
     return { tier: 'full', exceeded }
   }
 
@@ -59,7 +72,8 @@ export function classifyWeek(
     counts.workouts >= config.halfWorkouts &&
     counts.flex >= config.halfFlex &&
     counts.calDays >= config.halfCalDays &&
-    counts.vitaminDays >= config.halfVitaminDays
+    counts.vitaminDays >= config.halfVitaminDays &&
+    counts.whiteningDays >= config.halfWhiteningDays
 
   if (isHalf) {
     return { tier: 'half', exceeded: false }
@@ -119,6 +133,13 @@ export type StreakInput = {
    * without one isn't judged on them — see {@link weeklyStreakHistory}.
    */
   vitaminDates?: string[]
+  /**
+   * Days the whitening strip went on (see whitening.whiteningGoalDates).
+   * Optional for the same reason as {@link StreakInput.vitaminDates}: a caller
+   * with no strip log has no strip weeks, and a week without one isn't judged on
+   * them.
+   */
+  whiteningDates?: string[]
   today?: Date
   config?: WeeklyGoalConfig
 }
@@ -144,6 +165,7 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   const flexByWeek = bucketByWeek(input.flexDates)
   const calByWeek = bucketByWeek(input.calorieHitDates)
   const vitaminByWeek = bucketByWeek(input.vitaminDates ?? [])
+  const whiteningByWeek = bucketByWeek(input.whiteningDates ?? [])
 
   const currentWeekStart = weekStartISO(toISODate(today))
   const countsFor = (week: string): WeekCounts => ({
@@ -151,26 +173,41 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
     flex: flexByWeek.get(week) ?? 0,
     calDays: calByWeek.get(week) ?? 0,
     vitaminDays: vitaminByWeek.get(week) ?? 0,
+    whiteningDays: whiteningByWeek.get(week) ?? 0,
   })
 
-  // The pill goal starts judging weeks only after the first week it was logged
-  // in. Every week before that has no pill log because nothing was tracking the
-  // habit, and judging those would reset the run retroactively for a goal that
-  // didn't exist yet; the starting week is spared too, since a habit picked up on
-  // a Thursday can't fill a Monday-to-Sunday week. From the Monday after it
-  // counts like everything else — see the zero-goal rule in classifyWeek.
-  const vitaminWeeks = [...vitaminByWeek.keys()].sort()
-  const judgeVitaminsFrom = vitaminWeeks.length ? nextWeekStart(vitaminWeeks[0]) : null
-  const configFor = (week: string): WeeklyGoalConfig =>
-    judgeVitaminsFrom !== null && week >= judgeVitaminsFrom
-      ? config
-      : { ...config, vitaminDays: 0, halfVitaminDays: 0 }
+  // A daily-habit goal starts judging weeks only after the first week it was
+  // logged in. Every week before that has no log because nothing was tracking
+  // the habit, and judging those would reset the run retroactively for a goal
+  // that didn't exist yet; the starting week is spared too, since a habit picked
+  // up on a Thursday can't fill a Monday-to-Sunday week. From the Monday after
+  // it counts like everything else — see the zero-goal rule in classifyWeek.
+  //
+  // Each habit is gated on its own first week, not on a shared one: the pills
+  // and the strips were picked up months apart, so a single start date would
+  // either judge the strips over weeks that predate them or stop judging the
+  // pills over weeks they were logged in.
+  const judgeFrom = (byWeek: Map<string, number>): string | null => {
+    const weeks = [...byWeek.keys()].sort()
+    return weeks.length ? nextWeekStart(weeks[0]) : null
+  }
+  const judgeVitaminsFrom = judgeFrom(vitaminByWeek)
+  const judgeWhiteningFrom = judgeFrom(whiteningByWeek)
+  const configFor = (week: string): WeeklyGoalConfig => {
+    let c = config
+    if (judgeVitaminsFrom === null || week < judgeVitaminsFrom)
+      c = { ...c, vitaminDays: 0, halfVitaminDays: 0 }
+    if (judgeWhiteningFrom === null || week < judgeWhiteningFrom)
+      c = { ...c, whiteningDays: 0, halfWhiteningDays: 0 }
+    return c
+  }
 
   const allWeeks = [
     ...workoutByWeek.keys(),
     ...flexByWeek.keys(),
     ...calByWeek.keys(),
     ...vitaminByWeek.keys(),
+    ...whiteningByWeek.keys(),
   ]
   if (allWeeks.length === 0) return []
   const earliestWeek = allWeeks.reduce((min, w) => (w < min ? w : min), allWeeks[0])

@@ -3,6 +3,7 @@ import { useData } from '../../store/DataContext'
 import { ThisWeek } from './ThisWeek'
 import { CalorieLogger } from './CalorieLogger'
 import { VitaminsCard } from './VitaminsCard'
+import { WhiteningCard } from './WhiteningCard'
 import { WeightCard } from './WeightCard'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
@@ -105,6 +106,8 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
       <CalorieLogger />
 
       <VitaminsCard />
+
+      <WhiteningCard />
 
       <WeightCard />
 

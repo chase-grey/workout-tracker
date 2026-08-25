@@ -30,6 +30,13 @@ import {
   setVitaminDay,
   type VitaminEntry,
 } from '../lib/vitamins'
+import {
+  dedupeWhiteningByDate,
+  whiteningEntryFor,
+  whiteningGoalDates,
+  setWhiteningDay,
+  type WhiteningEntry,
+} from '../lib/whitening'
 import { dedupeMeasurementsByDate, type MeasurementEntry } from '../lib/bodyComp'
 import {
   applySessionSamples,
@@ -74,6 +81,7 @@ export type WeekProgress = {
   flex: number
   calDays: number
   vitaminDays: number
+  whiteningDays: number
 }
 
 /**
@@ -162,6 +170,7 @@ type DataContextValue = {
   flexEntries: FlexEntry[]
   calorieEntries: CalorieEntry[]
   vitaminEntries: VitaminEntry[]
+  whiteningEntries: WhiteningEntry[]
   measurements: MeasurementEntry[]
   durations: SessionDuration[]
   exerciseAverages: ExerciseAverages
@@ -191,6 +200,11 @@ type DataContextValue = {
     patch: { vitamins?: boolean; iron?: boolean },
     date?: string,
   ) => Promise<void>
+  /**
+   * Record whether the day's whitening strip went on. `false` is how a mis-tap
+   * is undone, the same way the pill card's undo works.
+   */
+  logWhitening: (strips: boolean, date?: string) => Promise<void>
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   logExerciseTimes: (samples: SessionTimeSamples) => Promise<void>
@@ -217,6 +231,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [flexEntries, setFlexEntries] = useState<FlexEntry[]>(() => storage.loadFlex())
   const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(() => storage.loadCalories())
   const [vitaminEntries, setVitaminEntries] = useState<VitaminEntry[]>(() => storage.loadVitamins())
+  const [whiteningEntries, setWhiteningEntries] = useState<WhiteningEntry[]>(() =>
+    storage.loadWhitening(),
+  )
   const [measurements, setMeasurements] = useState<MeasurementEntry[]>(() => storage.loadMeasurements())
   const [durations, setDurations] = useState<SessionDuration[]>(() => storage.loadDurations())
   const [exerciseAverages, setExerciseAverages] = useState<ExerciseAverages>(() =>
@@ -268,6 +285,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setVitaminEntries(e)
     storage.saveVitamins(e)
   }, [])
+  const persistWhitening = useCallback((e: WhiteningEntry[]) => {
+    setWhiteningEntries(e)
+    storage.saveWhitening(e)
+  }, [])
   const persistMeasurements = useCallback((e: MeasurementEntry[]) => {
     setMeasurements(e)
     storage.saveMeasurements(e)
@@ -303,6 +324,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         else if (w.type === 'flex') await api.postFlex(w.entry)
         else if (w.type === 'calorie') await api.postCalorie(w.entry)
         else if (w.type === 'vitamin') await api.postVitamin(w.entry)
+        else if (w.type === 'whitening') await api.postWhitening(w.entry)
         else if (w.type === 'measurement') await api.postMeasurement(w.entry)
         else if (w.type === 'duration') await api.postDuration(w.entry)
         else if (w.type === 'exerciseTimes') await api.postExerciseTimes(w.samples)
@@ -435,6 +457,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore — an older backend won't have this route */
     }
     try {
+      const w = await api.fetchWhitening()
+      // Same rule as the pills: a strip day is stored whole, so a fetched date
+      // replaces this device's row, but only once the outbox is empty — while a
+      // tap is still queued the local row is the newer of the two.
+      if (Array.isArray(w)) {
+        const local = storage.loadWhitening()
+        const settled = storage.loadQueue().length === 0
+        persistWhitening(dedupeWhiteningByDate(settled ? [...local, ...w] : [...w, ...local]))
+      }
+    } catch {
+      /* ignore — an older backend won't have this route */
+    }
+    try {
       const m = await api.fetchMeasurements()
       // Merge rather than replace, for the same reason as flex: a fetched date
       // wins, but a backend with nothing to say can't blank this device's log.
@@ -510,7 +545,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistVitamins, persistMeasurements, persistDurations, persistExerciseAverages, persistSettings])
+  }, [flush, persistWorkouts, persistWeights, persistFlex, persistCalories, persistVitamins, persistWhitening, persistMeasurements, persistDurations, persistExerciseAverages, persistSettings])
 
   // Initial sync, then re-sync whenever there's a fresh chance to: back online,
   // or back in the foreground. A phone that logged something and got locked
@@ -584,8 +619,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const flexDates = storage.loadFlex().map((f) => f.date)
         const cals = storage.loadCalories()
         const pills = storage.loadVitamins()
-        const before = currentWeekCounts(prev, flexDates, cals, pills)
-        const after = currentWeekCounts(next, flexDates, cals, pills)
+        const strips = storage.loadWhitening()
+        const before = currentWeekCounts(prev, flexDates, cals, pills, strips)
+        const after = currentWeekCounts(next, flexDates, cals, pills, strips)
         const beforeRec: RecordSnapshot = { workouts: prev, flexDates, calorieEntries: cals }
         const afterRec: RecordSnapshot = { workouts: next, flexDates, calorieEntries: cals }
         ambient = composeCelebration([
@@ -721,10 +757,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
           const workoutsNow = storage.loadWorkouts()
           const cals = storage.loadCalories()
           const pills = storage.loadVitamins()
+          const strips = storage.loadWhitening()
           const beforeFlexDates = prevFlex.map((f) => f.date)
           const afterFlexDates = nextFlex.map((f) => f.date)
-          const before = currentWeekCounts(workoutsNow, beforeFlexDates, cals, pills)
-          const after = currentWeekCounts(workoutsNow, afterFlexDates, cals, pills)
+          const before = currentWeekCounts(workoutsNow, beforeFlexDates, cals, pills, strips)
+          const after = currentWeekCounts(workoutsNow, afterFlexDates, cals, pills, strips)
           const beforeRec: RecordSnapshot = { workouts: workoutsNow, flexDates: beforeFlexDates, calorieEntries: cals }
           const afterRec: RecordSnapshot = { workouts: workoutsNow, flexDates: afterFlexDates, calorieEntries: cals }
           celebrate(
@@ -785,8 +822,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const workoutsNow = storage.loadWorkouts()
         const flexDates = storage.loadFlex().map((f) => f.date)
         const pills = storage.loadVitamins()
-        const before = currentWeekCounts(workoutsNow, flexDates, prevCals, pills)
-        const after = currentWeekCounts(workoutsNow, flexDates, nextCals, pills)
+        const strips = storage.loadWhitening()
+        const before = currentWeekCounts(workoutsNow, flexDates, prevCals, pills, strips)
+        const after = currentWeekCounts(workoutsNow, flexDates, nextCals, pills, strips)
         const beforeRec: RecordSnapshot = { workouts: workoutsNow, flexDates, calorieEntries: prevCals }
         const afterRec: RecordSnapshot = { workouts: workoutsNow, flexDates, calorieEntries: nextCals }
         celebrate(
@@ -827,11 +865,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const workoutsNow = storage.loadWorkouts()
         const flexDates = storage.loadFlex().map((f) => f.date)
         const cals = storage.loadCalories()
+        const strips = storage.loadWhitening()
         celebrate(
           composeCelebration(
             weeklyCelebrations(
-              currentWeekCounts(workoutsNow, flexDates, cals, prev),
-              currentWeekCounts(workoutsNow, flexDates, cals, next),
+              currentWeekCounts(workoutsNow, flexDates, cals, prev, strips),
+              currentWeekCounts(workoutsNow, flexDates, cals, next, strips),
             ),
           ),
         )
@@ -840,6 +879,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
     },
     [celebrate, deliver, enqueue, notify, persistVitamins, weeklyCelebrations],
+  )
+
+  const logWhitening = useCallback(
+    async (strips: boolean, date?: string) => {
+      const now = new Date()
+      const day = date ?? toISODate(now)
+      const prev = storage.loadWhitening()
+      // Stamp the log time only when logging TODAY, for the same reason the pill
+      // card does: a backfill says nothing about when the strip was worn.
+      const loggedAt = day === toISODate(now) ? now.toISOString() : undefined
+      const next = setWhiteningDay(prev, day, strips, loggedAt)
+      const entry = whiteningEntryFor(prev, day, strips, loggedAt)
+      persistWhitening(next)
+      // Write-ahead, like every other log, and a day is sent whole, so enqueuing
+      // leaves at most the newest state per date.
+      const ok = await deliver(enqueue({ type: 'whitening', entry }))
+      const label = entry.strips ? 'strip logged' : 'strip cleared'
+      notify(ok ? label : "couldn't save — queued to retry", ok)
+      // Only the weekly goal cheers: a strip is one tap a day, so cheering the
+      // tap itself would be noise.
+      try {
+        const workoutsNow = storage.loadWorkouts()
+        const flexDates = storage.loadFlex().map((f) => f.date)
+        const cals = storage.loadCalories()
+        const pills = storage.loadVitamins()
+        celebrate(
+          composeCelebration(
+            weeklyCelebrations(
+              currentWeekCounts(workoutsNow, flexDates, cals, pills, prev),
+              currentWeekCounts(workoutsNow, flexDates, cals, pills, next),
+            ),
+          ),
+        )
+      } catch {
+        /* a missed cheer must never break a save */
+      }
+    },
+    [celebrate, deliver, enqueue, notify, persistWhitening, weeklyCelebrations],
   )
 
   const logMeasurement = useCallback(
@@ -976,6 +1053,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Days that took the multivitamin AND the iron they owed — a day that dropped
   // its iron dose doesn't count (see vitamins.vitaminGoalDates).
   const vitaminDates = useMemo(() => vitaminGoalDates(vitaminEntries), [vitaminEntries])
+  // Days the whitening strip went on (see whitening.whiteningGoalDates).
+  const whiteningDates = useMemo(
+    () => whiteningGoalDates(whiteningEntries),
+    [whiteningEntries],
+  )
 
   // Every completed week replayed, oldest first. The flame is this list's last
   // row rather than a second calculation, so the Progress breakdown always
@@ -987,8 +1069,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         flexDates,
         calorieHitDates: calHitDates,
         vitaminDates,
+        whiteningDates,
       }),
-    [workoutDates, flexDates, calHitDates, vitaminDates],
+    [workoutDates, flexDates, calHitDates, vitaminDates, whiteningDates],
   )
 
   const streaks = useMemo<StreakState>(() => {
@@ -1004,8 +1087,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       flex: new Set(flexDates.filter(inWeek)).size,
       calDays: calHitDates.filter(inWeek).length,
       vitaminDays: vitaminDates.filter(inWeek).length,
+      whiteningDays: whiteningDates.filter(inWeek).length,
     }
-  }, [workoutDates, flexDates, calHitDates, vitaminDates])
+  }, [workoutDates, flexDates, calHitDates, vitaminDates, whiteningDates])
 
   // Merge read-only historical anchors (e.g. the 2025-10-31 baseline) with logged
   // measurements. Logged entries win on a shared date; history is never re-synced.
@@ -1020,6 +1104,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     flexEntries,
     calorieEntries,
     vitaminEntries,
+    whiteningEntries,
     measurements: allMeasurements,
     durations,
     exerciseAverages,
@@ -1040,6 +1125,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logFlex,
     logCalories,
     logVitamins,
+    logWhitening,
     logMeasurement,
     logSessionDuration,
     logExerciseTimes,

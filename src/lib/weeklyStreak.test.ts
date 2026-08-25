@@ -40,46 +40,48 @@ const CUR = '2026-07-06'
 describe('classifyWeek', () => {
   it('classifies a full week (exactly at goal, not exceeded)', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 6 }),
+      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 }),
     ).toEqual({ tier: 'full', exceeded: false })
   })
 
   it('classifies an exceeded full week', () => {
     expect(
-      classifyWeek({ workouts: 3, flex: 2, calDays: 6, vitaminDays: 6 }),
+      classifyWeek({ workouts: 3, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 }),
     ).toEqual({ tier: 'full', exceeded: true })
   })
 
   it('classifies a half week', () => {
     expect(
-      classifyWeek({ workouts: 1, flex: 1, calDays: 5, vitaminDays: 5 }),
+      classifyWeek({ workouts: 1, flex: 1, calDays: 5, vitaminDays: 5, whiteningDays: 5 }),
     ).toEqual({ tier: 'half', exceeded: false })
   })
 
   it('classifies an under week', () => {
     expect(
-      classifyWeek({ workouts: 0, flex: 0, calDays: 0, vitaminDays: 0 }),
+      classifyWeek({ workouts: 0, flex: 0, calDays: 0, vitaminDays: 0, whiteningDays: 0 }),
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
   it('is under when one dimension misses the half threshold', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 4, vitaminDays: 6 }),
+      classifyWeek({ workouts: 2, flex: 2, calDays: 4, vitaminDays: 6, whiteningDays: 6 }),
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
   it('is under when the pills miss the half threshold', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 4 }),
+      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 4, whiteningDays: 4 }),
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
   it('leaves a goal of zero unjudged', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 0 }, {
+      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 0, whiteningDays: 0 }, {
         ...DEFAULT_WEEKLY_GOALS,
         vitaminDays: 0,
         halfVitaminDays: 0,
+        whiteningDays: 0,
+        halfWhiteningDays: 0,
       }),
     ).toEqual({ tier: 'full', exceeded: false })
   })
@@ -264,7 +266,7 @@ describe('weeklyStreakHistory', () => {
       today: TODAY,
     })
     expect(wk1.week).toBe(WK1)
-    expect(wk1.counts).toEqual({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 0 })
+    expect(wk1.counts).toEqual({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 0, whiteningDays: 0 })
     expect(wk1.tier).toBe('full')
     expect(wk1.outcome).toBe('advanced')
     expect(wk1.streakAfter).toBe(1)
@@ -279,7 +281,7 @@ describe('weeklyStreakHistory', () => {
       calorieHitDates: daysInWeek(WK1, 6),
       today: TODAY,
     })
-    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6, vitaminDays: 0 })
+    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6, vitaminDays: 0, whiteningDays: 0 })
     expect(wk1.tier).toBe('half')
   })
 
@@ -375,6 +377,56 @@ describe('weeklyStreakHistory', () => {
     })
     expect(rows[0]).toMatchObject({ week: WK1, tier: 'full', outcome: 'advanced' })
     expect(rows[1]).toMatchObject({ week: WK2, tier: 'under', outcome: 'reset' })
+  })
+
+  it('judges the strips from the week after the first one logged, on their own clock', () => {
+    // The pills have been logged since WK1; the strips only start in WK2. WK2 is
+    // therefore spared the strip goal — a habit picked up mid-week can't fill the
+    // week — and WK3 is held to it, falling three days short. The pill goal, whose
+    // own start week is long past, is judged throughout, which is the point: one
+    // shared start date would have to be wrong about one of the two.
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6), ...daysInWeek(WK3, 6)],
+      vitaminDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6), ...daysInWeek(WK3, 6)],
+      whiteningDates: [...daysInWeek(WK2, 3), ...daysInWeek(WK3, 3)],
+      today: TODAY,
+    })
+    expect(rows[1]).toMatchObject({ week: WK2, tier: 'full' })
+    expect(rows[1].goals.whiteningDays).toBe(0)
+    expect(rows[2]).toMatchObject({ week: WK3, tier: 'under' })
+    expect(rows[2].goals).toMatchObject({ whiteningDays: 6, vitaminDays: 6 })
+  })
+
+  it('leaves a run of full pill weeks alone until the strips have a start week', () => {
+    // Nothing was ever logged for the strips, so the goal isn't judged at all —
+    // adding a habit to the config must not retroactively wipe a streak that was
+    // earned before the habit existed. (WK3 has no data and is replayed as an
+    // empty week, so only the two logged weeks are asserted.)
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6)],
+      vitaminDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6)],
+      today: TODAY,
+    })
+    expect(rows[0]).toMatchObject({ week: WK1, tier: 'full', outcome: 'advanced' })
+    expect(rows[1]).toMatchObject({ week: WK2, tier: 'full', outcome: 'advanced', streakAfter: 2 })
+    expect(rows[1].goals.whiteningDays).toBe(0)
+  })
+
+  it('counts a full strip week toward the run', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      flexDates: [...daysInWeek(WK1, 2), ...daysInWeek(WK2, 2), ...daysInWeek(WK3, 2)],
+      calorieHitDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6), ...daysInWeek(WK3, 6)],
+      vitaminDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6), ...daysInWeek(WK3, 6)],
+      whiteningDates: [...daysInWeek(WK1, 6), ...daysInWeek(WK2, 6), ...daysInWeek(WK3, 6)],
+      today: TODAY,
+    })
+    expect(rows[2]).toMatchObject({ week: WK3, tier: 'full', outcome: 'advanced', streakAfter: 3 })
+    expect(rows[2].counts.whiteningDays).toBe(6)
   })
 
   it('counts a full pill week toward the run', () => {

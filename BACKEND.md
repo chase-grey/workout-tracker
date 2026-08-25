@@ -54,6 +54,8 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
 | GET | `?route=vitamins&since=YYYY-MM-DD` | — | `{date, vitamins, iron, loggedAt?}[]` |
 | POST | `?route=vitamins` | `{ date, vitamins, iron, loggedAt }` | `{ saved }` |
+| GET | `?route=whitening&since=YYYY-MM-DD` | — | `{date, strips, loggedAt?}[]` |
+| POST | `?route=whitening` | `{ date, strips, loggedAt }` | `{ saved }` |
 | GET | `?route=settings` | — | settings blob, or `null` |
 | POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
 | GET | `?route=chat_endpoint&secret=…` | — | `{ url, updatedAt }` |
@@ -69,6 +71,13 @@ A `vitamins` tab, one row per date, holding the day's two doses as booleans: the
 multivitamin and the iron that rides along every other day. Upserted by date — a
 day is sent whole, so a new row for a date replaces it rather than appending, and
 a backfill that carries no `loggedAt` keeps the timestamp already stored.
+
+### Whitening
+
+A `whitening` tab, one row per date, holding whether that day's whitening strip
+went on. Upserted by date on exactly the same terms as the pills — a day is one
+boolean, so the row is replaced rather than appended, and a backfill keeps the
+`loggedAt` already stored.
 
 ### Notes
 

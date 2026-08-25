@@ -139,6 +139,7 @@ export function ThisWeek() {
         <MetricBar label="flex sessions" m={byKey.get('flex')!} />
         <MetricBar label="calorie days" m={byKey.get('calDays')!} />
         <MetricBar label="vitamins" m={byKey.get('vitaminDays')!} />
+        <MetricBar label="whitening" m={byKey.get('whiteningDays')!} />
       </div>
 
       {summary.weightTrend !== null && (

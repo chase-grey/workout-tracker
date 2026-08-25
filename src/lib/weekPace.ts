@@ -102,6 +102,7 @@ export const METRIC_WINDOW: Record<MetricKey, number> = {
   flex: 5,
   calDays: DAYS_IN_WEEK,
   vitaminDays: DAYS_IN_WEEK,
+  whiteningDays: DAYS_IN_WEEK,
 }
 
 /** One metric's standing against both the schedule and the days left. */
@@ -151,7 +152,13 @@ export type WeekPace = {
 }
 
 /** Metric order for display and for breaking buffer ties. */
-export const METRIC_KEYS: MetricKey[] = ['workouts', 'flex', 'calDays', 'vitaminDays']
+export const METRIC_KEYS: MetricKey[] = [
+  'workouts',
+  'flex',
+  'calDays',
+  'vitaminDays',
+  'whiteningDays',
+]
 
 /**
  * The week's pace: each metric against its schedule, plus the buffer on whichever

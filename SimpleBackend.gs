@@ -61,6 +61,8 @@
  *   GET  ?route=vitamins[&since=YYYY-MM-DD]
  *   POST ?route=vitamins      body: { date, vitamins, iron, loggedAt } (upsert by date; a day is
  *                                   stored whole, so a new row for a date replaces it)
+ *   GET  ?route=whitening[&since=YYYY-MM-DD]
+ *   POST ?route=whitening     body: { date, strips, loggedAt } (upsert by date, same as vitamins)
  *   POST ?route=durations     body: { date, kind, dayType, routine, totalSec, restSec } (append)
  *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
  *                 (folds a finished session's per-set active times + rests into the rolling averages)
@@ -110,6 +112,8 @@ const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
 // The daily pills: the multivitamin, and the iron that rides along every other
 // day. Booleans, stored as TRUE/FALSE and read back through boolOf.
 const VITAMIN_HEADERS = ['date', 'vitamins', 'iron', 'logged_at']
+// The nightly whitening strip. One boolean a day — there's only one thing to do.
+const WHITENING_HEADERS = ['date', 'strips', 'logged_at']
 // `routine` is which stretch routine a stretch session was, blank for a workout
 // and for a stretch logged before there were two. Appended, and the generic
 // sheet() helper fills a missing header cell in on its own, so no migration.
@@ -140,6 +144,8 @@ function doGet(e) {
         return json(getMeasurements(e.parameter.since))
       case 'vitamins':
         return json(getVitamins(e.parameter.since))
+      case 'whitening':
+        return json(getWhitening(e.parameter.since))
       case 'durations':
         return json(getDurations(e.parameter.since))
       case 'exercise_times':
@@ -204,6 +210,8 @@ function doPost(e) {
         return json(withLock(function () { return appendMeasurements(body) }))
       case 'vitamins':
         return json(withLock(function () { return appendVitamins(body) }))
+      case 'whitening':
+        return json(withLock(function () { return appendWhitening(body) }))
       case 'durations':
         return json(withLock(function () { return appendDurations(body) }))
       case 'exercise_times':
@@ -774,6 +782,68 @@ function appendVitamins(body) {
     })
   if (saved === 0 && list.length) {
     throw new Error('No valid vitamin rows among ' + list.length + ' submitted')
+  }
+  return { saved: saved }
+}
+
+function getWhitening(since) {
+  const sh = sheet('whitening', WHITENING_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0]) continue
+    const date = isoDate(r[0])
+    if (since && date < since) continue
+    const entry = { date: date, strips: boolOf(r[1]) }
+    // Only send a log time when one was actually recorded — a blank cell has to
+    // reach the client as "unknown", not as an unparseable empty string.
+    const loggedAt = String(r[2] || '')
+    if (loggedAt) entry.loggedAt = loggedAt
+    out.push(entry)
+  }
+  return out
+}
+
+// Upsert by date, the same way the pills are: a strip day is one row, so a new
+// value for a date overwrites that date's row rather than appending to it.
+function appendWhitening(body) {
+  const sh = sheet('whitening', WHITENING_HEADERS)
+  const list = Array.isArray(body.entries) ? body.entries : [body]
+  const rows = sh.getDataRange().getValues()
+
+  const rowByDate = {}
+  const loggedAtByDate = {}
+  for (let i = 1; i < rows.length; i++) {
+    const d = isoDate(rows[i][0])
+    if (d && !(d in rowByDate)) {
+      rowByDate[d] = i + 1
+      loggedAtByDate[d] = String(rows[i][2] || '')
+    }
+  }
+
+  let saved = 0
+  list
+    .filter(function (e) {
+      return e && e.date
+    })
+    .forEach(function (e) {
+      // A backfill sends no log time; keep the one already stored rather than
+      // blanking a real same-day timestamp with the correction's silence.
+      const at = e.loggedAt || loggedAtByDate[e.date] || ''
+      const values = [e.date, boolOf(e.strips), at]
+      const existingRow = rowByDate[e.date]
+      if (existingRow) {
+        sh.getRange(existingRow, 1, 1, WHITENING_HEADERS.length).setValues([values])
+      } else {
+        sh.appendRow(values)
+        rowByDate[e.date] = sh.getLastRow()
+        loggedAtByDate[e.date] = at
+      }
+      saved++
+    })
+  if (saved === 0 && list.length) {
+    throw new Error('No valid whitening rows among ' + list.length + ' submitted')
   }
   return { saved: saved }
 }
