@@ -37,9 +37,9 @@ const DETECT_NOTE = {
 } as const
 
 /**
- * Download the measured JPEG. Deliberately not the OS share sheet: sharing puts
- * the photo in front of a list of apps to send it to, when the only thing wanted
- * is a copy of it on the phone.
+ * Hand the JPEG to the browser's download manager. On Android that means the
+ * Downloads folder and nowhere else, which is why this is the fallback rather
+ * than the first choice.
  */
 function downloadPhoto(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob)
@@ -48,6 +48,26 @@ function downloadPhoto(blob: Blob, name: string): void {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/**
+ * Put the measured JPEG somewhere the phone's photo apps will find it. A web
+ * page can't write to the media collections Gallery and Photos index, so a
+ * plain download lands in Downloads instead of the camera roll; the share sheet
+ * is the only route there. Falls back to downloading where files can't be
+ * shared, and treats a dismissed sheet as a no rather than downloading anyway.
+ */
+async function savePhoto(blob: Blob, name: string): Promise<void> {
+  const file = new File([blob], name, { type: blob.type || 'image/jpeg' })
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] })
+      return
+    } catch (err) {
+      if ((err as DOMException | undefined)?.name === 'AbortError') return
+    }
+  }
+  downloadPhoto(blob, name)
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
@@ -495,9 +515,9 @@ export function CameraMeasure({
   }
 
   /** Answer the save prompt, then hand the reading on. */
-  const finishSave = (download: boolean) => {
+  const finishSave = (save: boolean) => {
     if (!pending) return
-    if (download) downloadPhoto(pending.blob, pending.name)
+    if (save) void savePhoto(pending.blob, pending.name)
     const { result } = pending
     setPending(null)
     onDone(result)

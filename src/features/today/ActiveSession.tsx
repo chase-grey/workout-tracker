@@ -828,7 +828,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       />
 
       <header className="flex items-start justify-between gap-2">
-        <h2 className="min-w-0 text-xl font-bold">{planned.name}</h2>
+        {/* The controls beside it are 44px tap targets with their glyphs centred, so
+            the name takes the same band: its first line lands on their centreline
+            instead of riding above it, and a name long enough to wrap still starts
+            level with them. */}
+        <h2 className="min-w-0 py-2 text-xl font-bold">{planned.name}</h2>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
           {/* Puts the set in the context of the whole history for the lift. */}

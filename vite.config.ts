@@ -379,10 +379,9 @@ function shareLink(
     name: 'share-link',
     configureServer(server) {
       // Publishing can't wait for someone to open Settings — the phone needs the
-      // address whether or not this machine's browser is ever touched. Poll until
-      // the tunnel is up and verified, then publish once and stop. The tunnel
-      // takes a few seconds longer than the dev server to come up, so a miss on
-      // the first passes is normal.
+      // address whether or not this machine's browser is ever touched. So poll for
+      // a verified tunnel and publish it. The tunnel takes a few seconds longer
+      // than the dev server to come up, so a miss on the first passes is normal.
       // Skipping this silently is the worst outcome: the tunnel comes up, the
       // terminal looks healthy, and the phone just says no computer is running.
       if (!publish.secret) {
@@ -395,31 +394,50 @@ function shareLink(
       if (explicit) {
         void publishEndpoint(explicit)
       } else if (publish.apiUrl && publish.secret) {
-        let tries = 0
-        const timer = setInterval(() => {
-          if (published) return clearInterval(timer)
-          if (++tries > 40) {
-            clearInterval(timer)
-            // Say so out loud. Giving up quietly looks exactly like success from
-            // here — the tunnel is up, the terminal is clean — and only the phone
-            // ever finds out that no address was published.
-            console.warn(
-              '\n  No tunnel to THIS dev server was verified, so no address was published' +
-                '\n  and the phone will not find the coach. Either cloudflared never came' +
-                '\n  up, or its tunnel is pointed at something else on this port.\n',
-            )
-            return
-          }
+        // Keep looking for the whole life of the dev server rather than stopping at
+        // the first success. cloudflared is supervised now (see scripts/tunnel.mjs),
+        // and a quick tunnel is handed a new random hostname every time it starts —
+        // so a poller that retired after one publish left the backend naming an
+        // address that had died minutes ago, the phone looking that one up and
+        // finding nothing, and this terminal perfectly clean throughout.
+        //
+        // Chained timeouts rather than an interval, so a slow round trip delays the
+        // next probe instead of stacking another one on top of it. Fast while there
+        // is nothing to show for it, then idle: once a tunnel has been verified the
+        // only job left is noticing that it was replaced.
+        const FIRST_LOOK_MS = 3000
+        const SETTLED_LOOK_MS = 30_000
+        let looks = 0
+        let warned = false
+        let seen: string | null = null
+        const schedule = (ms: number) => {
+          const timer = setTimeout(look, ms)
+          timer.unref?.() // never hold the process open on this alone
+        }
+        const look = () => {
           void detect()
             .catch(() => null)
-            .then((found) => {
+            .then(async (found) => {
               if (found?.verified) {
-                clearInterval(timer)
-                void publishEndpoint(found.url)
+                seen = found.url
+                await publishEndpoint(found.url)
               }
+              // Say so out loud. Failing quietly looks exactly like success from
+              // here — the tunnel is up, the terminal is clean — and only the phone
+              // ever finds out that no address was published.
+              if (!seen && !warned && ++looks > 40) {
+                warned = true
+                console.warn(
+                  '\n  No tunnel to THIS dev server has verified, so no address has been' +
+                    '\n  published and the phone will not find the coach. Either cloudflared' +
+                    '\n  never came up, or its tunnel is pointed at something else on this' +
+                    '\n  port. Still looking.\n',
+                )
+              }
+              schedule(seen ? SETTLED_LOOK_MS : FIRST_LOOK_MS)
             })
-        }, 3000)
-        timer.unref?.() // never hold the process open on this alone
+        }
+        look()
       }
 
       server.middlewares.use('/api/share/ping', (_req, res) => {
