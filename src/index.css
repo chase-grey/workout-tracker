@@ -485,23 +485,26 @@ input[type='number'] {
 }
 
 /* Tap: a drop falling from the spout to the water. The column it rides spans the
-   air gap, so travelling its own height lands the drop exactly on the surface
-   however full the glass is — the same trick as the tide's risers. It stretches on
-   the way down and is gone on contact; the ring below answers it. */
+   drop's journey, so travelling its own height lands the drop exactly on the
+   surface however full the glass is — the same trick as the tide's risers. Travel
+   only: the stretch lives on the drop below, because a scale here is a scale about
+   the *column's* centre, and that lifts or drops the drop by a share of the whole
+   gap — a stretched drop landed a third of the glass under the water, and a
+   flattened one finished below the box. It is gone on contact; the ring answers it. */
 @keyframes rest-drip-fall {
   0% {
-    transform: translateY(0) scaleY(0.6);
+    transform: translateY(0);
     opacity: 0;
   }
   10% {
     opacity: 1;
   }
   85% {
-    transform: translateY(92%) scaleY(1.4);
+    transform: translateY(92%);
     opacity: 1;
   }
   100% {
-    transform: translateY(100%) scaleY(0.5);
+    transform: translateY(100%);
     opacity: 0;
   }
 }
@@ -510,14 +513,36 @@ input[type='number'] {
   will-change: transform, opacity;
 }
 
+/* And the drop's own shape while it does that: drawn out by the fall, flattened
+   against the water. It scales from its lower edge (origin-bottom in RestShapes), so
+   the tail is what stretches and the leading edge stays exactly on the landing
+   point. Same period and easing as the travel, and it takes the same delay from the
+   drop it is mounted on, so the two never drift apart. */
+@keyframes rest-drip-stretch {
+  0% {
+    transform: scaleY(0.6);
+  }
+  85% {
+    transform: scaleY(1.4);
+  }
+  100% {
+    transform: scaleY(0.5);
+  }
+}
+.rest-drip-stretch {
+  animation: rest-drip-stretch 1900ms cubic-bezier(0.5, 0, 0.8, 0.4) infinite;
+  will-change: transform;
+}
+
 /* The ring the drop leaves, spreading out across the surface and fading. Its delay
-   is the drop's fall time, so the two stay in step for the whole rest. */
+   is the drop's fall time, so the two stay in step for the whole rest, and it comes
+   up sharply rather than easing in: a ripple is there the moment the water is hit. */
 @keyframes rest-drip-ring {
   0% {
     transform: scale(0.15);
     opacity: 0;
   }
-  15% {
+  6% {
     opacity: 0.8;
   }
   100% {

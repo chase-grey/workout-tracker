@@ -124,12 +124,23 @@ function RechargeCell({ fraction }: { fraction: number }) {
  * How long one drip takes from spout to surface, in ms, and where in that cycle it
  * lands. The ripple runs on the same period at that offset, so the two stay in
  * step for the whole rest instead of drifting apart.
+ *
+ * The fall is steeply eased, so the landing is late: the drop is only a quarter of
+ * the way down at the halfway mark and is against the water from 85% of the cycle
+ * on. A ring on the half-cycle rang for a drop that was still up near the spout.
  */
 const DRIP_MS = 1900
-const DRIP_LANDS = 0.52
+const DRIP_LANDS = 0.85
 
 /** Where the glass sits in the box, in percentages — shared by the water and the falling drips. */
 const GLASS = { top: 34, bottom: 6, spout: 21 } as const
+
+/**
+ * How wide a drop is, as a percentage of the box — and, the box being square, how
+ * tall, which is what lets the fall below be measured against the glass in the same
+ * numbers.
+ */
+const DROP = 3.5
 
 /**
  * The 'tap' shape: a tap dripping into a glass, the glass filling as the rest runs
@@ -140,15 +151,21 @@ const GLASS = { top: 34, bottom: 6, spout: 21 } as const
  * from the countdown, and a drip that appeared to raise it would be claiming to
  * tell the time. So they fall on a fixed cadence whatever the level, and the
  * ripple is pinned to the surface line by riding a layer exactly as tall as the
- * water, the way the tide's bubbles are.
+ * water, the way the tide's bubbles are. Riding that layer is all it takes from it,
+ * though: a ring sized in percentages of it would have started the rest too small
+ * to see and grown all the way through, which is the countdown again in a place it
+ * has no business being.
  */
 function DrippingTap({ fraction }: { fraction: number }) {
   const filled = 1 - clamp01(fraction)
-  // Air between the spout and the water: the drop's whole journey, which shortens
-  // as the glass fills.
+  // Air between the spout and the water, less the drop itself: the column carries
+  // the drop by exactly its own height and the drop hangs from the top of it, so a
+  // column the full depth of the gap lands the drop's *crown* on the surface and
+  // puts the whole body of it under the water. What's left is the journey, and it
+  // shortens as the glass fills.
   const glassHeight = 100 - GLASS.top - GLASS.bottom
   const surface = GLASS.top + (1 - filled) * glassHeight
-  const fallHeight = Math.max(0, surface - GLASS.spout)
+  const fallHeight = Math.max(0, surface - GLASS.spout - DROP)
 
   return (
     <div className="absolute inset-0 text-accent-bright" aria-hidden>
@@ -159,13 +176,16 @@ function DrippingTap({ fraction }: { fraction: number }) {
       {/* The handle, so it reads as a tap rather than as pipework. */}
       <div className="absolute left-[13%] top-[0%] h-[3%] w-[13%] rounded-full bg-accent-bright/55" />
 
-      {/* Drips. The column spans the air gap, so translating it its own height
-          carries the drop from the spout exactly onto the surface however full the
-          glass is — the same trick the tide's risers use. */}
+      {/* Drips. The column spans the drop's journey, so translating it its own
+          height carries the drop from the spout exactly onto the surface however
+          full the glass is — the same trick the tide's risers use. The column is a
+          drop wide as well as tall, because the drop is sized against it: left to
+          find its own width it found nothing to measure and came out empty. */}
       <div
-        className="absolute inset-x-0"
+        className="absolute left-1/2 -translate-x-1/2"
         style={{
           top: pct(GLASS.spout),
+          width: pct(DROP),
           height: pct(fallHeight),
           ...drainOf('height'),
         }}
@@ -173,10 +193,13 @@ function DrippingTap({ fraction }: { fraction: number }) {
         {[0, 0.5].map((phase) => (
           <div
             key={phase}
-            className="rest-drip-fall absolute inset-y-0"
+            className="rest-drip-fall absolute inset-0"
             style={{ animationDelay: `${phase * DRIP_MS}ms` }}
           >
-            <div className="absolute left-[49.5%] top-0 aspect-square w-[3.5%] -translate-x-1/2 rounded-full bg-accent-bright" />
+            <div
+              className="rest-drip-stretch absolute top-0 aspect-square w-full origin-bottom rounded-full bg-accent-bright"
+              style={{ animationDelay: `${phase * DRIP_MS}ms` }}
+            />
           </div>
         ))}
       </div>
@@ -193,11 +216,14 @@ function DrippingTap({ fraction }: { fraction: number }) {
         >
           <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
           {/* Rings spreading from where each drop lands, delayed by the fall so
-              they answer a drip rather than firing on their own. */}
+              they answer a drip rather than firing on their own. Their height comes
+              from their width rather than from the layer, so a ring is the same
+              ellipse on the first drip as on the last — the drop that makes it is
+              always the same size, and the water's depth is not the ring's business. */}
           {[0, 0.5].map((phase) => (
             <div
               key={phase}
-              className="rest-drip-ring absolute left-1/2 top-0 h-[7%] w-[34%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-accent-bright"
+              className="rest-drip-ring absolute left-1/2 top-0 aspect-[5/1] w-[34%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-accent-bright"
               style={{ animationDelay: `${(phase + DRIP_LANDS) * DRIP_MS}ms` }}
             />
           ))}
