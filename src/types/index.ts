@@ -35,8 +35,10 @@ export type WorkoutSession = {
    * Which side leads this session's one-limb-at-a-time exercises — it flips every
    * session so neither arm is always the tired one (see lib/pushSide). Pinned at
    * start for the same reason as `variant`: a resumed session keeps the order it
-   * began with. Not stored per row; the two sides are separate exercise keys, so
-   * the history already knows which arm did what.
+   * began with. Not stored per row, and it doesn't need to be: the two sides are
+   * separate exercise keys and the rows are written in performed order, so the
+   * first sided row of a session is what the next session flips off (see
+   * pushSide.lastStartSide).
    */
   startSide?: Side
 }
