@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { ThisWeek } from './ThisWeek'
 import { CalorieLogger } from './CalorieLogger'
@@ -13,6 +13,9 @@ import { lastStretchRoutine } from '../../lib/stretchRotation'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
+
+const sessionButton =
+  'min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2'
 
 type Props = {
   onStart: (dayType: DayType, variant?: VariantKey) => void
@@ -57,6 +60,11 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
   // was done last steps back so the other reads as up next.
   const dimmedStretch = lastStretchRoutine(flexEntries)
 
+  // The left column of the session grid. Full body is placed rather than
+  // ordered — it sits on the bottom row whatever Settings says — so the order
+  // chosen there applies to the two days that alternate.
+  const liftDays = dayOrder(plan).filter((t) => t !== 'fullbody')
+
   return (
     // No bottom padding of its own: `main` already pads below the scroll area, and
     // stacking a second 1rem on top of it pushed the home page just past the
@@ -100,36 +108,44 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
 
       <WeightCard />
 
-      {/* Two across rather than stacked rows: full-width buttons took a third of
-          the screen on their own, which is what pushed the rest of the page into
-          scrolling. Two grids rather than one five-cell flow, so each dimming
-          pair sits side by side — the stretches on their own row, the lift days
-          on theirs. */}
+      {/* One grid rather than a row per kind: the lift days run down the left
+          column, the stretch routines down the right, and full body takes the
+          bottom row on its own. Each dimming pair still sits together — push
+          above pull, side split above head to toe — and nothing is full width
+          except the day that trains everything, so the page still fits without
+          scrolling. */}
       <div className="grid grid-cols-2 gap-2">
-        {FLEX_ROUTINE_KEYS.map((r) => (
-          <button
-            key={r}
-            onClick={() => onStartStretch(r)}
-            className={`min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2 ${
-              r === dimmedStretch ? 'opacity-50' : ''
-            }`}
-          >
-            {FLEX_ROUTINES[r].label}
-          </button>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {dayOrder(plan).map((t) => (
-          <button
-            key={t}
-            onClick={() => onStart(t)}
-            className={`min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2 ${
-              t === dimmedDay ? 'opacity-50' : ''
-            }`}
-          >
-            {plan[t].label}
-          </button>
-        ))}
+        {Array.from({ length: Math.max(liftDays.length, FLEX_ROUTINE_KEYS.length) }, (_, i) => {
+          const t = liftDays[i]
+          const r = FLEX_ROUTINE_KEYS[i]
+          return (
+            <Fragment key={i}>
+              {t ? (
+                <button
+                  onClick={() => onStart(t)}
+                  className={`${sessionButton} ${t === dimmedDay ? 'opacity-50' : ''}`}
+                >
+                  {plan[t].label}
+                </button>
+              ) : (
+                <div />
+              )}
+              {r ? (
+                <button
+                  onClick={() => onStartStretch(r)}
+                  className={`${sessionButton} ${r === dimmedStretch ? 'opacity-50' : ''}`}
+                >
+                  {FLEX_ROUTINES[r].label}
+                </button>
+              ) : (
+                <div />
+              )}
+            </Fragment>
+          )
+        })}
+        <button onClick={() => onStart('fullbody')} className={`${sessionButton} col-span-2`}>
+          {plan.fullbody.label}
+        </button>
       </div>
     </div>
   )
