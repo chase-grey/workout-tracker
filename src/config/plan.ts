@@ -243,8 +243,15 @@ export type Plan = Record<DayType, DayPlan>
  *     own left and right circuit, trained on a rep ladder with no load and no top
  *     (see PlannedExercise.repLadder). Hand-added before this, so its single-entry
  *     versions are retired too.
+ *
+ * 12 — pull + legs: the weighted sit-up is retired from this day. It was the only
+ *     ab work here and the least productive in the week — it fell behind twenty-odd
+ *     sets of legs and pulling, so what capped the plate was accumulated trunk
+ *     fatigue rather than anything the abs had left. The volume stays where it's
+ *     trained fresh: push's four-and-four, and the Stretch + Core block twice a
+ *     week.
  */
-export const PLAN_REVISION = 11
+export const PLAN_REVISION = 12
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -470,13 +477,6 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
 
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
-
-      // The same swap push + core made, for the same reason: a plate at the chest
-      // gives the abs somewhere to keep progressing, where the hanging raise tops
-      // out at the 20 reps that graduate it. Three sets, not push's four — abs are
-      // trained 3× a week and this is the second of those days. The raise still runs
-      // on full body, which is what carries it to graduation now.
-      { key: 'weighted_situp', name: 'weighted sit-up', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'core' },
 
       // Both are a dumbbell in each hand, so both step in 10s (see dumbbellPair).
       { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 10, dumbbellPair: true, group: 'biceps' },
@@ -725,6 +725,15 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'cable_row',
     // Replaced by the weighted sit-up, as on push. Still shipped on full body.
     HANGING_RAISE_KEY,
+    // And now the sit-up that replaced it. This day trains abs last, behind the
+    // leg press, the Copenhagen holds, the sideways raises and the pull-ups — so
+    // the three sets cost a long day three more sets and bought the least
+    // stimulus in the week, since what limited the plate was trunk fatigue rather
+    // than the abs. Abs are still trained three times a week without it: four and
+    // four on push, where they run first and fresh, and four more in the
+    // Stretch + Core block (see STRETCH_CORE). Retired from THIS day only — the
+    // movement is unchanged everywhere else, and its logged history is untouched.
+    'weighted_situp',
     // The hand-added Copenhagen plank, now shipped as a left and a right station
     // (see COPENHAGEN_HOLD_SEC). It was only ever a custom entry, so what it was
     // keyed as depends on the name it was added under — the plausible slugs are all

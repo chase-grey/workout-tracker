@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_PLAN, GRADUATION_SETS, repRangeLabel, variantExercises } from './plan'
+import {
+  DEFAULT_PLAN,
+  GRADUATION_SETS,
+  STRETCH_CORE,
+  repRangeLabel,
+  variantExercises,
+} from './plan'
 
 /** Set count for one exercise in one variant of the push day. */
 function sets(variant: 'A' | 'B', key: string): number | undefined {
@@ -111,17 +117,6 @@ describe('the push + core day', () => {
 })
 
 describe('the pull + legs day', () => {
-  it('takes its core work loaded, leaving the raise to full body', () => {
-    const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
-    expect(keys).toContain('weighted_situp')
-    expect(keys).not.toContain('hanging_leg_raise')
-  })
-
-  it('does core after the leg press, so nothing pre-fatigues it', () => {
-    const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
-    expect(keys.indexOf('leg_press')).toBeLessThan(keys.indexOf('weighted_situp'))
-  })
-
   it('no longer carries the hip machines or the row', () => {
     const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
     expect(keys).not.toContain('leg_adductor')
@@ -134,10 +129,20 @@ describe('the pull + legs day', () => {
     expect(back.map((e) => e.key)).toEqual(['weighted_pullups'])
   })
 
-  it('does less core than a push day, keeping weekly volume in range', () => {
-    const pull = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'weighted_situp')
-    expect(pull?.sets).toBe(3)
-    expect(pull!.sets).toBeLessThan(sets('A', 'weighted_situp')!)
+  it('trains no abs at all, on what is already the longest day', () => {
+    const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
+    expect(keys).not.toContain('weighted_situp')
+    expect(keys).not.toContain('cable_crunch')
+    expect(keys).not.toContain('hanging_leg_raise')
+    expect(DEFAULT_PLAN.pull.exercises.some((e) => e.group === 'core')).toBe(false)
+  })
+
+  it('gives up no weekly ab volume by dropping them, since push and stretch carry it', () => {
+    // The sets that left this day were the ones done last; the ones that remain are
+    // done first on push and on their own after a stretch.
+    expect(sets('A', 'cable_crunch')).toBe(4)
+    expect(sets('A', 'weighted_situp')).toBe(4)
+    expect(STRETCH_CORE.sets).toBe(4)
   })
 
   it('trains calves directly, since pressing never takes them through range', () => {
