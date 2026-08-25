@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MdCameraAlt, MdCameraswitch, MdDownload, MdPhotoLibrary } from 'react-icons/md'
+import { MdCameraAlt, MdCameraswitch, MdPhotoLibrary, MdSave } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { detectPose } from '../../lib/pose'
 import {
@@ -256,7 +256,7 @@ async function renderMeasuredPhoto(
  * Full-screen camera flow: live preview, a self-timer (default 30s) so you can
  * get into position, then an auto-capture that runs pose detection and opens the
  * draggable AngleEditor. On save it shows the measured photo and asks whether to
- * download it — the reading is logged either way, and nothing is kept here.
+ * keep it — the reading is logged either way, and nothing is kept here.
  */
 export function CameraMeasure({
   mode: initialMode,
@@ -556,7 +556,7 @@ export function CameraMeasure({
             onClick={() => finishSave(true)}
             className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
           >
-            <MdDownload aria-hidden /> save
+            <MdSave aria-hidden /> save
           </button>
         </div>
       </div>
