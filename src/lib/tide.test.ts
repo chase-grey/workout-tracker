@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   createWave,
-  drawBubble,
   impulseWave,
-  splashStrength,
   stepWave,
+  waveHeightAt,
   waveSurfacePath,
   WAVE_NODES,
   type Wave,
@@ -28,12 +27,6 @@ const pathYs = (d: string) =>
     .map(Number)
     .filter((n) => !Number.isNaN(n))
     .filter((_, i) => i % 2 === 1)
-
-/** Draws in the order drawBubble takes them: size, buoyancy, drift. */
-const rolls =
-  (...values: number[]) =>
-  () =>
-    values.shift() ?? 0.5
 
 const MID = Math.floor((WAVE_NODES - 1) / 2)
 const BURST = 5
@@ -172,103 +165,34 @@ describe('waveSurfacePath', () => {
   })
 })
 
-describe('splashStrength', () => {
-  it('keeps every splash visible but never bigger than a full one', () => {
-    expect(splashStrength(0, 0)).toBeGreaterThan(0.2)
-    expect(splashStrength(1, 1)).toBeCloseTo(1, 10)
+describe('waveHeightAt', () => {
+  it('reads flat water as flat wherever it is asked', () => {
+    const wave = createWave()
+    for (const at of [0, 0.13, 0.5, 0.87, 1]) expect(waveHeightAt(wave, at)).toBe(0)
   })
 
-  it('needs both a big bubble and a fast one for the biggest splash', () => {
-    const biggest = splashStrength(1, 1)
-    expect(splashStrength(1, 0)).toBeLessThan(biggest)
-    expect(splashStrength(0, 1)).toBeLessThan(biggest)
-    // Size counts for a little more than the speed it arrived at.
-    expect(splashStrength(1, 0)).toBeGreaterThan(splashStrength(0, 1))
+  it('reads the bump where the bubble burst, and the walls it never reached', () => {
+    const wave = createWave()
+    impulseWave(wave, 0.5, BURST)
+    // Negative is up: the water over the burst stands well clear of the line.
+    expect(waveHeightAt(wave, 0.5)).toBeLessThan(-4.5)
+    expect(Math.abs(waveHeightAt(wave, 0))).toBeLessThan(BURST * 0.05)
   })
 
-  it('grows with the bubble, holding the speed still', () => {
-    const sizes = [0, 0.25, 0.5, 0.75, 1].map((s) => splashStrength(s, 0.5))
-    for (let i = 1; i < sizes.length; i++) expect(sizes[i]).toBeGreaterThan(sizes[i - 1])
+  it('lands between the nodes either side of it', () => {
+    const wave = createWave()
+    impulseWave(wave, 0.5, BURST)
+    const step = 1 / (WAVE_NODES - 1)
+    const [lo, hi] = [waveHeightAt(wave, 0.5 - step), waveHeightAt(wave, 0.5)]
+    const mid = waveHeightAt(wave, 0.5 - step / 2)
+    expect(mid).toBeGreaterThan(Math.min(lo, hi))
+    expect(mid).toBeLessThan(Math.max(lo, hi))
   })
 
-  it('makes small splashes the common case', () => {
-    const draws = Array.from({ length: 1000 }, (_, i) => splashStrength(i / 999, i / 999))
-    const small = draws.filter((s) => s < 0.6).length
-    const large = draws.filter((s) => s > 0.85).length
-    expect(small / draws.length).toBeGreaterThan(0.4)
-    expect(large / draws.length).toBeLessThan(0.2)
-  })
-
-  it('clamps a stray draw', () => {
-    expect(splashStrength(-1, -1)).toBe(splashStrength(0, 0))
-    expect(splashStrength(2, 2)).toBe(splashStrength(1, 1))
-  })
-})
-
-describe('drawBubble', () => {
-  it('keeps the surface for the buoyant few', () => {
-    const bubbles = Array.from({ length: 2000 }, () => drawBubble())
-    const surfaced = bubbles.filter((b) => b.surfaces).length / bubbles.length
-    // Often enough to catch one in a two-minute rest, rare enough that the water
-    // has time to go quiet in between.
-    expect(surfaced).toBeGreaterThan(0.05)
-    expect(surfaced).toBeLessThan(0.3)
-  })
-
-  it('sends a buoyant bubble all the way up, and a feeble one barely off the floor', () => {
-    const buoyant = drawBubble(rolls(0.5, 1, 0.5))
-    const feeble = drawBubble(rolls(0.5, 0, 0.5))
-    expect(buoyant.surfaces).toBe(true)
-    expect(buoyant.climb).toBeGreaterThan(0.9)
-    expect(feeble.surfaces).toBe(false)
-    expect(feeble.climb).toBeLessThan(0.15)
-  })
-
-  it('rushes the buoyant ones up and lets a doomed one go quickly', () => {
-    const rushed = drawBubble(rolls(0.5, 1, 0.5))
-    const laboured = drawBubble(rolls(0.5, 0.86, 0.5))
-    expect(laboured.surfaces).toBe(true)
-    expect(rushed.life).toBeLessThan(laboured.life)
-    // A bubble that never makes it is done with sooner than any climb.
-    expect(drawBubble(rolls(0.5, 0.5, 0.5)).life).toBeLessThan(rushed.life)
-  })
-
-  it('gives a doomed bubble no splash to speak of', () => {
-    const doomed = drawBubble(rolls(1, 0.5, 0.5))
-    expect(doomed.surfaces).toBe(false)
-    expect(doomed.splash).toBe(0)
-    expect(doomed.lift).toBe(0)
-    expect(doomed.bump).toBe(0)
-  })
-
-  it('saves the biggest splash for the big buoyant bubble', () => {
-    const bigAndBuoyant = drawBubble(rolls(1, 1, 0.5))
-    const smallAndBuoyant = drawBubble(rolls(0, 1, 0.5))
-    const bigAndJustBuoyant = drawBubble(rolls(1, 0.75, 0.5))
-    expect(bigAndBuoyant.size).toBeGreaterThan(smallAndBuoyant.size * 2)
-    expect(bigAndBuoyant.splash).toBeGreaterThan(smallAndBuoyant.splash)
-    expect(bigAndBuoyant.splash).toBeGreaterThan(bigAndJustBuoyant.splash)
-    // And it throws the surface hardest, over the widest patch, highest.
-    expect(bigAndBuoyant.lift).toBeGreaterThan(smallAndBuoyant.lift)
-    expect(bigAndBuoyant.bump).toBeGreaterThan(smallAndBuoyant.bump)
-    expect(bigAndBuoyant.pop).toBeGreaterThan(bigAndJustBuoyant.pop)
-  })
-
-  it('sizes the wave it throws off the bubble, not off luck', () => {
-    // Same buoyancy, so the only thing between these two is how big they are.
-    const big = drawBubble(rolls(1, 0.9, 0.5))
-    const small = drawBubble(rolls(0.1, 0.9, 0.5))
-    expect(big.lift).toBeGreaterThan(small.lift)
-    expect(big.bump).toBeGreaterThan(small.bump)
-  })
-
-  it('draws mostly small bubbles, and wanders each one either way', () => {
-    const bubbles = Array.from({ length: 1000 }, (_, i) => drawBubble(rolls(i / 999, 0.5, i / 999)))
-    const sizes = bubbles.map((b) => b.size)
-    const mid = (Math.min(...sizes) + Math.max(...sizes)) / 2
-    expect(sizes.filter((s) => s < mid).length / sizes.length).toBeGreaterThan(0.6)
-    const drifts = bubbles.map((b) => b.drift)
-    expect(Math.min(...drifts)).toBeLessThan(0)
-    expect(Math.max(...drifts)).toBeGreaterThan(0)
+  it('clamps a stray reading to the wall rather than reading off the end', () => {
+    const wave = createWave()
+    impulseWave(wave, 0, BURST)
+    expect(waveHeightAt(wave, -1)).toBe(wave.y[0])
+    expect(waveHeightAt(wave, 2)).toBeCloseTo(wave.y[WAVE_NODES - 1], 10)
   })
 })

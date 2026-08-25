@@ -1,15 +1,9 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { rollsThroughRest, type FastMode } from '../lib/fastMode'
 import { createFlame, flameLook, gutterFlame, stepFlame, type Flame } from '../lib/flame'
-import {
-  createWave,
-  drawBubble,
-  impulseWave,
-  stepWave,
-  waveSurfacePath,
-  type Bubble,
-} from '../lib/tide'
-import { createVessel, spanBetween, VESSEL_KINDS } from '../lib/vessels'
+import { bubbleOpacity, createSwarm, stepSwarm, type Vent } from '../lib/bubbles'
+import { createWave, impulseWave, stepWave, waveHeightAt, waveSurfacePath } from '../lib/tide'
+import { createVessel, VESSEL_KINDS, type Vessel } from '../lib/vessels'
 import { EXTRA_BOX_VARIANTS, EXTRA_FILL_VARIANTS, isExtraVariant } from '../lib/restShapes'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { createRotation } from '../lib/variantRotation'
@@ -356,35 +350,45 @@ function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction:
 }
 
 /**
- * The gap between one bubble leaving the floor and the next, in ms. Most of them
- * come apart in the water, so this is the beat of the shape rather than the beat of
- * the splashes — how often a pop lands is decided by how rare buoyancy is (see
- * lib/tide), and works out at one every several seconds.
- */
-const BUBBLE_GAP_MS = { min: 620, max: 1900 } as const
-
-/** The first bubble comes sooner, so the water is already alive on arrival. */
-const FIRST_BUBBLE_MS = { min: 300, max: 1100 } as const
-
-/**
- * One splash's lifetime at a modest pop, in ms — scaled by the bubble's own pop
- * height, so a crown thrown higher also takes longer to come down. Kept in step
+ * One splash's lifetime at a modest pop, in ms — scaled by how high the crown was
+ * thrown, so one thrown higher also takes longer to come back down. Kept in step
  * with the `rest-splash-*` keyframes, which read the same duration.
  */
 const SPLASH_MS = 780
 
 /**
- * How much water a bubble needs above it to be worth drawing, as a multiple of its
- * own diameter. A bubble is a fixed size while the water is not: near the end of a
- * rest the remaining puddle is shallower than a big bubble is tall, and one drawn
- * there reads as a blob sitting in the vessel rather than anything rising through
- * it. Surfacing asks for more room than dissolving because the climb is the point
- * of it — there has to be a journey to watch.
+ * How strong a burst has to be to be worth a crown. Below it the bubble still shoves
+ * the surface — the wave answers every burst, so the water is never still — there is
+ * just nothing thrown clear of the line to draw, which is what an ordinary little
+ * bubble does. Set where roughly a third of the bursts clear it: the line is always
+ * moving, and water actually leaving it is an event every few seconds.
  */
-const WATER_PER_BUBBLE = { dissolve: 2, surface: 3.2 } as const
+const SPLASH_VISIBLE = 0.42
 
-/** How far a bubble stays off the walls, in the vessel's hundredths. */
-const WALL_MARGIN = 1.5
+/** How high a crown is thrown, as a multiple of a modest pop: weakest burst to full. */
+const SPLASH_HEIGHT = { min: 0.7, max: 1.8 } as const
+
+/** How many places along the floor the bubbles come from. */
+const VENTS = { min: 1, max: 3 } as const
+
+/**
+ * How much room across a vent needs, in box units: the widest bubble that forms plus
+ * the walls it has to stay off. A vessel that comes to a point at the bottom has none
+ * of that at its floor, so its vents are pushed up it until they fit.
+ */
+const VENT_ROOM = 6
+
+/** How far up the vessel that may push them, as a share of the depth. */
+const VENT_LIFT = 0.3
+
+/** How far over a vent the walls are read, so the floor line itself isn't a pinch. */
+const VENT_PROBE = 1
+
+/** How far the vents stay off the walls, in box units. */
+const VENT_EDGE = 4
+
+/** How much of its share of the floor a vent may wander, so two never line up. */
+const VENT_WANDER = 0.5
 
 /** Droplets thrown by one splash: position across the crown and how far out each flies. */
 const SPLASH_DROPS = [
@@ -393,11 +397,10 @@ const SPLASH_DROPS = [
   { left: 66, size: 6, dx: '340%' },
 ] as const
 
-const rand = (min: number, max: number) => min + Math.random() * (max - min)
+const lerp = (range: { min: number; max: number }, at: number) =>
+  range.min + at * (range.max - range.min)
 
-/** A bubble on its way up, alive until it surfaces or comes apart. */
-type Riser = { id: number; left: number; bubble: Bubble }
-/** The splash one left behind: `x` across the vessel, `strength` its size. */
+/** The splash a bubble left behind: `x` across the vessel, `strength` its size. */
 type Splash = { id: number; x: number; strength: number; pop: number }
 
 /**
@@ -408,58 +411,106 @@ type Splash = { id: number; x: number; strength: number; pop: number }
 const vessels = createRotation(VESSEL_KINDS)
 
 /**
+ * The lowest line across the vessel with room on it for a bubble. A flat-bottomed
+ * shape gives that up at its floor; a triangle standing on a corner or a random
+ * polygon that came to a point has to be climbed a little way first, and the search
+ * gives up a third of the way up rather than sending the bubbles to the middle.
+ */
+function ventFloor(vessel: Vessel): number {
+  const limit = vessel.bottom - (vessel.bottom - vessel.top) * VENT_LIFT
+  for (let y = vessel.bottom; y > limit; y -= 1) {
+    const room = vessel.spanAt(y - VENT_PROBE)
+    if (room && room[1] - room[0] >= VENT_ROOM) return y
+  }
+  return limit
+}
+
+/**
+ * Where the bubbles come from: a few places spread along that line, each given its
+ * own share of it to sit somewhere in. Sharing it out rather than drawing each one
+ * freely is what keeps two vents from coming up in the same place — and keeps them
+ * close enough that a bubble rising off one drifts into the chain off the next,
+ * which is where most of the merges come from.
+ */
+function bubbleVents(vessel: Vessel, rng: () => number = Math.random): Vent[] {
+  const y = ventFloor(vessel)
+  const room = vessel.spanAt(y - VENT_PROBE) ?? [50, 50]
+  const lo = room[0] + VENT_EDGE
+  const hi = room[1] - VENT_EDGE
+  const count = VENTS.min + Math.floor(rng() * (VENTS.max - VENTS.min + 1))
+  if (hi <= lo) return [{ x: (room[0] + room[1]) / 2, y }]
+  const share = (hi - lo) / count
+  return Array.from({ length: count }, (_, i) => ({
+    x: lo + share * (i + 0.5) + (rng() - 0.5) * share * VENT_WANDER,
+    y,
+  }))
+}
+
+/**
  * The 'tide' shape: a vessel that empties, with a living water surface.
  *
- * The surface is a real wave (see lib/tide) rather than a straight line — a row
- * of sprung nodes that gets thrown upward wherever a bubble bursts, spreads the
- * bump outward, bounces it off the walls and rings down. So the top of the water
- * answers the bubbles instead of ignoring them. It is tuned slow, because wave
- * speed is what says how big a body of water this is. The water *level* is still
- * the countdown; the wave only ever rides on top of it.
+ * The surface is a real wave (see lib/tide) rather than a straight line — a row of
+ * sprung nodes that gets thrown upward wherever a bubble bursts, spreads the bump
+ * outward, bounces it off the walls and rings down. So the top of the water answers
+ * the bubbles instead of ignoring them. It is tuned slow, because wave speed is what
+ * says how big a body of water this is. The water *level* is still the countdown; the
+ * wave only ever rides on top of it.
  *
- * Every bubble is drawn from a size and a buoyancy (see lib/tide) and its whole
- * life follows from those two. The feeble ones barely leave the floor before they
- * come apart; the buoyant few rush the whole depth and burst through the line, and
- * how hard they hit it — the crown, the droplets, the shove given to the wave — is
- * size and buoyancy together. So a big bubble rushing up is worth watching all the
- * way, and you can tell it is going to be worth watching while it is still rising.
+ * The bubbles are a simulation (see lib/bubbles), not an animation: each one is a
+ * body carrying a velocity, pulled up by buoyancy, held back by the water, knocked
+ * about by its own wobble and by the walls, and joined to any bubble it touches —
+ * volume and momentum both conserved, so the pair comes out of it slower than the
+ * bigger one was and has to earn its speed back. Nothing about a bubble's life is
+ * decided when it forms. Big ones outrun small ones, so a vent's chain eats itself on
+ * the way up, and the crown worth looking at is one that grew three bubbles deep and
+ * arrived fast. What each burst does to the wave is what the bubble was carrying when
+ * it hit the line.
+ *
+ * Because the bubbles read the water line every frame rather than being told about it
+ * when they were born, a falling surface catches them: as the rest runs out the last
+ * of them burst early, and there is nothing left in an empty vessel.
  *
  * The vessel is whatever came up in the rotation, and can be any shape that holds
  * water. Its bounds are what the level is mapped into, so full is full and empty is
  * empty in a triangle as much as in a circle; a CSS clip path cuts the water and the
- * bubbles to its outline, and the room a bubble is given is measured from the actual
- * walls over the stretch it climbs, so nothing rises through the glass.
+ * bubbles to its outline, and the simulation is handed the vessel's own walls, so
+ * nothing rises through the glass.
  *
- * `left`/`size` are percentages of the *vessel's width*, never its height, so the
- * bubbles stay round as the level drops; the climb is a water-height column
- * translated by a percentage, which is what keeps a bubble surfacing exactly at
- * the line however far the water has drained.
+ * The surface and the bubbles are both written straight to the DOM every frame — this
+ * is texture at 60fps and has no business re-rendering the tree that often. React is
+ * only told which bubbles exist, which changes when one forms, merges or bursts.
  */
 function TideVessel({ fraction }: { fraction: number }) {
   const [vessel] = useState(() => createVessel(vessels.next()))
   const [wave] = useState(createWave)
-  const [risers, setRisers] = useState<Riser[]>([])
+  const [swarm] = useState(() => createSwarm(bubbleVents(vessel)))
+  const [live, setLive] = useState<number[]>([])
   const [splashes, setSplashes] = useState<Splash[]>([])
   const calm = usePrefersReducedMotion()
-  // The render loop and the bubble scheduler both run for the whole rest, so they
-  // read the countdown through a ref rather than restarting on every tick.
+  // The render loop runs for the whole rest, so it reads the countdown through a ref
+  // rather than restarting on every tick.
   const fractionRef = useRef(fraction)
   fractionRef.current = fraction
   const fillRef = useRef<SVGPathElement>(null)
   const lineRef = useRef<SVGPathElement>(null)
   const layerRef = useRef<HTMLDivElement>(null)
+  const bubbleEls = useRef(new Map<number, HTMLDivElement>())
+  const liveRef = useRef<number[]>([])
 
   // The water line runs from the vessel's own top to its own bottom rather than the
   // box's, so a shape that doesn't reach the edges still reads full at the start and
   // empty at the end instead of spending the ends of the rest out of sight.
   const depth = vessel.bottom - vessel.top
-  const surfaceAt = (level: number) => vessel.bottom - level * depth
 
-  // The surface is redrawn every frame, so it's written straight to the DOM: this
-  // is texture at 60fps and has no business re-rendering the tree that often. The
-  // water level follows the countdown here too — a CSS transition on the bubble
-  // layer would drift out of step with the path drawn from `level`.
   useEffect(() => {
+    // Reduced motion mid-rest: empty the water rather than leaving whatever was in it
+    // frozen in place, which is the one thing worse than motion.
+    if (calm && swarm.bubbles.length) {
+      swarm.bubbles = []
+      liveRef.current = []
+      setLive([])
+    }
+    const timers = new Set<number>()
     let raf = 0
     let last = performance.now()
     let level = fractionRef.current
@@ -470,66 +521,58 @@ function TideVessel({ fraction }: { fraction: number }) {
       // other shapes' `transition: height` does.
       level += (fractionRef.current - level) * (1 - Math.exp(-dt / 0.09))
       stepWave(wave, dt)
-      const surface = waveSurfacePath(wave, surfaceAt(level))
+      const flat = vessel.bottom - level * depth
+
+      if (!calm) {
+        // The bubbles are given the wave's surface rather than the flat line, so what
+        // lets one out is the water actually over it at that moment.
+        const water = {
+          surfaceAt: (x: number) => flat + waveHeightAt(wave, x / 100),
+          spanAt: vessel.spanAt,
+        }
+        for (const pop of stepSwarm(swarm, water, dt)) {
+          impulseWave(wave, pop.x / 100, pop.lift, pop.bump)
+          if (pop.strength < SPLASH_VISIBLE) continue
+          const height = lerp(SPLASH_HEIGHT, pop.strength)
+          const splash = { id: pop.id, x: pop.x, strength: pop.strength, pop: height }
+          setSplashes((s) => [...s, splash])
+          const timer = window.setTimeout(() => {
+            timers.delete(timer)
+            setSplashes((s) => s.filter((p) => p.id !== splash.id))
+          }, SPLASH_MS * height)
+          timers.add(timer)
+        }
+
+        // React is told the roster; the loop places each one itself.
+        const ids = swarm.bubbles.map((b) => b.id)
+        const roster = liveRef.current
+        if (ids.length !== roster.length || ids.some((id, i) => id !== roster[i])) {
+          liveRef.current = ids
+          setLive(ids)
+        }
+        for (const b of swarm.bubbles) {
+          const el = bubbleEls.current.get(b.id)
+          if (!el) continue
+          el.style.left = `${b.x - b.r}%`
+          el.style.top = `${b.y - b.r}%`
+          el.style.width = `${b.r * 2}%`
+          el.style.opacity = `${bubbleOpacity(b)}`
+        }
+      }
+
+      const surface = waveSurfacePath(wave, flat)
       fillRef.current?.setAttribute('d', `${surface} L 100 100 L 0 100 Z`)
       lineRef.current?.setAttribute('d', surface)
       if (layerRef.current) layerRef.current.style.height = `${level * depth}%`
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
-    return () => cancelAnimationFrame(raf)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the vessel never changes
-  }, [wave, depth])
-
-  // Bubbles leave the floor on a steady-ish beat; what each one does when it gets
-  // where it's going is its own business. A surfacing one is swapped for a splash
-  // and shoves the wave where it broke through.
-  useEffect(() => {
-    if (calm) return
-    const timers = new Set<number>()
-    const after = (ms: number, fn: () => void) => {
-      const id = window.setTimeout(() => {
-        timers.delete(id)
-        fn()
-      }, ms)
-      timers.add(id)
+    return () => {
+      cancelAnimationFrame(raf)
+      timers.forEach(clearTimeout)
     }
-    let nextId = 0
-    const spawn = () => {
-      after(rand(BUBBLE_GAP_MS.min, BUBBLE_GAP_MS.max), spawn)
-      const level = fractionRef.current
-      const water = level * depth
-      const bubble = drawBubble()
-      if (water < bubble.size * WATER_PER_BUBBLE[bubble.surfaces ? 'surface' : 'dissolve']) return
-
-      // Where the bubble's centre travels: off the floor, up to wherever it gets to.
-      // Its own radius is kept off both ends so the *body* stays in the water, and
-      // the top is never lifted past the floor — a bubble whose whole climb is
-      // shorter than it is wide barely moves, and is measured where it sits.
-      const half = bubble.size / 2
-      const floor = vessel.bottom - half
-      const reach = Math.min(floor, surfaceAt(level * bubble.climb) + half)
-      const room = spanBetween(vessel, reach, floor)
-      const lo = room ? room[0] + half + WALL_MARGIN : 0
-      const hi = room ? room[1] - half - WALL_MARGIN : 0
-      // Water pinched narrower than the bubble is wide: nothing this size rises here.
-      if (hi <= lo) return
-
-      const centre = rand(lo, hi)
-      const id = nextId++
-      setRisers((r) => [...r, { id, left: centre - half, bubble }])
-      after(bubble.life, () => {
-        setRisers((r) => r.filter((b) => b.id !== id))
-        if (!bubble.surfaces) return
-        impulseWave(wave, centre / 100, bubble.lift, bubble.bump)
-        setSplashes((s) => [...s, { id, x: centre, strength: bubble.splash, pop: bubble.pop }])
-        after(SPLASH_MS * bubble.pop, () => setSplashes((s) => s.filter((p) => p.id !== id)))
-      })
-    }
-    after(rand(FIRST_BUBBLE_MS.min, FIRST_BUBBLE_MS.max), spawn)
-    return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the vessel never changes
-  }, [calm, wave, depth])
+  }, [calm, wave, swarm, depth])
 
   return (
     <div className="absolute h-[74%] w-[74%]">
@@ -560,38 +603,28 @@ function TideVessel({ fraction }: { fraction: number }) {
             vectorEffect="non-scaling-stroke"
           />
         </svg>
-        {/* Everything that belongs *to* the water rides in a layer exactly as tall
-            as it, so `top: 0` is the surface and `bottom: 0` the floor. */}
+        {/* The bubbles sit in the vessel's own box — the simulation works in the same
+            hundredths the clip path does — so nothing here says where one is or how
+            big it is. The box is square, so a width in percent and a square aspect
+            make a circle. */}
+        {live.map((id) => (
+          <div
+            key={id}
+            ref={(el) => {
+              if (el) bubbleEls.current.set(id, el)
+              else bubbleEls.current.delete(id)
+            }}
+            className="absolute aspect-square rounded-full bg-accent-bright/70"
+            style={{ opacity: 0 }}
+          />
+        ))}
+        {/* The splashes ride in a layer exactly as tall as the water, so `top: 0` is
+            the surface and the crown hangs off the line as it falls. */}
         <div
           ref={layerRef}
           className="absolute inset-x-0"
           style={{ bottom: `${100 - vessel.bottom}%`, height: `${fraction * depth}%` }}
         >
-          {risers.map(({ id, left, bubble }) => (
-            // The riser is the travel: a column as tall as the water carrying one
-            // bubble at its foot, translated by the share of the depth it climbs.
-            <div
-              key={id}
-              className="rest-riser absolute inset-y-0"
-              style={
-                {
-                  left: `${left}%`,
-                  width: `${bubble.size}%`,
-                  '--rise': `${bubble.life}ms`,
-                  '--climb': `${-bubble.climb * 100}%`,
-                  '--drift': `${bubble.drift * 100}%`,
-                  // A bubble on its way up accelerates; one giving up slows down.
-                  '--ease': bubble.surfaces ? 'ease-in' : 'ease-out',
-                } as CSSProperties
-              }
-            >
-              <div
-                className={`absolute bottom-0 aspect-square w-full rounded-full bg-accent-bright/70 ${
-                  bubble.surfaces ? 'rest-riser-bubble' : 'rest-bubble-dissolve'
-                }`}
-              />
-            </div>
-          ))}
           {splashes.map((s) => (
             // Pinned to the surface line where its bubble broke through. Zero height,
             // so its children hang off the line; one scale sizes the whole splash,

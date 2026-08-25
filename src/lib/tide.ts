@@ -1,6 +1,7 @@
 /**
- * The water of the 'tide' rest shape (see components/RestTimer): its surface, and
- * the bubbles that disturb it.
+ * The surface of the 'tide' rest shape's water (see components/RestTimer). What
+ * disturbs it — the bubbles — is simulated in lib/bubbles; this is only the water
+ * line's own behaviour once something has hit it.
  *
  * The surface is a row of nodes strung together like a chain of springs: each one
  * is pulled toward its neighbours (so a disturbance travels sideways), pulled
@@ -171,160 +172,19 @@ export function waveSurfacePath(wave: Wave, surfaceY: number, width = 100): stri
   return parts.join(' ')
 }
 
+/**
+ * How far the surface is displaced at `at` (0 = left wall, 1 = right wall),
+ * interpolated between the two nodes either side of it. The bubbles read the water
+ * line through this, so what pops one is the wave over it rather than the flat line
+ * underneath: a trough rolling past lets a bubble out early, a crest holds it under.
+ */
+export function waveHeightAt(wave: Wave, at: number): number {
+  const y = wave.y
+  const n = y.length
+  const pos = Math.max(0, Math.min(1, at)) * (n - 1)
+  const i = Math.min(n - 2, Math.floor(pos))
+  const t = pos - i
+  return y[i] + (y[i + 1] - y[i]) * t
+}
+
 const round = (n: number) => Math.round(n * 100) / 100
-
-const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
-
-const between = (range: { min: number; max: number }, at: number) =>
-  range.min + clamp01(at) * (range.max - range.min)
-
-/* ---- The bubbles ----
- *
- * Two draws decide a bubble's whole life: how big it is, and how buoyant. Size is
- * the water it carries and buoyancy is how hard it pulls for the surface, and
- * every other number below falls out of those two — so what you see rising tells
- * you what it is about to do.
- *
- * Most bubbles lose: they come apart somewhere in the lower water, the feeble ones
- * barely off the floor. The buoyant few rush the whole depth and burst through the
- * line, and how hard they hit it is size and buoyancy together — a big lazy bubble
- * and a small frantic one both make a middling splash, while a big buoyant one is
- * the crown with droplets that makes watching the water worthwhile. */
-
-/** Bubble diameter as a share of the vessel's width. */
-const BUBBLE_SIZE = { min: 2.2, max: 8.6 } as const
-
-/** Higher means more of the draws come out small, so a big bubble is worth seeing. */
-const SIZE_BIAS = 1.45
-
-/**
- * Buoyancy above which a bubble reaches the surface. Everything below it comes
- * apart on the way up, so this is really "how rare is a pop" — and it is meant to
- * be rare: the water rings for seconds after one, and a pop every second or two
- * would leave the surface permanently churning with nothing to read.
- */
-const SURFACES_ABOVE = 0.74
-
-/** Higher means fewer buoyant bubbles still, on top of the threshold above. */
-const BUOYANCY_BIAS = 1.6
-
-/**
- * How long a surfacing bubble takes to climb the water: the most buoyant ones
- * rush it, the ones that only just make it labour all the way up.
- */
-const RISE_MS = { min: 1500, max: 3400 } as const
-
-/** And how long one that never makes it lasts before it comes apart. */
-const DISSOLVE_MS = { min: 650, max: 2000 } as const
-
-/** How far up the water a bubble that comes apart gets, as a share of the depth. */
-const DISSOLVE_CLIMB = { min: 0.08, max: 0.5 } as const
-
-/**
- * Where a surfacing bubble stops, as a share of the depth: just shy of the line,
- * so its body meets the surface rather than its centre pushing out through it.
- */
-const SURFACE_CLIMB = 0.94
-
-/** How far the surface is thrown by a full-strength splash, in vessel hundredths. */
-const WAVE_LIFT = 11
-
-/** Half-width of the bump left on the surface, in nodes: smallest bubble to largest. */
-const BUMP_NODES = { min: 1.3, max: 3.8 } as const
-
-/** How high a splash is thrown, as a multiple of a modest pop. */
-const POP_HEIGHT = { min: 0.7, max: 1.8 } as const
-
-/** How far a bubble wanders sideways on the way up, as a share of its own width. */
-const DRIFT = { min: -0.75, max: 0.75 } as const
-
-/** Smallest splash, as a fraction of a full one — still visible, just modest. */
-const SPLASH_MIN = 0.34
-
-/** How much of a splash is the bubble's size rather than the speed it arrived at. */
-const SPLASH_FROM_SIZE = 0.55
-
-/** Higher means more of the splashes land near the small end. */
-const SPLASH_BIAS = 1.5
-
-/**
- * How big a splash a surfacing bubble makes. `size` is how big it is across the
- * range bubbles come in and `rush` how far past the surfacing threshold its
- * buoyancy went, both 0–1 — so the biggest crown of the rest needs a big bubble
- * that also came up fast, and either one alone is a dent.
- */
-export function splashStrength(size: number, rush: number): number {
-  const blend = SPLASH_FROM_SIZE * clamp01(size) + (1 - SPLASH_FROM_SIZE) * clamp01(rush)
-  return SPLASH_MIN + (1 - SPLASH_MIN) * blend ** SPLASH_BIAS
-}
-
-/** One bubble's whole life, drawn at the moment it leaves the floor. */
-export type Bubble = {
-  /** Diameter, as a share of the vessel's width. */
-  size: number
-  /** How hard it pulls for the surface, 0–1. */
-  buoyancy: number
-  /** Whether it breaks the surface, or comes apart in the water. */
-  surfaces: boolean
-  /** How long it lives, in ms — its climb if it surfaces, its whole life if not. */
-  life: number
-  /** How far up the water it gets, as a share of the depth. */
-  climb: number
-  /** How far it wanders sideways on the way, as a share of its own width. */
-  drift: number
-  /** How big its splash is, 0–1 of a full crown. Meaningless unless it surfaces. */
-  splash: number
-  /** How high that splash is thrown, as a multiple of a modest pop. */
-  pop: number
-  /** How far it throws the surface, in vessel hundredths — see {@link impulseWave}. */
-  lift: number
-  /** And how broad a bump it leaves there, in wave nodes. */
-  bump: number
-}
-
-/**
- * Draw a bubble. `rng` is injectable so the tests can drive a whole life from a
- * known pair of draws rather than sampling for one.
- */
-export function drawBubble(rng: () => number = Math.random): Bubble {
-  // Both draws are skewed low, so the big buoyant bubble is the one you wait for.
-  const sizeAt = rng() ** SIZE_BIAS
-  const buoyancy = rng() ** BUOYANCY_BIAS
-  const size = between(BUBBLE_SIZE, sizeAt)
-  const drift = between(DRIFT, rng())
-  const surfaces = buoyancy > SURFACES_ABOVE
-
-  if (!surfaces) {
-    // How close it came to making it, which is all a doomed bubble's life is: the
-    // feeblest barely leaves the floor before it goes, the near-miss gets halfway.
-    const effort = buoyancy / SURFACES_ABOVE
-    return {
-      size,
-      buoyancy,
-      surfaces,
-      life: between(DISSOLVE_MS, effort),
-      climb: between(DISSOLVE_CLIMB, effort),
-      drift,
-      splash: 0,
-      pop: 0,
-      lift: 0,
-      bump: 0,
-    }
-  }
-
-  const rush = (buoyancy - SURFACES_ABOVE) / (1 - SURFACES_ABOVE)
-  const splash = splashStrength(sizeAt, rush)
-  return {
-    size,
-    buoyancy,
-    surfaces,
-    // The more buoyant, the faster the climb — hence the inverted ends.
-    life: between(RISE_MS, 1 - rush),
-    climb: SURFACE_CLIMB,
-    drift,
-    splash,
-    pop: between(POP_HEIGHT, rush),
-    lift: splash * WAVE_LIFT,
-    bump: between(BUMP_NODES, sizeAt),
-  }
-}

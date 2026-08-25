@@ -111,93 +111,20 @@ input[type='number'] {
    eye to the one part of the glass that tells no time. Both levels move on their
    own transitions, so nothing here is needed to sell the flow. */
 
-/* Tide: one bubble's climb. The riser column spans the water's full height, so
-   translating it by a share of that (`--climb`, negative for up) carries its
-   bubble that far up however deep the water currently is — -94% puts it at the
-   surface, a fifth of that leaves it in the lower water. RestTimer draws every
-   bubble from a size and a buoyancy (see lib/tide) and unmounts it when it gets
-   where it's going, so these run once rather than looping: `--rise` is this
-   bubble's own time, `--ease` accelerates the ones on their way up and slows the
-   ones giving up, and `--drift` is how far it wanders sideways on the way, in
-   multiples of its own width. Its splash is mounted at the moment of the pop and
-   runs once too; the surface it lands on is a simulated wave (lib/tide), which is
-   what carries the ripple. */
-@keyframes rest-riser {
-  0% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(var(--drift, 0%), calc(var(--climb, -94%) * 0.5));
-  }
-  100% {
-    transform: translate(0%, var(--climb, -94%));
-  }
-}
-.rest-riser {
-  animation-name: rest-riser;
-  animation-duration: var(--rise, 2800ms);
-  animation-timing-function: var(--ease, ease-in);
-  animation-fill-mode: forwards;
-  will-change: transform;
-}
-
-/* The bubbles that don't make it — most of them. Held together just long enough to
-   be seen leaving the floor, then shrinking away to nothing rather than fading at
-   full size: coming apart is the reading, and a bubble that only dims looks like it
-   went somewhere. */
-@keyframes rest-bubble-dissolve {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  18% {
-    opacity: 0.8;
-    transform: scale(1);
-  }
-  62% {
-    opacity: 0.65;
-    transform: scale(1.02);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-}
-.rest-bubble-dissolve {
-  animation: rest-bubble-dissolve var(--rise, 1400ms) ease-out forwards;
-  will-change: transform, opacity;
-}
-
-@keyframes rest-riser-bubble {
-  0% {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  12% {
-    opacity: 0.85;
-    transform: scale(1);
-  }
-  86% {
-    opacity: 0.85;
-    transform: scale(1.05);
-  }
-  /* Breaking the surface: the bubble stretches thin and is gone. */
-  100% {
-    opacity: 0;
-    transform: scale(1.9);
-  }
-}
-.rest-riser-bubble {
-  animation: rest-riser-bubble var(--rise, 2800ms) ease-in forwards;
-  will-change: transform, opacity;
-}
+/* Tide: the bubbles have no keyframes at all. Every one is a body in a simulation
+   (see lib/bubbles) — buoyancy, drag, its own wobble, the walls, and whatever it
+   runs into — and RestTimer writes its place, its size and its fade-in straight to
+   the element every frame. A bubble that swallowed a neighbour on the way up is
+   wider than it was a second ago and slower than it is about to be, and no loop can
+   say that. What's left here is the splash it makes breaking the line, which happens
+   once and is the same shape every time. */
 
 /* The splash: a crown of water thrown up where the bubble burst. How big it is
-   overall comes from the wrapper's scale, drawn per bubble — most are small — and
-   `--lift` is how *high* this one goes, which is the bubble's buoyancy: one that
-   rushed the whole depth pops well clear of the line where one that just about
-   made it barely creases it. `--splash-ms` scales with the same number, so a crown
-   thrown higher also takes longer to come back down. */
+   overall comes from the wrapper's scale, and `--lift` is how *high* this one goes.
+   Both are what the bubble was carrying when it hit the line — a fat one arriving
+   fast pops well clear of it, where a small one that laboured up barely creases it,
+   and most bursts don't clear the bar for a crown at all. `--splash-ms` scales with
+   the same number, so a crown thrown higher takes longer to come back down. */
 @keyframes rest-splash-crown {
   0% {
     transform: scaleX(0.7) scaleY(0.1);
