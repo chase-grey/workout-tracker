@@ -10,6 +10,7 @@ import {
   type BeadField,
   type BeadPlan,
 } from '../lib/beads'
+import { bulbPath, createBulbs, sandLevels, waistY } from '../lib/bulbs'
 import { type ExtraVariant } from '../lib/restShapes'
 import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
 import { createSpiral, pointAt, shareAt, spiralPath } from '../lib/spiral'
@@ -38,6 +39,8 @@ import { usePrefersReducedMotion } from '../lib/useReducedMotion'
  *    measured against anything: `beads` joins seven of them down to one, `split`
  *    breaks one into seven, `shed` empties a mass of them off the pane altogether,
  *    and `gather` collects seven out of the dark into one.
+ *  - an *area* — `bulbs`, the curvy sand timer, where the walls bow too much for a
+ *    level to be honest and how much sand you can see is the reading instead.
  *
  * A shape that fills is exactly as honest as one that drains: `1 - fraction` is
  * the same reading upside down, and it still lands on the tick.
@@ -1211,6 +1214,108 @@ function GlassGather({ fraction }: { fraction: number }) {
   return <BeadPane field={field} settled={whole} />
 }
 
+/* --------------------------------------------------------------------- bulbs */
+
+/**
+ * The silhouette, sampled once at module scope: it never changes shape, only how
+ * much sand each half of it holds. See lib/bulbs for why the two levels are solved
+ * out of area rather than taken straight off the countdown.
+ */
+const BULBS = createBulbs({ cx: 50, top: 7, bottom: 93, rimHalf: 30, waistHalf: 3.4 })
+const UPPER_BULB = bulbPath(BULBS, 'upper')
+const LOWER_BULB = bulbPath(BULBS, 'lower')
+const BULB_WAIST = waistY(BULBS)
+
+/** How far a surface can travel: the height of the bulb it is in. */
+const BULB_SPAN = BULB_WAIST - BULBS.spec.top
+
+/** The bright line along the top of a body of sand, in viewBox units. */
+const SURFACE = 1.5
+
+/**
+ * A body of sand with its surface at `y`, filled well past the bulb it belongs to
+ * and run wider than the shape, so every edge of it except the surface is a wall of
+ * the glass. Twice the travel is deep enough that a body slid the whole way still
+ * reaches the far end of its bulb.
+ */
+function sandBody(y: number) {
+  return { x: -10, width: 120, y, height: BULB_SPAN * 2 }
+}
+
+/**
+ * The 'bulbs' shape: a sand timer with no straight line in it — two bulbs swelling
+ * off a narrow waist, the sand draining out of the top one and piling into the
+ * bottom one over the rest.
+ *
+ * The third sand timer on the rest screen and the only curved one, which is the
+ * whole of why it looks unlike the other two at a glance: RestTimer's `sandglass`
+ * and `hourglass` are both a pair of straight tapers, and a triangle drains
+ * evenly. Here the shoulders are nine times wider than the neck, so what falls at
+ * a steady rate is the *area* of sand and not the height of it — see lib/bulbs.
+ * What you read is how much colour is still in the upper bulb, which is exactly
+ * the rest that is left, and the surfaces are free to ease through the wide part
+ * and run through the narrow one the way sand in a real glass does.
+ *
+ * Abstract for the same reasons the flat hourglass is: no frame, no caps, no
+ * glass, no heaped or scooped sand, and nothing crossing the waist. The bodies of
+ * sand *slide* behind a clip of the bulb rather than being redrawn each tick — a
+ * path can't be transitioned, and a translate can, which is what turns the
+ * countdown's 250ms steps into one continuous fall. Their curved sides come from
+ * the clip, so the only edge either body draws for itself is its surface.
+ */
+function SandBulbs({ fraction }: { fraction: number }) {
+  // Each bulb clips its own sand, and a clip path is referenced by id. Stripped to
+  // word characters: useId's own punctuation has no business in a url(#…).
+  const id = useId().replace(/\W/g, '')
+  const { upper, lower } = sandLevels(BULBS, fraction)
+  const slide = (dy: number): CSSProperties => ({
+    transform: `translateY(${dy}px)`,
+    transition: `transform ${DRAIN}`,
+  })
+
+  return (
+    <div className="absolute inset-0 text-accent-bright" aria-hidden>
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100">
+        <defs>
+          <clipPath id={`${id}-upper`}>
+            <path d={UPPER_BULB} />
+          </clipPath>
+          <clipPath id={`${id}-lower`}>
+            <path d={LOWER_BULB} />
+          </clipPath>
+        </defs>
+        <g fill="currentColor">
+          {/* The empty bulbs, so both are still there once their sand has gone. */}
+          <path d={UPPER_BULB} fillOpacity={0.1} />
+          <path d={LOWER_BULB} fillOpacity={0.1} />
+          {/* The sand still to fall: parked full and sinking toward the waist. */}
+          <g clipPath={`url(#${id}-upper)`}>
+            <g style={slide(upper - BULBS.spec.top)}>
+              <rect {...sandBody(BULBS.spec.top)} fillOpacity={0.8} />
+              <rect x={-10} y={BULBS.spec.top} width={120} height={SURFACE} />
+            </g>
+          </g>
+          {/* And the sand already fallen: parked under the base, rising off it. The
+              surface line sits at the very top of the body, so while nothing has
+              fallen the whole thing is below the base and the clip hides it. */}
+          <g clipPath={`url(#${id}-lower)`}>
+            <g style={slide(lower - BULBS.spec.bottom)}>
+              <rect {...sandBody(BULBS.spec.bottom)} fillOpacity={0.8} />
+              <rect x={-10} y={BULBS.spec.bottom} width={120} height={SURFACE} />
+            </g>
+          </g>
+        </g>
+        {/* The outline, over the sand so the curve stays crisp against it. One
+            weight, no highlight: the line is the wall and nothing more. */}
+        <g fill="none" stroke="currentColor" strokeOpacity={0.45} strokeWidth={1.1}>
+          <path d={UPPER_BULB} />
+          <path d={LOWER_BULB} />
+        </g>
+      </svg>
+    </div>
+  )
+}
+
 /* ---------------------------------------------------------------------- fuse */
 
 /** Sparks thrown off a burning head: where each one flies, in multiples of its own size. */
@@ -1342,6 +1447,9 @@ export function ExtraRestShape({
     // And that backwards: beads arriving out of the dark into a mass that takes them.
     case 'gather':
       return <GlassGather fraction={fraction} />
+    // A curvy sand timer: the area of sand left in the upper bulb is the reading.
+    case 'bulbs':
+      return <SandBulbs fraction={fraction} />
     // A cord burning in from both edges of the screen.
     case 'fuse':
     default:
