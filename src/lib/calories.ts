@@ -12,6 +12,12 @@ export type CalorieEntry = {
    * predate the field.
    */
   loggedAt?: string
+  /**
+   * How many calories the tap at {@link loggedAt} added — the last helping, not
+   * the day's running total. Signed, so a −100 correction records -100. It is
+   * half of one fact with `loggedAt` and is kept, replaced and dropped with it.
+   */
+  lastAmount?: number
 }
 
 export const CALORIE_GOAL = 4000
@@ -126,31 +132,47 @@ function latestByDate(entries: CalorieEntry[]): Map<string, number> {
   return totals
 }
 
+/** A date's last recorded tap: when it happened, and how big it was if known. */
+type LastLog = { at: Date; amount?: number }
+
 /**
- * The most recent {@link CalorieEntry.loggedAt} recorded for `date`, or null
- * when that day has no timestamp (never logged, or logged before the field
- * existed / only ever backfilled).
+ * The most recent tap recorded for `date`, or null when that day has no
+ * timestamp (never logged, or logged before the field existed / only ever
+ * backfilled). `amount` is absent when the row is older than that field.
  */
-export function lastLoggedAt(entries: CalorieEntry[], date: string): Date | null {
-  let latest: Date | null = null
+function lastLog(entries: CalorieEntry[], date: string): LastLog | null {
+  let latest: LastLog | null = null
   for (const entry of entries) {
     if (entry.date !== date || !entry.loggedAt) continue
     const at = new Date(entry.loggedAt)
     if (Number.isNaN(at.getTime())) continue
-    if (latest === null || at > latest) latest = at
+    if (latest !== null && at <= latest.at) continue
+    latest = Number.isFinite(entry.lastAmount) ? { at, amount: entry.lastAmount } : { at }
   }
   return latest
+}
+
+/** When `date` was last logged, or null — see {@link lastLog}. */
+export function lastLoggedAt(entries: CalorieEntry[], date: string): Date | null {
+  return lastLog(entries, date)?.at ?? null
+}
+
+/** A logged helping the way the card writes it: `+500`, `−100`. */
+export function formatHelping(calories: number): string {
+  return calories < 0 ? `−${Math.abs(calories)}` : `+${calories}`
 }
 
 /**
  * What the calorie card says about the day it's showing, and whether to flag it.
  *
  * For a past day there's nothing to report but the date. For today the line is
- * how long it's been since the last log — more useful than the word "today",
- * which the header position already implies. A day can have a total but no
- * timestamp — logged before the field existed, or only ever backfilled, or
- * never touched at all — and then there's nothing honest to say, so the label
- * is empty and the card drops the line.
+ * the last helping and how long it's been since — more useful than the word
+ * "today", which the header position already implies, and the size answers the
+ * question the gap raises: whether that hour-ago tap was a meal or a snack. A
+ * day can have a total but no timestamp — logged before the field existed, or
+ * only ever backfilled, or never touched at all — and then there's nothing
+ * honest to say, so the label is empty and the card drops the line. A stamped
+ * day predating the amount field still says how long ago, just not how much.
  */
 export function foodLogStatus(
   entries: CalorieEntry[],
@@ -159,8 +181,14 @@ export function foodLogStatus(
 ): { label: string; stale: boolean } {
   if (date !== toISODate(now)) return { label: date.slice(5), stale: false }
 
-  const loggedAt = lastLoggedAt(entries, date)
-  if (loggedAt) return { label: formatElapsed(loggedAt, now), stale: isFoodLogStale(loggedAt, now) }
+  const last = lastLog(entries, date)
+  if (last) {
+    const elapsed = formatElapsed(last.at, now)
+    return {
+      label: last.amount == null ? elapsed : `${formatHelping(last.amount)} · ${elapsed}`,
+      stale: isFoodLogStale(last.at, now),
+    }
+  }
 
   return { label: '', stale: false }
 }
@@ -171,17 +199,23 @@ export function foodLogStatus(
  * so the same-day quick-adds collapse into a single entry that we upsert.
  *
  * Omitting `loggedAt` keeps whatever timestamp the date already had rather than
- * clearing it, so a backfill can't erase a real same-day log time.
+ * clearing it, so a backfill can't erase a real same-day log time. The helping
+ * moves with the timestamp and never on its own: a backfill that kept the old
+ * time but took this tap's amount would claim a helping the day never had.
  */
 export function setDayTotal(
   entries: CalorieEntry[],
   date: string,
   total: number,
   loggedAt?: string,
+  lastAmount?: number,
 ): CalorieEntry[] {
-  const kept = loggedAt ?? lastLoggedAt(entries, date)?.toISOString()
+  const kept = loggedAt ? { at: loggedAt, amount: lastAmount } : lastLog(entries, date)
   const entry: CalorieEntry = { date, calories: total }
-  if (kept) entry.loggedAt = kept
+  if (kept) {
+    entry.loggedAt = typeof kept.at === 'string' ? kept.at : kept.at.toISOString()
+    if (Number.isFinite(kept.amount)) entry.lastAmount = kept.amount
+  }
   return [...entries.filter((e) => e.date !== date), entry]
 }
 
@@ -198,8 +232,9 @@ export function setDayTotal(
  * legacy multi-row dates collapse to a single entry and the cache self-migrates.
  *
  * The log timestamp is merged separately from the total, taking the newer of
- * the two sides: unlike the total it only ever moves forward, so a device that
- * hasn't logged today can still learn when the logging device last did.
+ * the two sides (and bringing that side's helping with it): unlike the total it
+ * only ever moves forward, so a device that hasn't logged today can still learn
+ * when the logging device last did, and what it last ate.
  *
  * `serverWins` inverts the precedence for one fetch, letting the backend
  * overwrite dates this device already has. Local-wins is otherwise permanent:
@@ -221,11 +256,14 @@ export function mergeCaloriesByDate(
   for (const date of dates) {
     const preferServer = opts.serverWins && serverTotals.has(date)
     const total = !preferServer && localTotals.has(date) ? localTotals.get(date)! : serverTotals.get(date)!
-    const localAt = lastLoggedAt(local, date)
-    const serverAt = lastLoggedAt(server, date)
-    const at = !localAt || (serverAt && serverAt > localAt) ? serverAt : localAt
+    const localAt = lastLog(local, date)
+    const serverAt = lastLog(server, date)
+    const at = !localAt || (serverAt && serverAt.at > localAt.at) ? serverAt : localAt
     const entry: CalorieEntry = { date, calories: total }
-    if (at) entry.loggedAt = at.toISOString()
+    if (at) {
+      entry.loggedAt = at.at.toISOString()
+      if (Number.isFinite(at.amount)) entry.lastAmount = at.amount
+    }
     out.push(entry)
   }
   return out.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))

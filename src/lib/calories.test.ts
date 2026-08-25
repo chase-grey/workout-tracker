@@ -12,6 +12,7 @@ import {
   foodLogStatus,
   formatClock,
   formatElapsed,
+  formatHelping,
   isEmptyDayNagTime,
   isFoodLogStale,
   lastLoggedAt,
@@ -201,6 +202,26 @@ describe('setDayTotal timestamps', () => {
       { date: '2026-07-08', calories: 900, loggedAt: AT_NOON },
     ])
   })
+
+  it('records the helping alongside the stamp', () => {
+    expect(setDayTotal([], '2026-07-08', 500, AT_NOON, 500)).toEqual([
+      { date: '2026-07-08', calories: 500, loggedAt: AT_NOON, lastAmount: 500 },
+    ])
+  })
+
+  it('records a correction as the negative helping it was', () => {
+    const prev: CalorieEntry[] = [{ date: '2026-07-08', calories: 500, loggedAt: AT_NOON, lastAmount: 500 }]
+    expect(setDayTotal(prev, '2026-07-08', 400, AT_6PM, -100)).toEqual([
+      { date: '2026-07-08', calories: 400, loggedAt: AT_6PM, lastAmount: -100 },
+    ])
+  })
+
+  it('keeps the stamped helping when a backfill supplies neither', () => {
+    const prev: CalorieEntry[] = [{ date: '2026-07-08', calories: 500, loggedAt: AT_NOON, lastAmount: 500 }]
+    expect(setDayTotal(prev, '2026-07-08', 900)).toEqual([
+      { date: '2026-07-08', calories: 900, loggedAt: AT_NOON, lastAmount: 500 },
+    ])
+  })
 })
 
 describe('mergeCaloriesByDate timestamps', () => {
@@ -228,6 +249,14 @@ describe('mergeCaloriesByDate timestamps', () => {
     const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 500 }]
     expect(mergeCaloriesByDate(local, server)).toEqual([
       { date: '2026-07-08', calories: 800, loggedAt: AT_6PM },
+    ])
+  })
+
+  it('brings the helping with the stamp it won on', () => {
+    const local: CalorieEntry[] = [{ date: '2026-07-08', calories: 800, loggedAt: AT_NOON, lastAmount: 300 }]
+    const server: CalorieEntry[] = [{ date: '2026-07-08', calories: 500, loggedAt: AT_6PM, lastAmount: 500 }]
+    expect(mergeCaloriesByDate(local, server)).toEqual([
+      { date: '2026-07-08', calories: 800, loggedAt: AT_6PM, lastAmount: 500 },
     ])
   })
 })
@@ -301,6 +330,16 @@ describe('isEmptyDayNagTime', () => {
   })
 })
 
+describe('formatHelping', () => {
+  it('signs an addition', () => {
+    expect(formatHelping(500)).toBe('+500')
+  })
+
+  it('signs a correction with a typographic minus, matching the button', () => {
+    expect(formatHelping(-100)).toBe('−100')
+  })
+})
+
 describe('foodLogStatus', () => {
   // Wednesday 2026-07-08, the same reference day the clock helpers above use.
   const TODAY_ISO = '2026-07-08'
@@ -327,6 +366,17 @@ describe('foodLogStatus', () => {
   it('says nothing for a day with a total but no timestamp', () => {
     const untimed: CalorieEntry[] = [{ date: TODAY_ISO, calories: 1200 }]
     expect(foodLogStatus(untimed, TODAY_ISO, at(15))).toEqual({ label: '', stale: false })
+  })
+
+  it('leads with the last helping when the entry records one', () => {
+    const withAmount: CalorieEntry[] = [
+      { date: TODAY_ISO, calories: 1300, loggedAt: at(8).toISOString(), lastAmount: 500 },
+    ]
+    expect(foodLogStatus(withAmount, TODAY_ISO, at(11))).toEqual({ label: '+500 · 3h ago', stale: false })
+  })
+
+  it('still says how long ago for an entry that predates the helping field', () => {
+    expect(foodLogStatus(logged(8), TODAY_ISO, at(11))).toEqual({ label: '3h ago', stale: false })
   })
 
   it('shows a past day as its date, never flagged', () => {

@@ -54,8 +54,9 @@
  *   POST ?route=notes         body: { session, exercise, notes }
  *                 (rewrites the note on every set row of one logged exercise; see updateWorkoutNotes)
  *   POST ?route=bodyweight    body: { date, weightLbs }
- *   POST ?route=calories      body: { date, calories, label, loggedAt } (upsert by date; calories = running daily total,
- *                 loggedAt = ISO time of the last tap made ON that date; omitted on a backfill, which keeps the stored one)
+ *   POST ?route=calories      body: { date, calories, label, loggedAt, lastAmount } (upsert by date; calories = running daily total,
+ *                 loggedAt = ISO time of the last tap made ON that date and lastAmount = how many calories that tap added;
+ *                 both omitted on a backfill, which keeps the stored pair)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  *   POST ?route=durations     body: { date, kind, dayType, routine, totalSec, restSec } (append)
  *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
@@ -101,7 +102,7 @@ const FLEX_HEADERS = [
   'warm_leg_lift_right_deg',
 ]
 const CONFIG_HEADERS = ['key', 'value']
-const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at']
+const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
 // `routine` is which stretch routine a stretch session was, blank for a workout
 // and for a stretch logged before there were two. Appended, and the generic
@@ -583,6 +584,11 @@ function getCalories(since) {
     // reach the client as "unknown", not as an unparseable empty string.
     const loggedAt = String(r[3] || '')
     if (loggedAt) entry.loggedAt = loggedAt
+    // The helping only means anything paired with the time it was logged at, so
+    // it doesn't travel without one — and a blank cell is "unknown", not zero.
+    if (loggedAt && r[4] !== '' && r[4] !== null && r[4] !== undefined && isFinite(Number(r[4]))) {
+      entry.lastAmount = Number(r[4])
+    }
     out.push(entry)
   }
   return out
@@ -601,7 +607,10 @@ function appendCalories(body) {
     if (!e || !e.date || !isFinite(Number(e.calories))) continue
     // A day's total is a running value that can be corrected down (the −100
     // button); never store a negative total.
-    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '')
+    const lastAmount = isFinite(Number(e.lastAmount)) && e.lastAmount !== null && e.lastAmount !== undefined
+      ? Number(e.lastAmount)
+      : ''
+    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '', lastAmount)
     saved++
   }
   if (saved === 0 && list.length) {
@@ -610,27 +619,32 @@ function appendCalories(body) {
   return { saved: saved }
 }
 
-function upsertCalorieDate(sh, date, calories, label, loggedAt) {
+function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount) {
   const rows = sh.getDataRange().getValues()
   let firstRow = -1
   let storedLoggedAt = ''
+  let storedLastAmount = ''
   const extraRows = []
   for (let r = 1; r < rows.length; r++) {
     if (rows[r][0] && isoDate(rows[r][0]) === date) {
       if (firstRow === -1) {
         firstRow = r + 1 // 1-based sheet row
         storedLoggedAt = String(rows[r][3] || '')
+        storedLastAmount = rows[r][4] === undefined || rows[r][4] === null ? '' : rows[r][4]
       } else extraRows.push(r + 1)
     }
   }
   if (firstRow === -1) {
-    sh.appendRow([date, calories, label, loggedAt])
+    sh.appendRow([date, calories, label, loggedAt, lastAmount])
     return
   }
-  // A backfill sends no log time; keep the one already stored rather than
-  // blanking a real same-day timestamp with the correction's silence.
-  const at = loggedAt || storedLoggedAt
-  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at]])
+  // A backfill sends no log time; keep the time and the helping already stored
+  // rather than blanking a real same-day stamp with the correction's silence.
+  // The two move together — a kept time beside this tap's amount would claim a
+  // helping the day being shown never had.
+  const at = loggedAt ? loggedAt : storedLoggedAt
+  const amount = loggedAt ? lastAmount : storedLastAmount
+  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at, amount]])
   // Delete leftover legacy rows bottom-up so earlier indices stay valid.
   for (let k = extraRows.length - 1; k >= 0; k--) {
     sh.deleteRow(extraRows[k])

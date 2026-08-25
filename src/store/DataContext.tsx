@@ -33,6 +33,7 @@ import {
   type ExerciseAverages,
   type SessionDuration,
   type SessionTimeSamples,
+  type WorkoutSplit,
 } from '../lib/estimate'
 import { sessionChallenges, metBaselines, type ChallengeOpts } from '../lib/challenge'
 import { MEASUREMENT_HISTORY } from '../config/body'
@@ -63,8 +64,17 @@ import { applyNotesEdit, parseDiscomfort, type NotesEdit } from '../lib/discomfo
 
 export type WeekProgress = { workouts: number; flex: number; calDays: number }
 
-/** Wall-clock split of a finished workout, measured by the guided flow. */
-export type SessionDurationInput = { totalSec: number; restSec: number }
+/**
+ * Wall-clock split of a finished workout, measured by the guided flow, plus what
+ * the estimator had projected that same workout would cost. The projection is
+ * optional: a session finished by anything that doesn't price its own steps
+ * simply has nothing to compare against.
+ */
+export type SessionDurationInput = {
+  totalSec: number
+  restSec: number
+  projected?: WorkoutSplit
+}
 
 /**
  * Everything the full-screen workout-finish recap needs: PRs and new baselines
@@ -77,6 +87,8 @@ export type WorkoutFinishSummary = {
   totalSec: number
   activeSec: number
   restSec: number
+  /** What the estimator expected that split to be, when it had a say. */
+  projected: WorkoutSplit | null
   ambient: Celebration | null
   /**
    * How this session moved the locked goals it touched — whether it gained or
@@ -496,7 +508,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const m = new Map<string, ChallengeOpts>()
     for (const day of Object.values(plan)) {
       for (const e of day.exercises) {
-        m.set(e.key, { repMin: e.repMin, repMax: e.repMax, bodyweight: e.bodyweight, increment: e.increment, weightCapLbs: e.weightCapLbs, sharedLoad: e.sharedLoad })
+        m.set(e.key, { repMin: e.repMin, repMax: e.repMax, bodyweight: e.bodyweight, increment: e.increment, weightCapLbs: e.weightCapLbs, repLadder: e.repLadder, sharedLoad: e.sharedLoad })
       }
     }
     return m
@@ -558,7 +570,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       const totalSec = duration?.totalSec ?? 0
       const restSec = Math.max(0, Math.min(duration?.restSec ?? 0, totalSec))
-      return { prs, baselines, totalSec, activeSec: totalSec - restSec, restSec, ambient, goalPace, notes }
+      const projected = duration?.projected ?? null
+      return {
+        prs,
+        baselines,
+        totalSec,
+        activeSec: totalSec - restSec,
+        restSec,
+        projected: projected && projected.totalSec > 0 ? projected : null,
+        ambient,
+        goalPace,
+        notes,
+      }
     },
     [challengeOptsByKey, deliver, enqueue, notify, persistWorkouts, weeklyCelebrations],
   )
@@ -692,8 +715,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // says nothing about when that day's food was eaten, so it leaves the
       // existing timestamp (if any) alone rather than writing a misleading one.
       const loggedAt = day === toISODate(now) ? now.toISOString() : undefined
-      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt)
-      const entry: CalorieEntry = { date: day, calories: newTotal, ...(loggedAt && { loggedAt }) }
+      // The helping rides along with the stamp, so the card can say what the last
+      // tap was and not just when it was. Backfills carry neither.
+      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, loggedAt ? calories : undefined)
+      const entry: CalorieEntry = {
+        date: day,
+        calories: newTotal,
+        ...(loggedAt && { loggedAt, lastAmount: calories }),
+      }
       persistCalories(nextCals)
       // Write-ahead: the outbox entry is on disk before the network is touched,
       // so a tap interrupted mid-POST — the phone sleeping, the PWA going to the
