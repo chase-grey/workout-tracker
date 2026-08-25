@@ -307,6 +307,19 @@ describe('muscleDevelopment — personal ladders', () => {
     expect(abd.band).toBe('beginner')
   })
 
+  it('ladders the outer hip off the sideways raise once the machine stops logging', () => {
+    // The raise takes no weight, so its rung is read in reps — and each hip has its
+    // own history, so the muscle takes whichever side has climbed further.
+    const scores = muscleDevelopment(
+      { sideways_leg_raise_l: grew(15, 21), sideways_leg_raise_r: grew(15, 38) },
+      BW,
+    )
+    const abd = scores.abductors as Extract<MuscleScore, { hasData: true }>
+    expect(abd.basis).toBe('ladder')
+    expect(abd.percentile).toBeNull()
+    expect(abd.band).toBe('advanced') // 2.5× the fifteen it opened at
+  })
+
   it('leaves the hips out of the legs-vs-upper balance, being on a personal scale', () => {
     const laddered = muscleDevelopment(
       { leg_adductor: grew(40, 200), leg_abductor: grew(40, 200) },

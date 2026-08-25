@@ -7,6 +7,10 @@ import {
   COPENHAGEN_SWITCH_SEC,
   DEFAULT_PLAN,
   legExerciseKeys,
+  repRangeLabel,
+  SIDE_RAISE_ROUND_REST_SEC,
+  SIDE_RAISE_START_REPS,
+  SIDE_RAISE_SWITCH_SEC,
   sideOrderedExercises,
   variantExercises,
   type PlannedExercise,
@@ -223,6 +227,100 @@ describe('the shipped copenhagen plank pair', () => {
       const lead = side === 'left' ? 'copenhagen_plank_l' : 'copenhagen_plank_r'
       const follow = side === 'left' ? 'copenhagen_plank_r' : 'copenhagen_plank_l'
       expect(held.slice(0, 4)).toEqual([lead, follow, lead, follow])
+    }
+  })
+})
+
+describe('the shipped sideways leg raise pair', () => {
+  const find = (key: string) => DEFAULT_PLAN.pull.exercises.find((e) => e.key === key)!
+  const left = find('sideways_leg_raise_l')
+  const right = find('sideways_leg_raise_r')
+
+  it('takes no weight at all', () => {
+    for (const e of [left, right]) {
+      expect(e.repsOnly).toBe(true)
+      expect(e.bodyweight).toBe(true)
+      expect(e.increment).toBeUndefined()
+      expect(e.weightCapLbs).toBeUndefined()
+    }
+  })
+
+  it('climbs in reps, from an opening number with no top', () => {
+    for (const e of [left, right]) {
+      expect(e.repLadder).toBe(true)
+      expect(e.repMin).toBe(SIDE_RAISE_START_REPS)
+      expect(e.repMax).toBe(SIDE_RAISE_START_REPS)
+      expect(repRangeLabel(e)).toBe(`${SIDE_RAISE_START_REPS}+`)
+    }
+  })
+
+  it('trains both sides the same way', () => {
+    expect(left.side).toBe('left')
+    expect(right.side).toBe('right')
+    expect(left.sets).toBe(right.sets)
+  })
+
+  it('is two stations of a circuit of its own', () => {
+    expect(left.circuit).toBeTruthy()
+    expect(left.circuit).toBe(right.circuit)
+    // Not folded into the Copenhagen pair's circuit: adduction and abduction are
+    // both hip work, but rotating four stations would leave each hip's own two
+    // sets further apart than the switch they're meant to share.
+    expect(left.circuit).not.toBe(find('copenhagen_plank_l').circuit)
+  })
+
+  it('switches sides on both stations and rests after the round', () => {
+    for (const e of [left, right]) {
+      expect(e.circuitRestSec).toBe(SIDE_RAISE_SWITCH_SEC)
+      expect(e.circuitRoundRestSec).toBe(SIDE_RAISE_ROUND_REST_SEC)
+    }
+  })
+
+  it('rests longer after the pair than between its sides, but less than the plank', () => {
+    expect(SIDE_RAISE_ROUND_REST_SEC).toBeGreaterThan(SIDE_RAISE_SWITCH_SEC)
+    expect(SIDE_RAISE_ROUND_REST_SEC).toBeLessThan(COPENHAGEN_ROUND_REST_SEC)
+  })
+
+  it('is hip work rather than leg work, so it stays out of the rep aggregates', () => {
+    // Grouped as abductors for the reason the plank is grouped as adductors: it's
+    // what the movement trains, and the leg series is for the day's heavy work.
+    const legs = legExerciseKeys(DEFAULT_PLAN)
+    const abs = absExerciseKeys(DEFAULT_PLAN)
+    for (const e of [left, right]) {
+      expect(e.group).toBe('abductors')
+      expect(legs.has(e.key)).toBe(false)
+      expect(abs.has(e.key)).toBe(false)
+    }
+  })
+
+  it('runs left, right, left, right rather than one side at a time', () => {
+    for (const side of ['left', 'right'] as const) {
+      const exercises = sideOrderedExercises(DEFAULT_PLAN.pull.exercises, side)
+      const order = buildSetOrder(
+        exercises,
+        exercises.map((e) => e.sets),
+      )
+      const raises = order
+        .map((s) => exercises[s.exIndex].key)
+        .filter((k) => k.startsWith('sideways_leg_raise'))
+      const lead = side === 'left' ? 'sideways_leg_raise_l' : 'sideways_leg_raise_r'
+      const follow = side === 'left' ? 'sideways_leg_raise_r' : 'sideways_leg_raise_l'
+      expect(raises.slice(0, 4)).toEqual([lead, follow, lead, follow])
+    }
+  })
+
+  it('leads with the fresh hip, the same session the plank leads with it', () => {
+    // Two sided pairs in one day, ordered independently but off the same session
+    // count — so a left-led session leads both, and neither hip is always second.
+    for (const side of ['left', 'right'] as const) {
+      const keys = sideOrderedExercises(DEFAULT_PLAN.pull.exercises, side).map((e) => e.key)
+      const suffix = side === 'left' ? '_l' : '_r'
+      expect(keys.indexOf(`sideways_leg_raise${suffix}`)).toBeLessThan(
+        keys.indexOf(`sideways_leg_raise${side === 'left' ? '_r' : '_l'}`),
+      )
+      expect(keys.indexOf(`copenhagen_plank${suffix}`)).toBeLessThan(
+        keys.indexOf(`copenhagen_plank${side === 'left' ? '_r' : '_l'}`),
+      )
     }
   })
 })

@@ -126,6 +126,24 @@ export type PlannedExercise = {
    */
   weightCapLbs?: number
   /**
+   * A movement that can't be loaded at all, so the reps are the only ladder it
+   * has: the top of the rep range stops applying and the prescription is one more
+   * rep than last time, session after session, with no top to arrive at (see
+   * progression.nextTarget). `repMin` is where it starts and the floor it re-paces
+   * to, so a range isn't needed — set both ends to the opening number.
+   *
+   * The same end of double progression that {@link weightCapLbs} reaches, arrived
+   * at from the other direction: the capped lift ran out of stack, this one never
+   * had any. A sideways leg raise is held up by nothing but the hip — there's no
+   * plate to add and nowhere to hang one — so asking for more of them is the whole
+   * progression.
+   *
+   * Only for movements that genuinely can't take weight. A bodyweight exercise
+   * you could load later (the hanging raise, which graduates to a harder variation
+   * instead) keeps its range.
+   */
+  repLadder?: boolean
+  /**
    * A movement trained one limb at a time. Each side is its own exercise — its own
    * key, its own history, its own line on the chart — so an imbalance between them
    * is visible instead of averaged away.
@@ -220,8 +238,13 @@ export type Plan = Record<DayType, DayPlan>
  *     timed circuit — a 30-second hold each side, ten seconds to switch, and a full
  *     rest after the pair. It was a hand-added exercise before this, so the
  *     single-entry versions of it are retired.
+ *
+ * 11 — pull + legs: the sideways leg raise ships beside the Copenhagen pair as its
+ *     own left and right circuit, trained on a rep ladder with no load and no top
+ *     (see PlannedExercise.repLadder). Hand-added before this, so its single-entry
+ *     versions are retired too.
  */
-export const PLAN_REVISION = 10
+export const PLAN_REVISION = 11
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -306,6 +329,23 @@ export const GRADUATION_REPS = 20
 export const COPENHAGEN_HOLD_SEC = 30
 export const COPENHAGEN_SWITCH_SEC = 10
 export const COPENHAGEN_ROUND_REST_SEC = 150
+
+/**
+ * The sideways leg raise: a hip abduction raise done lying on one side, a side at
+ * a time, and rotated as a circuit the way the Copenhagen pair is.
+ *
+ * Fifteen is where the ladder starts rather than a range it climbs inside — there
+ * is no load to earn at the top of a range, so the number itself is the
+ * progression and it has no top (see PlannedExercise.repLadder). A session that
+ * holds it on every set is asked for one more next time.
+ *
+ * Ten seconds to roll over onto the other side, and a minute's rest after the pair
+ * — less than the Copenhagen's, since a set of raises is closer to an ab exercise
+ * than to the near-maximal hold that one is.
+ */
+export const SIDE_RAISE_START_REPS = 15
+export const SIDE_RAISE_SWITCH_SEC = 10
+export const SIDE_RAISE_ROUND_REST_SEC = 60
 
 export const DEFAULT_PLAN: Plan = {
   push: {
@@ -412,6 +452,23 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'copenhagen_plank_l', name: 'copenhagen plank (left)', side: 'left', sets: 3, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
       { key: 'copenhagen_plank_r', name: 'copenhagen plank (right)', side: 'right', sets: 3, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
 
+      // The other half of the hip, and the abductor machine's replacement now that
+      // the machine is retired: the same outer hip, trained by lifting the leg
+      // against nothing but its own weight.
+      //
+      // No load, ever — a leg lifted sideways is held up by the hip alone, and
+      // there's nowhere to hang a plate on it. So the reps are the whole ladder
+      // (see PlannedExercise.repLadder): fifteen to open with, and one more every
+      // session that holds fifteen clean across all three sets, with no top.
+      //
+      // A side each, like the Copenhagen pair above and for the same reason — an
+      // imbalance between hips is what the movement is for, and it can't be seen if
+      // the two sides share a history. They rotate as a circuit too: the resting hip
+      // recovers while the other works, so the switch is just the time it takes to
+      // roll over, and the real rest lands after both sides.
+      { key: 'sideways_leg_raise_l', name: 'sideways leg raise (left)', side: 'left', sets: 3, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
+      { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
+
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
       // The same swap push + core made, for the same reason: a plate at the chest
@@ -497,15 +554,16 @@ export function withDayOrder(plan: Plan, order: DayType[]): Plan {
 /**
  * Human-readable rep range, e.g. "6–10", "12", or "20+".
  *
- * A movement at a load ceiling gets the open-ended form: there's no weight to earn
- * by reaching the top of its range, so the reps go on climbing past it and a closed
- * range would be describing a ceiling that isn't there (see
- * {@link PlannedExercise.weightCapLbs}).
+ * A movement whose reps are the ladder gets the open-ended form: there's no weight
+ * to earn by reaching the top of its range — either because the stack has run out
+ * or because the movement can't be loaded at all — so the reps go on climbing past
+ * it and a closed range would be describing a ceiling that isn't there (see
+ * {@link PlannedExercise.weightCapLbs} and {@link PlannedExercise.repLadder}).
  */
 export function repRangeLabel(
-  e: Pick<PlannedExercise, 'repMin' | 'repMax' | 'weightCapLbs'>,
+  e: Pick<PlannedExercise, 'repMin' | 'repMax' | 'weightCapLbs' | 'repLadder'>,
 ): string {
-  if (e.weightCapLbs != null) return `${e.repMax}+`
+  if (e.weightCapLbs != null || e.repLadder) return `${e.repMax}+`
   return e.repMin === e.repMax ? `${e.repMin}` : `${e.repMin}–${e.repMax}`
 }
 
@@ -677,6 +735,16 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'copenhagen',
     'copenhagen_side_plank',
     'copenhagen_plank_hold',
+    // The sideways leg raise, same story as the plank above: a hand-added entry
+    // until it shipped as a left and a right station, so which key it's under
+    // depends on the name it was added with. Every plausible slug is listed, and
+    // retiring one nothing ever stored costs nothing. The logged history stays.
+    'sideways_leg_raise',
+    'sideways_leg_raises',
+    'side_leg_raise',
+    'side_leg_raises',
+    'lateral_leg_raise',
+    'hip_abduction',
   ],
   fullbody: ['barbell_squat'],
 }
@@ -727,10 +795,11 @@ function mergeDayExercises(
   // or a step the user actually chose reads as neither and is left alone.
   //
   // The structural fields (circuit, sharedLoad, dumbbellPair, side, byVariant,
-  // repsOnly, weightCapLbs, timed) are program design rather than user preference,
-  // and the plan editor doesn't expose them, so they always come from the defaults —
-  // otherwise a stored day would never pick up the arm circuit, the shared tricep
-  // load, which arm a raise trains, the push A/B split, the calf machine's ceiling,
+  // repsOnly, weightCapLbs, repLadder, timed) are program design rather than user
+  // preference, and the plan editor doesn't expose them, so they always come from
+  // the defaults — otherwise a stored day would never pick up the arm circuit, the
+  // shared tricep load, which arm a raise trains, the push A/B split, the calf
+  // machine's ceiling, that a movement climbs in reps because it can't be loaded,
   // or that a plank is held for seconds rather than counted in reps.
   //
   // The round rest is the exception among the circuit fields: like `circuitRestSec`
@@ -759,6 +828,7 @@ function mergeDayExercises(
       byVariant: def.byVariant,
       repsOnly: def.repsOnly,
       weightCapLbs: def.weightCapLbs,
+      repLadder: def.repLadder,
       timed: def.timed,
     }
   })

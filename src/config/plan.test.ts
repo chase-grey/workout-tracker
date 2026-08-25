@@ -401,6 +401,61 @@ describe('withPlanDefaults', () => {
     })
   })
 
+  describe('a hand-added sideways leg raise', () => {
+    /**
+     * The pull day as it was before the pair shipped: one entry for the movement,
+     * both sides folded into it, and — being hand-added — with a rep range and a
+     * weight step it was never going to use.
+     */
+    const storedPull = (key: string): DayPlan => ({
+      ...DEFAULT_PLAN.pull,
+      exercises: [
+        ...DEFAULT_PLAN.pull.exercises.filter((e) => !e.key.startsWith('sideways_leg_raise')),
+        { key, name: 'sideways leg raise', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
+      ],
+    })
+
+    it('gives way to the shipped left/right pair', () => {
+      const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull('sideways_leg_raise') })
+      const keys = out.pull.exercises.map((e) => e.key)
+      expect(keys).not.toContain('sideways_leg_raise')
+      expect(keys).toContain('sideways_leg_raise_l')
+      expect(keys).toContain('sideways_leg_raise_r')
+    })
+
+    it('gives way whichever plausible name it was added under', () => {
+      for (const key of ['sideways_leg_raises', 'side_leg_raise', 'side_leg_raises', 'lateral_leg_raise', 'hip_abduction']) {
+        const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull(key) })
+        expect(out.pull.exercises.map((e) => e.key)).not.toContain(key)
+      }
+    })
+
+    it('arrives taking no weight, with the reps as its ladder', () => {
+      const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull('sideways_leg_raise') })
+      for (const e of out.pull.exercises.filter((x) => x.key.startsWith('sideways_leg_raise'))) {
+        expect(e.repsOnly).toBe(true)
+        expect(e.bodyweight).toBe(true)
+        expect(e.repLadder).toBe(true)
+      }
+    })
+
+    it('picks up the rep ladder even on a stored copy of the pair itself', () => {
+      // A device that saved the pair before the flag shipped keeps its own numbers,
+      // but whether the movement can be loaded at all is program design and always
+      // comes from the defaults.
+      const stale = {
+        ...DEFAULT_PLAN.pull,
+        exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
+          e.key.startsWith('sideways_leg_raise') ? { ...e, repLadder: undefined } : e,
+        ),
+      }
+      const out = withPlanDefaults({ ...DEFAULT_PLAN, pull: stale }, PLAN_REVISION)
+      for (const e of out.pull.exercises.filter((x) => x.key.startsWith('sideways_leg_raise'))) {
+        expect(e.repLadder).toBe(true)
+      }
+    })
+  })
+
   it('leaves the defaults themselves intact when nothing is stored', () => {
     const merged = withPlanDefaults(null)
     expect(merged.push.exercises.map((e) => e.key)).toEqual(

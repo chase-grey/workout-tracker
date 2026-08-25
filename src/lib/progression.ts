@@ -343,6 +343,11 @@ export function lastPerformance(
  * working at the heaviest load it can be given has no weight bump left to earn, so
  * once it's there the rep range stops bounding it and the reps become the ladder:
  * one more than last time, indefinitely (see PlannedExercise.weightCapLbs).
+ *
+ * `opts.repLadder` is that same exception without the wait: a movement that can't
+ * be loaded at all (a sideways leg raise) never had a weight bump to earn, so the
+ * reps are its ladder from the first session rather than from the session that
+ * arrives at the top of the stack.
  */
 export function nextTarget(
   workouts: WorkoutRow[],
@@ -354,6 +359,8 @@ export function nextTarget(
     increment?: number
     /** Heaviest load available — see PlannedExercise.weightCapLbs. */
     weightCapLbs?: number
+    /** Can't be loaded, so the reps are the ladder — see PlannedExercise.repLadder. */
+    repLadder?: boolean
     /** The prescription is a hold in seconds — see PlannedExercise.timed. */
     timed?: boolean
     today?: Date
@@ -383,13 +390,15 @@ export function nextTarget(
 
   const cap = opts.weightCapLbs
   /**
-   * Already training at the heaviest load this movement has. Double progression's
-   * weight bump has nowhere left to go, so the reps take over as the ladder: the
-   * top of the range stops applying, and there's no point lightening a load that's
-   * the only one on offer.
+   * Already training at the heaviest load this movement has — or, for a movement
+   * that can't be loaded, at the only one it will ever have. Either way double
+   * progression's weight bump has nowhere to go, so the reps take over as the
+   * ladder: the top of the range stops applying, and there's no point lightening a
+   * load that's the only one on offer.
    */
-  const atCap = cap != null && last.topWeight != null && last.topWeight >= cap
-  /** Top of the rep range — gone once the load is capped and reps are the ladder. */
+  const atCap =
+    opts.repLadder === true || (cap != null && last.topWeight != null && last.topWeight >= cap)
+  /** Top of the rep range — gone once reps are the ladder. */
   const repCeiling = atCap ? Infinity : repMax
 
   /** One more rep than last time, never past the top of the range. */
@@ -449,6 +458,8 @@ export type TargetInputs = {
   increment?: number
   /** Heaviest load available — see PlannedExercise.weightCapLbs. */
   weightCapLbs?: number
+  /** Can't be loaded, so the reps are the ladder — see PlannedExercise.repLadder. */
+  repLadder?: boolean
   /** The prescription is a hold in seconds — see PlannedExercise.timed. */
   timed?: boolean
   /** Load-sharing group id — see {@link nextTargets}. */
@@ -505,6 +516,7 @@ export function nextTargets(
         bodyweight: e.bodyweight,
         increment: e.increment,
         weightCapLbs: e.weightCapLbs,
+        repLadder: e.repLadder,
         timed: e.timed,
         today: opts.today,
         variant: opts.variantFor?.(e.key),

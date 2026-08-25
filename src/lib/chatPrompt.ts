@@ -35,8 +35,12 @@ function renderPlan(): string {
       // is a range of seconds. Said outright, or the coach reads a 30-second plank
       // as thirty repetitions of something.
       const unit = ex.timed ? 'second hold' : 'reps'
+      // A movement that can't be loaded reads as an open-ended `15+`, which the
+      // coach would otherwise answer with a weight to add. There is no weight to
+      // add: more of them is the only progression it has.
+      const ladder = ex.repLadder ? ' [takes no weight — it progresses by reps alone, with no top]' : ''
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}${ladder}`,
       )
     }
   }

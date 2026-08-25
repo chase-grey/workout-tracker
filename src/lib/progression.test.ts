@@ -338,6 +338,56 @@ describe('nextTarget', () => {
   })
 })
 
+describe('nextTarget on a movement that takes no weight', () => {
+  /** The sideways leg raise: no plate to add, so 15 reps is where the ladder starts. */
+  const RAISE = { repMin: 15, repMax: 15, bodyweight: true, repLadder: true, today: TODAY }
+  const raise = (reps: number, over: Partial<WorkoutRow> = {}) =>
+    row({ exercise: 'sideways_leg_raise_l', weight_lbs: null, reps, ...over })
+
+  it('opens at the starting number', () => {
+    expect(nextTarget([], 'sideways_leg_raise_l', RAISE)).toEqual({ weightLbs: null, reps: 15 })
+  })
+
+  it('asks for one more than the last session held', () => {
+    expect(nextTarget([raise(15)], 'sideways_leg_raise_l', RAISE)).toEqual({
+      weightLbs: null,
+      reps: 16,
+    })
+  })
+
+  it('goes on climbing past the opening number, with no top to arrive at', () => {
+    expect(nextTarget([raise(31)], 'sideways_leg_raise_l', RAISE)).toEqual({
+      weightLbs: null,
+      reps: 32,
+    })
+  })
+
+  it('re-paces to a short session rather than re-asking for the number missed', () => {
+    expect(nextTarget([raise(12)], 'sideways_leg_raise_l', RAISE)).toEqual({
+      weightLbs: null,
+      reps: 13,
+    })
+  })
+
+  it('repeats the number until every set holds it', () => {
+    // 18, 18, 15 was working at 18 and finished two of its three sets there, so 18
+    // is the number to hold rather than the one to beat.
+    const rows = [1, 2, 3].map((set_number) =>
+      raise(set_number === 3 ? 15 : 18, { set_number }),
+    )
+    expect(nextTarget(rows, 'sideways_leg_raise_l', RAISE)).toEqual({
+      weightLbs: null,
+      reps: 18,
+    })
+  })
+
+  it('keeps each side on its own ladder', () => {
+    const rows = [raise(22), raise(16, { exercise: 'sideways_leg_raise_r' })]
+    expect(nextTarget(rows, 'sideways_leg_raise_l', RAISE).reps).toBe(23)
+    expect(nextTarget(rows, 'sideways_leg_raise_r', RAISE).reps).toBe(17)
+  })
+})
+
 describe('nextTarget at a load ceiling', () => {
   /** The calf machine: 100 lbs is the whole stack, and 20 reps is what it does. */
   const CALF = { repMin: 20, repMax: 20, increment: 5, weightCapLbs: 100, today: TODAY }

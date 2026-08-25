@@ -408,6 +408,12 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   // stop where they stopped.
   leg_adductor: { ladder: 'load', muscles: ['adductors'] },
   leg_abductor: { ladder: 'load', muscles: ['abductors'] },
+  // The sideways leg raise, which trains the outer hip the abductor machine used to
+  // and is the only movement still logging to it. A rep ladder rather than a load
+  // one — it takes no weight at all (see PlannedExercise.repLadder), so reps in the
+  // best set are the whole measure. A side each, and each reads its own hip.
+  sideways_leg_raise_l: { ladder: 'reps', muscles: ['abductors'] },
+  sideways_leg_raise_r: { ladder: 'reps', muscles: ['abductors'] },
   neck_extension: { ladder: 'load', muscles: ['neck'] },
   neck_flexion: { ladder: 'load', muscles: ['neck'] },
   cable_crunch: { ladder: 'load', muscles: ['core'] },
@@ -591,6 +597,8 @@ const LADDER_ORDER: string[] = [
   'deadbug',
   'leg_adductor',
   'leg_abductor',
+  'sideways_leg_raise_l',
+  'sideways_leg_raise_r',
 ]
 
 /**
