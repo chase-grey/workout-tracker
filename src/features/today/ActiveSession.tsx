@@ -94,12 +94,18 @@ const MAX_SET_ACTIVE_SEC = 20 * 60
 const IDLE_PAUSE_MS = 5 * 60 * 1000
 
 /**
- * How long the get-into-position count runs after a rest that ended itself.
+ * How long the get-into-position count runs between rest and the set it leads
+ * into.
  *
  * Hands-free, the moment rest is up is the moment you're still walking back to
  * the bar — so instead of the live set appearing under your hands, a short count
  * covers the walk (the same screen the stretch routine settles in on, see
  * components/GetReady).
+ *
+ * A timed hold gets the same count however rest ended, tapped through or not: its
+ * clock starts the instant the set is on screen (see the HoldTimer's `autoRun`),
+ * so without a beat first the countdown would be running while you were still
+ * getting your hands down.
  */
 const GET_READY_SEC = 5
 
@@ -509,19 +515,28 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // `expired` is a rest that ran its own clock out hands-free, and that one lands
   // on a brief get-into-position count instead of straight on the live set: nobody
   // tapped, so you're still walking back to the bar when rest ends. A rest cut
-  // short by a tap goes straight through — you asked to move on, so you're already
-  // in position.
+  // short by a tap otherwise goes straight through — you asked to move on, so
+  // you're already in position.
+  //
+  // The exception is a timed hold, which takes the count either way: its clock
+  // starts itself the moment the set is up, so the seconds between tapping out of
+  // rest and actually being in the position would come off the hold.
+  //
+  // `landingTimed` is the set the rest is handing over to — ordinarily the one the
+  // rest was counting down to, but a jump, a skip or a set added mid-rest all land
+  // somewhere else, and the count belongs to wherever we're actually going.
   //
   // The count's seconds are charged to neither side of the session: rest has just
   // been banked, and the exercise's active average is what turbo's own wait is
   // priced from (see turboSetMs), so folding the count into it would push every
   // later wait out by the length of the count, workout after workout. The active
   // clock starts when the count ends instead.
-  const closeRest = (expired?: boolean) => {
+  const closeRest = (expired?: boolean, landingTimed = planned.timed) => {
     commitTally(bankRest(tally.current, restStartRef.current, Date.now()))
     restStartRef.current = 0
-    setPreparing(!!expired)
-    activeStartRef.current = expired ? 0 : Date.now()
+    const count = !!expired || !!landingTimed
+    setPreparing(count)
+    activeStartRef.current = count ? 0 : Date.now()
     setRest(null)
   }
 
@@ -541,9 +556,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     const ahead = leaving
       ? remainingFlow(stepDone, safeCurrent).slice(1).find((i) => steps[i].ex.key !== key)
       : undefined
-    const held = leaving
-      ? ((ahead != null ? steps[ahead] : steps.find((s) => s.ex.key !== key))?.stepKey ?? null)
-      : step.stepKey
+    const landing = leaving
+      ? (ahead != null ? steps[ahead] : steps.find((s) => s.ex.key !== key))
+      : step
+    const held = leaving ? (landing?.stepKey ?? null) : step.stepKey
     setSkipped(withSkipped(skipped, key, skip))
     setPendingStepKey(held)
     if (leaving) {
@@ -552,7 +568,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       // to it — it wasn't performed — and charging them to the next exercise would
       // inflate the very averages the time left is priced from.
       activeStartRef.current = Date.now()
-      if (rest) closeRest()
+      if (rest) closeRest(false, !!landing?.ex.timed)
     }
   }
 
@@ -564,7 +580,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     const owed = logFor(key)?.sets.findIndex((s) => !s.done) ?? -1
     setPendingStepKey(`${key}:${owed >= 0 ? owed : 0}`)
     activeStartRef.current = Date.now()
-    if (rest) closeRest()
+    if (rest) closeRest(false, !!exercises.find((e) => e.key === key)?.timed)
   }
 
   // Rest again before the set on screen — for the rest that was cut short, or the
@@ -679,7 +695,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         // sets can be done out of order, so where the new set lands in the reshaped
         // step list isn't the index `current` happens to sit at.
         setPendingStepKey(`${rest.exKey}:${logFor(rest.exKey)?.sets.length ?? 0}`)
-        closeRest()
+        // The extra set is on the exercise the rest came *from*, not the one it was
+        // counting down to, so that's the move the get-into-position count is for.
+        closeRest(false, !!exercises.find((e) => e.key === rest.exKey)?.timed)
       }
       return
     }
@@ -897,8 +915,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           )}
           {/* A hold rather than a count of reps: the clock is the set, and the field
               under it is the seconds it actually lasted — prefilled with the hold
-              prescribed, overwritten by the timer when one is run, and typeable
-              either way for a set held without it. */}
+              prescribed, and typed over with what the clock read when you came out
+              of it. The clock runs itself from the moment the set is on screen and
+              is never stopped by hand (see the HoldTimer's `autoRun`): the number
+              has to be read off the screen regardless, so a press to freeze it was
+              only ever an extra tap in the moment your hands are least free. */}
           {planned.timed ? (
             <div className="flex flex-col items-center gap-4">
               <HoldTimer
@@ -907,10 +928,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 // a hold that's already run past its time.
                 key={step.stepKey}
                 targetSec={target?.reps ?? planned.repMin}
-                onStop={(held) => {
-                  setHoldRunning(false)
-                  editSet({ reps: held })
-                }}
+                // Started by the set being up rather than by a press — but not one
+                // beat before that: rest, the get-into-position count, the pause
+                // curtain and any open sheet all hold it, since a hold counting
+                // down behind them is counting time you weren't holding anything.
+                autoRun={setScreenLive && !awaitingStart}
                 // The seconds on the clock aren't seconds spent standing at the set
                 // screen deciding anything, so the exercise's active-time average
                 // has nothing to learn from them (see recordActiveForCurrent).
@@ -1142,7 +1164,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                           if (jumpStep >= 0) setCurrent(jumpStep)
                           // Jumping is a decision to start that exercise now, so an
                           // in-flight rest ends rather than covering it back up.
-                          if (rest) closeRest()
+                          // The set we're landing on is the one the count is for,
+                          // not the one the rest was counting down to.
+                          if (rest) closeRest(false, !!steps[jumpStep]?.ex.timed)
                         }
                         setShowList(false)
                       }}
