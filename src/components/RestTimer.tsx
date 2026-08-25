@@ -8,7 +8,9 @@ import { EXTRA_BOX_VARIANTS, EXTRA_FILL_VARIANTS, isExtraVariant } from '../lib/
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { createRotation } from '../lib/variantRotation'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
+import { BOXED_GLASS, TALL_GLASS } from '../lib/waterclock'
 import { ExtraRestShape } from './RestShapes'
+import { WaterGlass } from './WaterGlass'
 
 // Time-telling shapes made for rest: each one encodes the remaining fraction
 // directly in its dominant dimension — a sand level, a liquid line, a candle's
@@ -24,10 +26,22 @@ import { ExtraRestShape } from './RestShapes'
 // Boxed shapes live in a square in the middle of the screen. Full-bleed ones use
 // the entire viewport instead, sitting behind the readout — a rest you can read
 // from across the gym without looking at the numbers.
-const BOX_VARIANTS = ['sandglass', 'tide', 'candle', 'pips', ...EXTRA_BOX_VARIANTS] as const
+//
+// Both hourglasses come in water as well as sand ('waterglass' and 'waterclock',
+// see components/WaterGlass): the same silhouette and the same two levels, but the
+// chamber drains a drop at a time through the neck and the water below answers
+// every one of them.
+const BOX_VARIANTS = [
+  'sandglass',
+  'waterglass',
+  'tide',
+  'candle',
+  'pips',
+  ...EXTRA_BOX_VARIANTS,
+] as const
 // 'perimeter' frames the screen edge; the others fill it, so they sit below the
 // up-next block rather than behind it.
-const FILL_VARIANTS = ['curtain', 'hourglass', ...EXTRA_FILL_VARIANTS] as const
+const FILL_VARIANTS = ['curtain', 'hourglass', 'waterclock', ...EXTRA_FILL_VARIANTS] as const
 const FULL_VARIANTS = ['perimeter', ...FILL_VARIANTS] as const
 const VARIANTS = [...BOX_VARIANTS, ...FULL_VARIANTS] as const
 type Variant = (typeof VARIANTS)[number]
@@ -329,6 +343,9 @@ function Hourglass({ fraction }: { fraction: number }) {
  */
 function FullBleedShape({ variant, fraction }: { variant: FillVariant; fraction: number }) {
   if (variant === 'hourglass') return <Hourglass fraction={fraction} />
+  // The same glass, running on water: it drips through the neck, and the chamber
+  // below ripples for the rest of the rest.
+  if (variant === 'waterclock') return <WaterGlass glass={TALL_GLASS} fraction={fraction} />
   if (variant !== 'curtain') return <ExtraRestShape variant={variant} fraction={fraction} />
 
   // 'curtain': the whole viewport is the vessel, and the level falls from the top
@@ -932,6 +949,11 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
         </div>
       )
     }
+    case 'waterglass':
+      // The sandglass filled with water instead: the levels read the same, and the
+      // drop falling through the neck lands in the bottom chamber with a splash
+      // small enough that what you notice is the beat of them.
+      return <WaterGlass glass={BOXED_GLASS} fraction={fraction} />
     case 'sandglass':
     default:
       // An hourglass: the top chamber's sand drains out the neck (its surface
