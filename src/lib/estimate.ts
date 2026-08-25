@@ -254,15 +254,29 @@ export type RemainingStep = { exercise: string; fallbackActiveSec: number; presc
  * ones.
  */
 export function remainingWorkoutSecs(averages: ExerciseAverages, steps: RemainingStep[]): number {
+  return workoutSplit(averages, steps).totalSec
+}
+
+/** An estimate split the same way a finished session is reported. */
+export type WorkoutSplit = { activeSec: number; restSec: number; totalSec: number }
+
+/**
+ * The same estimate as {@link remainingWorkoutSecs}, kept in its two halves so a
+ * projection can be set beside the active/resting split a finished session
+ * actually recorded.
+ */
+export function workoutSplit(averages: ExerciseAverages, steps: RemainingStep[]): WorkoutSplit {
   const ratio = learnedRestRatio(averages)
-  let sum = 0
+  let activeSec = 0
+  let restSec = 0
   for (const s of steps) {
     const a = averages.active[s.exercise]
     const active = a && a.n > 0 ? a.avgSec : s.fallbackActiveSec
     const prescribed = Math.max(0, s.prescribedRestSec)
-    sum += Math.max(0, active) + (ratio != null ? prescribed * ratio : prescribed)
+    activeSec += Math.max(0, active)
+    restSec += ratio != null ? prescribed * ratio : prescribed
   }
-  return sum
+  return { activeSec, restSec, totalSec: activeSec + restSec }
 }
 
 /** Median of a list of numbers (0 for an empty list). */

@@ -19,6 +19,7 @@ import {
   normalizeExerciseAverages,
   remainingSecs,
   remainingWorkoutSecs,
+  workoutSplit,
   type ExerciseAverages,
   type SessionDuration,
 } from './estimate'
@@ -468,5 +469,29 @@ describe('remainingWorkoutSecs', () => {
   it('ignores a ratio with no samples behind it', () => {
     const averages: ExerciseAverages = { active: {}, restRatio: { ratio: 3, n: 0 } }
     expect(remainingWorkoutSecs(averages, steps)).toBe(420)
+  })
+})
+
+describe('workoutSplit', () => {
+  const steps = [
+    { exercise: 'bench', fallbackActiveSec: 40, prescribedRestSec: 120 },
+    { exercise: 'bench', fallbackActiveSec: 40, prescribedRestSec: 120 },
+    { exercise: 'fly', fallbackActiveSec: 40, prescribedRestSec: 0 },
+  ]
+
+  it('reports the halves the finish recap sets beside the measured ones', () => {
+    const averages: ExerciseAverages = {
+      active: { bench: { avgSec: 50, n: 6 } },
+      restRatio: { ratio: 1.5, n: 20 },
+    }
+    const split = workoutSplit(averages, steps)
+    expect(split.activeSec).toBeCloseTo(50 + 50 + 40)
+    expect(split.restSec).toBeCloseTo(180 + 180)
+    expect(split.totalSec).toBeCloseTo(split.activeSec + split.restSec)
+  })
+
+  it('totals exactly what remainingWorkoutSecs charges', () => {
+    const averages: ExerciseAverages = { active: {}, restRatio: { ratio: 0.8, n: 12 } }
+    expect(workoutSplit(averages, steps).totalSec).toBe(remainingWorkoutSecs(averages, steps))
   })
 })
