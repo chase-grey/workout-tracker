@@ -633,15 +633,25 @@ function MeltingIce({ fraction }: { fraction: number }) {
 const FLAKE_COUNT = 34
 
 /**
- * How much of the globe's height a full drift takes. High enough that the end state
- * is a glass *buried* in snow rather than one half-filled: a bank that stops at the
- * middle reads as a globe still working through its rest, whatever the flakes are
- * doing above it.
+ * How much of the globe's height a full drift takes. Half: a bank that climbs past
+ * the middle crowds the glass into a lens of snow with a sliver of air over it, and
+ * the shape stops reading as a globe with weather in it. Stopped at the waterline
+ * the drift still reads as full — it is the tallest the bank ever gets, and the
+ * pulse round the glass is what says the rest is over.
  */
-const DRIFT_MAX = 0.72
+const DRIFT_MAX = 0.5
 
 /** How high the drift's middle stands over its edges, in the drift SVG's units. */
 const DRIFT_CROWN = 5
+
+/**
+ * How far below the bottom of its box the drift's body is drawn, in the same units.
+ * The bank is drawn once and slid up, and the slide is nearly a full box at the top
+ * of its travel; a body that stopped at the box's own floor would ride up with it
+ * and leave the bottom of the glass unpainted — snow sitting on a dark band. Enough
+ * to stay under the glass at every height the drift can reach.
+ */
+const DRIFT_FOOT = 200
 
 /**
  * How high the drift's *average* surface stands over the bottom of its box, in the
@@ -672,11 +682,11 @@ const DRIFT_MEAN = (5 * DRIFT_CROWN) / 3
  * than blowing through it as a front with a hole behind.
  *
  * What makes zero legible is that flakes *land*. Each one is called down by the
- * countdown, drops the last of the way to the drift and melts into it, so the snow
- * leaves the air at the bottom of the glass where the bank is — never by fading out
- * halfway up, which says only that a dot went away. The last one touches down as
- * the clock runs out, and the globe then holds a state it holds at no other point
- * in the rest: buried in snow, with nothing moving in it.
+ * countdown, drifts the last of the way down to the drift and melts into it, so the
+ * snow leaves the air at the bottom of the glass where the bank is — never by fading
+ * out halfway up, which says only that a dot went away. The last one touches down as
+ * the clock runs out, and the globe then holds a state it holds at no other point in
+ * the rest: half full of settled snow, with nothing moving above it.
  */
 function SnowGlobe({ fraction }: { fraction: number }) {
   const left = clamp01(fraction)
@@ -797,7 +807,7 @@ function SnowGlobe({ fraction }: { fraction: number }) {
             }}
           >
             <path
-              d={`M 0 ${100 - DRIFT_CROWN} Q 50 ${100 - 3 * DRIFT_CROWN} 100 ${100 - DRIFT_CROWN} L 100 100 L 0 100 Z`}
+              d={`M 0 ${100 - DRIFT_CROWN} Q 50 ${100 - 3 * DRIFT_CROWN} 100 ${100 - DRIFT_CROWN} L 100 ${DRIFT_FOOT} L 0 ${DRIFT_FOOT} Z`}
               fill="currentColor"
               fillOpacity={settled ? 0.9 : 0.75}
               style={drainOf('fill-opacity')}

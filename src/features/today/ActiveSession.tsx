@@ -55,6 +55,7 @@ import { toWeight } from '../../lib/weightField'
 import { usePressAction } from '../../lib/usePressAction'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
+import { useBackGuard } from '../../lib/useBackGuard'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
@@ -320,6 +321,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       setPaused(true)
     },
   )
+
+  // Android back (the button or the edge swipe) closes the checklist and leaves you
+  // in the workout: a press meant for the sheet on top doesn't reach past it to set
+  // the whole session aside, which is what the guard underneath does (see App).
+  useBackGuard(showList, () => setShowList(false))
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its clocks are wall-clock, so they'd otherwise keep advancing

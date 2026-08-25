@@ -24,7 +24,7 @@ const run = (snow: Snow, seconds: number, floor = FLOOR, fraction = 1) => {
 }
 
 /** How high the drift stands over a rest, matching the globe shape's own geometry. */
-const DRIFT_MAX = 0.72
+const DRIFT_MAX = 0.5
 const floorAt = (fraction: number) => 1 - (1 - fraction) * DRIFT_MAX
 
 /**
