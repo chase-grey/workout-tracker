@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { rollsThroughRest, type FastMode } from '../lib/fastMode'
-import { createFlame, flameLook, stepFlame } from '../lib/flame'
+import { createFlame, flameLook, gutterFlame, stepFlame, type Flame } from '../lib/flame'
 import {
   createWave,
   drawBubble,
@@ -645,8 +645,49 @@ function TideVessel({ fraction }: { fraction: number }) {
 }
 
 /**
+ * Where a candle is in its life: burning, going out (the flame collapsing into
+ * the wick, the first smoke already lifting off it), smoking (the flame gone, the
+ * plume still climbing), or out — nothing above the wax at all.
+ */
+type CandlePhase = 'lit' | 'snuff' | 'smoke' | 'out'
+
+/**
+ * How long the flame takes to go out once the wax has run out, in ms — kept in
+ * step with the `rest-flame-snuff` keyframes, which read the same duration.
+ */
+const SNUFF_MS = 700
+
+/**
+ * How long the whole burn-out runs, in ms, measured from the moment the wax runs
+ * out: the last wisp's delay plus its own climb, with a little room to spare.
+ * After this the candle is simply out and nothing above the wax is drawn.
+ */
+const BURN_OUT_MS = 4900
+
+/**
+ * The smoke the snuffed wick gives off. `left` and `size` place each wisp across
+ * the flame's own box in hundredths of it; `curl` is how far it has drifted by
+ * mid-climb and `dx` where it ends up, both in vw and deliberately of opposite
+ * signs — a wisp that doubles back on itself on the way up reads as smoke, where
+ * one that runs straight reads as a bubble. `blur` softens it in its own frame,
+ * which is before the climb's growing `scale` is applied, so the blur spreads
+ * with the wisp and it thins out as it rises at no per-frame cost. `delay`/`secs`
+ * stagger the plume so it trails off the top of the screen rather than leaving in
+ * a clump, and the first wisp is away while the flame is still dying.
+ */
+const SMOKE_WISPS = [
+  { left: 42, size: 32, curl: -2.2, dx: 3.4, blur: 4, peak: 0.5, delay: 0.45, secs: 3.4 },
+  { left: 57, size: 26, curl: 1.9, dx: -2.8, blur: 4, peak: 0.44, delay: 0.75, secs: 3.3 },
+  { left: 46, size: 36, curl: -1.5, dx: 4.2, blur: 5, peak: 0.42, delay: 1.05, secs: 3.1 },
+  { left: 55, size: 28, curl: 2.4, dx: -1.7, blur: 5, peak: 0.38, delay: 1.4, secs: 3 },
+  { left: 48, size: 34, curl: -1.9, dx: 2.6, blur: 5, peak: 0.34, delay: 1.75, secs: 2.8 },
+  { left: 53, size: 26, curl: 1.4, dx: -3.4, blur: 6, peak: 0.3, delay: 2.15, secs: 2.6 },
+] as const
+
+/**
  * The 'candle' shape: a wax column whose height is the time left, with a flame
- * riding its top down.
+ * riding its top down — and, once the wax runs out, a flame that goes out and
+ * leaves as smoke.
  *
  * The flame is simulated rather than keyframed (see lib/flame). A CSS loop can
  * only do the same thing over and over, and the eye picks that up in a second or
@@ -655,21 +696,62 @@ function TideVessel({ fraction }: { fraction: number }) {
  * own beat off their own randomness, and a draught catches it every few seconds,
  * so it never quite does the same thing twice.
  *
- * Like the tide's surface, this is texture at 60fps and is written straight to
- * the DOM — it has no business re-rendering the tree that often. The wax level
+ * The burn-out *is* keyframed, and that isn't a contradiction: what a loop can't
+ * do is happen once. The candle goes out one time per rest, so the snuff and the
+ * plume are exactly what CSS is good at — and the snuff rides a wrapper around
+ * the flame rather than the flame itself, so the simulation keeps running
+ * underneath and the flame dies mid-lean and mid-flicker, with one last draught
+ * for the lurch, instead of snapping upright to die.
+ *
+ * Like the tide's surface, the flicker is texture at 60fps and is written straight
+ * to the DOM — it has no business re-rendering the tree that often. The wax level
  * is still plain React state driven by the countdown; the flicker never touches
- * it, so the time reading stays honest.
+ * it, so the time reading stays honest. Neither does the burn-out: it starts when
+ * the level reaches nothing, and it's the one thing here that outlives the
+ * reading rather than telling it.
  */
 function CandleColumn({ fraction }: { fraction: number }) {
   const level = `${fraction * 100}%`
   const flameRef = useRef<SVGSVGElement>(null)
+  const simRef = useRef<Flame | null>(null)
   const calm = usePrefersReducedMotion()
+  const lit = fraction > 0
+  // A candle that arrives already spent — rest reopened past its own end — starts
+  // out, rather than replaying a burn-out nobody was here to watch.
+  const [phase, setPhase] = useState<CandlePhase>(() => (lit ? 'lit' : 'out'))
+
+  useEffect(() => {
+    if (lit) {
+      setPhase('lit')
+      return
+    }
+    // Reduced motion gets no burn-out at all: the whole of it is a plume crossing
+    // the entire screen, which is the one thing it asks not to be given. The flame
+    // is simply gone once the wax is.
+    setPhase((p) => (p !== 'lit' ? p : calm ? 'out' : 'snuff'))
+  }, [lit, calm])
+
+  useEffect(() => {
+    if (phase === 'snuff') {
+      const id = setTimeout(() => setPhase('smoke'), SNUFF_MS)
+      return () => clearTimeout(id)
+    }
+    if (phase === 'smoke') {
+      const id = setTimeout(() => setPhase('out'), BURN_OUT_MS - SNUFF_MS)
+      return () => clearTimeout(id)
+    }
+  }, [phase])
 
   useEffect(() => {
     // Reduced motion gets a steady flame: no loop at all, so the element keeps
-    // the resting look CSS gives it rather than being frozen mid-flicker.
-    if (calm) return
-    const flame = createFlame()
+    // the resting look CSS gives it rather than being frozen mid-flicker. The loop
+    // also stops once the flame is out, since there's nothing left to flicker.
+    if (calm || (phase !== 'lit' && phase !== 'snuff')) return
+    // Held in a ref across the phase change, so the flame that dies is the one
+    // that was burning a moment ago rather than a fresh one starting from rest.
+    const flame = (simRef.current ??= createFlame())
+    // The draught that put it out.
+    if (phase === 'snuff') gutterFlame(flame, Math.random() < 0.5 ? -1 : 1)
     let raf = 0
     let last = performance.now()
     const frame = (now: number) => {
@@ -686,7 +768,7 @@ function CandleColumn({ fraction }: { fraction: number }) {
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [calm])
+  }, [calm, phase])
 
   return (
     <div className="absolute bottom-[12%] left-1/2 h-[74%] w-[24%] -translate-x-1/2">
@@ -697,33 +779,69 @@ function CandleColumn({ fraction }: { fraction: number }) {
         {/* Melted rim across the wax top, so it reads as a candle's flat top. */}
         <div className="absolute inset-x-[10%] top-0 h-[9%] -translate-y-1/2 rounded-[50%] bg-accent-deep" />
       </div>
-      {fraction > 0 && (
+      {phase !== 'out' && (
         <div
           className="pointer-events-none absolute left-1/2 h-[30%] w-[64%] -translate-x-1/2"
           style={{ bottom: level, marginBottom: '-4%', transition: 'bottom 260ms linear' }}
         >
-          {/* Flame: a pointed teardrop with a denser inner core for depth. The
-              wide, faint outer body reads as the flame's glow. */}
-          <svg
-            ref={flameRef}
-            className="rest-flame absolute bottom-0 left-1/2 h-[66%] w-[88%] -translate-x-1/2 text-accent-bright"
-            viewBox="0 0 100 100"
-            fill="currentColor"
-            aria-hidden
-          >
-            <path d="M50 4 C 70 30 84 44 74 68 C 68 84 60 92 50 96 C 40 92 32 84 26 68 C 16 44 30 30 50 4 Z" opacity="0.4" />
-            <path d="M50 34 C 60 46 66 54 61 68 C 58 80 54 86 50 91 C 46 86 42 80 39 68 C 34 54 40 46 50 34 Z" />
-          </svg>
-          {/* Embers lifting off the flame's tip and winking out. */}
-          <span className="rest-ember absolute bottom-[56%] left-[42%] h-[8%] w-[8%] rounded-full bg-accent-bright" />
-          <span
-            className="rest-ember absolute bottom-[62%] left-[56%] h-[6%] w-[6%] rounded-full bg-accent-bright"
-            style={{ animationDelay: '0.7s' }}
-          />
-          <span
-            className="rest-ember absolute bottom-[58%] left-[50%] h-[5%] w-[5%] rounded-full bg-accent-bright"
-            style={{ animationDelay: '1.3s' }}
-          />
+          {phase !== 'smoke' && (
+            // The flame and its sparks together, so the snuff takes both down at
+            // once — a flame that has gone out throws no more embers. The wrapper
+            // spans the whole box, so everything inside keeps measuring against
+            // the same edges it did while the candle was burning.
+            <div className={`absolute inset-0 ${phase === 'snuff' ? 'rest-flame-snuff' : ''}`}>
+              {/* Flame: a pointed teardrop with a denser inner core for depth. The
+                  wide, faint outer body reads as the flame's glow. */}
+              <svg
+                ref={flameRef}
+                className="rest-flame absolute bottom-0 left-1/2 h-[66%] w-[88%] -translate-x-1/2 text-accent-bright"
+                viewBox="0 0 100 100"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M50 4 C 70 30 84 44 74 68 C 68 84 60 92 50 96 C 40 92 32 84 26 68 C 16 44 30 30 50 4 Z" opacity="0.4" />
+                <path d="M50 34 C 60 46 66 54 61 68 C 58 80 54 86 50 91 C 46 86 42 80 39 68 C 34 54 40 46 50 34 Z" />
+              </svg>
+              {/* Embers lifting off the flame's tip and winking out. */}
+              <span className="rest-ember absolute bottom-[56%] left-[42%] h-[8%] w-[8%] rounded-full bg-accent-bright" />
+              <span
+                className="rest-ember absolute bottom-[62%] left-[56%] h-[6%] w-[6%] rounded-full bg-accent-bright"
+                style={{ animationDelay: '0.7s' }}
+              />
+              <span
+                className="rest-ember absolute bottom-[58%] left-[50%] h-[5%] w-[5%] rounded-full bg-accent-bright"
+                style={{ animationDelay: '1.3s' }}
+              />
+            </div>
+          )}
+          {phase !== 'lit' && (
+            // Mounted for the whole burn-out rather than per phase, so the plume
+            // runs as one unbroken set of animations across the flame going out:
+            // the thread is already standing off the wick as the flame collapses
+            // into it, which is what ties the smoke to the fire that made it.
+            <>
+              <div className="rest-smoke-thread absolute bottom-[22%] left-1/2 h-[46%] w-[13%] -translate-x-1/2 rounded-full bg-accent-bright" />
+              {SMOKE_WISPS.map((wisp) => (
+                <div
+                  key={wisp.delay}
+                  className="rest-smoke absolute aspect-square -translate-x-1/2 rounded-full bg-accent-bright"
+                  style={
+                    {
+                      left: `${wisp.left}%`,
+                      bottom: '42%',
+                      width: `${wisp.size}%`,
+                      filter: `blur(${wisp.blur}px)`,
+                      animationDelay: `${wisp.delay}s`,
+                      animationDuration: `${wisp.secs}s`,
+                      '--curl': `${wisp.curl}vw`,
+                      '--dx': `${wisp.dx}vw`,
+                      '--peak': wisp.peak,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -751,7 +869,9 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
     case 'candle':
       // A candle burning down: the wax column (darker green) is squared off like
       // a real candle and its height is the time left; the flame (brighter green)
-      // rides its top downward, shedding embers, and gutters out at the base.
+      // rides its top downward, shedding embers, and gutters out at the base —
+      // where it collapses into the wick and goes up as smoke, which climbs the
+      // screen and leaves over the top of it.
       return <CandleColumn fraction={fraction} />
     case 'pips': {
       // A meter that empties bottom-up: lit segments are the time left, and the

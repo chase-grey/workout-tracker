@@ -285,6 +285,110 @@ input[type='number'] {
   will-change: transform, opacity;
 }
 
+/* Candle snuff: the wax has run out, so the flame ducks, draws down into a bead
+   on the wick and goes out.
+
+   Keyframes here, where the flicker above has none, and that isn't a change of
+   mind: the objection to keyframing the flame is that a *loop* reads as a repeat,
+   and this happens once per rest. A one-shot is what a keyframe is good at.
+
+   It rides a wrapper around the flame rather than the flame itself, so the
+   simulation keeps writing lean and twinkle underneath and the flame dies
+   mid-flicker instead of snapping upright to die (RestTimer hands it one last
+   draught as it goes). The embers ride the same wrapper: a flame that has gone
+   out throws no more sparks. */
+@keyframes rest-flame-snuff {
+  0% {
+    transform: scale(1, 1);
+    opacity: 1;
+  }
+  35% {
+    /* Squat and ducked, the way a flame goes just before it loses the wick. */
+    transform: scale(0.92, 0.58);
+    opacity: 1;
+  }
+  72% {
+    /* Down to a bead sitting on the wick. */
+    transform: scale(0.6, 0.2);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(0.42, 0.04);
+    opacity: 0;
+  }
+}
+.rest-flame-snuff {
+  transform-origin: 50% 100%;
+  animation: rest-flame-snuff 700ms cubic-bezier(0.4, 0, 0.7, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Candle smoke: what the dead wick gives off, climbing the whole screen and
+   leaving over the top of it — the last of the rest, drifting off.
+
+   Each wisp doubles back on itself on the way up (`--curl` one way at mid-climb,
+   `--dx` the other by the end), which is the difference between smoke and a
+   bubble rising in a straight line. It swells as it climbs, and since `filter`
+   applies in the element's own frame *before* `transform` scales the result, its
+   fixed blur spreads with it — the wisp softens as it thins out for no per-frame
+   cost at all. The final `-106vh` is measured from a wick that is always on
+   screen, so whatever the viewport, the wisp is well clear of the top edge by the
+   time it gets there. */
+@keyframes rest-smoke {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.55);
+    opacity: 0;
+  }
+  14% {
+    opacity: var(--peak);
+  }
+  46% {
+    transform: translate3d(var(--curl), -40vh, 0) scale(1.7);
+  }
+  74% {
+    opacity: calc(var(--peak) * 0.5);
+  }
+  100% {
+    transform: translate3d(var(--dx), -106vh, 0) scale(3.6);
+    opacity: 0;
+  }
+}
+/* Duration, delay and blur come per wisp from RestTimer — the plume leaves in
+   ones rather than all together, and the bigger wisps are the softer ones. The
+   blur here is only the floor under that. `both` holds the first frame through
+   the delay, so a wisp still waiting its turn isn't sitting at the wick at full
+   size until it starts. */
+.rest-smoke {
+  animation-name: rest-smoke;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+  filter: blur(4px);
+}
+
+/* The thread off the wick: the thin line of smoke that stands where the flame
+   just was, before the plume above it breaks up. Short-lived and drawn first —
+   it's the join between the fire and the smoke rather than the smoke itself. */
+@keyframes rest-smoke-thread {
+  0% {
+    transform: translate3d(0, 0, 0) scaleY(0.35);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translate3d(-1.2vw, -34vh, 0) scaleY(2.8);
+    opacity: 0;
+  }
+}
+.rest-smoke-thread {
+  transform-origin: 50% 100%;
+  animation: rest-smoke-thread 2s linear 0.3s both;
+  will-change: transform, opacity;
+  filter: blur(3px);
+}
+
 /* Pips: the leading lit segment breathes so the boundary is easy to spot.
    It rests at full brightness and dips in the middle — the reverse would start
    the pulse dim, so a segment newly promoted to leading would visibly drop the
@@ -652,7 +756,10 @@ input[type='number'] {
 @media (prefers-reduced-motion: reduce) {
   /* The flame isn't listed: it has no animation to switch off. RestTimer skips
      its simulation loop entirely under reduced motion, so it just sits still — and
-     so does the snow globe's snow (see RestShapes). */
+     so does the snow globe's snow (see RestShapes). Nor is the snuff, for the same
+     reason from the other end: reduced motion never enters the burn-out at all, so
+     the flame is simply gone once the wax is rather than collapsing into the wick
+     and going up as smoke. */
   .rest-ember,
   .rest-pip,
   .rest-perimeter-glow,
@@ -682,8 +789,12 @@ input[type='number'] {
   /* Same for the band of light crossing the bead pane: a sheen parked halfway over
      the glass reads as a mistake, where its absence reads as nothing at all. It is
      not rendered at all under reduced motion (see RestShapes) — this is only here so
-     it can't come back by being rendered again. */
-  .rest-bead-sheen {
+     it can't come back by being rendered again. The candle's smoke is the same: it
+     is never mounted under reduced motion (see RestTimer), and a plume stalled
+     halfway up the screen would be the worst of the lot. */
+  .rest-bead-sheen,
+  .rest-smoke,
+  .rest-smoke-thread {
     display: none;
   }
 }
