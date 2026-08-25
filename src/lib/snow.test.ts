@@ -271,7 +271,10 @@ describe('settling', () => {
 
   it('holds a landed flake still while it melts in', () => {
     const snow = createSnow(6, seeded(37))
-    run(snow, 3, FLOOR, 0)
+    // Long enough for the highest of them to have drifted the whole way down: the
+    // drop is deliberately unhurried, so a flake called from under the lid is still
+    // on its way several seconds later.
+    run(snow, 6, FLOOR, 0)
     const placed = snow.flakes.map((f) => flakeLook(f, snow.t))
     run(snow, 1, FLOOR, 0)
     snow.flakes.forEach((flake, i) => {

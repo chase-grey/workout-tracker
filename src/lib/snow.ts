@@ -19,6 +19,12 @@
  * dots disappearing mid-air, it is snow that has all come down and is lying on the
  * floor.
  *
+ * The drop keeps the swing it was already riding. A flake that stopped wandering
+ * the instant its turn came read as a switch being thrown — the same speck, one
+ * frame drifting and the next on rails — so the fall only takes the bob's place:
+ * the flake goes on swaying at its own beat and its own width, and works up to a
+ * sink rate slowly enough that the eye never catches the moment it was called.
+ *
  * Nothing recycles. Snow that restarts at the top gives the globe a moving front
  * with a hole opening up behind it, which reads as weather blowing past a window
  * rather than as a globe that was shaken once and is settling. Because a flake's
@@ -82,14 +88,15 @@ const SINK_TAU = 0.45
  */
 const SETTLE_SPAN = 0.95
 
-/** Globe-heights per second a called-down flake works up to. */
-const DROP_FALL = 0.45
+/**
+ * Globe-heights per second a called-down flake works up to. Slow: the drop it has
+ * left is only its `clearance`, and a rate that covers that in a blink reads as the
+ * flake being yanked down rather than as snow finding the surface.
+ */
+const DROP_FALL = 0.26
 
 /** How quickly it gets there — the time constant of the run-up, in seconds. */
-const DROP_TAU = 0.3
-
-/** What's left of a flake's swing once it has been called down: it comes down, it doesn't wander. */
-const DROP_SWAY = 0.3
+const DROP_TAU = 0.55
 
 /** Seconds a flake takes to melt into the drift after touching it. */
 const LAND_FADE = 0.5
@@ -256,9 +263,11 @@ export function isSettled(flake: Flake, t: number): boolean {
  * clumps and gaps within seconds, however evenly it was seeded.
  *
  * A flake the countdown has called down does the opposite: it stops taking its
- * height from the clock, speeds up, stops wandering, and the drift keeps it. That
- * is the reading at the end — the last flake touches down as the clock reaches
- * zero, and nothing in the glass is moving.
+ * height from the clock and eases into a sink of its own, and the drift keeps it.
+ * Only the vertical changes hands — it carries its swing the whole way down — so
+ * the drop reads as the same flake still drifting, and what marks the end is that
+ * it reaches the snow. The last one touches down as the clock reaches zero, and
+ * nothing in the glass is moving.
  */
 export function stepSnow(snow: Snow, dt: number, floor: number, fraction: number): void {
   const step = clamp(dt, 0, MAX_DT)
@@ -292,15 +301,18 @@ export function stepSnow(snow: Snow, dt: number, floor: number, fraction: number
  * the top and bottom; the flake's lateral position is a share of that room rather
  * than of the whole width, which is what keeps it inside the glass at every height.
  *
+ * The swing is the one thing a flake keeps from the first frame to the last, at
+ * full width even while it is dropping: the sideways drift is what says *snow*, and
+ * cutting it at the moment of the call is what made the fall look mechanical.
+ *
  * A landed flake reads its sway against the moment it landed rather than against
  * the running clock, so it lies still on the drift while it melts in instead of
  * sliding along the surface.
  */
 export function flakeLook(flake: Flake, t: number): Look {
   const clock = flake.landedAt ?? t
-  const amp = flake.swayAmp * (flake.dropping ? DROP_SWAY : 1)
   const swung = clamp(
-    flake.u + amp * Math.sin(2 * Math.PI * flake.swayHz * clock + flake.swayPhase),
+    flake.u + flake.swayAmp * Math.sin(2 * Math.PI * flake.swayHz * clock + flake.swayPhase),
     -1,
     1,
   )
