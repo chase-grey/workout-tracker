@@ -10,7 +10,7 @@ import {
   MdTrackChanges,
 } from 'react-icons/md'
 import type { SetLog, WorkoutSession } from '../../types'
-import { useData } from '../../store/DataContext'
+import { useData, type SessionDurationInput } from '../../store/DataContext'
 import {
   repRangeLabel,
   sideOrderedExercises,
@@ -47,8 +47,10 @@ import { ExerciseHistorySheet } from '../../components/ExerciseHistorySheet'
 import {
   formatDuration,
   remainingWorkoutSecs,
+  workoutSplit,
   WORK_PER_SET_SEC,
   type ExerciseTimeSample,
+  type RemainingStep,
 } from '../../lib/estimate'
 import { toISODate } from '../../lib/dates'
 import { toWeight } from '../../lib/weightField'
@@ -71,7 +73,7 @@ import { SetCheer } from '../../components/SetCheer'
 type Props = {
   session: WorkoutSession
   controls: ReturnType<typeof useActiveSession>
-  onFinish: (s: WorkoutSession, duration: { totalSec: number; restSec: number }) => void
+  onFinish: (s: WorkoutSession, duration: SessionDurationInput) => void
 }
 
 /** Reject per-set active times outside this range (app left open / mis-taps). */
@@ -116,6 +118,35 @@ type SetStep = {
   setIndex: number
   setCount: number
   stepKey: string
+}
+
+/**
+ * Price a run of steps for the estimator: each set costs its exercise's learned
+ * average active time plus its own prescribed rest scaled by the learned rest
+ * ratio (structural fallbacks day one). The prescribed rest comes from
+ * restBeforeNextSet — the same source the ratio was measured against — so a
+ * circuit station change isn't priced as a full inter-set rest, and the run has
+ * to be in the order the flow will walk it, since every step's rest depends on
+ * which step follows it.
+ */
+function priceFlow(flow: SetStep[]): RemainingStep[] {
+  return flow.map((s, i, arr) => {
+    const next = arr[i + 1]
+    const sameCircuit = !!next && !!s.ex.circuit && next.ex.circuit === s.ex.circuit
+    return {
+      exercise: s.ex.key,
+      fallbackActiveSec: WORK_PER_SET_SEC,
+      prescribedRestSec: restBeforeNextSet({
+        currentRestSec: s.ex.restSec,
+        sameExercise: !!next && next.ex.key === s.ex.key,
+        nextRestSec: next ? next.ex.restSec : null,
+        sameCircuit,
+        newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
+        circuitRestSec: s.ex.circuitRestSec,
+        circuitRoundRestSec: s.ex.circuitRoundRestSec,
+      }),
+    }
+  })
 }
 
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
@@ -411,30 +442,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // The sets still owed, in the order the flow will reach them — not everything
     // from here to the end of the list, which after a jump counts sets already
     // logged and misses the ones left behind.
-    //
-    // Each is priced by its exercise's learned average active time plus its own
-    // prescribed rest scaled by the learned rest ratio (structural fallbacks day
-    // one). The prescribed rest comes from restBeforeNextSet — the same source the
-    // ratio was measured against — so a circuit station change isn't priced as a
-    // full inter-set rest.
-    const remaining = remainingFlow(stepDone, safeCurrent).map((idx) => steps[idx]).map((s, i, arr) => {
-      const next = arr[i + 1]
-      const sameCircuit = !!next && !!s.ex.circuit && next.ex.circuit === s.ex.circuit
-      return {
-        exercise: s.ex.key,
-        fallbackActiveSec: WORK_PER_SET_SEC,
-        prescribedRestSec: restBeforeNextSet({
-          currentRestSec: s.ex.restSec,
-          sameExercise: !!next && next.ex.key === s.ex.key,
-          nextRestSec: next ? next.ex.restSec : null,
-          sameCircuit,
-          newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
-          circuitRestSec: s.ex.circuitRestSec,
-          circuitRoundRestSec: s.ex.circuitRoundRestSec,
-        }),
-      }
-    })
-    return remainingWorkoutSecs(exerciseAverages, remaining)
+    const remaining = remainingFlow(stepDone, safeCurrent).map((idx) => steps[idx])
+    return remainingWorkoutSecs(exerciseAverages, priceFlow(remaining))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steps, stepDone, safeCurrent, exerciseAverages])
 
@@ -507,7 +516,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         .map((ex) => ({ ...ex, sets: ex.sets.filter((s) => s.done && s.reps > 0) }))
         .filter((ex) => ex.sets.length > 0),
     }
-    onFinish(cleaned, { totalSec, restSec })
+    // What the estimator said this workout would cost, so the recap can set the
+    // clock beside the projection. Priced over the whole flow rather than what's
+    // left, and read here at the end rather than frozen at the start: a workout
+    // with two exercises skipped out of it was never going to take what the full
+    // one would, and a recap comparing against that number would read as time
+    // saved instead of work dropped.
+    const projected = workoutSplit(exerciseAverages, priceFlow(steps))
+    onFinish(cleaned, { totalSec, restSec, projected })
   }
 
   // Accumulate the just-ended rest slice, then dismiss the overlay.

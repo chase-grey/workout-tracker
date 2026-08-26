@@ -18,8 +18,9 @@ function fmtMin(sec: number): string {
 /**
  * Full-screen recap shown the moment a workout is finished, before dropping back
  * to the Today menu. It leads with any PRs set this session (gold, with
- * confetti), then the time spent split into active vs resting, then the new
- * baselines the session set. Stays until dismissed — a recap to read, not a
+ * confetti), then the time spent split into active vs resting — each set beside
+ * what the estimator had projected it would be — then the new baselines the
+ * session set. Stays until dismissed — a recap to read, not a
  * flash to enjoy. Deliberately omits total volume.
  */
 export function WorkoutFinishOverlay({
@@ -29,7 +30,7 @@ export function WorkoutFinishOverlay({
   summary: WorkoutFinishSummary
   onClose: () => void
 }) {
-  const { prs, baselines, totalSec, activeSec, restSec, goalPace, notes } = summary
+  const { prs, baselines, totalSec, activeSec, restSec, projected, goalPace, notes } = summary
   const hasPRs = prs.length > 0
 
   return (
@@ -62,18 +63,35 @@ export function WorkoutFinishOverlay({
         )}
 
         <div className="mt-5 rounded-2xl bg-surface p-4">
-          <div className="flex items-center gap-2 text-accent-2">
-            <MdTimer className="text-xl" aria-hidden />
-            <span className="text-sm font-bold tracking-wider">time · {fmtMin(totalSec)}</span>
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="flex items-center gap-2 text-accent-2">
+              <MdTimer className="text-xl" aria-hidden />
+              <span className="text-sm font-bold tracking-wider">time · {fmtMin(totalSec)}</span>
+            </div>
+            {projected && (
+              <span className="text-[11px] text-neutral-500">
+                projected {fmtMin(projected.totalSec)}
+              </span>
+            )}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-2 py-3 text-center">
               <span className="text-xl font-black text-accent-2">{fmtMin(activeSec)}</span>
               <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">active</span>
+              {projected && (
+                <span className="mt-1 text-[10px] leading-tight text-neutral-500">
+                  projected {fmtMin(projected.activeSec)}
+                </span>
+              )}
             </div>
             <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-2 py-3 text-center">
               <span className="text-xl font-black text-amber-400">{fmtMin(restSec)}</span>
               <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">resting</span>
+              {projected && (
+                <span className="mt-1 text-[10px] leading-tight text-neutral-500">
+                  projected {fmtMin(projected.restSec)}
+                </span>
+              )}
             </div>
           </div>
         </div>
