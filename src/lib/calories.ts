@@ -157,6 +157,39 @@ export function lastLoggedAt(entries: CalorieEntry[], date: string): Date | null
   return lastLog(entries, date)?.at ?? null
 }
 
+/**
+ * How close two taps have to be to count as one helping. Quick-adds are how a
+ * plate gets logged: a 900-calorie dinner is +500 +100 +100 +100 +100 fired off
+ * in a few seconds, and reporting the last of those as "+100 just now" says the
+ * meal was a snack. Anything inside this window is the same sitting, so the
+ * amounts add up and the card reports the plate. A tap an hour later is a
+ * separate helping and starts its own count.
+ */
+export const HELPING_MERGE_MS = 3 * 60_000
+
+/**
+ * The helping to record for a tap of `amount` on `date`: the tap on its own, or
+ * the running sum of the burst it belongs to (see {@link HELPING_MERGE_MS}).
+ * Undefined when the burst nets to zero — a +100 undone by a −100 left the day
+ * exactly as it found it, and "+0" is not a helping anyone ate — which leaves
+ * the card saying only how long ago the day was last touched.
+ *
+ * A stamped day with no recorded amount predates the field and can't be added
+ * to, so the tap stands alone rather than guessing at what came before it.
+ */
+export function coalesceHelping(
+  entries: CalorieEntry[],
+  date: string,
+  amount: number,
+  now: Date = new Date(),
+): number | undefined {
+  const last = lastLog(entries, date)
+  const burst =
+    last?.amount != null && now.getTime() - last.at.getTime() < HELPING_MERGE_MS ? last.amount : 0
+  const total = burst + amount
+  return total === 0 ? undefined : total
+}
+
 /** A logged helping the way the card writes it: `+500`, `−100`. */
 export function formatHelping(calories: number): string {
   return calories < 0 ? `−${Math.abs(calories)}` : `+${calories}`

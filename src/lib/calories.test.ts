@@ -7,6 +7,7 @@ import {
   totalForDate,
   calorieHitDates,
   caloriePR,
+  coalesceHelping,
   setDayTotal,
   mergeCaloriesByDate,
   foodLogStatus,
@@ -221,6 +222,50 @@ describe('setDayTotal timestamps', () => {
     expect(setDayTotal(prev, '2026-07-08', 900)).toEqual([
       { date: '2026-07-08', calories: 900, loggedAt: AT_NOON, lastAmount: 500 },
     ])
+  })
+})
+
+describe('coalesceHelping', () => {
+  const DATE = '2026-07-08'
+  const at = (h: number, m: number) => new Date(2026, 6, 8, h, m)
+  const stamped = (total: number, when: Date, amount: number): CalorieEntry[] => [
+    { date: DATE, calories: total, loggedAt: when.toISOString(), lastAmount: amount },
+  ]
+
+  it('reports a lone tap as itself', () => {
+    expect(coalesceHelping([], DATE, 500, at(18, 0))).toBe(500)
+  })
+
+  it('adds up a burst of quick-adds into the plate they logged', () => {
+    let entries: CalorieEntry[] = []
+    let helping: number | undefined
+    for (const [i, cal] of [500, 100, 100, 100, 100].entries()) {
+      const now = new Date(at(18, 0).getTime() + i * 4000)
+      helping = coalesceHelping(entries, DATE, cal, now)
+      entries = setDayTotal(entries, DATE, 0, now.toISOString(), helping)
+    }
+    expect(helping).toBe(900)
+  })
+
+  it('starts over once the taps are far enough apart', () => {
+    expect(coalesceHelping(stamped(500, at(18, 0), 500), DATE, 100, at(18, 4))).toBe(100)
+  })
+
+  it('nets a correction against the tap it undoes', () => {
+    expect(coalesceHelping(stamped(600, at(18, 0), 600), DATE, -100, at(18, 1))).toBe(500)
+  })
+
+  it('reports no helping when the burst nets to nothing', () => {
+    expect(coalesceHelping(stamped(100, at(18, 0), 100), DATE, -100, at(18, 1))).toBeUndefined()
+  })
+
+  it('leaves a stamp with no recorded helping alone', () => {
+    const prev: CalorieEntry[] = [{ date: DATE, calories: 500, loggedAt: at(18, 0).toISOString() }]
+    expect(coalesceHelping(prev, DATE, 100, at(18, 1))).toBe(100)
+  })
+
+  it('ignores a burst on another date', () => {
+    expect(coalesceHelping(stamped(500, at(18, 0), 500), '2026-07-09', 100, at(18, 1))).toBe(100)
   })
 })
 

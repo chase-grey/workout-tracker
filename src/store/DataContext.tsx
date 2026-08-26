@@ -18,6 +18,7 @@ import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import {
   calorieHitDates,
   CALORIE_GOAL,
+  coalesceHelping,
   mergeCaloriesByDate,
   setDayTotal,
   totalForDate,
@@ -799,12 +800,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // existing timestamp (if any) alone rather than writing a misleading one.
       const loggedAt = day === toISODate(now) ? now.toISOString() : undefined
       // The helping rides along with the stamp, so the card can say what the last
-      // tap was and not just when it was. Backfills carry neither.
-      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, loggedAt ? calories : undefined)
+      // tap was and not just when it was. A plate is logged as a burst of taps,
+      // so the helping is the burst's running sum rather than whichever button
+      // was pressed last. Backfills carry neither.
+      const helping = loggedAt ? coalesceHelping(prevCals, day, calories, now) : undefined
+      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, helping)
       const entry: CalorieEntry = {
         date: day,
         calories: newTotal,
-        ...(loggedAt && { loggedAt, lastAmount: calories }),
+        ...(loggedAt && { loggedAt, ...(helping != null && { lastAmount: helping }) }),
       }
       persistCalories(nextCals)
       // Write-ahead: the outbox entry is on disk before the network is touched,
@@ -812,9 +816,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // background, the tab closing — is still there to retry. Enqueuing also
       // coalesces, leaving at most the newest running total per date, so a stale
       // earlier total can never overwrite a newer one on the way out.
-      const signed = calories >= 0 ? `+${calories}` : `${calories}`
       const ok = await deliver(enqueue({ type: 'calorie', entry }))
-      notify(ok ? `${signed} cal saved` : "couldn't save — queued to retry", ok)
+      // No toast on success: the card's own readout moves the instant the tap
+      // lands and already says the helping and the new total, so a pill saying
+      // it again is one more thing covering the screen mid-meal. A failure
+      // still speaks up — that's the one outcome the card can't show.
+      if (!ok) notify("couldn't save — queued to retry", false)
       // Cheer: this date's total just crossed the goal + any weekly calorie-day goal.
       try {
         const crossed =
