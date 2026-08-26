@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { DataProvider, useData, type WorkoutFinishSummary } from './store/DataContext'
+import {
+  DataProvider,
+  useData,
+  type StretchFinishSummary,
+  type WorkoutFinishSummary,
+} from './store/DataContext'
 import { CelebrationProvider, useCelebrate } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
 import { ToastHost } from './components/ToastHost'
 import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
+import { StretchFinishOverlay } from './components/StretchFinishOverlay'
 import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
 import { ProgressTab } from './features/progress/ProgressTab'
@@ -61,6 +67,7 @@ function AppShell() {
   })
   const [review, setReview] = useState<Review | null>(null)
   const [finishSummary, setFinishSummary] = useState<WorkoutFinishSummary | null>(null)
+  const [stretchSummary, setStretchSummary] = useState<StretchFinishSummary | null>(null)
   // A session set aside — the rest of the app is usable while it keeps running.
   // The session stays mounted (just hidden), so its rest timer, rep pace and
   // elapsed-time accounting carry on untouched until you jump back in.
@@ -161,7 +168,8 @@ function AppShell() {
 
   // Workouts and stretches take over the whole screen (no tabs / bottom nav)
   // unless they've been set aside.
-  const immersive = (sessionActive && !minimized) || finishSummary != null
+  const immersive =
+    (sessionActive && !minimized) || finishSummary != null || stretchSummary != null
 
   // The keyboard shrinks the shell, and everything in it rides up — the nav and
   // the back-to-your-workout banner both, which then stack between the composer
@@ -177,6 +185,15 @@ function AppShell() {
     setFinishSummary(null)
     setTab('today')
     // Any weekly-goal / all-time-record wins ride in after the recap closes.
+    if (ambient) celebrate(ambient)
+  }
+
+  // The stretch recap closes the same way, and its ambient wins ride in behind it
+  // too — the recap has already said everything about the session itself.
+  const dismissStretchFinish = () => {
+    const ambient = stretchSummary?.ambient ?? null
+    setStretchSummary(null)
+    setTab('today')
     if (ambient) celebrate(ambient)
   }
 
@@ -200,9 +217,10 @@ function AppShell() {
         onClose={() => {
           storage.saveStretch(null)
           setStretching(null)
-          // A finished routine lands you home, under the celebration screen.
+          // A finished routine lands you home, under the recap screen.
           setTab('today')
         }}
+        onFinish={setStretchSummary}
       />
     )
   }
@@ -258,6 +276,9 @@ function AppShell() {
       )}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
       {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}
+      {stretchSummary && (
+        <StretchFinishOverlay summary={stretchSummary} onClose={dismissStretchFinish} />
+      )}
     </div>
   )
 }

@@ -72,7 +72,13 @@ import {
   type PR,
   type WeekCounts,
 } from '../lib/celebration'
-import { flexAngleCelebrations } from '../lib/flexCelebration'
+import {
+  anglePRs as detectAnglePRs,
+  completedFlexGoals,
+  flexAngleCelebrations,
+  type AnglePR,
+  type CompletedFlexGoal,
+} from '../lib/flexCelebration'
 import { newRecords, type RecordSnapshot } from '../lib/records'
 import { goalPaceNotes, type GoalPaceNote } from '../lib/goalPace'
 import { graduationNote } from '../lib/graduation'
@@ -119,6 +125,44 @@ export type WorkoutFinishSummary = {
   goalPace: GoalPaceNote[]
   /** One-off notes earned by this session (e.g. graduating to full leg raises). */
   notes: string[]
+}
+
+/** A finished Stretch + Core session, as handed to `finishStretch`. */
+export type StretchFinishInput = {
+  routine: FlexRoutineKey
+  /** Whether the core block was part of the session (see stretchCore). */
+  withCore: boolean
+  /** The core sets actually completed, in order. */
+  coreSets: CoreSet[]
+  /** The wall clock, absent for a session whose start was never recorded. */
+  duration?: SessionDurationInput
+}
+
+/**
+ * Everything the full-screen stretch-finish recap shows — the flexibility
+ * counterpart of {@link WorkoutFinishSummary}, and deliberately the same shape
+ * where the two sessions have the same thing to say.
+ *
+ * The headline is what the session earned: the poses whose all-time best today's
+ * readings beat, the goals those readings crossed, and the core block's own PRs
+ * (its sets are workout rows, so a heavier plate on the mat sit-up is a PR like
+ * any other). Then the clock, split and set beside the projection. The weekly-goal
+ * and all-time-record cheers ride back as `ambient` to play once the recap is
+ * dismissed, so the recap owns the moment rather than competing with it.
+ */
+export type StretchFinishSummary = {
+  routine: FlexRoutineKey
+  /** Whether the core block was part of the session, which the title says. */
+  withCore: boolean
+  anglePRs: AnglePR[]
+  flexGoals: CompletedFlexGoal[]
+  prs: PR[]
+  totalSec: number
+  activeSec: number
+  restSec: number
+  /** What the routine was projected to cost, when there was a projection. */
+  projected: WorkoutSplit | null
+  ambient: Celebration | null
 }
 
 /** A flexibility log: a stretch-session marker (angles omitted) and/or measurements. */
@@ -191,7 +235,14 @@ type DataContextValue = {
   saveSession: (s: WorkoutSession, duration?: SessionDurationInput) => Promise<WorkoutFinishSummary>
   flagDiscomfort: (edit: NotesEdit) => Promise<void>
   logBodyWeight: (weightLbs: number, date?: string) => Promise<void>
-  logFlex: (measurement: FlexMeasurement) => Promise<void>
+  /**
+   * Record a flex entry — an angle measurement, or a completed stretch session —
+   * and hand back the "ambient" weekly-goal / all-time-record cheer it earned.
+   *
+   * `quiet` says the caller has a recap screen of its own that owns the moment
+   * (see `finishStretch`); left to itself, a completed session cheers here.
+   */
+  logFlex: (measurement: FlexMeasurement, opts?: { quiet?: boolean }) => Promise<Celebration | null>
   logCalories: (calories: number, date?: string) => Promise<void>
   /**
    * Record a day's pills. Fields left out of `patch` keep what the day already
@@ -210,8 +261,13 @@ type DataContextValue = {
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   logExerciseTimes: (samples: SessionTimeSamples) => Promise<void>
-  /** The core sets of a Stretch + Core session — see the implementation. */
-  logCore: (sets: CoreSet[]) => Promise<void>
+  /**
+   * The core sets of a Stretch + Core session — see the implementation. Returns
+   * the PRs they set, which the finish recap leads with.
+   */
+  logCore: (sets: CoreSet[]) => PR[]
+  /** File a finished Stretch + Core session and hand back its recap. */
+  finishStretch: (input: StretchFinishInput) => Promise<StretchFinishSummary>
   /** A single at `weightLbs` on `exerciseKey`, the way a strength goal is settled. */
   logMaxAttempt: (exerciseKey: string, weightLbs: number) => Promise<void>
   logProgressPhoto: () => void
@@ -729,7 +785,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const logFlex = useCallback(
-    async (m: FlexMeasurement) => {
+    async (m: FlexMeasurement, opts?: { quiet?: boolean }): Promise<Celebration | null> => {
       const entry: FlexEntry = {
         date: toISODate(new Date()),
         splitDeg: m.splitDeg ?? null,
@@ -754,9 +810,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const prevFlex = storage.loadFlex()
       const nextFlex = dedupeFlexByDate([...prevFlex, entry])
       persistFlex(nextFlex)
-      // Cheer before the round-trip: the finish screen belongs to the moment you
-      // finished, not to whenever the backend gets back to us.
-      // Only a completed stretch session cheers — a pure angle measurement doesn't.
+      // Worked out before the round-trip, and handed back rather than awaited: the
+      // finish screen belongs to the moment you finished, not to whenever the
+      // backend gets back to us.
+      // Only a completed stretch session earns anything — a pure angle
+      // measurement doesn't.
+      let ambient: Celebration | null = null
       if (!isMeasurement) {
         try {
           const workoutsNow = storage.loadWorkouts()
@@ -769,24 +828,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
           const after = currentWeekCounts(workoutsNow, afterFlexDates, cals, pills, strips)
           const beforeRec: RecordSnapshot = { workouts: workoutsNow, flexDates: beforeFlexDates, calorieEntries: cals }
           const afterRec: RecordSnapshot = { workouts: workoutsNow, flexDates: afterFlexDates, calorieEntries: cals }
-          celebrate(
-            composeCelebration([
+          ambient = composeCelebration([
+            ...weeklyCelebrations(before, after),
+            ...newRecords(beforeRec, afterRec),
+          ])
+          // A stretch logged with no recap screen behind it cheers the whole lot
+          // here — the session done, and the angles measured along the way, which
+          // are cheered at the end rather than when the camera caught them
+          // mid-stretch. Where there is a recap it says all of that better, and
+          // only the ambient wins are left to ride in after it.
+          if (!opts?.quiet) {
+            const cheer = composeCelebration([
               stretchDoneCelebration,
-              // The angles measured during the session — a new best on a pose, a
-              // goal crossed — are cheered here, at the end, not when the camera
-              // caught them mid-stretch.
               ...flexAngleCelebrations(nextFlex),
-              ...weeklyCelebrations(before, after),
-              ...newRecords(beforeRec, afterRec),
-            ]),
-          )
+              ambient,
+            ])
+            if (cheer) celebrate(cheer)
+          }
         } catch {
           /* a missed cheer must never break a save */
         }
       }
-      const ok = await deliver(enqueue({ type: 'flex', entry }))
+      // Delivery runs in the background, so nothing on screen waits for it.
       const saved = isMeasurement ? 'measurement saved' : 'stretch logged'
-      notify(ok ? saved : "couldn't save — queued to retry", ok)
+      void deliver(enqueue({ type: 'flex', entry })).then((ok) =>
+        notify(ok ? saved : "couldn't save — queued to retry", ok),
+      )
+      return ambient
     },
     [celebrate, deliver, enqueue, notify, persistFlex, weeklyCelebrations],
   )
@@ -972,17 +1040,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // shared session_id, weight × reps per set) under the mat sit-up's own key, so
   // they build that movement's history and feed the core-progress series without
   // being mistaken for the incline sit-ups the training days press out (see
-  // plan.MAT_SITUP_KEY). Silent — the stretch save toasts — and no celebration.
+  // plan.MAT_SITUP_KEY). Silent — the stretch save toasts — and cheered by the
+  // finish recap rather than here: the PRs are returned for it to lead with.
   //
   // The key is what keeps the session out of the week's workout count, the streak
   // and the push variant's alternation (see session.SUPPLEMENTAL_EXERCISE_KEYS);
   // CORE_SESSION_NOTE says on the row itself which session it came out of, which is
   // what the rows written before the split are read by. The day_type is cosmetic —
   // nothing counts these rows as a push day.
+  //
+  // Synchronous, so the recap can be built in the same breath as the write: the
+  // push to the backend is kicked off and left to finish on its own.
   const logCore = useCallback(
-    async (sets: CoreSet[]) => {
+    (sets: CoreSet[]): PR[] => {
       const done = sets.filter((s) => s.reps > 0)
-      if (done.length === 0) return
+      if (done.length === 0) return []
       const sessionId = uuid()
       const date = toISODate(new Date())
       const rows: WorkoutRow[] = done.map((s, i) => ({
@@ -996,11 +1068,75 @@ export function DataProvider({ children }: { children: ReactNode }) {
         notes: CORE_SESSION_NOTE,
         is_historical: false,
       }))
-      persistWorkouts([...storage.loadWorkouts(), ...rows])
+      const prev = storage.loadWorkouts()
+      persistWorkouts([...prev, ...rows])
       enqueue({ type: 'session', rows })
-      await flush()
+      void flush()
+      // Read the same way a workout's PRs are — these are workout rows, so a
+      // heavier plate held on the mat sit-up is a PR like any other.
+      return detectPRs(prev, rows)
     },
     [enqueue, flush, persistWorkouts],
+  )
+
+  /**
+   * File a finished Stretch + Core session, and hand back its recap.
+   *
+   * The stretch flow's counterpart to `saveSession`: it records the session's
+   * length, the core sets and the flex-day entry, and returns everything the
+   * full-screen recap shows. Nothing here waits on the backend — every number the
+   * recap needs comes off the local write, because the screen belongs to the
+   * moment you put the phone down.
+   */
+  const finishStretch = useCallback(
+    async (input: StretchFinishInput): Promise<StretchFinishSummary> => {
+      const { routine, withCore, coreSets, duration } = input
+      if (duration) {
+        void logSessionDuration({
+          date: toISODate(new Date()),
+          kind: 'stretch',
+          routine,
+          totalSec: duration.totalSec,
+          restSec: duration.restSec,
+        })
+      }
+      const prs = logCore(coreSets)
+      // Which routine was done is what the alternation reads off the log. The note
+      // says whether the core block was part of it, since with it skipped "stretch
+      // + core" would be a plain misstatement of what happened.
+      const ambient = await logFlex(
+        { note: withCore ? 'stretch + core' : 'stretch', routines: [routine] },
+        { quiet: true },
+      )
+      // Read after that write, which is what puts today's readings in the log: an
+      // angle PR is today's best against every earlier day rather than a
+      // before/after diff (see lib/flexCelebration).
+      let anglePRs: AnglePR[] = []
+      let flexGoals: CompletedFlexGoal[] = []
+      try {
+        const entries = storage.loadFlex()
+        anglePRs = detectAnglePRs(entries)
+        flexGoals = completedFlexGoals(entries)
+      } catch {
+        /* a missed cheer must never break a save */
+      }
+      const totalSec = duration?.totalSec ?? 0
+      const restSec = Math.max(0, Math.min(duration?.restSec ?? 0, totalSec))
+      const projected = duration?.projected ?? null
+      return {
+        routine,
+        withCore,
+        anglePRs,
+        flexGoals,
+        prs,
+        totalSec,
+        activeSec: totalSec - restSec,
+        restSec,
+        projected: projected && projected.totalSec > 0 ? projected : null,
+        ambient,
+      }
+    },
+    [logCore, logFlex, logSessionDuration],
   )
 
   // Logs a one-rep max attempt as a workout row of its own: a real set on a real
@@ -1141,6 +1277,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logSessionDuration,
     logExerciseTimes,
     logCore,
+    finishStretch,
     logMaxAttempt,
     logProgressPhoto,
     importData,

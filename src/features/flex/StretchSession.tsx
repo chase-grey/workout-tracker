@@ -10,7 +10,7 @@ import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { PhotoStep } from './PhotoStep'
-import { formatDuration, remainingSecs } from '../../lib/estimate'
+import { formatDuration, medianTotalSec, remainingSecs } from '../../lib/estimate'
 import {
   buildSessionSteps,
   stepWorkSec,
@@ -21,8 +21,9 @@ import {
 import { coldGate, PHOTO_SHOT, gateAfterStep, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
 import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
-import { type FlexMeasurement } from '../../store/DataContext'
+import { type FlexMeasurement, type StretchFinishSummary } from '../../store/DataContext'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
+import { stretchSplit } from '../../lib/stretchSplit'
 import { canResumeRest, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useWakeLock } from '../../lib/useWakeLock'
@@ -97,18 +98,24 @@ function stepDetail(s: SessionStep): string {
 export function StretchSession({
   routine,
   onClose,
+  onFinish,
 }: {
   routine: FlexRoutineKey
   onClose: () => void
+  /**
+   * A session that was logged rather than abandoned, with its recap. Called
+   * alongside `onClose`, once the write has gone in — the recap screen takes it
+   * from there (see StretchFinishOverlay).
+   */
+  onFinish: (summary: StretchFinishSummary) => void
 }) {
   const {
     flexPlans,
     workouts,
     flexEntries,
     logFlex,
-    logCore,
     durations,
-    logSessionDuration,
+    finishStretch,
   } = useData()
   // Held for the session's lifetime: which Mon–Sun week the photo cadence is
   // measured against.
@@ -271,34 +278,48 @@ export function StretchSession({
     })
   }, [steps, done, durations, completed, N, coreTarget])
 
-  // Record the finished routine's length once, for time-left learning + reporting.
-  const recordDuration = () => {
-    if (!startedAt) return
+  /**
+   * What the session that just happened was projected to cost, split the way the
+   * recap reports it.
+   *
+   * Priced over the steps actually done rather than the whole routine, and read
+   * here at the end rather than frozen at the start: a routine finished off the
+   * menu at set five was never going to cost what all twenty would, and a recap
+   * comparing against that number would read as time saved instead of work
+   * dropped. The learned median comes off the same history the time-left readout
+   * quotes, scaled the same way, so the recap can't contradict what the screen
+   * was promising all the way through.
+   */
+  const projectedSplit = (doneSet: Set<string>) => {
+    const doneSteps = steps.filter((s) => doneSet.has(s.stepKey))
+    const learned = medianTotalSec(durations, { kind: 'stretch', routine })
+    const share = N > 0 ? doneSteps.length / N : 0
+    return stretchSplit(doneSteps, coreRepsFor, learned == null ? null : learned * share)
+  }
+
+  // Finish the session: file the length, the completed core sets (as workout rows,
+  // weight × reps) and the stretch/flex day, then hand the recap on. `doneSet` is
+  // passed explicitly so the set just completed is included without waiting for
+  // the state update.
+  const finishWith = (doneSet: Set<string>) => {
     // The rest screen carries the finish actions, so bank the rest still on the
     // clock rather than logging it as time stretching.
     bankRest()
-    void logSessionDuration({
-      date: toISODate(new Date()),
-      kind: 'stretch',
-      routine,
-      totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,
-      restSec: restAccumSec.current,
-    })
-  }
-
-  // Finish the session: log the completed core sets as workout rows (weight ×
-  // reps) and record the stretch/flex day. `doneSet` is passed explicitly so the
-  // set just completed is included without waiting for the state update.
-  const finishWith = (doneSet: Set<string>) => {
-    recordDuration()
     const coreSets = steps
       .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
       .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
-    void logCore(coreSets)
-    // Which routine was done is what the alternation reads off the log. The note
-    // says whether the core block was part of it, since with it skipped "stretch
-    // + core" would be a plain misstatement of what happened.
-    void logFlex({ note: withCore ? 'stretch + core' : 'stretch', routines: [routine] })
+    void finishStretch({
+      routine,
+      withCore,
+      coreSets,
+      duration: startedAt
+        ? {
+            totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,
+            restSec: restAccumSec.current,
+            projected: projectedSplit(doneSet),
+          }
+        : undefined,
+    }).then(onFinish)
     onClose()
   }
 
