@@ -7,7 +7,12 @@ import { vitaminDayState } from '../../lib/vitamins'
 import { usedStrips } from '../../lib/whitening'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
-const QUICK_ADDS = [100, 500, 4000]
+const QUICK_ADDS = [100, 500]
+
+// A whole day's goal in one tap. Only ever right for a day that is already over
+// and went unlogged, so it stays out of the row until you select one; on today it
+// is one mis-tap between an honest count and a filled-in lie.
+const BACKFILL = CALORIE_GOAL
 
 /**
  * The three things every day owes — the calories, the pills, and the whitening
@@ -172,6 +177,14 @@ export function DailyHabits() {
             +{cal}
           </button>
         ))}
+        {selDate < today && (
+          <button
+            onClick={() => addCalories(BACKFILL)}
+            className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
+          >
+            +{BACKFILL}
+          </button>
+        )}
         <button
           onClick={() => addCalories(-100)}
           className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
