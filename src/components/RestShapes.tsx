@@ -1247,7 +1247,16 @@ function GlassGather({ fraction }: { fraction: number }) {
  * much sand each half of it holds. See lib/bulbs for why the two levels are solved
  * out of area rather than taken straight off the countdown.
  */
-const BULBS = createBulbs({ cx: 50, top: 7, bottom: 93, rimHalf: 30, waistHalf: 3.4 })
+const BULBS = createBulbs({
+  cx: 50,
+  top: 7,
+  bottom: 93,
+  rimHalf: 30,
+  // Barely wider than the stroke that draws it: at this size the two bulbs read as
+  // meeting at a point, which is the whole silhouette.
+  waistHalf: 1.5,
+  corner: 9,
+})
 const UPPER_BULB = bulbPath(BULBS, 'upper')
 const LOWER_BULB = bulbPath(BULBS, 'lower')
 const BULB_WAIST = waistY(BULBS)
@@ -1270,13 +1279,14 @@ function sandBody(y: number) {
 
 /**
  * The 'bulbs' shape: a sand timer with no straight line in it — two bulbs swelling
- * off a narrow waist, the sand draining out of the top one and piling into the
- * bottom one over the rest.
+ * off a waist so narrow they all but meet at a point, rolling over rounded
+ * shoulders into a flat top and base, the sand draining out of the top one and
+ * piling into the bottom one over the rest.
  *
  * The third sand timer on the rest screen and the only curved one, which is the
  * whole of why it looks unlike the other two at a glance: RestTimer's `sandglass`
  * and `hourglass` are both a pair of straight tapers, and a triangle drains
- * evenly. Here the shoulders are nine times wider than the neck, so what falls at
+ * evenly. Here the shoulders are twenty times wider than the neck, so what falls at
  * a steady rate is the *area* of sand and not the height of it — see lib/bulbs.
  * What you read is how much colour is still in the upper bulb, which is exactly
  * the rest that is left, and the surfaces are free to ease through the wide part

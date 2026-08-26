@@ -11,7 +11,18 @@ import {
   type BulbsSpec,
 } from './bulbs'
 
-const SPEC: BulbsSpec = { cx: 50, top: 8, bottom: 92, rimHalf: 30, waistHalf: 3.5 }
+const CORNER = 9
+const SPEC: BulbsSpec = {
+  cx: 50,
+  top: 8,
+  bottom: 92,
+  rimHalf: 30,
+  waistHalf: 1.5,
+  corner: CORNER,
+}
+
+/** Each bulb's shoulder: its widest point, a corner in from its flat end. */
+const SHOULDER = { upper: SPEC.top + CORNER, lower: SPEC.bottom - CORNER }
 
 /**
  * The area of the shape between two heights, integrated independently of the
@@ -29,24 +40,67 @@ function areaBetween(bulbs: Bulbs, from: number, to: number, steps = 20000): num
   return total
 }
 
+/** Every x a path visits: the point after an M or an L, and where an arc lands. */
+function pathXs(path: string): number[] {
+  const points = [...path.matchAll(/[ML] (-?[\d.]+) /g)]
+  const arcs = [...path.matchAll(/A [\d.]+ [\d.]+ 0 0 [01] (-?[\d.]+) /g)]
+  return [...points, ...arcs].map((m) => Number(m[1]))
+}
+
 describe('createBulbs', () => {
-  it('is widest at both rims and narrowest at the waist', () => {
+  it('is widest at the shoulders and narrowest at the waist', () => {
     const bulbs = createBulbs(SPEC)
-    const { points } = bulbs
-    expect(points[0].half).toBeCloseTo(SPEC.rimHalf, 6)
-    expect(points[points.length - 1].half).toBeCloseTo(SPEC.rimHalf, 6)
+    expect(halfWidthAt(bulbs, SHOULDER.upper)).toBeCloseTo(SPEC.rimHalf, 6)
+    expect(halfWidthAt(bulbs, SHOULDER.lower)).toBeCloseTo(SPEC.rimHalf, 6)
     expect(halfWidthAt(bulbs, waistY(bulbs))).toBeCloseTo(SPEC.waistHalf, 6)
   })
 
-  it('pinches in all the way to the waist and swells all the way back out', () => {
+  it('pulls each flat end in by the corner it rounds through', () => {
+    const bulbs = createBulbs(SPEC)
+    const { points } = bulbs
+    const flat = SPEC.rimHalf - CORNER
+    expect(points[0].half).toBeCloseTo(flat, 6)
+    expect(points[points.length - 1].half).toBeCloseTo(flat, 6)
+    // A quarter circle tangent to the end and to the widest point: the wall leaves
+    // the flat horizontally and reaches the shoulder vertically, so neither join
+    // shows a crease.
+    for (const depth of [0.5, 2, 4.5, 7, 8.9]) {
+      const arc = SPEC.rimHalf - CORNER + Math.sqrt(CORNER ** 2 - (CORNER - depth) ** 2)
+      expect(halfWidthAt(bulbs, SPEC.top + depth)).toBeCloseTo(arc, 6)
+      expect(halfWidthAt(bulbs, SPEC.bottom - depth)).toBeCloseTo(arc, 6)
+    }
+  })
+
+  it('swells out to each shoulder and pinches in all the way to the waist', () => {
     const { points } = createBulbs(SPEC)
     const middle = (points.length - 1) / 2
-    for (let i = 1; i <= middle; i++) {
-      expect(points[i].half).toBeLessThan(points[i - 1].half)
-    }
-    for (let i = middle + 1; i < points.length; i++) {
+    const widest = points.findIndex((p) => p.y >= SHOULDER.upper)
+    for (let i = 1; i <= widest; i++) {
       expect(points[i].half).toBeGreaterThan(points[i - 1].half)
     }
+    for (let i = widest + 1; i <= middle; i++) {
+      expect(points[i].half).toBeLessThan(points[i - 1].half)
+    }
+    // And back out again, over the lower shoulder and in to the base.
+    const lowest = points.length - 1 - widest
+    for (let i = middle + 1; i <= lowest; i++) {
+      expect(points[i].half).toBeGreaterThan(points[i - 1].half)
+    }
+    for (let i = lowest + 1; i < points.length; i++) {
+      expect(points[i].half).toBeLessThan(points[i - 1].half)
+    }
+  })
+
+  it('closes onto the waist at a slope, so the bulbs meet at a point', () => {
+    // The neck is the one place the wall is allowed a corner. A flat there — the
+    // wall running parallel to the centre line for a stretch — is a tube between the
+    // bulbs rather than a point, so the profile has to still be moving when it
+    // arrives.
+    const bulbs = createBulbs(SPEC)
+    const waist = waistY(bulbs)
+    const step = 0.25
+    const opening = (halfWidthAt(bulbs, waist - step) - SPEC.waistHalf) / step
+    expect(opening).toBeGreaterThan(1)
   })
 
   it('mirrors about the waist, so the bulbs match', () => {
@@ -70,10 +124,12 @@ describe('createBulbs', () => {
   it('accumulates area that matches an independent integral', () => {
     const bulbs = createBulbs(SPEC)
     expect(bulbs.areas[0]).toBe(0)
-    expect(bulbs.areas[bulbs.areas.length - 1]).toBeCloseTo(
-      areaBetween(bulbs, SPEC.top, SPEC.bottom),
-      3,
-    )
+    // Compared as a share, because trapezoids between samples cut the corner of a
+    // quarter circle that turns through ninety degrees in nine units: the
+    // accumulation lands a ten-thousandth of the shape under the true area, which is
+    // thousandths of a unit of level and a hundredth of a pixel on screen.
+    const whole = areaBetween(bulbs, SPEC.top, SPEC.bottom)
+    expect(bulbs.areas[bulbs.areas.length - 1] / whole).toBeCloseTo(1, 3)
   })
 })
 
@@ -117,7 +173,7 @@ describe('sandLevels', () => {
       const { upper, lower } = sandLevels(bulbs, fraction)
       const left = areaBetween(bulbs, upper, waist)
       const fallen = areaBetween(bulbs, lower, SPEC.bottom)
-      expect(left + fallen).toBeCloseTo(full, 3)
+      expect((left + fallen) / full).toBeCloseTo(1, 3)
     }
   })
 
@@ -178,16 +234,35 @@ describe('bulbPath', () => {
     }
   })
 
-  it('starts each bulb at the outer corner it is measured from', () => {
+  it('starts each bulb on the flat end it is measured from', () => {
     // The lower bulb's path has to reach exactly the base, or the parked sand block
     // that rides up out of it would show a sliver of surface with nothing under it.
-    expect(bulbPath(bulbs, 'upper')).toContain(`M ${SPEC.cx - SPEC.rimHalf} ${SPEC.top}`)
-    expect(bulbPath(bulbs, 'lower')).toContain(`M ${SPEC.cx - SPEC.rimHalf} ${SPEC.bottom}`)
+    const flat = SPEC.cx - SPEC.rimHalf + CORNER
+    expect(bulbPath(bulbs, 'upper')).toContain(`M ${flat} ${SPEC.top}`)
+    expect(bulbPath(bulbs, 'lower')).toContain(`M ${flat} ${SPEC.bottom}`)
+  })
+
+  it('turns each corner as an arc rather than as samples of it', () => {
+    // Anticlockwise round the upper bulb, clockwise round the lower one, both from
+    // the flat end out to the shoulder.
+    expect(bulbPath(bulbs, 'upper')).toContain(
+      `A ${CORNER} ${CORNER} 0 0 0 ${SPEC.cx - SPEC.rimHalf} ${SHOULDER.upper}`,
+    )
+    expect(bulbPath(bulbs, 'lower')).toContain(
+      `A ${CORNER} ${CORNER} 0 0 1 ${SPEC.cx - SPEC.rimHalf} ${SHOULDER.lower}`,
+    )
   })
 
   it('spans the full width and no more', () => {
-    const xs = [...bulbPath(bulbs, 'upper').matchAll(/[ML] (-?[\d.]+) /g)].map((m) => Number(m[1]))
+    const xs = pathXs(bulbPath(bulbs, 'upper'))
     expect(Math.min(...xs)).toBeCloseTo(SPEC.cx - SPEC.rimHalf, 6)
     expect(Math.max(...xs)).toBeCloseTo(SPEC.cx + SPEC.rimHalf, 6)
+  })
+
+  it('squares the corners off when asked for none', () => {
+    const square = createBulbs({ ...SPEC, corner: 0, samples: 41 })
+    const path = bulbPath(square, 'upper')
+    expect(path).toContain(`M ${SPEC.cx - SPEC.rimHalf} ${SPEC.top}`)
+    expect(path).not.toContain('A ')
   })
 })

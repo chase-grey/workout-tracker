@@ -4,13 +4,14 @@
  * The rest set already has two straight-sided sand timers — RestTimer's `sandglass`
  * and its full-screen `hourglass`, both a pair of triangles whose level is the
  * reading. This is the same object drawn the way an hourglass is actually blown:
- * two bulbs swelling away from a narrow waist in one continuous curve, with no
- * frame, no caps and no glass. Flat, abstract, and curved everywhere.
+ * two bulbs swelling away from a waist so narrow they all but meet at a point,
+ * each one rolling over a rounded shoulder into a flat end, with no frame, no caps
+ * and no glass. Flat, abstract, and curved everywhere.
  *
  * The curve is why this module exists. Once the walls bow outward, a level falling
- * at a steady rate stops meaning a steady rate of *sand*: the shoulder is several
- * times wider than the neck, so an even fall would drain most of the charge in the
- * first third of the rest and a sliver in the last. The straight shapes get away
+ * at a steady rate stops meaning a steady rate of *sand*: the shoulder is twenty
+ * times the width of the neck, so an even fall would drain most of the charge in
+ * the first third of the rest and a sliver in the last. The straight shapes get away
  * with mapping the countdown onto the level because on a triangle a glance reads
  * the level; here a glance reads the *area* — how much colour is still up there —
  * and so that is what the countdown drives. The sand's area falls linearly with the
@@ -32,18 +33,29 @@
 export type BulbsSpec = {
   /** The centre line the whole shape is symmetric about. */
   cx: number
-  /** The top rim and the base — the two widest points. */
+  /** The flat top and the flat base. */
   top: number
   bottom: number
-  /** Half-width at those rims. */
+  /**
+   * Half-width at the widest point of each bulb — its shoulder, which sits a
+   * corner's depth in from the flat end rather than on it.
+   */
   rimHalf: number
-  /** Half-width at the waist, halfway between them. */
+  /**
+   * Half-width at the waist, halfway between the ends. Small: the bulbs are meant
+   * to look like they meet at a point, and this is how blunt that point is.
+   */
   waistHalf: number
   /**
-   * How the wall swells as it leaves the waist, as an exponent on the distance from
-   * it. Above 1 holds the neck narrow for longer and throws the swell up into the
-   * shoulder, which is the hourglass silhouette; at 1 the wall is an even S-curve
-   * from waist to rim.
+   * How far in from each flat end its shoulder sits, and so the radius of the
+   * quarter circle that turns the one into the other. 0 for a square corner.
+   */
+  corner?: number
+  /**
+   * How hard the wall swells as it leaves the waist, as an exponent on the distance
+   * left to the shoulder. Above 1 opens the bulb out fast off the waist and then
+   * eases into the shoulder, which is what makes the middle read as a point and the
+   * ends as bulbs; at 1 the wall is a straight taper.
    */
   swell?: number
   /**
@@ -81,9 +93,13 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 /** Sample a silhouette and accumulate its area, top rim to base. */
 export function createBulbs(spec: BulbsSpec): Bulbs {
   const asked = Math.max(5, Math.floor(spec.samples ?? DEFAULT_SAMPLES))
+  const halfHeight = Math.abs(spec.bottom - spec.top) / 2
   const resolved: Required<BulbsSpec> = {
-    swell: 1.1,
+    swell: 2,
     ...spec,
+    // A corner as deep as the bulb is tall would eat the taper it is supposed to
+    // turn into, so it never gets more than most of the way there.
+    corner: Math.max(0, Math.min(spec.corner ?? 0, halfHeight * 0.9)),
     // Odd, so `points[(samples - 1) / 2]` is the waist itself. An even count would
     // straddle it and quietly leave the two bulbs different sizes.
     samples: asked % 2 === 0 ? asked + 1 : asked,
@@ -111,21 +127,37 @@ export function halfWidthAt(bulbs: Bulbs, y: number): number {
 }
 
 /**
- * The wall: the waist's half-width opening out to the rim's along a cosine ease,
- * which leaves the wall flat where it meets the waist and flat again where it meets
- * the rim. Both flats matter — the first is the neck and the second the shoulder,
- * and a profile with a corner at either end reads as a funnel rather than as blown
- * glass.
+ * The wall, in two pieces that meet without a crease.
+ *
+ * Out at the flat end is the corner: a quarter circle tangent to the end, so the
+ * wall leaves it perfectly horizontal, and tangent to the widest point a corner's
+ * depth in, so it arrives at the shoulder perfectly vertical. That is what stops
+ * the flat top reading as a lid stuck on the shape — the end and the wall are one
+ * curve, and the widest point of the bulb sits below the rim the way blown glass
+ * does.
+ *
+ * In from the shoulder is the taper: the waist's half-width opening out to the
+ * shoulder's, eased so that it arrives vertical there and so meets the corner's
+ * tangent exactly. It leaves the waist at a *slope*, though, and that corner is the
+ * point of the whole thing: two walls closing at an angle onto a waist barely wider
+ * than the stroke read as bulbs meeting at a point, where a neck flat on both sides
+ * reads as a tube between them.
  */
 function halfWidth(spec: Required<BulbsSpec>, y: number): number {
-  const { top, bottom, rimHalf, waistHalf, swell } = spec
+  const { top, bottom, rimHalf, waistHalf, corner, swell } = spec
   const waist = (top + bottom) / 2
-  const span = waist - top
+  // Depth in from whichever end is nearer: the lower bulb is the upper one upside
+  // down, so one profile measured from the nearer end serves both.
+  const depth = Math.min(y - top, bottom - y)
+  if (depth <= 0) return rimHalf - corner
+  if (depth < corner) {
+    return rimHalf - corner + Math.sqrt(Math.max(0, corner ** 2 - (corner - depth) ** 2))
+  }
+  const span = waist - top - corner
   if (span <= 0) return rimHalf
-  // Distance from the waist as a share of the way out to a rim. Symmetric by
-  // construction: the lower bulb is the upper one upside down.
+  // How far out of the waist the taper has come, as a share of the way to a shoulder.
   const u = clamp01(Math.abs(y - waist) / span)
-  const ease = (1 - Math.cos(Math.PI * u ** swell)) / 2
+  const ease = 1 - (1 - u) ** swell
   return waistHalf + (rimHalf - waistHalf) * ease
 }
 
@@ -192,22 +224,52 @@ export function levelAtArea(bulbs: Bulbs, area: number): number {
 const round = (n: number) => Math.round(n * 100) / 100
 
 /**
- * One bulb as a closed SVG path: in along one wall, back out along the other.
+ * One bulb as a closed SVG path: out along the flat end, round the corner, in along
+ * one wall to the waist, and back out the other.
  *
  * Drawn as the bulb and used to clip the sand inside it, which is what gives the
  * sand its curved sides for nothing — the surface is a straight line and the walls
  * it stops at are the shape's own.
+ *
+ * The corners are arcs rather than samples of the profile. Everywhere else the
+ * polyline is finer than the stroke, but a circle turning through ninety degrees in
+ * a couple of units of height outruns any sampling even in y, and a visibly clipped
+ * corner is exactly the thing the rounding is there to avoid.
  */
 export function bulbPath(bulbs: Bulbs, which: Bulb): string {
   const { points, spec } = bulbs
+  const { cx, rimHalf, corner } = spec
   const middle = (points.length - 1) / 2
   // Both walls listed from the flat end in toward the waist, so the two lists meet
   // there and the path closes without a seam.
   const wall = which === 'upper' ? points.slice(0, middle + 1) : points.slice(middle).reverse()
-  const down = wall.map((p) => `L ${round(spec.cx - p.half)} ${round(p.y)}`)
-  const up = [...wall].reverse().map((p) => `L ${round(spec.cx + p.half)} ${round(p.y)}`)
-  const start = wall[0]
-  return [`M ${round(spec.cx - start.half)} ${round(start.y)}`, ...down.slice(1), ...up, 'Z'].join(
-    ' ',
-  )
+  const flat = wall[0].y
+  // The whole shape lies one way from that end, and the path runs anticlockwise
+  // around the upper bulb and clockwise around the lower one, which is what decides
+  // both corners' sweep.
+  const inward = which === 'upper' ? 1 : -1
+  const shoulder = flat + inward * corner
+  const sweep = which === 'upper' ? 0 : 1
+  const arc = (x: number, y: number) =>
+    `A ${round(corner)} ${round(corner)} 0 0 ${sweep} ${round(x)} ${round(y)}`
+
+  // The shoulder exactly, then every sample the corner does not already cover.
+  const taper = [
+    { y: shoulder, half: rimHalf },
+    ...wall.filter((p) => Math.abs(p.y - flat) > corner),
+  ]
+  const down = taper.map((p) => `L ${round(cx - p.half)} ${round(p.y)}`)
+  const up = [...taper].reverse().map((p) => `L ${round(cx + p.half)} ${round(p.y)}`)
+
+  if (corner <= 0) {
+    return [`M ${round(cx - rimHalf)} ${round(flat)}`, ...down.slice(1), ...up, 'Z'].join(' ')
+  }
+  return [
+    `M ${round(cx - rimHalf + corner)} ${round(flat)}`,
+    arc(cx - rimHalf, shoulder),
+    ...down.slice(1),
+    ...up,
+    arc(cx + rimHalf - corner, flat),
+    'Z',
+  ].join(' ')
 }
