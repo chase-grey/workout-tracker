@@ -1,9 +1,7 @@
 import { Fragment, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { ThisWeek } from './ThisWeek'
-import { CalorieLogger } from './CalorieLogger'
-import { VitaminsCard } from './VitaminsCard'
-import { WhiteningCard } from './WhiteningCard'
+import { DailyHabits } from './DailyHabits'
 import { WeightCard } from './WeightCard'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
@@ -103,11 +101,7 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
 
       <ThisWeek />
 
-      <CalorieLogger />
-
-      <VitaminsCard />
-
-      <WhiteningCard />
+      <DailyHabits />
 
       <WeightCard />
 
