@@ -1,19 +1,10 @@
-import { MdBolt, MdEmojiEvents, MdFlag, MdTimer, MdTrendingDown, MdTrendingUp } from 'react-icons/md'
+import { MdBolt, MdEmojiEvents, MdFlag, MdTrendingDown, MdTrendingUp } from 'react-icons/md'
 import type { WorkoutFinishSummary } from '../store/DataContext'
 import { Confetti } from './Confetti'
+import { SessionTimeCard } from './SessionTimeCard'
 
 const GREENS = ['#16a34a', '#22c55e', '#4ade80', '#86efac']
 const GOLDS = ['#fbbf24', '#f59e0b', '#fde68a']
-
-/** Seconds → "38 min" / "1 hr 5 min" / "<1 min". */
-function fmtMin(sec: number): string {
-  const min = Math.round(sec / 60)
-  if (min < 1) return '<1 min'
-  if (min < 60) return `${min} min`
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  return m === 0 ? `${h} hr` : `${h} hr ${m} min`
-}
 
 /**
  * Full-screen recap shown the moment a workout is finished, before dropping back
@@ -62,39 +53,12 @@ export function WorkoutFinishOverlay({
           </div>
         )}
 
-        <div className="mt-5 rounded-2xl bg-surface p-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <div className="flex items-center gap-2 text-accent-2">
-              <MdTimer className="text-xl" aria-hidden />
-              <span className="text-sm font-bold tracking-wider">time · {fmtMin(totalSec)}</span>
-            </div>
-            {projected && (
-              <span className="text-[11px] text-neutral-500">
-                projected {fmtMin(projected.totalSec)}
-              </span>
-            )}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-2 py-3 text-center">
-              <span className="text-xl font-black text-accent-2">{fmtMin(activeSec)}</span>
-              <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">active</span>
-              {projected && (
-                <span className="mt-1 text-[10px] leading-tight text-neutral-500">
-                  projected {fmtMin(projected.activeSec)}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-2 py-3 text-center">
-              <span className="text-xl font-black text-amber-400">{fmtMin(restSec)}</span>
-              <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">resting</span>
-              {projected && (
-                <span className="mt-1 text-[10px] leading-tight text-neutral-500">
-                  projected {fmtMin(projected.restSec)}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+        <SessionTimeCard
+          totalSec={totalSec}
+          activeSec={activeSec}
+          restSec={restSec}
+          projected={projected}
+        />
 
         {baselines.length > 0 && (
           <div className="mt-5 rounded-2xl border border-accent/40 bg-surface p-4">
