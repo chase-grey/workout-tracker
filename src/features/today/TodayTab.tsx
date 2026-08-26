@@ -59,10 +59,24 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
   // was done last steps back so the other reads as up next.
   const dimmedStretch = lastStretchRoutine(flexEntries)
 
+  // Whichever half of an alternating pair reads as up next takes the top row:
+  // the dimmed one was just done, so it steps down and the button you're
+  // likelier to want is the first one your eye and thumb land on. With nothing
+  // dimmed — no history yet, or a full-body day, which dims neither — the pair
+  // keeps the order it already had.
+  const nextUpFirst = <T,>(pair: T[], dimmed: T | null) =>
+    dimmed && pair.length === 2 && pair[0] === dimmed ? [pair[1], pair[0]] : pair
+
   // The left column of the session grid. Full body is placed rather than
   // ordered — it sits on the bottom row whatever Settings says — so the order
   // chosen there applies to the two days that alternate.
-  const liftDays = dayOrder(plan).filter((t) => t !== 'fullbody')
+  const liftDays = nextUpFirst(
+    dayOrder(plan).filter((t) => t !== 'fullbody'),
+    dimmedDay,
+  )
+
+  // The right column: the same two routines, rotated the same way.
+  const stretchRoutines = nextUpFirst(FLEX_ROUTINE_KEYS, dimmedStretch)
 
   return (
     // No bottom padding of its own: `main` already pads below the scroll area, and
@@ -107,14 +121,13 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
 
       {/* One grid rather than a row per kind: the lift days run down the left
           column, the stretch routines down the right, and full body takes the
-          bottom row on its own. Each dimming pair still sits together — push
-          above pull, side split above head to toe — and nothing is full width
-          except the day that trains everything, so the page still fits without
-          scrolling. */}
+          bottom row on its own. Each dimming pair still sits together, up next
+          over just-done, and nothing is full width except the day that trains
+          everything, so the page still fits without scrolling. */}
       <div className="grid grid-cols-2 gap-2">
-        {Array.from({ length: Math.max(liftDays.length, FLEX_ROUTINE_KEYS.length) }, (_, i) => {
+        {Array.from({ length: Math.max(liftDays.length, stretchRoutines.length) }, (_, i) => {
           const t = liftDays[i]
-          const r = FLEX_ROUTINE_KEYS[i]
+          const r = stretchRoutines[i]
           return (
             <Fragment key={i}>
               {t ? (
