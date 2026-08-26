@@ -150,7 +150,7 @@ export function DailyHabits() {
                       aria-hidden
                     />
                     <MdAutoAwesome
-                      className={`text-[11px] ${wht ? 'text-lime-300' : 'text-neutral-700'}`}
+                      className={`text-[11px] ${wht ? 'text-accent-bright' : 'text-neutral-700'}`}
                       aria-hidden
                     />
                   </>
