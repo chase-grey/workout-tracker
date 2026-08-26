@@ -61,10 +61,10 @@ describe('the head-to-toe routine', () => {
   it('runs its five exercises, every one of them a side at a time', () => {
     expect(exercises.map((e) => e.key)).toEqual([
       'rolling_feet',
-      'calf_stretch',
       'sciatic_floss',
       'pike_block_crush',
       'pike_lift',
+      'calf_stretch',
     ])
     expect(exercises.every((e) => e.perSide)).toBe(true)
   })
@@ -84,10 +84,13 @@ describe('the head-to-toe routine', () => {
     for (const e of exercises) expect(e.holdSec && e.tempo).toBeFalsy()
   })
 
-  it('names the calf stretch’s three sets as the variations they are', () => {
+  // Two knee angles rather than three foot angles: bending the knee is what takes
+  // the gastroc slack and hands the stretch to the soleus, and toe direction isn't
+  // doing comparable work. Four holds instead of six.
+  it('names the calf stretch’s two sets as the knee angles they are', () => {
     const calf = byKey('calf_stretch')
-    expect(calf.maxSets).toBe(3)
-    expect(calf.setLabels).toEqual(['straight on', 'feet out', 'feet in'])
+    expect(calf.maxSets).toBe(2)
+    expect(calf.setLabels).toEqual(['knee straight', 'knee bent'])
     expect(calf.setLabels).toHaveLength(calf.maxSets)
   })
 
@@ -97,13 +100,31 @@ describe('the head-to-toe routine', () => {
     }
   })
 
-  it('rests only after both sides, and only where there is a rest at all', () => {
+  // The rests are scaled to what the set actually costs rather than set to one
+  // number: a nerve glide barely earns thirty, three press-and-release reps earn
+  // forty-five, and only the pike lift still earns a full minute.
+  it('rests only after both sides, and only as long as the set is worth', () => {
     expect(byKey('rolling_feet').restSec).toBe(0)
     expect(byKey('calf_stretch').restSec).toBe(0)
+    expect(byKey('sciatic_floss').restSec).toBe(30)
+    expect(byKey('pike_block_crush').restSec).toBe(45)
+    expect(byKey('pike_lift').restSec).toBe(60)
     for (const key of ['sciatic_floss', 'pike_block_crush', 'pike_lift']) {
-      expect(byKey(key).restSec).toBe(60)
       expect(byKey(key).restAfterSides).toBe(true)
     }
+  })
+
+  // The measured work goes before the calves, and the calves close the routine
+  // out warm — see the ordering note in flexRoutines. Pinned because the warm
+  // photo gate anchors to the last pike set on the strength of it (see
+  // lib/photoSteps.gateAfterStep).
+  it('ends on the calves, with the pike work ahead of them', () => {
+    expect(HEAD_TO_TOE.blocks.map((b) => b.label)).toEqual([
+      'feet',
+      'nerve floss',
+      'pike',
+      'calves',
+    ])
   })
 
   it('gives the nerve floss ten seconds to change legs, the rest the default', () => {
@@ -113,7 +134,8 @@ describe('the head-to-toe routine', () => {
     }
   })
 
-  it('gives the block crush one set and the pike lift three', () => {
+  it('gives the floss two sets, the block crush one, and the pike lift three', () => {
+    expect(byKey('sciatic_floss').maxSets).toBe(2)
     expect(byKey('pike_block_crush').maxSets).toBe(1)
     expect(byKey('pike_lift').maxSets).toBe(3)
   })

@@ -87,10 +87,18 @@ const flexIndices = (steps: SessionStep[]): number[] =>
  * the warm split after the last stretch set. If the routine's last stretch set is
  * also its last tailor's set, both shots share one screen.
  *
- * Head to toe has one, after its last stretch set: both pike exercises warm the
+ * Head to toe has one, after its last *pike* set. Both pike exercises warm the
  * fold and the lift alike, so there's no earlier point at which one of the three
- * readings is finished and the others aren't — and one screen at the end mirrors
- * where the splits routine puts its warm split.
+ * readings is finished and the others aren't — but the routine no longer ends on
+ * the pike. The calves were moved behind it (see config/flexRoutines), and six
+ * minutes of quiet ankle holds is not what the toe touch and the leg lifts should
+ * be measured off. So this anchors to the work that earns the readings rather
+ * than to the end of the session; the calf block runs after the screen.
+ *
+ * It falls back to the last stretch set when there's no pike in the plan at all,
+ * which is what a coach edit that renames or drops the pike exercises leaves
+ * behind — a routine that offers its warm shots late beats one that never offers
+ * them.
  *
  * Core sets never trigger one.
  */
@@ -107,7 +115,9 @@ export function gateAfterStep(
   const atLastFlex = index === flexIdx[flexIdx.length - 1]
 
   if (routine === 'head_to_toe') {
-    if (!atLastFlex) return null
+    const lastPike = [...flexIdx].reverse().find((i) => steps[i].exKey.toLowerCase().includes('pike'))
+    const anchor = lastPike ?? flexIdx[flexIdx.length - 1]
+    if (index !== anchor) return null
     return { id: 'warm-h2t', title: 'warm photos', shots: FLEX_ROUTINES.head_to_toe.warmShots }
   }
 

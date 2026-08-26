@@ -17,9 +17,9 @@ describe('settleInSec', () => {
   it('builds the calf stretch once and then only changes the angle', () => {
     const first = find(isFlex('calf_stretch', 0, 'left'))
     expect(at(first)).toBe(20)
-    // Every other set of it — the other foot, and each of the two remaining
-    // angles — is a reposition off the position already built.
-    for (const round of [0, 1, 2]) {
+    // Every other set of it — the other foot, and the bent-knee angle — is a
+    // reposition off the position already built.
+    for (const round of [0, 1]) {
       for (const side of ['left', 'right']) {
         if (round === 0 && side === 'left') continue
         expect(at(find(isFlex('calf_stretch', round, side)))).toBe(5)
@@ -30,14 +30,15 @@ describe('settleInSec', () => {
   it('builds the nerve floss once and then gives ten seconds to change legs', () => {
     expect(at(find(isFlex('sciatic_floss', 0, 'left')))).toBe(20)
     expect(at(find(isFlex('sciatic_floss', 0, 'right')))).toBe(10)
-    expect(at(find(isFlex('sciatic_floss', 2, 'left')))).toBe(10)
+    expect(at(find(isFlex('sciatic_floss', 1, 'left')))).toBe(10)
   })
 
   it('charges the full setup when a stretch is the one arriving', () => {
-    // The first calf set follows the last of the feet — a different position, so
-    // there is nothing built to reposition within.
+    // The first calf set follows the last of the pike work — the calves close the
+    // routine out now (see config/flexRoutines) — and that's a different position,
+    // so there is nothing built to reposition within.
     const first = find(isFlex('calf_stretch', 0, 'left'))
-    expect(steps[first - 1].exKey).toBe('rolling_feet')
+    expect(steps[first - 1].exKey).toBe('pike_lift')
     expect(at(first)).toBe(20)
     expect(settleInSec(steps[first])).toBe(20)
   })

@@ -27,56 +27,62 @@ Where the build diverged from what is written below, see [As built](#as-built).
 - [File-by-file change list](#file-by-file-change-list)
 - [Open questions](#open-questions)
 - [As built](#as-built)
+- [Revision — 2026-08-26](#revision--2026-08-26)
 
 ## The routine
 
 Five exercises, in order. Every per-side exercise runs one side at a time, with
 5 seconds to switch legs between them.
 
+> **Revised 2026-08-26** — the table below is current. The routine it first
+> shipped with ran the calves second (three foot-angle variations, six holds), the
+> floss for three sets at 60s rest, and the block crush at 60s. See
+> [Revision — 2026-08-26](#revision--2026-08-26) for what changed and why.
+
 | | exercise | work | sets | sides | rest |
 |---|---|---|---|---|---|
 | A | rolling feet | 90s hold, ball under a bare foot | 1 | each | none |
-| B | calf stretch | 90s hold | 3 (one per variation) | each | none |
-| C | sciatic nerve floss | 8 reps · 3s up · 3s down | 3 | each | 60s, after both sides |
-| D | pike block crush | 3 reps · 10s each | 1 | each | 60s, after both sides |
-| E | pike lift | 5 reps · 5s contract down · 5s rest · 5s lift · 5s rest | 3 | each | 60s, after both sides |
+| B | sciatic nerve floss | 8 reps · 3s up · 3s down | 2 | each | 30s, after both sides |
+| C | pike block crush | 3 reps · 10s each | 1 | each | 45s, after both sides |
+| D | pike lift | 5 reps · 5s contract down · 5s rest · 5s lift · 5s rest | 3 | each | 60s, after both sides |
+| E | calf stretch | 90s hold | 2 (one per knee angle) | each | none |
 
-B's three sets are three variations rather than three identical rounds: **straight
-on**, **feet out**, **feet in**. Each variation is held 90s per side, so the calf
-block is six holds — nine minutes of it.
+E's two sets are two variations rather than two identical rounds: **knee
+straight** and **knee bent**. Each is held 90s per side, so the calf block is four
+holds — six minutes of it.
 
 Then the core block (weighted sit-ups, the same one the side-splits routine
 appends), unless it was already done in an earlier stretch today.
 
 ### Set order
 
-C, D and E rest only once both sides have finished the round:
+B, C and D rest only once both sides have finished the round, each for its own
+length (30s, 45s, 60s):
 
 ```
-L set 1  ─5s switch→  R set 1  ─60s rest→
-L set 2  ─5s switch→  R set 2  ─60s rest→
-L set 3  ─5s switch→  R set 3  ─60s rest→
+L set 1  ─5s switch→  R set 1  ─rest→
+L set 2  ─5s switch→  R set 2  ─rest→
+L set 3  ─5s switch→  R set 3  ─rest→
 ```
 
-A and B never rest at all — 5 seconds to switch sides, and for B, 5 seconds
-between variations.
+A and E never rest at all — 5 seconds to switch sides, and for E, 5 seconds
+between knee angles.
 
 ### Session length
 
-Roughly 40 minutes with core, on the prescription above:
+Roughly 32 minutes with core, on the prescription above:
 
 | block | work | rest | total |
 |---|---|---|---|
 | A rolling feet | 180s | — | 3:00 |
-| B calf stretch | 540s | — | 9:00 |
-| C nerve floss | 288s | 180s | 7:48 |
-| D block crush | 60s | 60s | 2:00 |
-| E pike lift | 600s | 180s | 13:00 |
+| B nerve floss | 192s | 60s | 4:12 |
+| C block crush | 60s | 45s | 1:45 |
+| D pike lift | 600s | 180s | 13:00 |
+| E calf stretch | 360s | — | 6:00 |
 | core | ~120s | 180s | ~5:00 |
 
-That is about twice the side-splits routine. Worth knowing before it ships;
-nothing in the design depends on shortening it, and the numbers above are exactly
-what was asked for.
+Down from about 40. It is still the longer of the two routines — the side split
+is around 17 minutes now — but no longer twice it.
 
 ## Decisions already made
 
@@ -110,7 +116,7 @@ unchanged and every new field reads as "no" when absent.
    *  exclusive with `tempo` — a step with holdSec renders the HoldTimer. */
   holdSec?: number
   /** A name per set, when the sets are variations rather than rounds
-   *  (calf stretch: straight on / feet out / feet in). Indexed by round. */
+   *  (calf stretch: knee straight / knee bent). Indexed by round. */
   setLabels?: string[]
   /** Seconds to switch legs between the two sides of a round. Default 5. */
   sideSwitchSec?: number
@@ -787,3 +793,71 @@ flat five seconds. The tempos actually prescribed run from six seconds a rep to
 twenty — a pike lift set is five reps of twenty — so the first-ever session's
 estimate came out at little over half the real length. It now sums the tempo's own
 phases, falling back to the flat assumption when there is nothing to parse.
+
+## Revision — 2026-08-26
+
+A programming review of both routines, alongside raising the weekly stretch goal
+from two sessions to three. What changed here, and why:
+
+**Order: the calves went from second to last.** Nothing in the routine warmed up
+before them, so six of the session's nine calf minutes were cold holds — the least
+productive way to spend them. Worse, the warm photo gate fires off the end of the
+stretch work, so the toe touch and the leg lifts were being measured after six
+minutes of standing still rather than off the pike work that earns them. The floss
+makes a better opener: it is a nerve glide rather than a stretch, gentle enough to
+go first, and it takes neural tension out of the chain the pike is about to work.
+The calves close the session out warm, which is where a long passive hold belongs.
+
+`gateAfterStep` now anchors head to toe's warm screen to the last **pike** set
+instead of the last stretch set, and falls back to the last stretch set when a
+plan has no pike in it at all. The calf block runs after the screen.
+
+**Calves: six holds to four, and the variations changed.** `straight on / feet out
+/ feet in` are three knee-*straight* positions. Toe direction does not meaningfully
+shift load between the heads of the gastroc; knee angle does, and bending the knee
+takes the gastroc slack and hands the stretch to the soleus underneath. The soleus
+is usually what actually caps ankle range and the routine had no stretch for it at
+all. Now `knee straight / knee bent`, two sets — three minutes back and a muscle
+covered that wasn't.
+
+**Floss: three sets to two, rest 60s to 30s.** Flossing glides the nerve rather
+than lengthening tissue, and the dose that helps is a small one — past it the nerve
+gets irritated instead of freer, which is the opposite of what the pike work behind
+it needs. Eight gentle glides also leave nothing to recover from, so the minute of
+rest was costing more than the set did.
+
+**Rests, generally.** Block crush 60s → 45s. The pike lift keeps its full minute:
+it is the hardest thing here and the one that moves the leg-lift reading, so it is
+the last place to buy time back. On the side split, all three rests went 90s → 60s
+— ninety is a strength-training number, and the longest working set over there is
+forty-eight seconds of paced reps at bodyweight.
+
+**Weekly goal: two sessions to three**, half-credit two. Strict alternation already
+produces the intended pattern with no change — two side splits and one head to toe
+one week, the reverse the next — because `nextStretchRoutine` reads the last
+completed routine globally rather than per week.
+
+Raising a goal re-judges every week the streak has ever replayed, so a past week
+that hit two and called it done would have dropped out of `full` and taken the run
+with it. `FLEX_GOAL_3_FROM` pins the changeover to the Monday it happened
+(2026-08-31, the current week spared the way a newly picked-up habit's is) and
+weeks before it are still judged at two. Callers passing an explicit config are
+left alone.
+
+`METRIC_WINDOW.flex` went 5 → 6. Five days was sized for two sessions and had room
+to spare; three in five leaves none, and a window with no slack reports being
+behind as the normal state, which is the fastest way to make a pacer worth
+ignoring. Six keeps Sunday out — the point of the window — and gives the third
+session somewhere to go.
+
+### Not done here
+
+Raised in the review, deliberately left out of this change:
+
+- **Adductor strength at length** for the side split — there is still no active
+  adductor work, only pushing into passive range.
+- **Hip flexor and hip rotation work.** A short rectus femoris caps pancake depth,
+  so this silently limits the side split too. "Head to toe" also still stops at the
+  hips: nothing thoracic, nothing shoulder.
+- **A progression variable.** Both routines are fixed sets, reps and holds. The
+  app measures the outcome; nothing changes the input.

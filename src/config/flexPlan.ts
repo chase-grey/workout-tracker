@@ -1,6 +1,14 @@
 /**
- * Chase's side-splits routine (goal: 180° straddle, 2×/week). Editable data,
- * like the workout plan. Tempo strings are display-only guidance.
+ * Chase's side-splits routine (goal: 180° straddle). Editable data, like the
+ * workout plan. Tempo strings are display-only guidance.
+ *
+ * Rests are sixty seconds, down from ninety. Ninety is a strength-training
+ * number — time to clear fatigue before a heavy set — and none of this is a heavy
+ * set: the longest working set here is forty-eight seconds of paced reps at
+ * bodyweight. The superset shortens it further, since alternating tailor's and
+ * horse means either one gets two rests before it comes round again. Thirty
+ * seconds a set back across eight sets is most of the time the pancake block
+ * costs.
  *
  * The head-to-toe routine (see config/flexRoutines) is built from the same shape,
  * which is what the optional fields below are for: every one of them reads as
@@ -28,7 +36,7 @@ export type FlexExercise = {
   holdSec?: number
   /**
    * A name per set, when the sets are variations rather than rounds (the calf
-   * stretch: straight on / feet out / feet in). Indexed by round.
+   * stretch: knee straight / knee bent). Indexed by round.
    */
   setLabels?: string[]
   /** Seconds to switch legs between the two sides of a round. Default 5. */
@@ -58,7 +66,7 @@ export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
         maxSets: 4,
         reps: 8,
         tempo: '2s down · 3s hold at bottom · 1s up',
-        restSec: 90,
+        restSec: 60,
       },
       {
         key: 'horse_squat',
@@ -67,7 +75,7 @@ export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
         maxSets: 4,
         reps: 8,
         tempo: '2s down · 3s hold at bottom · 1s up',
-        restSec: 90,
+        restSec: 60,
       },
     ],
   },
@@ -81,7 +89,7 @@ export const DEFAULT_FLEX_ROUTINE: FlexBlock[] = [
         maxSets: 3,
         reps: 6,
         tempo: '5s pushing down · 5s passive hang',
-        restSec: 90,
+        restSec: 60,
       },
     ],
   },

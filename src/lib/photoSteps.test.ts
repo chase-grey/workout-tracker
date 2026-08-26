@@ -92,26 +92,48 @@ describe('gateAfterStep', () => {
 })
 
 describe('gateAfterStep — head to toe', () => {
-  // Two per-side exercises: the pike lift's second side is the routine's last
-  // stretch set, and the only place a warm photo is owed.
+  // The routine as it runs: the pike work, then the calves behind it. The pike
+  // lift's second side is where the three readings are earned, and the calf holds
+  // after it are not what they should be measured off.
   const plan: FlexBlock[] = [
-    { label: 'calves', exercises: [{ ...ex('calf_stretch', 2), perSide: true }] },
     { label: 'pike', exercises: [{ ...ex('pike_lift', 2), perSide: true }] },
+    { label: 'calves', exercises: [{ ...ex('calf_stretch', 2), perSide: true }] },
   ]
   const steps = buildSessionSteps(plan)
   const gateAt = (i: number) => gateAfterStep(steps, i, 'head_to_toe')
-  const lastFlex = steps.map((s) => s.kind).lastIndexOf('flex')
+  const flexAt = steps.flatMap((s, i) => (s.kind === 'flex' ? [i] : []))
+  const lastFlex = flexAt[flexAt.length - 1]
+  const lastPike = flexAt.filter((i) => steps[i].exKey.includes('pike')).pop()!
 
-  it('offers all three warm shots on one screen after the last stretch set', () => {
-    expect(gateAt(lastFlex)).toEqual({
+  it('offers all three warm shots on one screen after the last pike set', () => {
+    expect(gateAt(lastPike)).toEqual({
       id: 'warm-h2t',
       title: 'warm photos',
       shots: ['warm-toe-touch', 'warm-leg-lift-left', 'warm-leg-lift-right'],
     })
   })
 
+  // The whole point of anchoring to the pike rather than to the end: the calf
+  // block runs after the screen, and asking for the readings again there would
+  // measure a fold that has been sitting still for six minutes.
+  it('offers nothing on the calf holds that follow it', () => {
+    expect(lastFlex).toBeGreaterThan(lastPike)
+    for (let i = lastPike + 1; i <= lastFlex; i++) expect(gateAt(i)).toBeNull()
+  })
+
   it('offers nothing anywhere earlier — both pike sides warm all three poses', () => {
-    for (let i = 0; i < lastFlex; i++) expect(gateAt(i)).toBeNull()
+    for (let i = 0; i < lastPike; i++) expect(gateAt(i)).toBeNull()
+  })
+
+  // A coach edit that drops or renames the pike leaves nothing to anchor to, and
+  // late warm shots beat none at all.
+  it('falls back to the last stretch set with no pike in the plan', () => {
+    const noPike = buildSessionSteps([
+      { label: 'calves', exercises: [{ ...ex('calf_stretch', 2), perSide: true }] },
+    ])
+    const last = noPike.map((s) => s.kind).lastIndexOf('flex')
+    expect(gateAfterStep(noPike, last, 'head_to_toe')?.id).toBe('warm-h2t')
+    for (let i = 0; i < last; i++) expect(gateAfterStep(noPike, i, 'head_to_toe')).toBeNull()
   })
 
   it('offers nothing on the core block', () => {

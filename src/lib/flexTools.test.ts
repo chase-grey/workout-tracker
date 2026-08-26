@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { FLEX_ROUTINE } from '../config/flexPlan'
+import { FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import { FLEX_ROUTINES } from '../config/flexRoutines'
 import { applyFlexEdits, applyFlexPlanEdits, type FlexEdit } from './flexTools'
 
@@ -18,7 +18,7 @@ describe('applyFlexEdits', () => {
     const ex = block.exercises.find((e) => e.key === 'pancake_hang')!
     expect(ex.reps).toBe(10)
     expect(ex.name).toBe('Pancake Reach')
-    expect(ex.restSec).toBe(90) // invalid negative ignored, keeps original
+    expect(ex.restSec).toBe(60) // invalid negative ignored, keeps original
     expect(applied.some((m) => m.includes('reps'))).toBe(true)
     expect(errors.some((m) => m.includes('restSec'))).toBe(true)
   })
@@ -181,11 +181,14 @@ describe('applyFlexPlanEdits', () => {
     ])
     expect(errors).toEqual([])
     expect(applied).toHaveLength(1)
-    expect(after.head_to_toe[1].exercises[0].holdSec).toBe(120)
+    // By label, not by index: the calves moved to the end of the routine once and
+    // could again, and this test is about which routine the edit landed in.
+    const calves = (bs: FlexBlock[]) => bs.find((b) => b.label === 'calves')!.exercises[0]
+    expect(calves(after.head_to_toe).holdSec).toBe(120)
     // Untouched routines come back by reference, so nothing else looks changed.
     expect(after.side_split).toBe(before.side_split)
     // And the input is never mutated.
-    expect(before.head_to_toe[1].exercises[0].holdSec).toBe(90)
+    expect(calves(before.head_to_toe).holdSec).toBe(90)
   })
 
   // Written when there was only one routine to edit — it still means that one.

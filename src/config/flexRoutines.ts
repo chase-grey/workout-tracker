@@ -23,10 +23,19 @@ export type FlexRoutine = {
 }
 
 /**
- * The head-to-toe routine: feet, calves, nerve floss, pike. Every exercise runs
+ * The head-to-toe routine: feet, nerve floss, pike, calves. Every exercise runs
  * one side at a time (`perSide`), and each is its own block — nothing here is a
  * superset, and the block labels are what the session header and the checklist
  * show.
+ *
+ * The order is the measured work first and the calves last, which is a reversal
+ * of the distal-to-proximal one it shipped with. Nothing in the routine warms up
+ * before the calves did their six cold ninety-second holds, and the two readings
+ * the routine actually moves — the toe touch and the leg lifts — were taken after
+ * that rather than off the pike work that earns them. The floss makes a better
+ * opener anyway: it's a nerve glide rather than a stretch, so it's gentle enough
+ * to go first and it takes neural tension out of the chain the pike is about to
+ * work. The calves close it out warm, where a long passive hold belongs.
  *
  * The tempo strings are chosen so lib/tempo and lib/rhythmMotion read them
  * correctly with no changes: `up`/`down` gives the floss a breath, `press down`
@@ -55,36 +64,23 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
     ],
   },
   {
-    label: 'calves',
-    // Three variations rather than three identical rounds, so the block is six
-    // holds — nine minutes of it.
-    exercises: [
-      {
-        key: 'calf_stretch',
-        name: 'calf stretch',
-        sets: '3',
-        maxSets: 3,
-        reps: 1,
-        tempo: '',
-        holdSec: 90,
-        perSide: true,
-        restSec: 0,
-        setLabels: ['straight on', 'feet out', 'feet in'],
-      },
-    ],
-  },
-  {
     label: 'nerve floss',
     exercises: [
       {
         key: 'sciatic_floss',
         name: 'sciatic nerve floss',
-        sets: '3',
-        maxSets: 3,
+        // Two sets, not three. Flossing glides the nerve rather than lengthening
+        // tissue, and the dose that helps is a small one — past it the nerve gets
+        // irritated instead of freer, which is the opposite of what the pike work
+        // after it needs.
+        sets: '2',
+        maxSets: 2,
         reps: 8,
         tempo: '3s up · 3s down',
         perSide: true,
-        restSec: 60,
+        // Thirty seconds, not sixty: eight gentle glides leave nothing to recover
+        // from, and the rest was costing more than the set did.
+        restSec: 30,
         restAfterSides: true,
         // Changing legs on the floss is getting out of the strap and back into it
         // on the other side, which the default five seconds doesn't cover. The
@@ -104,7 +100,9 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
         reps: 3,
         tempo: '10s press down · 5s rest',
         perSide: true,
-        restSec: 60,
+        // Forty-five: three reps of press-and-release isn't a set you need a full
+        // minute back from, and the pike lift behind it is where the rest matters.
+        restSec: 45,
         restAfterSides: true,
       },
       {
@@ -115,8 +113,34 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
         reps: 5,
         tempo: '5s press down · 5s rest · 5s pull up · 5s rest',
         perSide: true,
+        // The one rest in the routine left at a full minute. This is the hardest
+        // thing here and the one that moves the leg-lift reading, so it's the last
+        // place to buy time back.
         restSec: 60,
         restAfterSides: true,
+      },
+    ],
+  },
+  {
+    label: 'calves',
+    // Four holds, not six — six minutes rather than nine. The three it dropped to
+    // two were all knee-straight, and pointing the toes in or out doesn't
+    // meaningfully move the load between the heads of the gastroc. Knee angle
+    // does: straight is the gastroc, bent takes it slack and hands the stretch to
+    // the soleus underneath, which is usually what actually caps ankle range and
+    // which the routine had no stretch for at all.
+    exercises: [
+      {
+        key: 'calf_stretch',
+        name: 'calf stretch',
+        sets: '2',
+        maxSets: 2,
+        reps: 1,
+        tempo: '',
+        holdSec: 90,
+        perSide: true,
+        restSec: 0,
+        setLabels: ['knee straight', 'knee bent'],
       },
     ],
   },
