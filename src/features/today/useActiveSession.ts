@@ -6,6 +6,7 @@ import { toISODate } from '../../lib/dates'
 import { useData } from '../../store/DataContext'
 import { nextTargets } from '../../lib/progression'
 import { spreadSharedWeight } from '../../lib/sharedLoad'
+import { carryLoggedSet, type CarriedSet } from '../../lib/carryForward'
 import { sideOrderedExercises, variantExercises, type VariantKey } from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
 import { nextStartSide } from '../../lib/pushSide'
@@ -134,6 +135,18 @@ export function useActiveSession() {
     [mutateExercise, plan],
   )
 
+  // What a completed set leaves the rest of the exercise: the sets still ahead of
+  // it prefill with the numbers just logged instead of the target they were built
+  // with, so an exercise is prescribed once and then follows itself (see
+  // carryLoggedSet).
+  const carrySet = useCallback(
+    (exKey: string, carried: CarriedSet) =>
+      setSession((prev) =>
+        prev ? { ...prev, exercises: carryLoggedSet({ logs: prev.exercises, exKey, carried }) } : prev,
+      ),
+    [],
+  )
+
   const removeSet = useCallback(
     (exKey: string, index: number) =>
       mutateExercise(exKey, (sets) => sets.filter((_, i) => i !== index)),
@@ -150,5 +163,5 @@ export function useActiveSession() {
     setSession(null)
   }, [])
 
-  return { session, start, addSet, updateSet, removeSet, clear }
+  return { session, start, addSet, updateSet, carrySet, removeSet, clear }
 }

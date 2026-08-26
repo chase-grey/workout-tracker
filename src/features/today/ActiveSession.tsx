@@ -675,11 +675,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       cheerId.current += 1
       setCheer({ id: cheerId.current, grade })
     }
-    // Carry this set's actual weight/reps forward to the next set of the same
-    // exercise, so subsequent sets prefill what you just did (not the target).
-    if (nextStep.ex.key === planned.key && set) {
-      controls.updateSet(planned.key, nextStep.setIndex, { weightLbs: set.weightLbs ?? null, reps })
-    }
+    // Carry this set's actual weight/reps forward to the sets of this exercise
+    // still to come, so after the first one they prefill what you just did rather
+    // than the target (see carryLoggedSet). Every one of them, not only the next
+    // screen: a circuit station's own next set is two stations away, and the
+    // checklist can jump you to any of them.
+    if (set) controls.carrySet(planned.key, { weightLbs: set.weightLbs ?? null, reps })
     // The rest the header has been naming all along (see restShownSec) — one
     // computation for both, so the break you get is the one you were shown.
     const restSec = restShownSec
