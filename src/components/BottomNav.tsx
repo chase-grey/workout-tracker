@@ -40,7 +40,7 @@ export function BottomNav({
           onClick={() => onChange(t.id)}
           aria-label={t.label}
           aria-current={active === t.id ? 'page' : undefined}
-          className={`flex min-h-[56px] items-center justify-center ${
+          className={`flex min-h-[44px] items-center justify-center ${
             active === t.id ? 'text-accent' : 'text-neutral-500'
           }`}
         >
