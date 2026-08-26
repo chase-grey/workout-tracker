@@ -2,17 +2,12 @@ import { useEffect, useState } from 'react'
 import { MdAutoAwesome, MdCheck, MdLocalFireDepartment, MdMedication } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { CALORIE_GOAL, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
-import { mondayOf, toISODate, weekStartISO } from '../../lib/dates'
-import { vitaminDayState, vitaminGoalDates } from '../../lib/vitamins'
-import { usedStrips, whiteningGoalDates } from '../../lib/whitening'
+import { mondayOf, toISODate } from '../../lib/dates'
+import { vitaminDayState } from '../../lib/vitamins'
+import { usedStrips } from '../../lib/whitening'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
-const QUICK_ADDS = [100, 500]
-
-// A whole day's goal in one tap. Only ever right for a day that is already over
-// and went unlogged, so it stays out of the row until you select one; on today it
-// is one mis-tap between an honest count and a filled-in lie.
-const BACKFILL = CALORIE_GOAL
+const QUICK_ADDS = [100, 500, 4000]
 
 /**
  * The three things every day owes — the calories, the pills, and the whitening
@@ -36,7 +31,7 @@ const BACKFILL = CALORIE_GOAL
  * reason the pill log tracks the two doses apart.
  */
 export function DailyHabits() {
-  const { calorieEntries, vitaminEntries, whiteningEntries, logCalories, logVitamins, logWhitening, goals } =
+  const { calorieEntries, vitaminEntries, whiteningEntries, logCalories, logVitamins, logWhitening } =
     useData()
 
   // Ticks so the "2h ago" since the last log ages on screen instead of freezing
@@ -56,11 +51,6 @@ export function DailyHabits() {
     d.setDate(monday.getDate() + i)
     return toISODate(d)
   })
-
-  const thisWeek = weekStartISO(today)
-  const inThisWeek = (d: string) => weekStartISO(d) === thisWeek
-  const vitDays = vitaminGoalDates(vitaminEntries).filter(inThisWeek).length
-  const whtDays = whiteningGoalDates(whiteningEntries).filter(inThisWeek).length
 
   const selTotal = totalForDate(calorieEntries, selDate)
   const pct = Math.min(selTotal / CALORIE_GOAL, 1) * 100
@@ -171,8 +161,7 @@ export function DailyHabits() {
         })}
       </div>
 
-      {/* One row for the whole day: the calorie taps, then the two toggles,
-          each carrying its week's count so the goal reads without a second line. */}
+      {/* One row for the whole day: the calorie taps, then the two toggles. */}
       <div className="mt-2 flex gap-1.5">
         {QUICK_ADDS.map((cal) => (
           <button
@@ -183,14 +172,6 @@ export function DailyHabits() {
             +{cal}
           </button>
         ))}
-        {selDate < today && (
-          <button
-            onClick={() => addCalories(BACKFILL)}
-            className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
-          >
-            +{BACKFILL}
-          </button>
-        )}
         <button
           onClick={() => addCalories(-100)}
           className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
@@ -200,22 +181,16 @@ export function DailyHabits() {
         <button
           onClick={cyclePills}
           aria-label="vitamins"
-          className={`flex min-h-[44px] w-11 flex-col items-center justify-center gap-0.5 rounded-xl active:opacity-80 ${pillTone}`}
+          className={`flex min-h-[44px] w-11 items-center justify-center rounded-xl active:opacity-80 ${pillTone}`}
         >
           <MdMedication aria-hidden />
-          <span className="text-[9px] leading-none tabular-nums">
-            {vitDays}/{goals.vitaminDays}
-          </span>
         </button>
         <button
           onClick={() => void logWhitening(!selStrip, selDate)}
           aria-label="whitening"
-          className={`flex min-h-[44px] w-11 flex-col items-center justify-center gap-0.5 rounded-xl active:opacity-80 ${stripTone}`}
+          className={`flex min-h-[44px] w-11 items-center justify-center rounded-xl active:opacity-80 ${stripTone}`}
         >
           <MdAutoAwesome aria-hidden />
-          <span className="text-[9px] leading-none tabular-nums">
-            {whtDays}/{goals.whiteningDays}
-          </span>
         </button>
       </div>
     </div>
