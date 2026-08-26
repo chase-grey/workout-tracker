@@ -18,8 +18,10 @@ const QUICK_ADDS = [100, 500, 4000]
  * says everything the three said: a day shows an icon per habit it got, and a
  * day that got all three collapses to a single check, because at that point
  * which icons are lit is no longer information. The dim icons matter as much as
- * the bright ones — a day always draws all three slots, so the gap you have to
- * close is visible rather than absent.
+ * the bright ones — a day that is already spent draws all three slots, so the
+ * gap you have to close is visible rather than absent. A day that hasn't
+ * happened yet has no gap to show, so it draws the check dim instead: the shape
+ * of a day you could still finish, without three unlit icons reading as failure.
  *
  * The selected day drives everything below the strip: the calorie readout and
  * bar, and the two toggles. The pill toggle cycles rather than branching into
@@ -123,6 +125,7 @@ export function DailyHabits() {
           const vit = vitaminDayState(vitaminEntries, d).done
           const wht = usedStrips(whiteningEntries, d)
           const all = cal && vit && wht
+          const future = d > today
           return (
             <button
               key={d}
@@ -135,9 +138,11 @@ export function DailyHabits() {
               <span className={`text-[10px] leading-none ${d === today ? 'text-accent' : 'text-neutral-500'}`}>
                 {DOW[i]}
               </span>
-              {/* Both branches share the row height so the strip stays level. */}
+              {/* Every branch shares the row height so the strip stays level. */}
               <span className="flex h-4 items-center gap-px">
-                {all ? (
+                {future ? (
+                  <MdCheck className="text-base text-neutral-700" aria-hidden />
+                ) : all ? (
                   <MdCheck className="text-base text-accent-2" aria-hidden />
                 ) : (
                   <>
