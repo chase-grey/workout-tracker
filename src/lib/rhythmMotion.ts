@@ -9,8 +9,13 @@ import type { TempoPhase } from './tempo'
  *   passive hang), which never come out of the stretch the way a breath returns to
  *   neutral. The rest segment gives back only some of the depth, so the rep ends
  *   where the next one starts and the two halves read as work and then release.
+ * - 'pushpull': a shape that drives one way, rests, drives the *other* way, rests —
+ *   suits isometrics that alternate direction against something that doesn't move
+ *   (e.g. the pike lift: press down · rest · pull up · rest). Depth is the wrong
+ *   signal for these, since pressing down and pulling up are both effort and
+ *   neither is "deeper"; they read from `phaseDrives` instead, which is signed.
  */
-export type MotionKind = 'breathe' | 'descent'
+export type MotionKind = 'breathe' | 'descent' | 'pushpull'
 
 // Words that move you deeper into a stretch vs. words that bring you back up.
 // Holds keep whatever depth the last phase reached; rest phases let most of it go.
@@ -29,16 +34,70 @@ const HOLD = /\b(hold|pause|bottom|top|stay|hang|release|deepen|settle)\b/
 export const REST_DEPTH_KEPT = 0.3
 
 /**
- * Pick the animation family for a set of tempo phases. A stretch that pushes or
- * folds downward and never rises back (it ends in a hold/hang) reads as a
- * descent; anything with a return phase reads as a breath. Defaults to breathe
- * for shapeless tempos, since the breathing family is the general-purpose one.
+ * Pick the animation family for a set of tempo phases. Driving both ways with rest
+ * between the halves is a push/pull: the rests are what say the two efforts are
+ * separate pushes rather than one continuous travel down and back (a breath). A
+ * stretch that pushes or folds downward and never rises back (it ends in a
+ * hold/hang) reads as a descent; anything else reads as a breath, which is the
+ * general-purpose family and so also the default for shapeless tempos.
  */
 export function motionForPhases(phases: TempoPhase[]): MotionKind {
   const labels = phases.map((p) => p.label.toLowerCase())
   const hasDescend = labels.some((l) => DESCEND.test(l))
   const hasRise = labels.some((l) => RISE.test(l))
+  const hasRest = labels.some((l) => REST.test(l))
+  if (hasDescend && hasRise && hasRest) return 'pushpull'
   return hasDescend && !hasRise ? 'descent' : 'breathe'
+}
+
+/**
+ * Which way each phase drives, for the push/pull family: +1 presses down, −1 pulls
+ * up, 0 is rest. Rest is checked first, so the word that says you've stopped
+ * working wins over any direction left in the label. Anything the words don't place
+ * counts as rest rather than guessing a direction — driving the wrong way is worse
+ * than standing still.
+ */
+export function phaseDrives(phases: TempoPhase[]): number[] {
+  return phases.map((p) => {
+    const l = p.label.toLowerCase()
+    if (REST.test(l)) return 0
+    if (DESCEND.test(l)) return 1
+    if (RISE.test(l)) return -1
+    return 0
+  })
+}
+
+/**
+ * Seconds a push/pull phase spends travelling into its new state. Short on purpose:
+ * the phase is an instruction, and easing across the whole five seconds means every
+ * frame is a transition and none of them shows you what you're meant to be doing.
+ * Arriving fast spends the rest of the phase holding a shape you can read at a
+ * glance — which is the difference between pacing the work and merely timing it.
+ */
+export const ATTACK_SECONDS = 0.6
+
+/**
+ * How far (0–1) a phase has arrived at `progress` through it: 1 for all of the
+ * phase past the attack. A phase shorter than the attack itself spends all of
+ * itself travelling, so it still lands exactly on its boundary.
+ */
+export function attack(seconds: number, progress: number): number {
+  if (seconds <= 0) return 1
+  const window = Math.min(1, ATTACK_SECONDS / seconds)
+  return Math.max(0, Math.min(1, progress / window))
+}
+
+/**
+ * The direction the next working phase drives, seen from `idx` — what a rest is
+ * resting *before*. Wraps around the rep, so the last rest primes the push that
+ * opens the next one. Zero when nothing in the tempo drives at all.
+ */
+export function nextDrive(drives: number[], idx: number): number {
+  for (let step = 1; step <= drives.length; step++) {
+    const d = drives[(idx + step) % drives.length]
+    if (d !== 0) return d
+  }
+  return 0
 }
 
 /**

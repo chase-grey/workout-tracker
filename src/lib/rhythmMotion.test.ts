@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { parseTempo } from './tempo'
 import {
+  attack,
   cycleCloses,
   cycleProgress,
   hitRepTarget,
   loopFadeIn,
+  nextDrive,
   repGlow,
   motionForPhases,
   phaseDepths,
+  phaseDrives,
   phaseEfforts,
   strain,
+  ATTACK_SECONDS,
   REST_DEPTH_KEPT,
 } from './rhythmMotion'
 
@@ -22,6 +26,64 @@ describe('motionForPhases', () => {
   })
   it('defaults to breathe for a shapeless tempo', () => {
     expect(motionForPhases(parseTempo(''))).toBe('breathe')
+  })
+  it('reads driving both ways with a rest between as a push/pull', () => {
+    expect(motionForPhases(parseTempo('5s press down · 5s rest · 5s pull up · 5s rest'))).toBe(
+      'pushpull',
+    )
+  })
+  it('still reads down and back with no rest as one breath, not two pushes', () => {
+    expect(motionForPhases(parseTempo('3s up · 3s down'))).toBe('breathe')
+  })
+})
+
+describe('phaseDrives', () => {
+  it('presses down, rests, pulls up, rests', () => {
+    expect(phaseDrives(parseTempo('5s press down · 5s rest · 5s pull up · 5s rest'))).toEqual([
+      1, 0, -1, 0,
+    ])
+  })
+  it('lets the rest word win over any direction left in the label', () => {
+    expect(phaseDrives(parseTempo('5s rest down low'))).toEqual([0])
+  })
+  it('rests rather than guessing a direction the words do not give', () => {
+    expect(phaseDrives(parseTempo('5s'))).toEqual([0])
+  })
+})
+
+describe('attack', () => {
+  it('arrives within the attack and holds there for the rest of the phase', () => {
+    const phase = 5
+    expect(attack(phase, 0)).toBe(0)
+    expect(attack(phase, ATTACK_SECONDS / phase)).toBe(1)
+    expect(attack(phase, 0.5)).toBe(1)
+    expect(attack(phase, 1)).toBe(1)
+  })
+  it('spends most of the phase arrived, which is the whole point', () => {
+    // Anything past a fifth of the way in is holding a readable shape, not moving.
+    expect(attack(5, 0.2)).toBe(1)
+  })
+  it('travels the whole of a phase shorter than the attack, landing on its end', () => {
+    expect(attack(0.5, 0.5)).toBeCloseTo(0.5)
+    expect(attack(0.5, 1)).toBe(1)
+  })
+  it('is arrived for a phase with no duration', () => {
+    expect(attack(0, 0)).toBe(1)
+  })
+})
+
+describe('nextDrive', () => {
+  const pike = phaseDrives(parseTempo('5s press down · 5s rest · 5s pull up · 5s rest'))
+
+  it('tells a rest which way the push after it goes', () => {
+    expect(nextDrive(pike, 1)).toBe(-1)
+  })
+  it('wraps, so the last rest primes the push that opens the next rep', () => {
+    expect(nextDrive(pike, 3)).toBe(1)
+  })
+  it('has nothing to prime when nothing in the tempo drives', () => {
+    expect(nextDrive([0, 0], 0)).toBe(0)
+    expect(nextDrive([], 0)).toBe(0)
   })
 })
 

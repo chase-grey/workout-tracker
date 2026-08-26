@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MdKeyboardArrowDown } from 'react-icons/md'
+import { MdKeyboardArrowDown, MdKeyboardArrowUp } from 'react-icons/md'
 import { parseTempo } from '../lib/tempo'
 import {
+  attack,
   cycleCloses,
   cycleProgress,
   hitRepTarget,
   loopFadeIn,
   motionForPhases,
+  nextDrive,
   phaseDepths,
+  phaseDrives,
   phaseEfforts,
   repGlow,
   strain,
@@ -24,6 +27,13 @@ import { createRotation, type Rotation } from '../lib/variantRotation'
  *   (Pancake Hang) rather than forcing a breathing shape to fit them. Their two
  *   segments are told apart by more than position: working is bright, crisp and
  *   faintly straining, resting is dim, soft and still.
+ * - 'pushpull' shapes drive down, rest, drive up, rest, for isometrics that
+ *   alternate direction (the pike lift). They differ from the other two families in
+ *   what they're for: not a mood to breathe along with but an instruction you have
+ *   to read in a second — which way to drive, or whether to drive at all. So they
+ *   snap into each phase (see `attack`) and hold it, they put pressing down and
+ *   pulling up at opposite ends of the frame, and through a rest they light the end
+ *   you're about to drive into, so the next push is known before it's due.
  * A random variant within the family is chosen per mount, so it varies from one
  * set to the next.
  *
@@ -36,7 +46,14 @@ import { createRotation, type Rotation } from '../lib/variantRotation'
  */
 const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
 const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
-type Variant = (typeof BREATHE_VARIANTS)[number] | (typeof DESCENT_VARIANTS)[number]
+// Fewer shapes here than in the other families, and all three say the same thing
+// the same way round: the direction has to be unmistakable at a glance, which is
+// not something every abstract shape can carry.
+const PUSHPULL_VARIANTS = ['anvil', 'chevrons', 'gauge'] as const
+type Variant =
+  | (typeof BREATHE_VARIANTS)[number]
+  | (typeof DESCENT_VARIANTS)[number]
+  | (typeof PUSHPULL_VARIANTS)[number]
 
 // One rotation per family, held across mounts (each set remounts the guide): the
 // order stays random, but a shape never follows itself and none of them sits out
@@ -44,6 +61,7 @@ type Variant = (typeof BREATHE_VARIANTS)[number] | (typeof DESCENT_VARIANTS)[num
 const rotations: Record<MotionKind, Rotation<Variant>> = {
   breathe: createRotation(BREATHE_VARIANTS),
   descent: createRotation(DESCENT_VARIANTS),
+  pushpull: createRotation(PUSHPULL_VARIANTS),
 }
 function pickVariant(kind: MotionKind): Variant {
   return rotations[kind].next()
@@ -297,6 +315,129 @@ function DescentShape({ variant, depth, glow }: { variant: Variant; depth: numbe
   }
 }
 
+/**
+ * Push/pull family: a shape whose two ends are the two directions you drive, with
+ * neutral in the middle.
+ * - `drive` is −1 (pulling up) … 0 (resting) … 1 (pressing down).
+ * - `prime` lights the end the coming push will drive into, filling as the rest it
+ *   belongs to runs out — so you're never surprised by a phase change, and every
+ *   moment of the rep answers "which way, or neither?" on its own.
+ * Every variant obeys the same two rules: down is at the bottom of the frame and up
+ * is at the top, and resting is the state with nothing extended anywhere.
+ */
+function PushPullShape({
+  variant,
+  drive,
+  prime,
+  primeDir,
+  glow,
+}: {
+  variant: Variant
+  drive: number
+  prime: number
+  primeDir: number
+  glow: RepGlow
+}) {
+  const tone = TONES[glow]
+  // How lit each end is: fully while you drive into it, filling while a rest primes
+  // it. `side` is +1 for the bottom (pressing down) and −1 for the top.
+  const endLit = (side: number) => Math.max(clamp01(drive * side), primeDir === side ? prime : 0)
+  switch (variant) {
+    case 'chevrons':
+      // Arrows pointing the way to drive, lighting from the middle outward so the
+      // stack itself reads as the push travelling. A rest empties both stacks and
+      // then fills the one it's priming.
+      return (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center"
+          style={{ fontSize: 'min(17vw, 6rem)' }}
+        >
+          {[-1, 1].map((side) => {
+            const lit = endLit(side)
+            const Arrow = side === 1 ? MdKeyboardArrowDown : MdKeyboardArrowUp
+            // Index counts outward from the centre line, whichever way the stack points.
+            const steps = side === 1 ? [0, 1, 2] : [2, 1, 0]
+            return (
+              <div key={side} className="flex flex-col items-center">
+                {steps.map((step, k) => (
+                  <Arrow
+                    key={k}
+                    aria-hidden
+                    className="-my-[7%] text-accent-bright"
+                    style={{
+                      opacity: litOpacity(tone, clamp01(lit * 3 - step)),
+                      transform: `translateY(${side * clamp01(drive * side) * 8}%)`,
+                    }}
+                  />
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )
+    case 'gauge': {
+      // A needle track: the bar runs out from the centre line toward the end you're
+      // driving into, so its length is the effort and its half is the direction.
+      // Resting leaves the centre tick alone on the track.
+      const reach = Math.abs(drive) * 38
+      return (
+        <div className="absolute inset-0">
+          <div
+            className={`absolute left-1/2 top-[8%] h-[84%] w-[13%] -translate-x-1/2 rounded-full ${tone.track}`}
+          />
+          {[-1, 1].map((side) => (
+            <div
+              key={side}
+              className={`absolute left-1/2 h-[6%] w-[34%] -translate-x-1/2 rounded-full ${tone.fill}`}
+              style={{
+                top: side === -1 ? '3%' : undefined,
+                bottom: side === 1 ? '3%' : undefined,
+                opacity: litOpacity(tone, endLit(side)),
+              }}
+            />
+          ))}
+          <div
+            className={`absolute left-1/2 w-[13%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
+            style={{ top: `${drive >= 0 ? 50 : 50 - reach}%`, height: `${reach}%` }}
+          />
+          <div
+            className="absolute left-1/2 top-1/2 h-[3%] w-[26%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-bright"
+            style={{ opacity: tone.dimmest }}
+          />
+        </div>
+      )
+    }
+    case 'anvil':
+    default:
+      // A bar between a floor and a ceiling, bearing on whichever one the phase
+      // asks for: the plate under load lights up and squashes, the other stays an
+      // outline. The most literal of the three, and the one that reads fastest.
+      return (
+        <div className="absolute inset-0">
+          {[-1, 1].map((side) => {
+            const bearing = clamp01(drive * side)
+            return (
+              <div
+                key={side}
+                className={`absolute left-1/2 w-[64%] -translate-x-1/2 rounded-full border ${tone.border} ${tone.fill}`}
+                style={{
+                  top: side === -1 ? '8%' : undefined,
+                  bottom: side === 1 ? '8%' : undefined,
+                  height: `${8 - bearing * 2.5}%`,
+                  opacity: litOpacity(tone, endLit(side)),
+                }}
+              />
+            )
+          })}
+          <div
+            className={`absolute left-1/2 h-[10%] w-[46%] rounded-full ${tone.fill} ${tone.ring}`}
+            style={{ top: `${50 + drive * 27}%`, transform: 'translate(-50%, -50%)' }}
+          />
+        </div>
+      )
+  }
+}
+
 /** Smooth ease-in-out so each phase accelerates then settles, like a breath. */
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 /** Working: commit fast, then grind the last of the range out against resistance. */
@@ -347,6 +488,7 @@ export function RhythmGuide({
 }) {
   const phases = useMemo(() => parseTempo(tempo), [tempo])
   const depths = useMemo(() => phaseDepths(phases), [phases])
+  const drives = useMemo(() => phaseDrives(phases), [phases])
   const efforts = useMemo(() => phaseEfforts(phases), [phases])
   const closes = useMemo(() => cycleCloses(phases), [phases])
   const motion = useMemo(() => motionForPhases(phases), [phases])
@@ -422,10 +564,29 @@ export function RhythmGuide({
     motion !== 'descent' ? easeInOut : depths[i] > from ? easeOutCubic : easeInOutSine
   const depth = from + (depths[i] - from) * ease(progress)
 
+  // A push/pull phase arrives inside the first moment of itself and then holds
+  // (see rhythmMotion.attack), which is what makes the phase you're in readable:
+  // spend the five seconds in a shape, not in a transition toward one. Entering
+  // work commits hard, letting go drifts off — the same two characters the descent
+  // family eases with, over a much shorter travel.
+  const arrival = (efforts[i] === 1 ? easeOutCubic : easeInOutSine)(
+    attack(phases[i].seconds, progress),
+  )
+  const drive = drives[prev] + (drives[i] - drives[prev]) * arrival
+
   // Effort crosses between segments on its own gentle curve, so the shape brightens
-  // and sharpens as you push and goes soft and still as you let go.
-  const effort = efforts[prev] + (efforts[i] - efforts[prev]) * easeInOut(progress)
+  // and sharpens as you push and goes soft and still as you let go. The push/pull
+  // family crosses it on the arrival instead, so the brightening lands with the
+  // drive rather than trailing it across the phase.
+  const effort =
+    efforts[prev] +
+    (efforts[i] - efforts[prev]) * (motion === 'pushpull' ? arrival : easeInOut(progress))
   const tremor = strain(effort, progress)
+
+  // Which way the next push goes, and how close it is: a rest fills the end it's
+  // resting before, so the change of direction is known before it's asked for.
+  const primeDir = efforts[i] === 0 ? nextDrive(drives, i) : 0
+  const prime = primeDir === 0 ? 0 : progress
 
   // Fallback for the frozen-curve case only: for the first moment of the new rep
   // the shape fades in up top while the finished one lingers deep and dissolves, so
@@ -466,6 +627,19 @@ export function RhythmGuide({
               <DescentShape variant={variant} depth={depth} glow={glow} />
             </div>
           </>
+        ) : motion === 'pushpull' ? (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ transform: `translateY(${tremor * STRAIN_PCT}%)` }}
+          >
+            <PushPullShape
+              variant={variant}
+              drive={drive}
+              prime={prime}
+              primeDir={primeDir}
+              glow={glow}
+            />
+          </div>
         ) : (
           <BreatheShape variant={variant} scale={scaleFromDepth(depth)} glow={glow} />
         )}

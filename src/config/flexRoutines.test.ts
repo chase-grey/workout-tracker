@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, flexRoutineOf } from './flexRoutines'
 import { DEFAULT_FLEX_ROUTINE } from './flexPlan'
 import { parseTempo } from '../lib/tempo'
-import { cycleCloses, motionForPhases, phaseDepths, phaseEfforts } from '../lib/rhythmMotion'
+import {
+  cycleCloses,
+  motionForPhases,
+  phaseDepths,
+  phaseDrives,
+  phaseEfforts,
+} from '../lib/rhythmMotion'
 import { PHOTO_SHOT } from '../lib/photoSteps'
 
 const HEAD_TO_TOE = FLEX_ROUTINES.head_to_toe
@@ -137,11 +143,15 @@ describe('the head-to-toe tempos, as lib/rhythmMotion reads them', () => {
     expect(byKey('pike_block_crush').reps).toBe(3)
   })
 
-  it('gives the pike lift work, release, lift, release', () => {
+  // Press, rest, pull, rest — two opposite efforts, not one trip down and back.
+  // Reading it as a breath is what made the four phases blur into each other: a
+  // breath's depth puts pulling up at neutral, the same place as resting.
+  it('gives the pike lift a push down, a pull up, and a rest after each', () => {
     const phases = phasesOf('pike_lift')
     expect(phases.map((p) => p.seconds)).toEqual([5, 5, 5, 5])
-    expect(motionForPhases(phases)).toBe('breathe')
-    expect(phaseDepths(phases)).toEqual([1, 0.3, 0, 0])
+    expect(motionForPhases(phases)).toBe('pushpull')
+    expect(phaseDrives(phases)).toEqual([1, 0, -1, 0])
+    expect(phaseEfforts(phases)).toEqual([1, 0, 1, 0])
   })
 
   it('leaves the held stretches with nothing to parse', () => {

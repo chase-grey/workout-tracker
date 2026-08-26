@@ -31,9 +31,11 @@ export type FlexRoutine = {
  * The tempo strings are chosen so lib/tempo and lib/rhythmMotion read them
  * correctly with no changes: `up`/`down` gives the floss a breath, `press down`
  * then `rest` gives the block crush a descent that drives hard and then lets most
- * of it go without leaving the pose, and the pike lift's four phases read as work,
- * release, lift, release. They're word-boundary regex matches, so renaming a phase
- * would silently change the animation — see lib/rhythmMotion.test.
+ * of it go without leaving the pose, and `press down` · `rest` · `pull up` · `rest`
+ * gives the pike lift a push/pull — two efforts in opposite directions, each with
+ * its own rest, which is the only family that shows the direction rather than a
+ * depth. They're word-boundary regex matches, so renaming a phase would silently
+ * change the animation — see lib/rhythmMotion.test.
  */
 const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
   {
@@ -111,7 +113,7 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
         sets: '3',
         maxSets: 3,
         reps: 5,
-        tempo: '5s contract down · 5s rest · 5s lift · 5s rest',
+        tempo: '5s press down · 5s rest · 5s pull up · 5s rest',
         perSide: true,
         restSec: 60,
         restAfterSides: true,
