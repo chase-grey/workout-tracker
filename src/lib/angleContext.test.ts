@@ -159,9 +159,17 @@ describe('angleTrends — the head-to-toe poses', () => {
       expect(angleTrends(entries, { toeTouchDeg: 96 }, 'warm', TODAY)[0].coldToday).toBe(118)
     })
 
-    // The ladders are deferred, so there is no rung to be short of yet.
-    it('offers no goal — the fold has no ladder yet', () => {
-      expect(angleTrends([], { toeTouchDeg: 96 }, 'warm', TODAY)[0].goal).toBeNull()
+    // The rung named is the shallowest one still ahead of a closing fold — the
+    // mirror of "lowest one still above" on every other pose.
+    it('names the next rung down the ladder', () => {
+      expect(angleTrends([], { toeTouchDeg: 104 }, 'warm', TODAY)[0].goal).toEqual({
+        target: 100,
+        toGo: 4,
+      })
+    })
+
+    it('offers no goal once the deepest rung is cleared', () => {
+      expect(angleTrends([], { toeTouchDeg: 88 }, 'warm', TODAY)[0].goal).toBeNull()
     })
   })
 
@@ -177,6 +185,16 @@ describe('angleTrends — the head-to-toe poses', () => {
     it('keeps the two sides on rows of their own', () => {
       const rows = angleTrends([], { legLiftLeftDeg: 78, legLiftRightDeg: 74 }, 'warm', TODAY)
       expect(rows.map((r) => r.metric)).toEqual(['legLiftLeft', 'legLiftRight'])
+    })
+
+    // Both sides read the same ladder, so a session where one hip is ahead of the
+    // other has each row chasing the rung that side is actually short of.
+    it('names each side its own next rung', () => {
+      const rows = angleTrends([], { legLiftLeftDeg: 78, legLiftRightDeg: 62 }, 'warm', TODAY)
+      expect(rows.map((r) => r.goal)).toEqual([
+        { target: 85, toGo: 7 },
+        { target: 65, toGo: 3 },
+      ])
     })
   })
 

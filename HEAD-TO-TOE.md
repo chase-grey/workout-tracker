@@ -4,9 +4,9 @@ A second flexibility routine, alongside the existing side-splits one. The two
 alternate the way push and pull do: Today dims whichever was done last, so the
 other reads as up next.
 
-Status: **implemented.** Goal ladders for the two new angles are deliberately out
-of scope — see [Deferred](#deferred). Where the build diverged from what is
-written below, see [As built](#as-built).
+Status: **implemented**, goal ladders included — they landed after the first real
+measurements were in (see [Deferred](#deferred), which records what they cost).
+Where the build diverged from what is written below, see [As built](#as-built).
 
 ## Contents
 
@@ -528,22 +528,18 @@ export function legLiftSeries(entries: FlexEntry[]): LegLiftPoint[]
 
 ### Where the charts live
 
-**Not in `GoalsPanel`.** A `FlexLadderBlock` is only ever reached through
-`ladders.find(l => l.rungs.some(...))` from a goal row — a ladder with zero rungs
-never renders at all. Since the goal ladders are deliberately deferred, putting the
-new charts there would put them nowhere.
+**In `GoalsPanel`, as of the ladders landing.** `ladders` there now maps
+`['split', 'tailors', 'toeTouch', 'legLift']`, and `goalFamily`'s
+`g.id.split('_')[0]` sorts the new rungs into their blocks with no change — the ids
+are `toeTouch_100` and `legLift_75`.
 
-So: a plain chart section in `ProgressTab`, below the lift charts, drawing
-`toeTouchSeries` and `legLiftSeries` through `LadderChart` with `goals={[]}`.
-`FlexLadderBlock` already tolerates empty rungs (`goalLines` comes out empty, the
-rung rows map over nothing), so the block component can be reused as-is with
-`rungs={[]}` and `ring=""` — it just needs a caller that is not goal-driven.
-
-When the goal ladders land, these two blocks move into `GoalsPanel` alongside the
-split and tailor's blocks and the `ProgressTab` section goes away.
-
-Check `LadderChart`'s axis framing with `goals={[]}` — the existing two callers
-always pass at least one goal line, so a no-goal domain is an untested path.
+Until the ladders landed they lived somewhere else, and the reason is worth keeping:
+a `FlexLadderBlock` is only ever reached through `ladders.find(l =>
+l.rungs.some(...))` from a goal row, so a ladder with zero rungs renders nowhere at
+all. The two poses were therefore drawn from a plain section of `ProgressTab` below
+the lift charts, passing `rungs={[]}` and `ring=""` to the same component. That
+section is gone; the empty-rungs tolerance in `FlexLadderBlock` is kept, because it
+costs a filter over nothing and it's what the next new pose lands on.
 
 ## Today tab
 
@@ -638,12 +634,33 @@ so it does not describe a session that includes core when it will not.
 
 ## Deferred
 
-- **Goal ladders for toe touch and leg lift.** Explicitly out of scope until the
-  first real measurements are in and the gap is known. The direction plumbing
-  (`AngleDirection`) is built now because PRs and the on-photo context card need it
-  immediately; `GoalSpec` and `lib/goals.ts` are left alone. When rungs land,
-  `GoalSpec` will need its own `direction` and `isReached` / projection will need to
-  respect it — the fold's ladder descends.
+- ~~**Goal ladders for toe touch and leg lift.**~~ **Landed.** Toe touch runs
+  110 → 100 → 90, leg lift 65 → 75 → 85 → 90 (`flexPredict.TOE_TOUCH_GOALS` /
+  `LEG_LIFT_GOALS`), both easiest rung first — which for the fold means descending
+  degrees, since its angle closes as it deepens.
+
+  What the descending ladder actually cost, against what was expected: `GoalSpec`
+  already carried `direction: 'up' | 'down'` for the body-fat goal, and `isReached`,
+  `reachedDate` and `projectGoal` were all written through it, so `direction:
+  'down'` plus `milestone: true` was the entire fold-specific change on the goals
+  side — it judges the milestone on the *lowest* reading ever taken and anchors the
+  projected gap to the lowest in the window. `capSlope` bounds magnitude, so the
+  cap needed no case of its own either.
+
+  The two things that did need work were both about *order*: `completedFlexGoals`
+  compared with a bare `>=` and would have cheered the fold's whole ladder on the
+  first upright photo (175° is greater than every target on it), so it now folds
+  through the pose's `MetricDir` like the PR detector already did; and its sort
+  changed from "biggest target first" to "the rung cleared by the least first",
+  since a 90° fold and a 90° leg lift are two different achievements wearing the
+  same number.
+
+  Both ladders are measured on warm readings — the fold on `warmToeTouchSeries`,
+  the lift on `legLiftAvgSeries`, matching what `tailorsAvgSeries` does for the
+  other paired pose. One ladder for the lift rather than one per side: two ladders
+  differing by the couple of degrees between hips would double every rung to say
+  the same thing twice. Per-side readings keep their own chart lines, PRs, and
+  on-photo context rows.
 - **Per-hold duration history.** Holds are done/not-done for now.
 - **Weekly stretch goal.** Stays at 2 sessions/week (`flexStats.weeklyGoal`), which
   with alternation is one of each. `sessionsThisWeek` counts distinct *dates*, so a

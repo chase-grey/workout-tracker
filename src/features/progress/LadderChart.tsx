@@ -133,8 +133,10 @@ export function LadderChart({
               ladder plots a single series, and a legend under it would name the
               only line on the chart. */}
           {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
-          {/* The targets climb away from the data, so their tags hang under the
-              lines, on the side the readings have already left. */}
+          {/* Tags hang under their lines, on the side the readings have already
+              left — the targets climb away from the data on every ladder but the
+              toe touch, whose targets sit below it and leave that side emptier
+              still. ChartTag flips a tag that won't fit either way. */}
           {goals.map((g) => (
             <ReferenceLine
               key={g.label}

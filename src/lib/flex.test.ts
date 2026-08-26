@@ -5,6 +5,7 @@ import {
   coldToeTouchOf,
   dedupeFlexByDate,
   flexStats,
+  legLiftAvgSeries,
   legLiftSeries,
   splitSeries,
   tailorsAvgSeries,
@@ -13,6 +14,7 @@ import {
   warmLegLiftLeftOf,
   warmLegLiftRightOf,
   warmToeTouchOf,
+  warmToeTouchSeries,
   type FlexEntry,
 } from './flex'
 
@@ -241,6 +243,35 @@ describe('the head-to-toe angle fields', () => {
     const e = entry({ date: '2026-08-24', splitDeg: 120 })
     expect(warmToeTouchOf(e)).toBeNull()
     expect(warmLegLiftLeftOf(e)).toBeNull()
+  })
+})
+
+describe('the head-to-toe goal series', () => {
+  it('carries the warm fold in the order it was measured, downhill and all', () => {
+    const entries: FlexEntry[] = [
+      entry({ date: '2026-07-08', warmToeTouchDeg: 104 }),
+      entry({ date: '2026-07-01', warmToeTouchDeg: 116 }),
+      entry({ date: '2026-07-04', coldToeTouchDeg: 120 }), // cold only — excluded
+      entry({ date: '2026-07-05', splitDeg: 130 }), // no fold at all — excluded
+    ]
+    expect(warmToeTouchSeries(entries)).toEqual([
+      { date: '2026-07-01', value: 116 },
+      { date: '2026-07-08', value: 104 },
+    ])
+  })
+
+  it('averages the lift over whichever sides a session measured', () => {
+    const entries: FlexEntry[] = [
+      entry({ date: '2026-07-08', warmLegLiftLeftDeg: 70, warmLegLiftRightDeg: 80 }), // avg 75
+      entry({ date: '2026-07-01', warmLegLiftLeftDeg: 62 }), // only left
+      entry({ date: '2026-07-03', warmLegLiftRightDeg: 68 }), // only right
+      entry({ date: '2026-07-04', coldLegLiftLeftDeg: 60 }), // cold only — excluded
+    ]
+    expect(legLiftAvgSeries(entries)).toEqual([
+      { date: '2026-07-01', value: 62 },
+      { date: '2026-07-03', value: 68 },
+      { date: '2026-07-08', value: 75 },
+    ])
   })
 })
 

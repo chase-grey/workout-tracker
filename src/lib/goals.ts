@@ -19,8 +19,14 @@ import {
 import { LEG_PRESS_TO_SQUAT } from './liftRatios'
 import { isMaxAttempt } from './maxAttempt'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
-import { tailorsAvgSeries, warmSplitSeries, type FlexEntry } from './flex'
-import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
+import {
+  legLiftAvgSeries,
+  tailorsAvgSeries,
+  warmSplitSeries,
+  warmToeTouchSeries,
+  type FlexEntry,
+} from './flex'
+import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './flexPredict'
 import { project, type Projection, type TrendWindow } from './predictions'
 import { toISODate, weekStartISO } from './dates'
 
@@ -125,6 +131,26 @@ export const BENCH_GAIN_CAP = 3
  */
 export const SPLIT_GAIN_CAP = 0.5
 export const TAILORS_GAIN_CAP = 0.4
+
+/**
+ * The same ceiling for the head-to-toe ladders, in degrees a week.
+ *
+ * Both of these are mostly waiting on hamstring length, which is the one tissue in
+ * the four poses that answers quickly: a fold and a supine lift move in the first
+ * month of honest work in a way a straddle does not, so their caps sit above the
+ * split's rather than below it. The fold gets the higher of the two because it is
+ * two hamstrings sharing the load and the whole posterior chain behind them, where
+ * the lift is one leg at a time and spends its last rung on whether the opposite
+ * hip will stay down — which is hip stability, not length, and doesn't come on a
+ * schedule.
+ *
+ * The caps are read the same way the split's is: the fit still decides the
+ * direction and is still reported as measured, and the ETA is projected off the
+ * ceiling (see capSlope). The fold's cap is a bound on the *closing* of the angle —
+ * capSlope works on magnitude, so a descending ladder needs no special case.
+ */
+export const TOE_TOUCH_GAIN_CAP = 0.6
+export const LEG_LIFT_GAIN_CAP = 0.5
 
 /**
  * The lift the bench goal is named for and cued on, and the other press its
@@ -499,8 +525,11 @@ export function bodyWeightPoints(bodyWeights: BodyWeightEntry[]): Point[] {
  * Every goal, in the order they should be shown. Strength goals expressed as a
  * multiple of bodyweight come in ascending order, so the nearer milestone is
  * always listed (and reached) before the harder one — as does the pull-up
- * ladder after them. The flexibility ladders (side split, then tailor's pose)
- * come last, each ascending for the same reason.
+ * ladder after them. The flexibility ladders come last, in the order the poses are
+ * measured in — side split, tailor's pose, toe touch, leg lift — each running
+ * easiest rung first for the same reason. For three of the four that means
+ * ascending degrees; the fold's rungs descend, because its angle closes as it
+ * deepens (see flexPredict.TOE_TOUCH_GOALS).
  */
 export function buildGoals({
   workouts,
@@ -530,10 +559,12 @@ export function buildGoals({
   const { target: bfTarget } = personalSixPackTarget(measurements, heightIn)
 
   // The flexibility ladders run on the same series their projections and
-  // celebrations do: the warm side split, and the average of the warm tailor's
-  // left/right. Each milestone angle becomes its own goal.
+  // celebrations do: the warm side split, the warm fold, and the average of each
+  // paired pose's warm left/right. Each milestone angle becomes its own goal.
   const splitPoints = warmSplitSeries(flexEntries)
   const tailorsPoints = tailorsAvgSeries(flexEntries)
+  const toeTouchPoints = warmToeTouchSeries(flexEntries)
+  const legLiftPoints = legLiftAvgSeries(flexEntries)
   const splitGoals: GoalSpec[] = SPLIT_GOALS.map((deg): GoalSpec => ({
     id: `split_${deg}`,
     title: `${deg}° split`,
@@ -556,6 +587,35 @@ export function buildGoals({
     direction: 'up',
     milestone: true,
     capPerWeek: TAILORS_GAIN_CAP,
+    window: FLEX_TREND_WINDOW,
+  }))
+  // The one ladder in the app that descends. `direction: 'down'` is the whole of
+  // it: isReached then judges the milestone on the *lowest* reading ever taken
+  // rather than the highest, and projectGoal anchors its gap to the lowest in the
+  // window — so a fold that reached 98° one good session keeps it, and the rung
+  // below is owed from 98 rather than from whatever the next stiff morning read.
+  const toeTouchGoals: GoalSpec[] = TOE_TOUCH_GOALS.map((deg): GoalSpec => ({
+    id: `toeTouch_${deg}`,
+    title: `${deg}° toe touch`,
+    unit: '°',
+    exerciseKey: null,
+    points: toeTouchPoints,
+    target: deg,
+    direction: 'down',
+    milestone: true,
+    capPerWeek: TOE_TOUCH_GAIN_CAP,
+    window: FLEX_TREND_WINDOW,
+  }))
+  const legLiftGoals: GoalSpec[] = LEG_LIFT_GOALS.map((deg): GoalSpec => ({
+    id: `legLift_${deg}`,
+    title: `${deg}° leg lift`,
+    unit: '°',
+    exerciseKey: null,
+    points: legLiftPoints,
+    target: deg,
+    direction: 'up',
+    milestone: true,
+    capPerWeek: LEG_LIFT_GAIN_CAP,
     window: FLEX_TREND_WINDOW,
   }))
 
@@ -664,5 +724,7 @@ export function buildGoals({
     },
     ...splitGoals,
     ...tailorsGoals,
+    ...toeTouchGoals,
+    ...legLiftGoals,
   ]
 }

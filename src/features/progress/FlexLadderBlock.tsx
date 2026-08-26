@@ -101,8 +101,10 @@ function headline(ladder: Ladder, entries: FlexEntry[]): string {
  * warm history that section carried, with the goals it was really about attached
  * to it.
  *
- * A ladder with no rungs still draws — see `rungs` — which is what lets the
- * Progress tab plot the two poses whose goals haven't been set yet.
+ * A ladder with no rungs still draws — see `rungs` — which is what carried the
+ * head-to-toe pair through the stretch where they were charted but not yet aimed
+ * at. Nothing passes an empty ladder now, and the tolerance is kept anyway: it
+ * costs a filter over nothing, and it's what a new pose lands on.
  */
 export function FlexLadderBlock({
   ladder,
@@ -115,9 +117,10 @@ export function FlexLadderBlock({
   ladder: Ladder
   entries: FlexEntry[]
   /**
-   * The ladder's rungs, ascending. Empty is a real case: the toe touch and the
-   * leg lift have no goals set yet, and the block draws their history without
-   * a target line or a rung row under it.
+   * The ladder's rungs, easiest first — which for the toe touch means descending
+   * degrees, since its angle closes as the fold deepens (see
+   * flexPredict.TOE_TOUCH_GOALS). Empty is tolerated: the block then draws the
+   * history with no target line and no rung row under it.
    */
   rungs: GoalSpec[]
   locked: LockedProjections
@@ -128,8 +131,8 @@ export function FlexLadderBlock({
   const { title, series, empty } = LADDERS[ladder]
 
   // Cold and warm readings per date. The rungs are measured on the warm series
-  // (for tailor's pose, the average of its left and right), which is the line
-  // that runs at the goals; the cold readings ride along as the day's floor.
+  // (for the paired poses, the average of their left and right), which is the
+  // line that runs at the goals; the cold readings ride along as the day's floor.
   const readings = useMemo<LadderReading[]>(() => {
     if (ladder === 'split') return splitSeries(entries)
     if (ladder === 'tailors') return tailorsSeries(entries)
@@ -140,7 +143,9 @@ export function FlexLadderBlock({
   // Which rungs the chart draws a line for: the one being worked on, plus any
   // rung already committed to. All of them would frame the axis on 180° and
   // squash a 110° history flat along the bottom of the plot — and the rungs
-  // beyond the next one aren't being measured against yet anyway.
+  // beyond the next one aren't being measured against yet anyway. `rungs` arrives
+  // easiest-first, so the head of the open ones is the one in play whichever way
+  // the ladder runs.
   const goalLines = useMemo(() => {
     const open = rungs.filter((g) => !isReached(g))
     return open

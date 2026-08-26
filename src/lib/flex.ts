@@ -314,6 +314,22 @@ export function toeTouchSeries(entries: FlexEntry[]): ToeTouchPoint[] {
   return out.sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
+/**
+ * Non-null warm toe-touch values as {date, value}, sorted ascending — for goal
+ * projections. The values descend as the fold deepens; nothing here reorders
+ * them, because a projection reads its own direction off the goal (see
+ * goals.projectGoal).
+ */
+export function warmToeTouchSeries(entries: FlexEntry[]): { date: string; value: number }[] {
+  const out: { date: string; value: number }[] = []
+  for (const e of entries) {
+    const warm = warmToeTouchOf(e)
+    if (warm == null) continue
+    out.push({ date: e.date, value: warm })
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
 /** One leg-lift chart row per date, carrying both cold and warm left/right. */
 export type LegLiftPoint = {
   date: string
@@ -341,6 +357,36 @@ export function legLiftSeries(entries: FlexEntry[]): LegLiftPoint[] {
       continue
     }
     out.push(row)
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
+ * For each entry with at least one warm leg-lift value, the average of the
+ * available left/right values — the series goal projections run on, matching what
+ * `tailorsAvgSeries` does for the other paired pose. Sorted ascending by date.
+ *
+ * Averaging rather than a rung per side: the ladder is about the lift, and two
+ * ladders that differ by the couple of degrees between one hip and the other
+ * would double every rung to say the same thing twice. The per-side readings are
+ * still on the chart, still get their own PRs, and still show up in the block's
+ * headline — this is only what the goals are measured on.
+ */
+export function legLiftAvgSeries(
+  entries: FlexEntry[],
+): { date: string; value: number }[] {
+  const out: { date: string; value: number }[] = []
+  for (const e of entries) {
+    const vals: number[] = []
+    const left = warmLegLiftLeftOf(e)
+    const right = warmLegLiftRightOf(e)
+    if (left != null) vals.push(left)
+    if (right != null) vals.push(right)
+    if (vals.length === 0) continue
+    out.push({
+      date: e.date,
+      value: vals.reduce((s, v) => s + v, 0) / vals.length,
+    })
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1))
 }

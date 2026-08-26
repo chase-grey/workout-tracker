@@ -19,6 +19,7 @@
 import type { Celebration } from './celebration'
 import { toISODate } from './dates'
 import {
+  legLiftAvgSeries,
   tailorsAvgSeries,
   warmLegLiftLeftOf,
   warmLegLiftRightOf,
@@ -27,10 +28,11 @@ import {
   warmTailorsLeftOf,
   warmTailorsRightOf,
   warmToeTouchOf,
+  warmToeTouchSeries,
   type FlexEntry,
 } from './flex'
 import { HIGHER_IS_BETTER, LOWER_IS_BETTER, type MetricDir } from './flexMetrics'
-import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
+import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './flexPredict'
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
 
@@ -107,36 +109,60 @@ export function anglePRs(entries: FlexEntry[], today: Date = new Date()): AngleP
 }
 
 /**
- * Goals today's reading reached that no earlier day had, biggest target first.
- * Measured on the same series the Goals panel projects — the warm split, and the
- * average of the warm tailor's pair — so a cheer here can't disagree with what
- * the panel shows.
+ * Goals today's reading reached that no earlier day had, hardest first. Measured
+ * on the same series the Goals panel projects — the warm split, the warm fold, and
+ * the average of each paired pose's warm left/right — so a cheer here can't
+ * disagree with what the panel shows.
  *
- * The toe touch and the leg lifts have no ladder yet (see HEAD-TO-TOE.md's
- * deferred list), so nothing here reads them: a goal set can only be cheered
- * once there is one.
+ * Every comparison runs through the pose's own direction: a rung is cleared when
+ * today's reading `beats` it, and it's new when no earlier day's best did. Read
+ * with a bare `>=` the fold would have cheered its whole ladder on the first
+ * upright photo ever taken, since 175° is greater than every target on it.
+ *
+ * "Hardest first" is the rung today cleared by the *least* — the one it only just
+ * got over — rather than the rung with the biggest number on it. Same answer as
+ * the old sort wherever a session crossed several rungs of one ladder, since a
+ * ladder's harder rungs are the ones a single reading passes most narrowly, and
+ * still the right answer now that a 90° fold and a 90° leg lift are two different
+ * achievements wearing the same number.
+ *
+ * Note this runs the opposite way to `anglePRs`, which sorts by *most* moved: a
+ * PR's margin is how far you beat your own best, and more of that is a bigger win.
+ * A rung's margin is overshoot past a fixed line, and less of it means a harder
+ * line.
  */
 export function completedFlexGoals(
   entries: FlexEntry[],
   today: Date = new Date(),
 ): CompletedFlexGoal[] {
   const date = toISODate(today)
-  const sets: { points: { date: string; value: number }[]; targets: readonly number[]; label: (t: number) => string }[] = [
-    { points: warmSplitSeries(entries), targets: SPLIT_GOALS, label: (t) => `${t}° split` },
-    { points: tailorsAvgSeries(entries), targets: TAILORS_GOALS, label: (t) => `${t}° tailor's pose` },
+  const sets: {
+    points: { date: string; value: number }[]
+    targets: readonly number[]
+    label: (t: number) => string
+    dir: MetricDir
+  }[] = [
+    { points: warmSplitSeries(entries), targets: SPLIT_GOALS, label: (t) => `${t}° split`, dir: HIGHER_IS_BETTER },
+    { points: tailorsAvgSeries(entries), targets: TAILORS_GOALS, label: (t) => `${t}° tailor's pose`, dir: HIGHER_IS_BETTER },
+    { points: warmToeTouchSeries(entries), targets: TOE_TOUCH_GOALS, label: (t) => `${t}° toe touch`, dir: LOWER_IS_BETTER },
+    { points: legLiftAvgSeries(entries), targets: LEG_LIFT_GOALS, label: (t) => `${t}° leg lift`, dir: HIGHER_IS_BETTER },
   ]
 
-  const out: CompletedFlexGoal[] = []
+  const out: (CompletedFlexGoal & { by: number })[] = []
   for (const set of sets) {
-    const { today: now, prior } = todayVsPrior(set.points, date)
+    const { today: now, prior } = todayVsPrior(set.points, date, set.dir)
     if (now == null) continue
     for (const target of set.targets) {
-      if (now >= target && (prior == null || prior < target)) {
-        out.push({ label: set.label(target), target, deg: round1(now) })
+      // `beats` is strict, so a reading that lands exactly on a rung has to clear
+      // it the other way round: not-worse-than-target is at-or-past it.
+      const cleared = !set.dir.beats(target, now)
+      const isNew = prior == null || set.dir.beats(target, prior)
+      if (cleared && isNew) {
+        out.push({ label: set.label(target), target, deg: round1(now), by: set.dir.gain(target, now) })
       }
     }
   }
-  return out.sort((a, b) => b.target - a.target)
+  return out.sort((a, b) => a.by - b.by).map(({ label, target, deg }) => ({ label, target, deg }))
 }
 
 /** A single epic celebration summarizing one or more angle PRs. */

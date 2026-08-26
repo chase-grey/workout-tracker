@@ -14,7 +14,7 @@ import {
   type FlexEntry,
 } from './flex'
 import { HIGHER_IS_BETTER, LOWER_IS_BETTER, bestOf, nextGoal, type MetricDir } from './flexMetrics'
-import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
+import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './flexPredict'
 import type { MeasureResult, MeasureTemp } from './measure'
 
 /**
@@ -83,9 +83,11 @@ type MetricSpec = {
 /**
  * Display order: the side-splits poses first, then the head-to-toe ones.
  *
- * The two new poses have no goal ladders yet — those wait until the first real
- * measurements are in and the gap is known — so their `goals` are empty and the
- * goal line is simply absent from their cards.
+ * Every pose carries a ladder now (see lib/flexPredict). The fold's runs downhill,
+ * which `nextGoal` handles by folding through the metric's own `beats` rather than
+ * by sorting — so the rung it names is the shallowest one still ahead of a fold
+ * that's closing, the same way it names the lowest one still ahead of an angle
+ * that's opening.
  */
 const METRICS: MetricSpec[] = [
   {
@@ -114,7 +116,7 @@ const METRICS: MetricSpec[] = [
     label: 'toe touch',
     field: 'toeTouchDeg',
     read: { cold: coldToeTouchOf, warm: warmToeTouchOf },
-    goals: [],
+    goals: TOE_TOUCH_GOALS,
     // The hip angle of a forward fold: 180° standing, 0° flat. Deeper is smaller.
     dir: LOWER_IS_BETTER,
   },
@@ -123,14 +125,14 @@ const METRICS: MetricSpec[] = [
     label: 'left leg lift',
     field: 'legLiftLeftDeg',
     read: { cold: coldLegLiftLeftOf, warm: warmLegLiftLeftOf },
-    goals: [],
+    goals: LEG_LIFT_GOALS,
   },
   {
     metric: 'legLiftRight',
     label: 'right leg lift',
     field: 'legLiftRightDeg',
     read: { cold: coldLegLiftRightOf, warm: warmLegLiftRightOf },
-    goals: [],
+    goals: LEG_LIFT_GOALS,
   },
 ]
 

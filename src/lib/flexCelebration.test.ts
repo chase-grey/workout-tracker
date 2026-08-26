@@ -92,6 +92,78 @@ describe('completedFlexGoals', () => {
     expect(completedFlexGoals(already, TODAY)).toEqual([])
   })
 
+  it('cheers a fold that closed past a rung, and reads its rungs downward', () => {
+    // 96° clears 110 and 100 and stops short of 90. A bare >= would have cheered
+    // all three on the first upright photo, since 175 > every target on the ladder.
+    const fold: FlexEntry[] = [
+      { date: '2026-07-31', splitDeg: null, warmToeTouchDeg: 114, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-08-05', splitDeg: null, warmToeTouchDeg: 96, tailorsLeftDeg: null, tailorsRightDeg: null },
+    ]
+    expect(completedFlexGoals(fold, TODAY)).toEqual([
+      { label: '100° toe touch', target: 100, deg: 96 },
+      { label: '110° toe touch', target: 110, deg: 96 },
+    ])
+  })
+
+  it('does not cheer a fold rung an earlier, deeper day already took', () => {
+    const already: FlexEntry[] = [
+      { date: '2026-07-31', splitDeg: null, warmToeTouchDeg: 98, tailorsLeftDeg: null, tailorsRightDeg: null },
+      { date: '2026-08-05', splitDeg: null, warmToeTouchDeg: 96, tailorsLeftDeg: null, tailorsRightDeg: null },
+    ]
+    expect(completedFlexGoals(already, TODAY)).toEqual([])
+  })
+
+  it('judges the leg-lift goal on the average of the warm pair', () => {
+    // 68 and 62 average to 65 — exactly the first rung, and `beats` is strict, so
+    // landing on a rung has to count as clearing it.
+    const lift: FlexEntry[] = [
+      {
+        date: '2026-07-31',
+        splitDeg: null,
+        tailorsLeftDeg: null,
+        tailorsRightDeg: null,
+        warmLegLiftLeftDeg: 60,
+        warmLegLiftRightDeg: 58,
+      },
+      {
+        date: '2026-08-05',
+        splitDeg: null,
+        tailorsLeftDeg: null,
+        tailorsRightDeg: null,
+        warmLegLiftLeftDeg: 68,
+        warmLegLiftRightDeg: 62,
+      },
+    ]
+    expect(completedFlexGoals(lift, TODAY)).toEqual([{ label: '65° leg lift', target: 65, deg: 65 }])
+  })
+
+  it('leads with the rung today cleared by the least, across poses', () => {
+    // The split clears 100 by 4; the fold clears 110 by 1. The narrower one is the
+    // harder thing that happened, whichever ladder it came off.
+    const both: FlexEntry[] = [
+      {
+        date: '2026-07-31',
+        splitDeg: null,
+        warmSplitDeg: 95,
+        warmToeTouchDeg: 114,
+        tailorsLeftDeg: null,
+        tailorsRightDeg: null,
+      },
+      {
+        date: '2026-08-05',
+        splitDeg: null,
+        warmSplitDeg: 104,
+        warmToeTouchDeg: 109,
+        tailorsLeftDeg: null,
+        tailorsRightDeg: null,
+      },
+    ]
+    expect(completedFlexGoals(both, TODAY).map((g) => g.label)).toEqual([
+      '110° toe touch',
+      '100° split',
+    ])
+  })
+
   it('reports every goal crossed at once, biggest target first', () => {
     const leap: FlexEntry[] = [
       { date: '2026-07-31', splitDeg: null, warmSplitDeg: 95, tailorsLeftDeg: null, tailorsRightDeg: null },

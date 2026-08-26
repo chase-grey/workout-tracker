@@ -21,10 +21,12 @@ import {
   SQUAT_GAIN_CAP,
   STRENGTH_GAIN_DECAY,
   TAILORS_GAIN_CAP,
+  TOE_TOUCH_GAIN_CAP,
+  LEG_LIFT_GAIN_CAP,
 } from './goals'
 import { LEG_PRESS_TO_SQUAT } from './liftRatios'
 import { MAX_ATTEMPT_NOTE } from './maxAttempt'
-import { SPLIT_GOALS, TAILORS_GOALS } from './flexPredict'
+import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './flexPredict'
 import type { FlexEntry } from './flex'
 import type { WorkoutRow } from '../types'
 import { isPaceCapped, project } from './predictions'
@@ -336,6 +338,126 @@ describe('flexibility goals join the goal set', () => {
     const bare = buildGoals(inputs(HOT_FORTNIGHT))
     for (const deg of SPLIT_GOALS) {
       expect(bare.find((x) => x.id === `split_${deg}`)!.points).toHaveLength(0)
+    }
+  })
+})
+
+/** A head-to-toe entry: one warm fold, one warm lift a side. */
+const h2t = (
+  date: string,
+  toeTouch: number,
+  liftLeft: number,
+  liftRight: number,
+): FlexEntry => ({
+  date,
+  splitDeg: null,
+  tailorsLeftDeg: null,
+  tailorsRightDeg: null,
+  warmToeTouchDeg: toeTouch,
+  warmLegLiftLeftDeg: liftLeft,
+  warmLegLiftRightDeg: liftRight,
+})
+
+describe('buildGoals — the head-to-toe ladders', () => {
+  /** A deepening fold (118→100) and a rising lift (58→72 a side) over four sessions. */
+  const flexEntries: FlexEntry[] = [
+    h2t('2026-01-01', 118, 56, 60),
+    h2t('2026-01-08', 112, 60, 64),
+    h2t('2026-01-15', 106, 64, 68),
+    h2t('2026-01-22', 100, 70, 74),
+  ]
+  const goals = buildGoals({ ...inputs(HOT_FORTNIGHT), flexEntries })
+  const at = (id: string) => goals.find((x) => x.id === id)!
+
+  it('adds one milestone goal per fold and per lift angle', () => {
+    for (const deg of TOE_TOUCH_GOALS) {
+      const g = at(`toeTouch_${deg}`)
+      expect(g).toBeDefined()
+      expect(g.title).toBe(`${deg}° toe touch`)
+      expect(g.unit).toBe('°')
+      expect(g.exerciseKey).toBeNull()
+      expect(g.milestone).toBe(true)
+      expect(g.capPerWeek).toBe(TOE_TOUCH_GAIN_CAP)
+      expect(g.decayPerWeek).toBeUndefined()
+    }
+    for (const deg of LEG_LIFT_GOALS) {
+      const g = at(`legLift_${deg}`)
+      expect(g).toBeDefined()
+      expect(g.title).toBe(`${deg}° leg lift`)
+      expect(g.milestone).toBe(true)
+      expect(g.capPerWeek).toBe(LEG_LIFT_GAIN_CAP)
+      expect(g.decayPerWeek).toBeUndefined()
+    }
+  })
+
+  it('declares the fold as the one ladder that descends', () => {
+    for (const deg of TOE_TOUCH_GOALS) expect(at(`toeTouch_${deg}`).direction).toBe('down')
+    for (const deg of LEG_LIFT_GOALS) expect(at(`legLift_${deg}`).direction).toBe('up')
+  })
+
+  it('orders each ladder easiest rung first', () => {
+    // The fold's easiest rung is its biggest number, every other pose's is its
+    // smallest — which is the whole reason the arrays carry an order at all.
+    expect([...TOE_TOUCH_GOALS]).toEqual([...TOE_TOUCH_GOALS].sort((a, b) => b - a))
+    expect([...LEG_LIFT_GOALS]).toEqual([...LEG_LIFT_GOALS].sort((a, b) => a - b))
+    const ids = goals.map((g) => g.id)
+    expect(ids.indexOf('toeTouch_110')).toBeLessThan(ids.indexOf('toeTouch_90'))
+    expect(ids.indexOf('legLift_65')).toBeLessThan(ids.indexOf('legLift_90'))
+  })
+
+  it('measures the fold on the warm reading and the lift on both sides averaged', () => {
+    expect(at('toeTouch_90').points.map((p) => p.value)).toEqual([118, 112, 106, 100])
+    expect(at('legLift_90').points.map((p) => p.value)).toEqual([58, 62, 66, 72])
+  })
+
+  it('calls a fold that closed past a rung reached, and one short of it not', () => {
+    expect(isReached(at('toeTouch_110'))).toBe(true)
+    expect(isReached(at('toeTouch_100'))).toBe(true)
+    expect(isReached(at('toeTouch_90'))).toBe(false)
+  })
+
+  it('keeps a rung the fold has since backed off from', () => {
+    // Milestones judge on the best reading, and for the fold "best" is the lowest.
+    const backslid = buildGoals({
+      ...inputs(HOT_FORTNIGHT),
+      flexEntries: [h2t('2026-01-01', 98, 70, 70), h2t('2026-01-08', 116, 70, 70)],
+    })
+    expect(isReached(backslid.find((x) => x.id === 'toeTouch_100')!)).toBe(true)
+  })
+
+  it('projects a deepening fold on track, off the ceiling rather than the fit', () => {
+    const p = projectGoal(at('toeTouch_90'), new Date(2026, 0, 22))
+    expect(p.onTrack).toBe(true)
+    // The fit is -6°/week; the cap holds the pace it projects from to 0.6, which
+    // is what keeps a good month from promising the floor by spring.
+    expect(p.slopePerWeek).toBe(-TOE_TOUCH_GAIN_CAP)
+    expect(p.etaWeeks!).toBeGreaterThan(10)
+  })
+
+  it('projects a rising lift on track, off its own ceiling', () => {
+    const p = projectGoal(at('legLift_90'), new Date(2026, 0, 22))
+    expect(p.onTrack).toBe(true)
+    expect(p.slopePerWeek).toBe(LEG_LIFT_GAIN_CAP)
+  })
+
+  it('reads the fold gap from the best reading in the window, not the latest', () => {
+    // A stiff morning after a good session is the milestone rule the other way
+    // round: the rung below is owed from the deepest fold, not from today's.
+    const stiff = buildGoals({
+      ...inputs(HOT_FORTNIGHT),
+      flexEntries: [...flexEntries, h2t('2026-01-29', 108, 72, 76)],
+    })
+    const p = projectGoal(stiff.find((x) => x.id === 'toeTouch_90')!, new Date(2026, 0, 29))
+    expect(p.current).toBe(100)
+  })
+
+  it('lists both ladders with empty series when no entries are given', () => {
+    const bare = buildGoals(inputs(HOT_FORTNIGHT))
+    for (const deg of TOE_TOUCH_GOALS) {
+      expect(bare.find((x) => x.id === `toeTouch_${deg}`)!.points).toHaveLength(0)
+    }
+    for (const deg of LEG_LIFT_GOALS) {
+      expect(bare.find((x) => x.id === `legLift_${deg}`)!.points).toHaveLength(0)
     }
   })
 })

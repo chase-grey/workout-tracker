@@ -1058,9 +1058,14 @@ export function GoalsPanel() {
   // a row per rung that re-plotted that log apiece — and in place of the side
   // split / tailor's pose section that carried a second copy of it further down
   // the tab.
+  //
+  // All four poses, in the order they're measured in. The head-to-toe pair used to
+  // draw from a section of its own further down the tab, because a block here is
+  // only ever reached through a goal row and those two had no rungs to be reached
+  // through. Now that they have ladders, they belong up here with the other two.
   const ladders = useMemo(
     () =>
-      (['split', 'tailors'] as Ladder[]).map((ladder) => {
+      (['split', 'tailors', 'toeTouch', 'legLift'] as Ladder[]).map((ladder) => {
         const rungs = goals.filter((g) => goalFamily(g) === `flex:${ladder}`)
         return {
           ladder,
