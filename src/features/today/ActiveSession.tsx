@@ -105,7 +105,7 @@ const IDLE_PAUSE_MS = 5 * 60 * 1000
  * components/GetReady).
  *
  * A timed hold gets the same count however rest ended, tapped through or not: its
- * clock starts the instant the set is on screen (see the HoldTimer's `autoRun`),
+ * clock starts the instant the set is on screen (see the HoldTimer's `running`),
  * so without a beat first the countdown would be running while you were still
  * getting your hands down.
  */
@@ -372,9 +372,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
   // And while it's on, the screen stays lit: hands-free means nothing is being
   // tapped, and a phone left untouched dims and locks in less time than a rest
-  // takes. Not under the pause curtain, which is the state of nobody being here —
-  // there's nothing to watch, so the phone can sleep as it normally would.
-  useWakeLock(fastMode !== 'off' && !paused)
+  // takes. A timed hold gets the same, hands-free or not — its clock started
+  // itself and nobody is touching the screen through a plank either. Not under the
+  // pause curtain, which is the state of nobody being here — there's nothing to
+  // watch, so the phone can sleep as it normally would.
+  useWakeLock((fastMode !== 'off' || holdRunning) && !paused)
 
   // The slot this lift is being trained in, for every read of its history: the
   // press that leads today is compared against the days it led, not against the
@@ -933,7 +935,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               under it is the seconds it actually lasted — prefilled with the hold
               prescribed, and typed over with what the clock read when you came out
               of it. The clock runs itself from the moment the set is on screen and
-              is never stopped by hand (see the HoldTimer's `autoRun`): the number
+              is never stopped by hand (see the HoldTimer's `running`): the number
               has to be read off the screen regardless, so a press to freeze it was
               only ever an extra tap in the moment your hands are least free. */}
           {planned.timed ? (
@@ -944,11 +946,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 // a hold that's already run past its time.
                 key={step.stepKey}
                 targetSec={target?.reps ?? planned.repMin}
-                // Started by the set being up rather than by a press — but not one
-                // beat before that: rest, the get-into-position count, the pause
-                // curtain and any open sheet all hold it, since a hold counting
-                // down behind them is counting time you weren't holding anything.
-                autoRun={setScreenLive && !awaitingStart}
+                // Started by the set being up rather than by a press, and stood
+                // back down the moment it isn't: rest, the get-into-position count,
+                // the pause curtain and any open sheet all hold the clock with its
+                // seconds banked, since a hold counting down behind them is counting
+                // time you weren't holding anything.
+                running={setScreenLive && !awaitingStart}
                 // The seconds on the clock aren't seconds spent standing at the set
                 // screen deciding anything, so the exercise's active-time average
                 // has nothing to learn from them (see recordActiveForCurrent).

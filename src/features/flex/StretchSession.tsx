@@ -29,37 +29,21 @@ import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { STRETCH_CORE, repRangeLabel } from '../../config/plan'
+import {
+  CORE_ENTRY_GET_READY_SEC,
+  POST_PHOTO_GET_READY_SEC,
+  settleInSec,
+} from '../../lib/settleIn'
 import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 
-/** Seconds to get into position at the start and after each rest, before the pace starts. */
-const GET_READY_SEC = 5
-
 /**
- * Stretches that take longer than the default to settle into, by exercise key.
- * The pike positions take real setting up — a block under the leg, a strap, the
- * whole shape squared away before anything is worth timing.
+ * Seconds of rest the menu hands out where the routine prescribes none — the feet
+ * and the calf holds run one straight into the next. Needing a minute is about the
+ * body rather than the plan, so the option is always there; the length is what the
+ * rest of the routine rests for.
  */
-const GET_READY_SEC_BY_EX: Record<string, number> = {
-  tailors_pose: 15,
-  pike_block_crush: 15,
-  pike_lift: 15,
-  rolling_feet: 10,
-}
-
-/**
- * Seconds to get into position when crossing from the mobility routine into the
- * core block. The pancake hang leaves you rested enough — no recovery rest, just
- * time to fetch a plate and set up the first sit-up.
- */
-const CORE_ENTRY_GET_READY_SEC = 10
-
-/**
- * Seconds to get into position after taking a photo on the way into the first
- * stretch. A shot means the phone was propped up somewhere across the room, so
- * this is the walk back and the settle in, not just the settle in.
- */
-const POST_PHOTO_GET_READY_SEC = 15
+const MANUAL_REST_SEC = 60
 
 /**
  * A photo screen waiting to be shown, and what the routine does once it closes:
@@ -73,23 +57,29 @@ const POST_PHOTO_GET_READY_SEC = 15
 type PendingPhotos = { gate: PhotoGate; index: number | null; then: 'start' | 'advance' | 'stay' }
 
 /**
- * The settle-in a step gets before its work begins: the per-stretch value for a
- * mobility set, a brief reposition on the way into the core block, and none
- * between the core sets — those get a real rest instead.
+ * Which leg, and which of the stretch's shapes: the calf stretch's foot angle, the
+ * leg the floss is on. Empty for a stretch that is neither taken a side at a time
+ * nor varied set to set, and for a core set.
  */
-function getReadySecFor(s: SessionStep): number {
-  if (s.kind !== 'flex') return s.round === 0 ? CORE_ENTRY_GET_READY_SEC : 0
-  return GET_READY_SEC_BY_EX[s.exKey] ?? GET_READY_SEC
+function stepPosition(s: SessionStep): string {
+  if (s.kind !== 'flex') return ''
+  return [s.side && `${s.side} leg`, s.setLabel].filter(Boolean).join(' · ')
 }
 
-/** The side and the variation, as the header and the checklist name them. */
+/** Which set of how many. */
+const setOfLabel = (s: SessionStep) => `set ${s.round + 1} of ${s.maxSets}`
+
+/**
+ * The big title. A stretch taken one leg at a time, in one of three shapes, is a
+ * position before it is a name: which leg and which angle is the thing you need
+ * off a glance with your head down, so it takes the title and the move's own name
+ * drops to the line under it.
+ */
+const stepTitle = (s: SessionStep) => stepPosition(s) || s.exName
+
+/** The line under the title: the move, where the title gave its place away, and the set. */
 function stepDetail(s: SessionStep): string {
-  const parts = [`set ${s.round + 1} of ${s.maxSets}`]
-  if (s.kind === 'flex') {
-    if (s.setLabel) parts.push(s.setLabel)
-    if (s.side) parts.push(s.side)
-  }
-  return parts.join(' · ')
+  return [stepPosition(s) ? s.exName : '', setOfLabel(s)].filter(Boolean).join(' · ')
 }
 
 /**
@@ -238,10 +228,25 @@ export function StretchSession({
   // otherwise keep rolling the routine forward while it's out of sight.
   useOnHidden(fast, () => setFast(false))
 
+  // A static hold has nothing to animate, so it runs on a clock of its own — see
+  // HoldTimer. Read here rather than beside the set below, because the wake lock
+  // sits above the empty-routine return and needs it.
+  const onScreen = steps[safeCurrent]
+  const holdSec = onScreen?.kind === 'flex' ? onScreen.holdSec : undefined
+
+  // Nothing between you and the set: no rest, no get-into-position count, no photo
+  // screen, no sheet, no pause curtain. The rhythm guide paces only while this
+  // holds and a hold's clock starts only then — a set counting down behind a
+  // screen you're reading is counting time you weren't in the pose. The workout's
+  // timed holds run on the same rule (see ActiveSession's setScreenLive).
+  const setLive = rest == null && photos == null && !paused && !showList && !preparing
+
   // And while it's on, the screen stays lit — a paced routine is one nobody is
-  // tapping, and the phone would dim mid-hold. Not under the pause curtain,
-  // where there's nothing to watch.
-  useWakeLock(fast && !paused)
+  // tapping, and the phone would dim mid-hold. A hold's clock runs unattended
+  // whether or not the routine is hands-free, so ninety seconds of calf stretch
+  // holds the screen open too. Not under the pause curtain, where there's nothing
+  // to watch.
+  useWakeLock((fast || (holdSec != null && setLive)) && !paused)
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
@@ -309,11 +314,12 @@ export function StretchSession({
 
   const step = steps[safeCurrent]
   const atLast = safeCurrent >= N - 1
-  // A static hold has nothing to animate, so it runs on a clock of its own with
-  // its own start and done — see HoldTimer.
-  const holdSec = step.kind === 'flex' ? step.holdSec : undefined
+  // The step this one follows. It decides two things: whether the settle-in ahead
+  // of this set is a reposition within a stretch already built or the full setup of
+  // a new one, and whether a rest led into the set on screen.
+  const prevStep = steps[safeCurrent - 1]
 
-  const getReadySec = getReadySecFor(step)
+  const getReadySec = settleInSec(step, prevStep)
 
   // Route a captured angle into the right field. The shot fixes cold vs warm;
   // which pose it lands in follows the angles the camera actually returned, so
@@ -420,7 +426,7 @@ export function StretchSession({
     // straight to the next set's own settle-in rather than flashing a rest screen
     // that's already over.
     if (finished.restSec <= 0) {
-      straightToGetReady(getReadySecFor(steps[index + 1]))
+      straightToGetReady(settleInSec(steps[index + 1], finished))
       return
     }
     restStartRef.current = Date.now()
@@ -468,11 +474,10 @@ export function StretchSession({
   // the whole page is the target rather than one button. Controls (the kebab, the
   // core block's own fields) keep their own job, an overlay that owns the screen
   // swallows the tap, and the last set still needs its explicit finish button.
-  // A timed hold is exempt: it has a start and a done of its own, and a stray tap
-  // shouldn't cut ninety seconds of it short.
-  const overlayUp = rest != null || photos != null || paused || showList || preparing
+  // A timed hold is exempt: it runs on a clock of its own and closes itself, and a
+  // stray tap shouldn't cut ninety seconds of it short.
   const onScreenTap = (e: MouseEvent) => {
-    if (atLast || overlayUp || holdSec) return
+    if (atLast || !setLive || holdSec) return
     if ((e.target as HTMLElement).closest('button, input, label, a')) return
     completeSetAndAdvance()
   }
@@ -491,7 +496,6 @@ export function StretchSession({
   // first set, a side switch, a stretch that rests not at all, and the crossing
   // out of the mobility routine into the core block, which hands you to the
   // sit-ups already rested off the last stretch.
-  const prevStep = steps[safeCurrent - 1]
   const restBeforeSec =
     !prevStep || (prevStep.kind === 'flex' && step.kind === 'core') ? 0 : prevStep.restSec
 
@@ -512,10 +516,16 @@ export function StretchSession({
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
-    // Off the rest screen only — there's nothing to go back to while it's up, and
-    // nothing to go back to before a set that never had a rest ahead of it.
-    ...(rest == null && restBeforeSec > 0
-      ? [{ label: 'back to rest', onClick: () => reopenRest(restBeforeSec) }]
+    // Off the rest screen only — there's nothing to go back to while it's up. A set
+    // the routine ran straight into (a side switch, or the feet and calf holds,
+    // which prescribe no rest at all) still gets the option, since needing a minute
+    // is about the body rather than the plan — it just doesn't call it going back.
+    ...(rest == null
+      ? [
+          restBeforeSec > 0
+            ? { label: 'back to rest', onClick: () => reopenRest(restBeforeSec) }
+            : { label: 'take a rest', onClick: () => reopenRest(MANUAL_REST_SEC) },
+        ]
       : []),
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'routine checklist', onClick: () => setShowList(true) },
@@ -548,9 +558,10 @@ export function StretchSession({
 
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-xl font-bold">{step.exName}</h2>
-          {/* The variation and the side, when the stretch has them: which of the
-              calf stretch's three shapes this is, and which leg it's on. */}
+          <h2 className="text-xl font-bold">{stepTitle(step)}</h2>
+          {/* The move the position belongs to, and which set of it — which leg and
+              which of the calf stretch's three shapes are up in the title, where
+              they can't be missed mid-stretch. */}
           <p className="text-sm text-neutral-500">{stepDetail(step)}</p>
         </div>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
@@ -583,17 +594,24 @@ export function StretchSession({
           <HoldTimer
             key={step.stepKey}
             targetSec={holdSec}
-            // A hold you kept going on is worth keeping, so stopping it by hand
-            // is what ends the set — and hands-free the clock closes it instead.
-            onStop={() => completeSetAndAdvance(true)}
-            onTargetEnd={fast ? () => completeSetAndAdvance(true) : undefined}
+            // The set being on screen is the whole of the start signal, and the
+            // count leading in is what covers getting into the pose. Standing the
+            // clock down when it isn't (a rest reopened over it, the curtain, the
+            // checklist) is the same call the rhythm guide's `running` makes.
+            running={setLive}
+            // And the clock closes the set, hands-free or not, exactly as the paced
+            // sets close themselves on their target rep: ninety seconds is what was
+            // prescribed, and waiting on a tap only means holding it longer. On the
+            // closing set it stops at the finish button rather than logging the
+            // session off a timer.
+            onTargetEnd={() => completeSetAndAdvance(true)}
           />
         ) : (
           <RhythmGuide
             key={step.stepKey}
             tempo={step.tempo}
             reps={step.reps}
-            running={rest == null && !preparing && !paused && photos == null}
+            running={setLive}
             startRep={rep}
             onRep={setRep}
             // A stretch set always ends itself: the target rep rolls it into its
@@ -729,7 +747,7 @@ export function StretchSession({
                     >
                       <span className="text-[10px] tracking-wide text-neutral-500">{s.blockLabel}</span>
                       <span className="block font-medium">
-                        {s.exName} · {stepDetail(s)}
+                        {[s.exName, stepPosition(s), setOfLabel(s)].filter(Boolean).join(' · ')}
                       </span>
                     </button>
                     <button

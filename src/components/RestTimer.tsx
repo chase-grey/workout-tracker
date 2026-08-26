@@ -985,6 +985,29 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
   }
 }
 
+// The boxed shapes on a rotation of their own, for the countdowns that aren't
+// rest: a long hold's clock lives inline in a set screen, where the full-bleed
+// and perimeter variants have no room to read.
+const holdRotation = createRotation(BOX_VARIANTS)
+
+/**
+ * A rest shape telling a hold's time instead of a rest's (see
+ * components/HoldTimer). The same time-telling shapes under the same rule — the
+ * level *is* the countdown, and `fraction` is how much of the hold is still to
+ * come — because a ninety-second calf stretch and a ninety-second rest are the
+ * same problem: a number you can't read while your head is on the floor.
+ *
+ * One shape picked per mount, like rest's, so a hold varies from set to set.
+ */
+export function CountdownShape({ fraction }: { fraction: number }) {
+  const [variant] = useState<Variant>(() => holdRotation.next())
+  return (
+    <div className="relative flex aspect-square w-[min(72vw,34vh,20rem)] items-center justify-center">
+      <RestShape variant={variant} fraction={clamp01(fraction)} />
+    </div>
+  )
+}
+
 /**
  * Full-screen rest countdown. Wall-clock based: it tracks a target end time and
  * derives the remaining seconds from `Date.now()`, so it stays accurate even
