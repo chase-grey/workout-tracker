@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, flexRoutineOf } from './flexRoutines'
 import { DEFAULT_FLEX_ROUTINE } from './flexPlan'
 import { parseTempo } from '../lib/tempo'
-import { motionForPhases, phaseDepths } from '../lib/rhythmMotion'
+import { cycleCloses, motionForPhases, phaseDepths, phaseEfforts } from '../lib/rhythmMotion'
 import { PHOTO_SHOT } from '../lib/photoSteps'
 
 const HEAD_TO_TOE = FLEX_ROUTINES.head_to_toe
@@ -100,6 +100,13 @@ describe('the head-to-toe routine', () => {
     }
   })
 
+  it('gives the nerve floss ten seconds to change legs, the rest the default', () => {
+    expect(byKey('sciatic_floss').sideSwitchSec).toBe(10)
+    for (const key of ['rolling_feet', 'calf_stretch', 'pike_block_crush', 'pike_lift']) {
+      expect(byKey(key).sideSwitchSec).toBeUndefined()
+    }
+  })
+
   it('gives the block crush one set and the pike lift three', () => {
     expect(byKey('pike_block_crush').maxSets).toBe(1)
     expect(byKey('pike_lift').maxSets).toBe(3)
@@ -117,11 +124,17 @@ describe('the head-to-toe tempos, as lib/rhythmMotion reads them', () => {
     expect(motionForPhases(phases)).toBe('breathe')
   })
 
-  it('gives the block crush a descent that never comes back up', () => {
+  // Ten seconds of hard press and five of rest, three times through: the rest half
+  // is what gives the descent something to loop back from, instead of a lone press
+  // phase that freezes deep and has to be faded back to the top.
+  it('gives the block crush a hard press and a rest that keeps the pose', () => {
     const phases = phasesOf('pike_block_crush')
-    expect(phases.map((p) => p.seconds)).toEqual([10])
+    expect(phases.map((p) => p.seconds)).toEqual([10, 5])
     expect(motionForPhases(phases)).toBe('descent')
-    expect(phaseDepths(phases)).toEqual([1])
+    expect(phaseDepths(phases)).toEqual([1, 0.3])
+    expect(phaseEfforts(phases)).toEqual([1, 0])
+    expect(cycleCloses(phases)).toBe(true)
+    expect(byKey('pike_block_crush').reps).toBe(3)
   })
 
   it('gives the pike lift work, release, lift, release', () => {
