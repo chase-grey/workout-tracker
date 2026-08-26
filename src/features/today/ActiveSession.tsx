@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
   MdBlock,
   MdBolt,
   MdCheckCircle,
-  MdChevronRight,
   MdFlag,
   MdRadioButtonUnchecked,
   MdShowChart,
@@ -176,7 +175,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const [paused, setPaused] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
-  // The first set of a workout waits on a start press (see `awaitingStart`).
+  // The first set of a workout waits on a tap to begin (see `awaitingStart`).
   const [started, setStarted] = useState(false)
   // Whether the get-into-position count is up: the beat between a rest that ran
   // itself out and the set it leads into (see closeRest).
@@ -430,9 +429,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }, [exercises, skipped, session])
 
   // A moment to get set up before anything is on the clock: the very first set of a
-  // workout waits for a start press, so walking over and loading the bar isn't
-  // charged to that exercise's active-time average. The target is already on screen
-  // while you wait, which is the point — you can see what to load before starting.
+  // workout waits for a tap, so walking over and loading the bar isn't charged to
+  // that exercise's active-time average. The target is already on screen while you
+  // wait, which is the point — you can see what to load before starting. The tap
+  // that starts it is a tap anywhere, like every other tap in the flow (see
+  // onScreenTap): it takes one to begin and the next one logs the set.
   const awaitingStart = !started && safeCurrent === 0 && totals.done === 0
 
   const start = () => {
@@ -787,6 +788,27 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setHoldRunning(false)
   }, [step.stepKey])
 
+  // Tapping the screen ends the set — the same target the stretch routine gives a
+  // set, and for the same reason: a button is a small thing to hit for hands that
+  // have just come off a bar, and the whole page is the one target you can't miss.
+  // Controls (the trend button, the kebab, the weight and reps fields) keep their
+  // own job, an overlay that owns the screen swallows the tap rather than logging a
+  // set behind it, and the last set of all still waits on its explicit finish
+  // button — ending the workout is not something to trigger with a stray tap.
+  //
+  // Before the first set is under way the tap starts the workout instead, which is
+  // all the old start press ever did (see `awaitingStart`): loading the bar stays
+  // off that exercise's active-time average, without asking for a press to say so.
+  const onScreenTap = (e: MouseEvent) => {
+    if (atLast || !setScreenLive) return
+    if ((e.target as HTMLElement).closest('button, input, label, a')) return
+    if (awaitingStart) {
+      start()
+      return
+    }
+    completeSetAndAdvance()
+  }
+
   // The stations of the circuit in play, in the order they're rotated through —
   // the whole circuit rather than just the station on screen, because "rest only
   // after the lateral raise" is a statement about all of them.
@@ -899,7 +921,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   )
 
   return (
-    <div className="flex flex-col gap-3 pb-6">
+    <div className="flex flex-col gap-3 pb-6" onClick={onScreenTap}>
       {topBar}
 
       {set && (
@@ -1022,19 +1044,19 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         </div>
       )}
 
-      <button
-        {...(awaitingStart ? { onClick: start } : advancePress)}
-        aria-label={awaitingStart || atLast ? undefined : 'next set'}
-        className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
-      >
-        {awaitingStart ? (
-          'start'
-        ) : atLast ? (
-          'finish workout'
-        ) : (
-          <MdChevronRight className="text-3xl" aria-hidden />
-        )}
-      </button>
+      {/* Every other set advances on a tap anywhere (see onScreenTap); ending the
+          whole workout is worth an explicit button. It fires on pointerup rather
+          than on click, because it's pressed straight out of the reps field and the
+          keyboard closing under the finger would otherwise swallow the tap (see
+          usePressAction). */}
+      {atLast && (
+        <button
+          {...advancePress}
+          className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+        >
+          finish workout
+        </button>
+      )}
 
       {rest != null && (
         <RestTimer
