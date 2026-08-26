@@ -25,8 +25,8 @@ const QUICK_ADDS = [100, 500, 4000]
  * bar, and the two toggles. The pill toggle cycles rather than branching into
  * separate buttons — nothing, then the multivitamin, then the iron that rides
  * along every other day — so an iron day that quietly dropped the iron is still
- * a state you can record and see (amber, not green), which is the whole reason
- * the pill log tracks the two doses apart.
+ * a state you can record and see (lime, not the full green), which is the whole
+ * reason the pill log tracks the two doses apart.
  */
 export function DailyHabits() {
   const { calorieEntries, vitaminEntries, whiteningEntries, logCalories, logVitamins, logWhitening, goals } =
@@ -81,7 +81,7 @@ export function DailyHabits() {
   const pillTone = sel.done
     ? 'bg-accent-2/15 text-accent-2'
     : sel.vitamins
-      ? 'bg-surface-2 text-amber-400'
+      ? 'bg-surface-2 text-lime-400'
       : 'bg-surface-2 text-neutral-500'
   const stripTone = selStrip ? 'bg-accent-2/15 text-accent-2' : 'bg-surface-2 text-neutral-500'
 
@@ -146,11 +146,11 @@ export function DailyHabits() {
                       aria-hidden
                     />
                     <MdMedication
-                      className={`text-[11px] ${vit ? 'text-amber-400' : 'text-neutral-700'}`}
+                      className={`text-[11px] ${vit ? 'text-emerald-400' : 'text-neutral-700'}`}
                       aria-hidden
                     />
                     <MdAutoAwesome
-                      className={`text-[11px] ${wht ? 'text-sky-300' : 'text-neutral-700'}`}
+                      className={`text-[11px] ${wht ? 'text-lime-300' : 'text-neutral-700'}`}
                       aria-hidden
                     />
                   </>
