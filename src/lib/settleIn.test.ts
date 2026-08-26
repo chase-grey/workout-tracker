@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES } from '../config/flexRoutines'
 import { buildSessionSteps, type SessionStep } from './flexSteps'
-import { CORE_ENTRY_GET_READY_SEC, GET_READY_SEC, settleInSec } from './settleIn'
+import { GET_READY_SEC, settleInSec } from './settleIn'
 
 const steps = buildSessionSteps(FLEX_ROUTINES.head_to_toe.blocks)
 const at = (i: number) => settleInSec(steps[i], steps[i - 1])
@@ -51,7 +51,8 @@ describe('settleInSec', () => {
   it('repositions into the core block and then rests between its sets instead', () => {
     const core = steps.filter((s) => s.kind === 'core')
     expect(core.length).toBeGreaterThan(1)
-    expect(settleInSec(core[0], steps[steps.indexOf(core[0]) - 1])).toBe(CORE_ENTRY_GET_READY_SEC)
+    // Fifteen, not the plain five: the plate has to be fetched first.
+    expect(settleInSec(core[0], steps[steps.indexOf(core[0]) - 1])).toBe(15)
     expect(settleInSec(core[1], core[0])).toBe(0)
   })
 })

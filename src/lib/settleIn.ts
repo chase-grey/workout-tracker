@@ -43,9 +43,11 @@ export const RESET_SEC_BY_EX: Record<string, number> = {
 /**
  * Seconds to get into position when crossing from the mobility routine into the
  * core block. The pancake hang leaves you rested enough — no recovery rest, just
- * time to fetch a plate and set up the first sit-up.
+ * time to fetch a plate and set up the first sit-up. Fetching the plate is the
+ * long part: it lives across the room, not on the mat, so this is more than any
+ * reposition within a stretch.
  */
-export const CORE_ENTRY_GET_READY_SEC = 10
+export const CORE_ENTRY_GET_READY_SEC = 15
 
 /**
  * Seconds to get into position after taking a photo on the way into the first
