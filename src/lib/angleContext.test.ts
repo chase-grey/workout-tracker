@@ -162,14 +162,14 @@ describe('angleTrends — the head-to-toe poses', () => {
     // The rung named is the shallowest one still ahead of a closing fold — the
     // mirror of "lowest one still above" on every other pose.
     it('names the next rung down the ladder', () => {
-      expect(angleTrends([], { toeTouchDeg: 104 }, 'warm', TODAY)[0].goal).toEqual({
-        target: 100,
+      expect(angleTrends([], { toeTouchDeg: 94 }, 'warm', TODAY)[0].goal).toEqual({
+        target: 90,
         toGo: 4,
       })
     })
 
     it('offers no goal once the deepest rung is cleared', () => {
-      expect(angleTrends([], { toeTouchDeg: 88 }, 'warm', TODAY)[0].goal).toBeNull()
+      expect(angleTrends([], { toeTouchDeg: 68 }, 'warm', TODAY)[0].goal).toBeNull()
     })
   })
 

@@ -401,7 +401,7 @@ describe('buildGoals — the head-to-toe ladders', () => {
     expect([...TOE_TOUCH_GOALS]).toEqual([...TOE_TOUCH_GOALS].sort((a, b) => b - a))
     expect([...LEG_LIFT_GOALS]).toEqual([...LEG_LIFT_GOALS].sort((a, b) => a - b))
     const ids = goals.map((g) => g.id)
-    expect(ids.indexOf('toeTouch_110')).toBeLessThan(ids.indexOf('toeTouch_90'))
+    expect(ids.indexOf('toeTouch_90')).toBeLessThan(ids.indexOf('toeTouch_70'))
     expect(ids.indexOf('legLift_65')).toBeLessThan(ids.indexOf('legLift_90'))
   })
 
@@ -411,18 +411,21 @@ describe('buildGoals — the head-to-toe ladders', () => {
   })
 
   it('calls a fold that closed past a rung reached, and one short of it not', () => {
-    expect(isReached(at('toeTouch_110'))).toBe(true)
-    expect(isReached(at('toeTouch_100'))).toBe(true)
-    expect(isReached(at('toeTouch_90'))).toBe(false)
+    const deep = buildGoals({
+      ...inputs(HOT_FORTNIGHT),
+      flexEntries: [...flexEntries, h2t('2026-01-29', 88, 72, 76)],
+    })
+    expect(isReached(deep.find((x) => x.id === 'toeTouch_90')!)).toBe(true)
+    expect(isReached(deep.find((x) => x.id === 'toeTouch_80')!)).toBe(false)
   })
 
   it('keeps a rung the fold has since backed off from', () => {
     // Milestones judge on the best reading, and for the fold "best" is the lowest.
     const backslid = buildGoals({
       ...inputs(HOT_FORTNIGHT),
-      flexEntries: [h2t('2026-01-01', 98, 70, 70), h2t('2026-01-08', 116, 70, 70)],
+      flexEntries: [h2t('2026-01-01', 88, 70, 70), h2t('2026-01-08', 116, 70, 70)],
     })
-    expect(isReached(backslid.find((x) => x.id === 'toeTouch_100')!)).toBe(true)
+    expect(isReached(backslid.find((x) => x.id === 'toeTouch_90')!)).toBe(true)
   })
 
   it('projects a deepening fold on track, off the ceiling rather than the fit', () => {

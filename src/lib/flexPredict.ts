@@ -31,16 +31,20 @@ export const TAILORS_GOALS = [60, 70, 80, 90] as const
 /**
  * Toe-touch goal angles (degrees), easiest first — which here means *descending*,
  * because the reading is the hip angle of a standing fold and it closes as the
- * fold deepens (see lib/flexMetrics). 110° is a fold to mid-shin, 90° is hands to
- * the floor with the hips square, and every ladder consumer reads the order
- * rather than the arithmetic, so the array itself carries the difficulty.
+ * fold deepens (see lib/flexMetrics). 90° is hands to the floor with the hips
+ * square, 70° is a chest that has started to come down onto the thighs, and every
+ * ladder consumer reads the order rather than the arithmetic, so the array itself
+ * carries the difficulty.
  *
- * Ten degrees a rung the whole way up. The fold is mostly waiting on hamstring
- * length, which gives up range faster than the adductors the split needs, so a
- * rung this size is a season rather than a year — and unlike the split there is a
- * floor in sight, so the rungs have no reason to widen as they go.
+ * The ladder starts at 90 rather than above it: a fold to mid-shin is where the
+ * log already was, and a rung already standing behind you is a rung that never
+ * gets crossed. Ten degrees a rung from there. The fold is mostly waiting on
+ * hamstring length, which gives up range faster than the adductors the split
+ * needs, so a rung this size is a season rather than a year — and unlike the
+ * split there is a floor in sight, so the rungs have no reason to widen as they
+ * go.
  */
-export const TOE_TOUCH_GOALS = [110, 100, 90] as const
+export const TOE_TOUCH_GOALS = [90, 80, 70] as const
 
 /**
  * Leg-lift goal angles (degrees), ascending.
