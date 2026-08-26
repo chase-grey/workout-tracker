@@ -1,7 +1,8 @@
-// The chat + OpenAI settings can't reach the proxy from a deployed phone
-// (internal-only + CORS + cert), so we only surface them on desktop, and in
-// local dev (which includes `dev:host` viewed from a phone, where the dev
-// proxy makes it work).
+// The chat + OpenAI settings need the dev server's /api/chat proxy, which holds
+// the Epic key and can reach Epic's internal LLM host — so the deployed site can
+// never have them. DEV is what actually decides it: on a phone that means the
+// phone loaded the dev server itself over Epic wifi (`npm run dev:phone`), where
+// the proxy is same-origin and everything works.
 const isTouchDevice =
   typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 

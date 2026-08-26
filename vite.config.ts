@@ -9,40 +9,11 @@ import { execSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
-import { DEFAULT_API_URL } from './src/config/backend.js'
 
 // Repo name — used as the GitHub Pages base path in production.
 const REPO = 'workout-tracker'
-
-/**
- * The origin the installed phone app is served from, which chats to this dev
- * server cross-origin (see llmProxy).
- *
- * This has to be declared to Vite, not just handled in our own middleware:
- * Vite's CORS layer answers the preflight before any plugin middleware runs, and
- * it only echoes an `access-control-allow-origin` for origins it has been told
- * to trust. Anything else gets a 204 with no such header, which curl ignores and
- * a browser treats as a refusal.
- *
- * Derived from the git remote so a fork doesn't have to edit it; PAGES_ORIGIN
- * overrides for a custom domain.
- */
-function pagesOrigin(explicit: string): string {
-  if (explicit) return explicit.replace(/\/$/, '')
-  try {
-    const remote = execSync('git remote get-url origin').toString().trim()
-    const owner = /github\.com[:/]([^/]+)\//.exec(remote)?.[1]
-    if (owner) return `https://${owner.toLowerCase()}.github.io`
-  } catch {
-    /* no remote, or not a GitHub one */
-  }
-  return ''
-}
-
-// Vite's default: localhost in any form. Overriding server.cors replaces this
-// rather than adding to it, so it has to be carried along.
-const LOCALHOST_ORIGIN = /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/
 
 // Build stamp baked into the bundle so Settings can show exactly which build is
 // running — the quickest way to tell whether a phone is on a stale cached copy.
@@ -179,13 +150,17 @@ function postJson(
  * and is NEVER shipped to the client bundle. The browser POSTs { messages, tools,
  * model } to /api/chat; we inject the key + base URL and forward to the LLM.
  * Only works locally (`npm run dev`) — the Epic proxy is internal-network-only.
+ *
+ * Every caller is same-origin: the browser on this machine, or a phone that
+ * loaded this dev server over the LAN (see shareLink). So there is no CORS layer
+ * and no token here — reaching this at all means already reaching this dev
+ * server, which is as far as the key ever travels.
  */
 function llmProxy(opts: {
   apiKey: string
   baseUrl: string
   model: string
   insecure: boolean
-  sharedSecret: string
 }): PluginOption {
   return {
     name: 'llm-proxy',
@@ -197,42 +172,7 @@ function llmProxy(opts: {
           res.end(JSON.stringify(obj))
         }
 
-        // The installed phone app is served from GitHub Pages, so its calls here
-        // are cross-origin: they need CORS, and a preflight for the JSON
-        // content-type and token header.
-        const origin = req.headers.origin
-        if (origin) {
-          res.setHeader('access-control-allow-origin', origin)
-          res.setHeader('vary', 'origin')
-          res.setHeader('access-control-allow-headers', 'content-type, x-chat-token')
-          res.setHeader('access-control-max-age', '86400')
-        }
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 204
-          return res.end()
-        }
         if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' })
-
-        // A cross-origin caller reached us over the public tunnel, so it has to
-        // prove it's the phone. Same-origin dev browsing doesn't — nothing but
-        // this machine can make a same-origin request to it.
-        const crossOrigin = (() => {
-          if (!origin) return false
-          try {
-            return new URL(origin).host !== req.headers.host
-          } catch {
-            return true
-          }
-        })()
-        if (crossOrigin) {
-          if (!opts.sharedSecret) {
-            return json(503, { error: { message: 'No CHAT_SHARED_SECRET in .env' } })
-          }
-          if (req.headers['x-chat-token'] !== opts.sharedSecret) {
-            return json(401, { error: { message: 'Bad or missing chat token' } })
-          }
-        }
-
         if (!opts.apiKey) return json(503, { error: { message: 'No OPENAI_API_KEY in .env' } })
 
         let body = ''
@@ -273,8 +213,8 @@ function llmProxy(opts: {
             res.setHeader('content-type', upstream.headers['content-type'] || 'application/json')
             if (parsed.stream) {
               res.setHeader('cache-control', 'no-cache, no-transform')
-              // Nothing in this path buffers today, but a proxy in front of the
-              // tunnel that decides to would silently undo the streaming.
+              // Nothing in this path buffers today, but anything that decided
+              // to would silently undo the streaming.
               res.setHeader('x-accel-buffering', 'no')
               res.flushHeaders?.()
             }
@@ -288,175 +228,57 @@ function llmProxy(opts: {
   }
 }
 
-/**
- * A Cloudflare quick tunnel (`npm run dev:tunnel`) publishes this dev server at a
- * random *.trycloudflare.com hostname, which is how the phone reaches it from
- * anywhere — including off Epic's wifi. cloudflared advertises that hostname on a
- * local metrics port (20241 by default, walking up when it's taken), so the dev
- * server can discover its own public URL and hand it to Settings as a QR.
- */
-const CF_METRICS_PORTS = [20241, 20242, 20243, 20244, 20245]
+// Adapters that answer on a real address but never reach a phone. Windows names
+// its virtual switches after whatever created them, which is the only signal
+// os.networkInterfaces() gives us to go on.
+const VIRTUAL_ADAPTER = /vethernet|virtualbox|vmware|hyper-?v|wsl|docker|tailscale|zerotier|loopback/i
 
-/** GET JSON with a deadline; any failure is just "no answer" — every caller here
- *  is probing something that may not exist. */
-async function getJson(url: string, timeoutMs: number): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
-    return res.ok ? ((await res.json()) as Record<string, unknown>) : null
-  } catch {
-    return null
+/**
+ * The address a phone on this wifi can load this dev server at, or null.
+ *
+ * A laptop has several non-loopback addresses — wifi, ethernet, a VPN client, a
+ * hypervisor's virtual switch — and only some of them are on the network the
+ * phone is on. The virtual ones are dropped by name and wifi is preferred, that
+ * being the network the phone is necessarily on; past those two rules it is a
+ * guess, and SHARE_URL pins the answer when the guess is wrong.
+ */
+function lanAddress(port: number): string | null {
+  const found: { name: string; address: string }[] = []
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    if (VIRTUAL_ADAPTER.test(name)) continue
+    for (const a of addrs ?? []) {
+      // family is 'IPv4' on current Node and 4 on some older ones.
+      if (a.internal || (a.family !== 'IPv4' && (a.family as unknown as number) !== 4)) continue
+      found.push({ name, address: a.address })
+    }
   }
+  if (!found.length) return null
+  const wifi = found.find((f) => /wi-?fi|wlan|wireless/i.test(f.name))
+  return `http://${(wifi ?? found[0]).address}:${port}`
 }
 
 /**
- * Serves /api/share: the public URL to open this dev server on a phone, or null.
+ * Serves /api/share: the address to open this dev server on a phone, or null.
  *
- * A tunnel being alive doesn't make it OURS — other dev servers on this machine
- * may have tunnels of their own. This process mints a nonce and serves it at
- * /api/share/ping; a tunnel is only reported once a round trip through the public
- * hostname comes back with THIS nonce. If the round trip can't complete at all (no
- * egress), a single detected tunnel is reported unverified rather than dropped.
+ * This is the whole of the phone coach now. The phone loads this dev server
+ * itself, so its /api/chat proxy — and the Epic key behind it — is simply there,
+ * same-origin, with no address published anywhere and no public hostname to
+ * chase. What that costs is reach: both ends have to be on Epic private wifi, so
+ * the phone has to be an Epic-managed device, and off that network there is no
+ * coach at all.
  */
-function shareLink(
-  explicit: string | null,
-  publish: { apiUrl: string; secret: string },
-): PluginOption {
-  const nonce = `wt-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
-  let cache: { at: number; value: { url: string; verified: boolean } | null } = { at: 0, value: null }
-  let published: string | null = null
-
-  /**
-   * Leave this tunnel's address on the Apps Script backend so the installed
-   * phone app can find it. That indirection is the whole point: the quick tunnel
-   * hostname changes every run, but the app stays installed from its permanent
-   * GitHub Pages URL and looks the current one up. See saveChatEndpoint in
-   * SimpleBackend.gs for why both directions need the shared secret.
-   */
-  const publishEndpoint = async (url: string) => {
-    if (url === published || !publish.apiUrl || !publish.secret) return
-    try {
-      const res = await fetch(`${publish.apiUrl}?route=chat_endpoint`, {
-        method: 'POST',
-        // text/plain keeps this a CORS "simple request", which is what the Apps
-        // Script web app can answer — same trick as src/services/api.ts.
-        headers: { 'content-type': 'text/plain' },
-        body: JSON.stringify({ url, secret: publish.secret }),
-        signal: AbortSignal.timeout(15000),
-      })
-      const body = (await res.json()) as { saved?: number; error?: string }
-      if (body.error) throw new Error(body.error)
-      published = url
-      console.log(`\n  Coach published to your phone: ${url}\n`)
-    } catch (err) {
-      console.warn(
-        `\n  Could not publish the chat endpoint (${String(err)}).` +
-          `\n  The phone won't find the coach until this succeeds.\n`,
-      )
-    }
-  }
-
-  const detect = async () => {
-    const hits = await Promise.all(
-      CF_METRICS_PORTS.map((p) => getJson(`http://127.0.0.1:${p}/quicktunnel`, 700)),
-    )
-    const hosts = [...new Set(hits.map((h) => h?.hostname).filter(Boolean))] as string[]
-    if (!hosts.length) return null
-    // true = answered with our nonce, false = someone else's server, null = no answer.
-    const checked = await Promise.all(
-      hosts.map(async (host) => {
-        const pong = await getJson(`https://${host}/api/share/ping`, 6000)
-        return { host, mine: pong ? pong.nonce === nonce : null }
-      }),
-    )
-    const verified = checked.find((c) => c.mine === true)
-    if (verified) return { url: `https://${verified.host}`, verified: true }
-    if (checked.length === 1 && checked[0].mine === null)
-      return { url: `https://${checked[0].host}`, verified: false }
-    return null
-  }
-
+function shareLink(explicit: string | null): PluginOption {
   return {
     name: 'share-link',
     configureServer(server) {
-      // Publishing can't wait for someone to open Settings — the phone needs the
-      // address whether or not this machine's browser is ever touched. So poll for
-      // a verified tunnel and publish it. The tunnel takes a few seconds longer
-      // than the dev server to come up, so a miss on the first passes is normal.
-      // Skipping this silently is the worst outcome: the tunnel comes up, the
-      // terminal looks healthy, and the phone just says no computer is running.
-      if (!publish.secret) {
-        console.warn(
-          '\n  No CHAT_SHARED_SECRET in .env — not publishing an address, so the' +
-            '\n  installed phone app will not find the coach. See README.\n',
-        )
-      }
-
-      if (explicit) {
-        void publishEndpoint(explicit)
-      } else if (publish.apiUrl && publish.secret) {
-        // Keep looking for the whole life of the dev server rather than stopping at
-        // the first success. cloudflared is supervised now (see scripts/tunnel.mjs),
-        // and a quick tunnel is handed a new random hostname every time it starts —
-        // so a poller that retired after one publish left the backend naming an
-        // address that had died minutes ago, the phone looking that one up and
-        // finding nothing, and this terminal perfectly clean throughout.
-        //
-        // Chained timeouts rather than an interval, so a slow round trip delays the
-        // next probe instead of stacking another one on top of it. Fast while there
-        // is nothing to show for it, then idle: once a tunnel has been verified the
-        // only job left is noticing that it was replaced.
-        const FIRST_LOOK_MS = 3000
-        const SETTLED_LOOK_MS = 30_000
-        let looks = 0
-        let warned = false
-        let seen: string | null = null
-        const schedule = (ms: number) => {
-          const timer = setTimeout(look, ms)
-          timer.unref?.() // never hold the process open on this alone
-        }
-        const look = () => {
-          void detect()
-            .catch(() => null)
-            .then(async (found) => {
-              if (found?.verified) {
-                seen = found.url
-                await publishEndpoint(found.url)
-              }
-              // Say so out loud. Failing quietly looks exactly like success from
-              // here — the tunnel is up, the terminal is clean — and only the phone
-              // ever finds out that no address was published.
-              if (!seen && !warned && ++looks > 40) {
-                warned = true
-                console.warn(
-                  '\n  No tunnel to THIS dev server has verified, so no address has been' +
-                    '\n  published and the phone will not find the coach. Either cloudflared' +
-                    '\n  never came up, or its tunnel is pointed at something else on this' +
-                    '\n  port. Still looking.\n',
-                )
-              }
-              schedule(seen ? SETTLED_LOOK_MS : FIRST_LOOK_MS)
-            })
-        }
-        look()
-      }
-
-      server.middlewares.use('/api/share/ping', (_req, res) => {
-        res.setHeader('content-type', 'application/json')
-        res.end(JSON.stringify({ nonce }))
-      })
-
       server.middlewares.use('/api/share', (_req, res) => {
         res.setHeader('content-type', 'application/json')
-        if (explicit) return res.end(JSON.stringify({ url: explicit, verified: true }))
-        // Probing costs an internet round trip, so hold the answer briefly —
-        // reopening Settings shouldn't re-run the whole dance.
-        if (Date.now() - cache.at < 20_000) return res.end(JSON.stringify(cache.value ?? { url: null }))
-        void detect()
-          .catch(() => null) // report no link rather than fail the request
-          .then((value) => {
-            cache = { at: Date.now(), value }
-            res.end(JSON.stringify(value ?? { url: null }))
-          })
+        // The bound port rather than the configured one: they differ whenever the
+        // config left it unset, and the phone has to dial the one in use.
+        const bound = server.httpServer?.address()
+        const port =
+          bound && typeof bound === 'object' ? bound.port : (server.config.server.port ?? 5173)
+        res.end(JSON.stringify({ url: explicit ?? lanAddress(port) }))
       })
     },
   }
@@ -478,21 +300,14 @@ export default defineConfig(({ mode }) => {
   const insecure =
     env.OPENAI_INSECURE_TLS === 'true' ||
     (env.OPENAI_INSECURE_TLS !== 'false' && host.endsWith('.epic.com'))
-  const pages = pagesOrigin((env.PAGES_ORIGIN || '').trim())
-
   return {
     base: mode === 'production' ? `/${REPO}/` : '/',
-    // host: true binds to the LAN so a phone on the same wifi can reach the dev
-    // server directly. allowedHosts lets a Cloudflare quick tunnel reach it too —
-    // Vite otherwise rejects Host headers it doesn't recognize with "Blocked
-    // request." Scoped to the tunnel domain, not opened wide.
+    // host: true binds the LAN, which is how a phone reaches this dev server —
+    // and, the public tunnel having gone, how it reaches the coach at all (see
+    // shareLink). Vite accepts IP-literal Host headers by default, so binding the
+    // LAN needs no allowlist to go with it.
     server: {
       host: true,
-      allowedHosts: ['.trycloudflare.com'],
-      // Chat from the installed app is cross-origin; everything else here stays
-      // same-origin. The token in llmProxy is what actually guards /api/chat —
-      // this only gets the browser's preflight past Vite.
-      cors: { origin: pages ? [LOCALHOST_ORIGIN, pages] : [LOCALHOST_ORIGIN] },
     },
     define: {
       __APP_COMMIT__: JSON.stringify(COMMIT),
@@ -507,15 +322,10 @@ export default defineConfig(({ mode }) => {
         baseUrl,
         model: env.OPENAI_MODEL || 'gpt-4o',
         insecure,
-        sharedSecret: (env.CHAT_SHARED_SECRET || '').trim(),
       }),
-      // The phone link Settings shows as a QR, and the address published to the
-      // backend so the installed app can find this machine. SHARE_URL pins it (a
-      // named tunnel or a LAN address); left unset, a quick tunnel is detected.
-      shareLink((env.SHARE_URL || '').trim().replace(/\/$/, '') || null, {
-        apiUrl: ((env.VITE_API_URL || '').trim() || DEFAULT_API_URL).replace(/\/$/, ''),
-        secret: (env.CHAT_SHARED_SECRET || '').trim(),
-      }),
+      // The phone link Settings shows as a QR. SHARE_URL pins it on a machine
+      // whose LAN address this guesses wrong.
+      shareLink((env.SHARE_URL || '').trim().replace(/[/]$/, '') || null),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: [

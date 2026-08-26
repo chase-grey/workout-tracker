@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { MdKeyboardArrowDown } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { fetchChatEndpoint, forgetChatEndpoint } from '../../services/chatEndpoint'
 import {
   issueProgress,
   partitionIssues,
@@ -98,36 +97,11 @@ export function SettingsTab({
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
-  // Whether a laptop has published a coach address the token can actually reach.
-  const [coach, setCoach] = useState<'checking' | 'live' | 'none' | 'untried'>('untried')
   // Closed issues fold away by default — they're history, and the live ones are
   // what you came here for. Opening them lasts only as long as the visit.
   const [showClosed, setShowClosed] = useState(false)
 
   const { active, closed } = partitionIssues(issues ?? [])
-
-  useEffect(() => {
-    if (!settings.chatToken.trim()) return setCoach('untried')
-    setCoach('checking')
-    let alive = true
-    void fetchChatEndpoint().then((e) => alive && setCoach(e ? 'live' : 'none'))
-    return () => {
-      alive = false
-    }
-  }, [settings.chatToken])
-
-  // Once the token reaches a coach there's nothing left to type, so the field only
-  // comes back if the coach goes missing and the token needs re-entering.
-  const showTokenField = coach !== 'live'
-
-  const coachStatus =
-    coach === 'untried'
-      ? 'no token — chat falls back to the OpenAI key below'
-      : coach === 'checking'
-        ? 'looking for your computer…'
-        : coach === 'live'
-          ? 'coach found ✓'
-          : 'no computer is running dev:tunnel right now'
 
   const saveKey = () => {
     updateSettings({ ...settings, openAiKey: openAiKey.trim() })
@@ -136,8 +110,6 @@ export function SettingsTab({
   }
 
   const saveChatToken = () => {
-    // The old token is what the cached coach address was looked up with.
-    forgetChatEndpoint()
     updateSettings({ ...settings, chatToken: chatTokenDraft.trim() })
     setChatTokenSaved(true)
     setTimeout(() => setChatTokenSaved(false), 1500)
@@ -262,26 +234,21 @@ export function SettingsTab({
       <PhoneLink />
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">coach token (for chat)</label>
-        {showTokenField && (
-          <>
-            <input
-              type="password"
-              value={chatTokenDraft}
-              onChange={(e) => setChatTokenDraft(e.target.value)}
-              placeholder="the CHAT_SHARED_SECRET from your computer"
-              autoComplete="off"
-              className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <button
-              onClick={saveChatToken}
-              className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-            >
-              {chatTokenSaved ? 'saved ✓' : 'save token'}
-            </button>
-          </>
-        )}
-        <p className="text-xs text-neutral-500">{coachStatus}</p>
+        <label className="text-sm font-medium text-neutral-300">issue token</label>
+        <input
+          type="password"
+          value={chatTokenDraft}
+          onChange={(e) => setChatTokenDraft(e.target.value)}
+          placeholder="the CHAT_SHARED_SECRET script property"
+          autoComplete="off"
+          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+        <button
+          onClick={saveChatToken}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          {chatTokenSaved ? 'saved ✓' : 'save token'}
+        </button>
       </section>
 
       {IS_DESKTOP && (

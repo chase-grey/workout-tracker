@@ -58,8 +58,6 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 | POST | `?route=whitening` | `{ date, strips, loggedAt }` | `{ saved }` |
 | GET | `?route=settings` | — | settings blob, or `null` |
 | POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
-| GET | `?route=chat_endpoint&secret=…` | — | `{ url, updatedAt }` |
-| POST | `?route=chat_endpoint` | `{ url, secret }` | `{ saved }` |
 | GET | `?route=issues&secret=…` | — | `TrackedIssue[]` |
 | POST | `?route=report_issue` | `{ secret, title, body, area, context }` | `{ number, url }` |
 | GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |
@@ -103,20 +101,16 @@ true}` — the one route here that deliberately stores nothing rather than throw
 The API URL and the OpenAI/chat keys are **not** synced. This route is unauthenticated and the
 `/exec` URL is public (see below), so a key stored here would be a key published.
 
-### Chat endpoint
-
-`chat_endpoint` is a `config` row holding the address of whichever computer is currently running
-`npm run dev:tunnel`, so the installed phone app can find the chat coach behind a tunnel hostname
-that changes every run. See "Chat on your phone" in the [README](./README.md).
-
-Both directions require a `CHAT_SHARED_SECRET` **script property** (Project Settings → Script
-properties). The `/exec` URL above is public and baked into the web bundle, so without the secret
-anyone could read the live tunnel address — or publish one of their own and receive the chat. If the
-property is missing, both routes throw rather than failing open.
-
 ### Issues
 
-The four issue routes are a thin proxy onto the GitHub API, so a bug filed from the coach chat lands
+The four issue routes are the only authenticated ones here: each takes a `secret` checked against a
+`CHAT_SHARED_SECRET` **script property** (Project Settings → Script properties), because the
+`/exec` URL above is public and baked into the web bundle — without it anyone holding the bundle
+could file issues on the repo, or read the ones already filed. Missing, they throw rather than
+failing open. The name is historical: the same token once brokered the chat coach's public address
+for the phone, which it no longer does (see "Chat on your phone" in the [README](./README.md)).
+
+Past that they are a thin proxy onto the GitHub API, so a bug filed from the coach chat lands
 even when the laptop running the auto-fixer is asleep. They need a `GITHUB_ISSUE_TOKEN` script
 property — a fine-grained PAT scoped to this one repo with Issues: Read/Write — and the same
 `CHAT_SHARED_SECRET` as the chat routes, for the same reason.

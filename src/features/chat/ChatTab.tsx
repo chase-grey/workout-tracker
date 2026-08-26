@@ -503,13 +503,9 @@ export function ChatTab({
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, pending, loading])
 
-  // Three ways to be able to send (see chatCompleteRaw): the dev proxy holds the
-  // key locally, a coach token reaches that same proxy on a laptop over its
-  // tunnel, or an OpenAI key goes straight to OpenAI.
-  const hasKey =
-    import.meta.env.DEV ||
-    settings.chatToken.trim().length > 0 ||
-    settings.openAiKey.trim().length > 0
+  // Two ways to be able to send (see chatCompleteRaw): the dev proxy holds an
+  // Epic key locally, or an OpenAI key goes straight to OpenAI.
+  const hasKey = import.meta.env.DEV || settings.openAiKey.trim().length > 0
 
   const send = async () => {
     const text = input.trim()

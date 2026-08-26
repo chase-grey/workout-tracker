@@ -3,16 +3,28 @@
  *
  * The web bundle is public and holds no secret, so it can't call GitHub itself.
  * Instead it POSTs to the always-on Apps Script backend, which holds the GitHub
- * token and creates the issue (see createIssue in SimpleBackend.gs). We route
- * through Apps Script rather than the laptop tunnel so a bug report still lands
- * when the coach laptop is asleep.
- *
- * Gated by the same shared token as the chat (entered once in Settings), because
- * the backend URL itself is public in this bundle.
+ * token and creates the issue (see createIssue in SimpleBackend.gs). Routing
+ * through Apps Script rather than the laptop is what lets a bug report land from
+ * anywhere — the coach itself now needs the laptop on the same wifi, but the
+ * report you file from the gym does not.
  */
 import { api } from './api'
-import { chatToken } from './chatEndpoint'
 import { storage } from './storage'
+
+/**
+ * The token this device proves itself to the backend with, entered once in
+ * Settings. The /exec URL is baked into this public bundle, so without it anyone
+ * holding the bundle could file issues on the repo — or read the ones already
+ * filed.
+ *
+ * Persisted under `chatToken`, which is what it was called while the same token
+ * also reached the chat coach across a public tunnel. That path is gone, but the
+ * key is device-local and never synced (see lib/settingsSync), so renaming it
+ * would quietly empty every phone's issue list until the token was typed again.
+ */
+function backendToken(): string {
+  return storage.loadSettings().chatToken.trim()
+}
 
 export type IssueArea = 'plan' | 'chat' | 'timer' | 'history' | 'other'
 
@@ -194,9 +206,9 @@ export async function reportIssue(
   input: ReportIssueInput,
   chatTail?: string,
 ): Promise<ReportedIssue> {
-  const secret = chatToken()
+  const secret = backendToken()
   if (!secret) {
-    throw new Error('add your coach token in Settings to file issues.')
+    throw new Error('add your issue token in Settings to file issues.')
   }
   return api.reportIssue({
     secret,
@@ -220,7 +232,7 @@ export function cachedIssues(): TrackedIssue[] | null {
 
 /**
  * The issues filed from the app, newest first, with their open/closed state.
- * Gated by the coach token like reportIssue — the backend holds the GitHub token
+ * Gated by the issue token like reportIssue — the backend holds the GitHub token
  * and the repo's issues can't be read from the public bundle without it.
  *
  * A successful read replaces the cache wholesale rather than merging: state
@@ -228,9 +240,9 @@ export function cachedIssues(): TrackedIssue[] | null {
  * only correct one.
  */
 export async function listIssues(): Promise<TrackedIssue[]> {
-  const secret = chatToken()
+  const secret = backendToken()
   if (!secret) {
-    throw new Error('add your coach token in Settings to see filed issues.')
+    throw new Error('add your issue token in Settings to see filed issues.')
   }
   const list = await api.listIssues(secret)
   storage.saveIssues(list)
@@ -239,9 +251,9 @@ export async function listIssues(): Promise<TrackedIssue[]> {
 
 /** The comment thread on one issue — the fixer's question and anything since. */
 export async function fetchIssueThread(number: number): Promise<IssueThread> {
-  const secret = chatToken()
+  const secret = backendToken()
   if (!secret) {
-    throw new Error('add your coach token in Settings to read this issue.')
+    throw new Error('add your issue token in Settings to read this issue.')
   }
   return api.issueThread(secret, number)
 }
@@ -252,9 +264,9 @@ export async function fetchIssueThread(number: number): Promise<IssueThread> {
  * so the next poll picks it up with the whole thread as context.
  */
 export async function answerIssue(number: number, answer: string): Promise<void> {
-  const secret = chatToken()
+  const secret = backendToken()
   if (!secret) {
-    throw new Error('add your coach token in Settings to answer.')
+    throw new Error('add your issue token in Settings to answer.')
   }
   const text = answer.trim()
   if (!text) throw new Error('write an answer first.')

@@ -20,9 +20,9 @@ vi.mock('./api', () => ({
     answerIssue: answerIssueMock,
   },
 }))
-vi.mock('./chatEndpoint', () => ({ chatToken: () => tokenRef.value }))
 vi.mock('./storage', () => ({
   storage: {
+    loadSettings: () => ({ chatToken: tokenRef.value }),
     loadIssues: () => cacheRef.value,
     saveIssues: (v: unknown) => {
       cacheRef.value = v
@@ -66,9 +66,9 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('reportIssue', () => {
-  it('refuses without a coach token, and never calls the backend', async () => {
+  it('refuses without a issue token, and never calls the backend', async () => {
     tokenRef.value = ''
-    await expect(reportIssue({ title: 'x' })).rejects.toThrow(/coach token/i)
+    await expect(reportIssue({ title: 'x' })).rejects.toThrow(/issue token/i)
     expect(reportIssueMock).not.toHaveBeenCalled()
   })
 
@@ -333,9 +333,9 @@ describe('latestQuestion', () => {
 })
 
 describe('fetchIssueThread', () => {
-  it('refuses without a coach token, and never calls the backend', async () => {
+  it('refuses without a issue token, and never calls the backend', async () => {
     tokenRef.value = ''
-    await expect(fetchIssueThread(7)).rejects.toThrow(/coach token/i)
+    await expect(fetchIssueThread(7)).rejects.toThrow(/issue token/i)
     expect(issueThreadMock).not.toHaveBeenCalled()
   })
 
@@ -347,9 +347,9 @@ describe('fetchIssueThread', () => {
 })
 
 describe('answerIssue', () => {
-  it('refuses without a coach token, and never calls the backend', async () => {
+  it('refuses without a issue token, and never calls the backend', async () => {
     tokenRef.value = ''
-    await expect(answerIssue(7, 'push day')).rejects.toThrow(/coach token/i)
+    await expect(answerIssue(7, 'push day')).rejects.toThrow(/issue token/i)
     expect(answerIssueMock).not.toHaveBeenCalled()
   })
 
@@ -369,9 +369,9 @@ describe('answerIssue', () => {
 })
 
 describe('listIssues', () => {
-  it('refuses without a coach token, and never calls the backend', async () => {
+  it('refuses without a issue token, and never calls the backend', async () => {
     tokenRef.value = ''
-    await expect(listIssues()).rejects.toThrow(/coach token/i)
+    await expect(listIssues()).rejects.toThrow(/issue token/i)
     expect(listIssuesMock).not.toHaveBeenCalled()
   })
 

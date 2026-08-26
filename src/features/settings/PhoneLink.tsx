@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { fetchShareUrl } from '../../lib/share'
 
 /**
- * "Open this on your phone" — the Cloudflare quick tunnel URL plus a QR to scan.
+ * "Open this on your phone" — this machine's LAN address plus a QR to scan.
  *
- * Scanning this from the desktop before heading to the gym is what brings the
- * chat coach to the phone: the phone loads the dev server through the tunnel, so
- * its /api/chat proxy (and the Epic key behind it) travels with you. Renders
- * nothing until a tunnel is detected, so it's invisible on a plain `npm run dev`.
+ * Scanning it is what brings the chat coach to the phone: the phone loads this
+ * dev server directly, so its /api/chat proxy (and the Epic key behind it) is
+ * simply there. Both devices have to be on Epic private wifi for that hop to
+ * exist at all — see lib/share. Renders nothing until the dev server reports an
+ * address, so it's invisible in the deployed build.
  */
 
 // The QR encoder is pulled from a CDN the first time this renders rather than
@@ -32,26 +33,26 @@ function loadQr(): Promise<QrFactory> {
 }
 
 export function PhoneLink() {
-  const [link, setLink] = useState<{ url: string; verified: boolean } | null>(null)
+  const [url, setUrl] = useState<string | null>(null)
   const [svg, setSvg] = useState('')
 
   useEffect(() => {
     let alive = true
-    void fetchShareUrl().then((l) => alive && setLink(l))
+    void fetchShareUrl().then((u) => alive && setUrl(u))
     return () => {
       alive = false
     }
   }, [])
 
   useEffect(() => {
-    if (!link) return
+    if (!url) return
     let alive = true
     loadQr()
       .then((qrcode) => {
         // Type 0 = smallest version that fits; 'M' error correction is the usual
         // trade-off for a screen-to-camera scan.
         const qr = qrcode(0, 'M')
-        qr.addData(link.url)
+        qr.addData(url)
         qr.make()
         if (alive) setSvg(qr.createSvgTag({ cellSize: 4, margin: 1, scalable: true }))
       })
@@ -61,10 +62,10 @@ export function PhoneLink() {
     return () => {
       alive = false
     }
-  }, [link])
+  }, [url])
 
-  // Already viewing through the tunnel (i.e. this IS the phone) — nothing to offer.
-  if (!link || new URL(link.url).host === window.location.host) return null
+  // Already viewing over the LAN (i.e. this IS the phone) — nothing to offer.
+  if (!url || new URL(url).host === window.location.host) return null
 
   return (
     <section className="flex flex-col gap-2">
@@ -79,16 +80,13 @@ export function PhoneLink() {
         )}
         <div className="min-w-0 flex-1">
           <a
-            href={link.url}
+            href={url}
             target="_blank"
             rel="noreferrer"
             className="block break-all font-mono text-xs text-accent-2"
           >
-            {link.url.replace(/^https?:\/\//, '')}
+            {url.replace(/^https?:\/\//, '')}
           </a>
-          {!link.verified && (
-            <p className="mt-1 text-xs text-neutral-500">tunnel found but not confirmed</p>
-          )}
         </div>
       </div>
     </section>

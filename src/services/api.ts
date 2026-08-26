@@ -20,9 +20,6 @@ import { DEFAULT_API_URL } from '../config/backend'
  * The backend parses the raw body as JSON.
  */
 
-// DEFAULT_API_URL is shared with vite.config.ts, which publishes to the same
-// backend. A Settings value still overrides it.
-
 function baseUrl(): string {
   // Prefer a user-configured URL (Settings), then a build-time env value, then the default.
   return (storage.loadSettings().apiUrl || import.meta.env.VITE_API_URL || DEFAULT_API_URL).trim()

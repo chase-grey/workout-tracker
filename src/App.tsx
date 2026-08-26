@@ -29,15 +29,6 @@ import type { FlexRoutineKey } from './config/flexRoutines'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
 
-/**
- * Chat needs a proxy holding an Epic key, which the deployed site doesn't have —
- * so it's hidden by default on a phone. A coach token means the user has pointed
- * this device at a laptop that IS running one, which brings the tab back.
- */
-function chatEnabled(settings: { chatToken: string }): boolean {
-  return IS_DESKTOP || settings.chatToken.trim().length > 0
-}
-
 export default function App() {
   return (
     <CelebrationProvider>
@@ -56,7 +47,10 @@ function AppShell() {
   const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, settings, updateSettings, workouts } = useData()
-  const showChat = chatEnabled(settings)
+  // Chat needs the dev server's proxy to hold the Epic key, so the coach exists
+  // only where that proxy does: a desktop, or a phone that loaded the dev server
+  // itself over Epic wifi. The deployed site never has it (see lib/device).
+  const showChat = IS_DESKTOP
   const { celebrate } = useCelebrate()
   const controls = useActiveSession()
   // Which stretch routine is on screen, or null for none. A session restored from

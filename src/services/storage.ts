@@ -127,9 +127,11 @@ export type Settings = {
   apiUrl: string
   openAiKey: string
   /**
-   * Shared token that reaches the chat coach running on the laptop. Kept
-   * on-device rather than bundled precisely because the bundle is public — see
-   * services/chatEndpoint.ts. Blank means chat falls back to a direct OpenAI key.
+   * Shared token this device proves itself to the backend's issue routes with.
+   * Kept on-device rather than bundled precisely because the bundle is public —
+   * see backendToken in services/issues.ts, which is also why the name still
+   * says "chat": it once reached the coach too, and the key is not worth
+   * renaming out from under the phones holding it.
    */
   chatToken: string
   /** OpenAI model for the chat assistant. */

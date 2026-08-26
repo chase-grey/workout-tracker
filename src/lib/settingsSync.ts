@@ -25,10 +25,10 @@ import type { LockedProjections } from './goalLock'
  * place it would have to fetch the fix from.
  *
  * The other two are credentials, and the settings route is unauthenticated like
- * `plan` is. The /exec URL ships inside the public web bundle (see
- * services/chatEndpoint.ts, and the chat routes' shared secret, which exists for
- * exactly this reason), so anything stored here is readable by anyone holding
- * that URL. A synced key would be a published key.
+ * `plan` is. The /exec URL ships inside the public web bundle (which is exactly
+ * why the issue routes take a shared token — see services/issues.ts), so anything
+ * stored here is readable by anyone holding that URL. A synced key would be a
+ * published key.
  */
 export const DEVICE_LOCAL_KEYS = ['apiUrl', 'openAiKey', 'chatToken'] as const
 

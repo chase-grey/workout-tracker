@@ -62,49 +62,34 @@ The chat can answer questions about your data and edit your plans. Two ways to p
      which injects the key server-side and relaxes TLS for `*.epic.com`. The key never enters
      the browser bundle. (`.env` is gitignored — never commit your key.)
 
-### Chat on your phone (installed app + Epic key)
+### Chat on your phone (Epic device, on Epic private wifi)
 
 The Epic proxy is internal-only, so the deployed site can't call it — only a computer on Epic's
-network can. The installed phone app therefore sends chat **to your computer**, which forwards it:
-phone → Cloudflare → your dev server → Epic proxy. Only the computer needs Epic wifi/VPN.
-
-The app stays installed from the GitHub Pages URL, which never changes. Your computer's tunnel
-hostname *does* change every run, so the dev server publishes its current address to the Apps Script
-backend and the app looks it up. You never see the churn.
+network can. So the phone doesn't call the coach: it **loads the dev server itself**, over the
+LAN. `/api/chat` is then same-origin, the Epic key stays in the `.env` on that computer, and
+there's nothing to publish, no token to share, and no public hostname anywhere in it.
 
 ```
-install once:  https://<you>.github.io/workout-tracker/     (permanent)
-each run:      dev:tunnel → random trycloudflare hostname
-               └─ published to the Apps Script config sheet
-phone chat:    reads that address → POSTs /api/chat → Epic proxy
+computer:  npm run dev:phone  → binds the LAN, prints its address
+phone:     scan the QR under Settings → "open on your phone"
+           → loads that dev server → /api/chat → Epic proxy
 ```
 
-**One-time setup.** Pick a token — `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`
-— and put that same value in three places:
+**What it needs, and it's the whole of the catch:** an **Epic-managed phone**, joined to **Epic
+private wifi**, on the same network as the computer. That's the entire reach. From cell data,
+home wifi, or a gym on guest wifi the address doesn't answer and there is no coach at all — the
+installed app keeps logging workouts and filing bugs, it just has no Chat tab. (A standard OpenAI
+key in Settings brings one back anywhere, talking to OpenAI rather than to Epic.)
 
-1. `CHAT_SHARED_SECRET` in `.env`.
-2. The Apps Script project: **Project Settings → Script properties → Add**, name `CHAT_SHARED_SECRET`.
-   Redeploy the web app so the `chat_endpoint` route in `SimpleBackend.gs` goes live.
-3. The phone: **Settings → coach token**. It should then read `coach found ✓` while your computer is
-   running. This also brings the Chat tab back on the phone.
+What the phone loads this way is the dev build, not the installed app: handy for testing the real
+thing, but don't install from it — the address changes with the network you're on.
 
-The token is why the setup is safe to hang off a public backend: the `/exec` URL is baked into the
-web bundle, so without it anyone could read your live tunnel address and spend the Epic key behind
-it. Both reading the address and calling the proxy require it, and the dev server refuses
-cross-origin chat without it.
+The QR names one of this machine's addresses, and a laptop has several — wifi, ethernet, a VPN
+client, a Hyper-V or WSL switch. The virtual ones are dropped by name and wifi is preferred, but
+if the QR ever names the wrong adapter, pin it with `SHARE_URL` in `.env`.
 
-**Then, every time you want the coach:** run `npm run dev:tunnel` on your computer before you leave.
-It needs [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
-on `PATH`, in your home directory, or at `CLOUDFLARED_PATH`. The computer has to stay awake and
-connected — asleep, chat says it can't reach the coach and everything else in the app keeps working.
-
-**Other ways in:**
-
-- **Same wifi, no install:** `npm run dev:host`, then open the printed **Network** URL on your phone.
-- **The dev server itself, from anywhere:** `npm run dev:tunnel` also shows its URL as a QR under
-  **Settings → open on your phone**. Loading that gives you the live dev build rather than the
-  installed app — handy for testing, but the address changes each run so don't install from it.
-- **No computer at all:** put a standard OpenAI key in Settings and chat talks to OpenAI directly.
+`npm run dev:phone` runs the auto-fixer alongside the dev server, so the two below come up
+together by default.
 
 ## Report bugs from the chat, and auto-fix them
 
@@ -123,8 +108,8 @@ The `auto-fix` label hands it straight to the fixer below (if it's running) — 
 coach-filed bug fixes itself with no extra step.
 
 The report goes through the **always-on Apps Script backend** (not your laptop), so
-it works even when your computer is asleep. It's gated by the same coach token as
-the chat, so only you can file.
+it works even when your computer is asleep — and unlike the coach, from any network.
+It's gated by a shared token, so only you can file.
 
 **One-time setup:**
 
@@ -133,7 +118,14 @@ the chat, so only you can file.
    scoped to **only** `chase-grey/workout-tracker`, with **Issues: Read/Write**.
 2. Add it to the Apps Script project: **Project Settings → Script properties → Add**,
    name `GITHUB_ISSUE_TOKEN`.
-3. Redeploy the web app so the `report_issue` route in `SimpleBackend.gs` goes live
+3. Pick a token —
+   `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"` —
+   and add it as a second script property named `CHAT_SHARED_SECRET`. Enter the same
+   value on the phone under **Settings → issue token**. The `/exec` URL is baked into
+   the public web bundle, so without this anyone holding the bundle could file issues
+   on the repo, or read the ones already filed. (The name is historical: it once
+   reached the coach too.)
+4. Redeploy the web app so the `report_issue` route in `SimpleBackend.gs` goes live
    (`npm run deploy:backend`, then redeploy `/exec` — see [BACKEND.md](./BACKEND.md)).
 
 ### Auto-fixing (opt-in, laptop must be awake)
@@ -147,14 +139,14 @@ change that breaks tests fails the deploy instead of shipping.
 It runs **locally, not as a GitHub Action**, on purpose: the `claude` here is signed
 in with an Epic work account, and that credential must never go into a public repo's
 Action secrets. The tradeoff is it only works while this machine is awake — which it
-usually is when `dev:tunnel` is up for the phone coach, so `AUTOFIX=1 npm run
-dev:tunnel` runs the fixer alongside the tunnel.
+usually is when `dev:phone` is up for the phone coach, so `npm run dev:phone` runs
+the fixer alongside the dev server by default (`AUTOFIX=0` opts out).
 
 **One-time setup:**
 
 1. Put the same fine-grained PAT in `.env` as `GITHUB_ISSUE_TOKEN` — the local fixer
    additionally needs **Contents: Read/Write** on it (to push to `main`).
-2. Run `npm run autofix` (or `AUTOFIX=1 npm run dev:tunnel`). Coach-filed issues
+2. Run `npm run autofix` (or `npm run dev:phone`). Coach-filed issues
    already carry the `auto-fix` label; to fix an issue raised any other way, add
    that label to it yourself.
 

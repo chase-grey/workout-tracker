@@ -26,8 +26,7 @@
  *                 row holds the pooled observed÷prescribed rest ratio, and the
  *                 legacy "__rest__" row holds pooled rest seconds — still written
  *                 for older clients, no longer served)
- *   config:       key, value  (one JSON blob per key: "plan", "settings",
- *                 "chat_endpoint")
+ *   config:       key, value  (one JSON blob per key: "plan", "settings")
  *
  * Routes:
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
@@ -37,8 +36,6 @@
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
  *   GET  ?route=settings         -> the account's settings blob, or null (see getSettings)
  *   POST ?route=settings      body: { settings: {…} }  (whole; declines a stale copy)
- *   GET  ?route=chat_endpoint&secret=…  -> { url, updatedAt } (see getChatEndpoint)
- *   POST ?route=chat_endpoint    body: { url, secret }
  *   GET  ?route=issues&secret=…  -> [{ number, title, url, state, area, createdAt, closedAt }]
  *                 (the app-filed GitHub issues + their open/closed state; see listIssues)
  *   POST ?route=report_issue    body: { secret, title, body, area, context }
@@ -154,8 +151,6 @@ function doGet(e) {
         return json(getPlan())
       case 'settings':
         return json(getSettings())
-      case 'chat_endpoint':
-        return json(getChatEndpoint(e.parameter.secret))
       case 'issues':
         return json(listIssues(e.parameter.secret))
       case 'issue_thread':
@@ -220,8 +215,6 @@ function doPost(e) {
         return json(withLock(function () { return savePlan(body.plan) }))
       case 'settings':
         return json(withLock(function () { return saveSettings(body.settings) }))
-      case 'chat_endpoint':
-        return json(withLock(function () { return saveChatEndpoint(body) }))
       case 'report_issue':
         // Not under withLock: GitHub is the store of record, not a sheet, and two
         // reports racing just make two issues — no row to clobber.
@@ -1082,23 +1075,21 @@ function saveSettings(settings) {
   return { saved: 1 }
 }
 
-/* ------------------------------------------------------------ chat endpoint */
+/* -------------------------------------------------------------- shared token */
 
 /**
- * Where the phone should send chat, published by whichever laptop is running
- * `npm run dev:tunnel`.
+ * The token a device has to present to reach the issue routes below.
  *
- * The chat coach needs a proxy holding an Epic key that can reach the internal
- * Epic LLM host, so it only exists while that laptop is up — behind a Cloudflare
- * quick tunnel whose hostname is new every run. The installed app can't chase a
- * moving hostname, so the laptop leaves its current address here and the phone
- * reads it. That keeps the app installed from a URL that never changes.
+ * The /exec URL is baked into the public web bundle, so without one anyone
+ * holding that bundle could file issues on the repo — or read the ones already
+ * filed. It's a Script Property, set once under Project Settings → Script
+ * properties; unset, the routes refuse to serve rather than failing open.
  *
- * Both directions require CHAT_SHARED_SECRET, a Script Property you set once
- * under Project Settings → Script properties. The /exec URL is baked into the
- * public web bundle, so without it anyone could read the live tunnel address and
- * spend the Epic key behind it — or publish an address of their own and receive
- * the chat instead. Unset, this refuses to serve rather than failing open.
+ * Still called CHAT_SHARED_SECRET, which is what it was while the same token also
+ * brokered the coach's public address for the phone. That brokering is gone — the
+ * phone reaches the coach by loading the dev server itself over Epic wifi, so
+ * there is no address to publish — but renaming the property would cost a
+ * redeploy and a re-entry on every phone to buy nothing.
  */
 function chatSecret() {
   const expected = PropertiesService.getScriptProperties().getProperty('CHAT_SHARED_SECRET')
@@ -1106,43 +1097,6 @@ function chatSecret() {
     throw new Error('CHAT_SHARED_SECRET script property is not set on the backend')
   }
   return expected
-}
-
-function getChatEndpoint(secret) {
-  if (secret !== chatSecret()) throw new Error('Bad chat secret')
-  const sh = sheet('config', CONFIG_HEADERS)
-  const rows = sh.getDataRange().getValues()
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === 'chat_endpoint') {
-      try {
-        return JSON.parse(rows[i][1])
-      } catch (e) {
-        return { url: null }
-      }
-    }
-  }
-  return { url: null } // no laptop has published yet
-}
-
-function saveChatEndpoint(body) {
-  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
-  const url = String(body.url || '').replace(/\/$/, '')
-  // Only an https origin, no path/query — this value becomes the prefix of a
-  // URL the phone POSTs its workout context to.
-  if (!/^https:\/\/[a-z0-9][a-z0-9.-]*[a-z0-9](:\d+)?$/i.test(url)) {
-    throw new Error('Invalid chat endpoint: ' + url)
-  }
-  const value = JSON.stringify({ url: url, updatedAt: new Date().toISOString() })
-  const sh = sheet('config', CONFIG_HEADERS)
-  const rows = sh.getDataRange().getValues()
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === 'chat_endpoint') {
-      sh.getRange(i + 1, 2).setValue(value)
-      return { saved: 1 }
-    }
-  }
-  sh.appendRow(['chat_endpoint', value])
-  return { saved: 1 }
 }
 
 /* --------------------------------------------------------- issue reporting */

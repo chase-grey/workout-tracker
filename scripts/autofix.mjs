@@ -6,8 +6,8 @@
  * with an Epic work account, whose credential must never be pushed into a public
  * personal repo's Action secrets. So the fixer runs on this machine, on the
  * Claude you already have. The tradeoff is that it only works while this machine
- * is awake — which it usually is when `dev:tunnel` is up powering the phone coach,
- * so `AUTOFIX=1 npm run dev:tunnel` lets the two ride together.
+ * is awake — which it usually is when `dev:phone` is up powering the phone coach,
+ * so `npm run dev:phone` runs the two together by default.
  *
  * Safety:
  *   - Work happens in a DEDICATED git worktree (.autofix/worktree), never your

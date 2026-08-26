@@ -1,61 +1,50 @@
 /**
- * `npm run dev:tunnel` — the dev server plus a Cloudflare quick tunnel in front
- * of it, so the phone can reach it from anywhere (cell data, home wifi, a gym).
+ * `npm run dev:phone` — the dev server bound to the LAN, plus the auto-fixer, so
+ * the phone can reach the coach and reported bugs keep draining.
  *
- * Why this exists: the chat coach needs the /api/chat proxy in vite.config.ts,
- * which holds the Epic key and can reach llmproxy.epic.com. That proxy only runs
- * in the dev server, and the Epic LLM endpoint is internal-network-only — so the
- * deployed GitHub Pages build can't have it. Tunnelling the dev server keeps the
- * network hop on this machine: phone → Cloudflare → this dev server → Epic proxy.
- * Only this computer needs to be on Epic wifi/VPN.
+ * Why the LAN and nothing else: the chat coach needs the /api/chat proxy in
+ * vite.config.ts, which holds the Epic key and can reach llmproxy.epic.com. That
+ * proxy only exists in the dev server, and the Epic LLM endpoint is
+ * internal-network-only, so the deployed GitHub Pages build can never have it.
+ * The phone therefore doesn't call the coach — it *is* the coach, loading this dev
+ * server directly, which makes /api/chat same-origin and keeps the key on this
+ * machine.
  *
- * One command brings up everything the phone needs: the dev server, the public
- * tunnel in front of it, and the auto-fixer that drains `auto-fix` issues. All
- * three die with this process, so Ctrl+C tears the whole thing down — and while
- * it lives, the two that can fail quietly are supervised (see supervise).
+ * What that requires, and it is worth saying plainly: an Epic-managed phone,
+ * joined to Epic private wifi, on the same network as this laptop. There is no
+ * public hop any more. From cell data, home wifi, or a gym, there is no coach —
+ * only the deployed app, which still logs workouts and still files bugs.
+ *
+ * One command brings up both halves of that: the dev server and the auto-fixer
+ * that drains `auto-fix` issues. Both die with this process, so Ctrl+C tears the
+ * whole thing down — and while it lives, the fixer is supervised (see supervise),
+ * because it is the one that can fail quietly.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import net from 'node:net'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
 /**
- * The dev server port, and the port the tunnel is aimed at.
+ * The dev server port.
  *
  * Deliberately not `PORT`: that name is ambient on a dev box. Epic's Session
  * Runner sets PORT=3991 for everything it launches and serves its own app on
- * 127.0.0.1:3991, so inheriting it aimed the tunnel at that app rather than this
- * dev server, and nothing complained — see loopbackPortTaken for why --strictPort
- * sails past it. The phone was then handed a coach address that answered every
- * request with a 404.
+ * 127.0.0.1:3991, so inheriting it would have this script reasoning about that
+ * app rather than this one.
  */
 const PORT = Number(process.env.WT_PORT || 5173)
-
-// cloudflared usually isn't on PATH on Windows — it's often just an .exe dropped
-// in the home directory. Try the obvious places before giving up.
-function resolveCloudflared() {
-  const candidates = [
-    process.env.CLOUDFLARED_PATH,
-    path.join(process.env.USERPROFILE || process.env.HOME || '', 'cloudflared.exe'),
-    path.join(process.env.USERPROFILE || process.env.HOME || '', 'cloudflared'),
-  ].filter(Boolean)
-  for (const c of candidates) if (existsSync(c)) return c
-  return 'cloudflared' // fall back to PATH; spawn reports ENOENT if it isn't there
-}
 
 /**
  * Kill this project's leftovers from a previous run before starting.
  *
  * The shutdown handler below covers Ctrl+C, but nothing runs when the parent is
  * killed outright — closing the terminal, or a tool that SIGKILLs the wrapper.
- * Then the dev server keeps port 5173 and the next run dies on "already in use",
- * with a stale public tunnel still pointed at it. Since a hard kill can't be
- * intercepted, reclaim on the way in instead.
+ * Then the dev server keeps port 5173 and the next run dies on "already in use".
+ * Since a hard kill can't be intercepted, reclaim on the way in instead.
  *
  * Matching is deliberately narrow: only a vite serving THIS checkout on THIS
- * port, and only a cloudflared tunnelling that same port. Other projects' dev
- * servers and tunnels — often several here — must not be touched.
+ * port. Other projects' dev servers — often several here — must not be touched.
  */
 function reclaimStaleProcesses() {
   if (process.platform !== 'win32') return // POSIX kills the tree with the parent
@@ -78,14 +67,10 @@ function reclaimStaleProcesses() {
 
   const stale = procs.filter((p) => {
     const cmd = String(p?.CommandLine || '').toLowerCase()
-    const ourVite =
+    return (
       cmd.includes(path.join(root, 'node_modules', 'vite', 'bin', 'vite.js').toLowerCase()) &&
       cmd.includes(`--port ${PORT}`)
-    const ourTunnel =
-      cmd.includes('cloudflared') &&
-      (cmd.includes(`--url http://127.0.0.1:${PORT}`) ||
-        cmd.includes(`--url http://localhost:${PORT}`))
-    return ourVite || ourTunnel
+    )
   })
 
   for (const p of stale) {
@@ -98,7 +83,7 @@ function reclaimStaleProcesses() {
  * Every long-lived child this script owns, keyed by the name we call it by.
  *
  * A Map rather than a list because a supervised child replaces its own entry when
- * it restarts instead of adding a second one — a tunnel that has flapped all
+ * it restarts instead of adding a second one — a fixer that has crashed all
  * morning should still leave exactly one process for shutdown to take down, not
  * a pile of corpses to step over.
  */
@@ -143,13 +128,12 @@ process.on('exit', shutdown)
  * Keep a child running for as long as this script runs, and say so out loud when
  * it stops.
  *
- * cloudflared and the fixer were both started once and then trusted, and neither
- * announces its own death. When cloudflared exits, the coach goes unreachable from
- * the phone; when the fixer exits, the `auto-fix` queue stops draining. In both
- * cases vite keeps printing, this terminal keeps looking healthy, and the
- * launcher's chip stays lit — which is how a fixer that stopped on a Friday
- * afternoon left every reported issue untouched until somebody happened to open
- * the tracker four days later and ask whether it still worked.
+ * The fixer was started once and then trusted, and it doesn't announce its own
+ * death. When it exits, the `auto-fix` queue stops draining, vite keeps printing,
+ * this terminal keeps looking healthy, and the launcher's chip stays lit — which
+ * is how a fixer that stopped on a Friday afternoon left every reported issue
+ * untouched until somebody happened to open the tracker four days later and ask
+ * whether it still worked.
  *
  * So restart, and narrate. A child that dies instantly every time is misconfigured
  * rather than unlucky, and restarting it forever would scroll the one message that
@@ -197,14 +181,13 @@ function supervise(name, start, hint) {
 reclaimStaleProcesses()
 
 /**
- * Is something already answering on the loopback address the tunnel will dial?
+ * Is something already answering on 127.0.0.1:PORT?
  *
  * `--strictPort` cannot see this one. A server bound to the specific address
  * 127.0.0.1 and a Vite bound to the wildcard 0.0.0.0 sit on the same port without
  * either failing to start, and a loopback connection goes to the specific one. So
- * the dev server comes up clean, the tunnel comes up clean, and every request
- * through the tunnel lands on the other server. Check the address the tunnel will
- * actually dial, not the one Vite reports.
+ * the dev server comes up clean while every request this machine's own browser
+ * makes to localhost lands on the other server.
  */
 function loopbackPortTaken(port) {
   return new Promise((resolve) => {
@@ -229,9 +212,9 @@ for (let i = 0; i < 5 && !portFree; i++) {
 }
 if (!portFree) {
   console.error(
-    `\n  Something else is already serving http://127.0.0.1:${PORT}. The tunnel would` +
-      `\n  reach that instead of this dev server, and the phone would be handed an` +
-      `\n  address that isn't the coach. Stop it, or run with WT_PORT=<other> set.\n`,
+    `\n  Something else is already serving http://127.0.0.1:${PORT}, and this machine's` +
+      `\n  own browser would reach that rather than this dev server. Stop it, or run` +
+      `\n  with WT_PORT=<other> set.\n`,
   )
   process.exit(1)
 }
@@ -246,8 +229,8 @@ const viteBin = path.join(
   'bin',
   'vite.js',
 )
-// Not supervised: the dev server is the thing being tunnelled, so there is nothing
-// left to keep alive once it's gone. Its exit deliberately takes the run with it.
+// --host is what puts this on the LAN, which is the whole point of this script:
+// no LAN binding, no phone.
 const vite = run('the dev server', process.execPath, [
   viteBin,
   '--host',
@@ -255,14 +238,34 @@ const vite = run('the dev server', process.execPath, [
   String(PORT),
   '--strictPort',
 ])
-vite.stdout.on('data', (d) => process.stdout.write(d))
-// --strictPort on purpose: a bumped port would leave the tunnel pointed at
-// whatever is on 5173, which is a confusing way to fail. Name the real problem.
+
+// Vite prints every address it bound, one of which is the one to scan. Restate it
+// plainly with what it costs — a phone that isn't on Epic wifi will just time out,
+// and the address looks perfectly fine while that happens.
+let announced = false
+vite.stdout.on('data', (d) => {
+  const text = String(d)
+  process.stdout.write(text)
+  const match = text.match(/Network:\s+(http:\/\/\d[\d.]*:\d+)/)
+  if (match && !announced) {
+    announced = true
+    console.log(
+      `\n  Phone URL: ${match[1]}` +
+        `\n  Epic-managed phone on Epic private wifi, same network as this laptop.` +
+        `\n  Also in the app under Settings → "open on your phone" (with a QR).\n`,
+    )
+  }
+})
+
+// --strictPort on purpose: a bumped port would leave the QR naming a port nothing
+// is on, which is a confusing way to fail. Name the real problem.
 let portTaken = false
 vite.stderr.on('data', (d) => {
   process.stderr.write(d)
   if (/already in use/i.test(String(d))) portTaken = true
 })
+// Not supervised: the dev server is the thing the phone loads, so there is nothing
+// left worth keeping alive once it's gone. Its exit takes the run with it.
 vite.on('exit', (code) => {
   if (portTaken) {
     console.error(
@@ -274,62 +277,19 @@ vite.on('exit', (code) => {
   process.exit(code ?? 0)
 })
 
-// --- the tunnel -----------------------------------------------------------
-// cloudflared prints the assigned hostname to stderr inside a banner. Pull it out
-// and restate it plainly — it's the one line that matters here. `announced` resets
-// on every start, because a quick tunnel is handed a NEW random hostname each time
-// it comes up: after a restart the address printed above is not the live one, and
-// staying quiet about the replacement would leave the old one as the last word.
-let announced = false
-const watchForUrl = (chunk) => {
-  const text = String(chunk)
-  process.stderr.write(text)
-  const match = text.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i)
-  if (match && !announced) {
-    announced = true
-    console.log(
-      `\n  Phone URL: ${match[0]}` +
-        `\n  Also in the app under Settings → "open on your phone" (with a QR).\n`,
-    )
-  }
-}
-
-const bin = resolveCloudflared()
-supervise(
-  'cloudflared',
-  (name, hopeless) => {
-    announced = false
-    // 127.0.0.1 rather than localhost: this is the address checked for a squatter
-    // above, and `localhost` can also resolve to ::1, where nothing is listening.
-    const cf = run(name, bin, ['tunnel', '--url', `http://127.0.0.1:${PORT}`])
-    cf.on('error', (err) => {
-      hopeless()
-      console.error(
-        `\n  cloudflared failed to start (${err.code ?? err.message}).` +
-          `\n  Install it, or set CLOUDFLARED_PATH to the executable.` +
-          `\n  The dev server is still running on http://localhost:${PORT}\n`,
-      )
-    })
-    cf.stdout.on('data', watchForUrl)
-    cf.stderr.on('data', watchForUrl)
-    return cf
-  },
-  'The coach is unreachable from the phone until it comes back.',
-)
-
 // --- the auto-fixer -------------------------------------------------------
 /**
- * The fixer rides along with the tunnel by default, rather than waiting to be
- * asked for with AUTOFIX=1.
+ * The fixer rides along by default, rather than waiting to be asked for with
+ * AUTOFIX=1.
  *
  * Opt-in read well on paper — the laptop is already awake serving the coach, so
  * draining `auto-fix` issues is a natural passenger — but it meant the queue only
- * moved when the tunnel happened to be started the one right way. Start it from a
- * bash prompt, or from any shortcut whose command predates the flag, and the coach
- * came up perfectly while nothing at all watched the tracker. Reporting a bug from
- * the phone is one tap, so the queue fills whether or not the fixer is up, and
- * there is no version of this where you want the coach on and the fixer off by
- * accident. The default should be the pair.
+ * moved when this was started the one right way. Start it from a bash prompt, or
+ * from any shortcut whose command predates the flag, and the coach came up
+ * perfectly while nothing at all watched the tracker. Reporting a bug from the
+ * phone is one tap, so the queue fills whether or not the fixer is up, and there
+ * is no version of this where you want the coach on and the fixer off by accident.
+ * The default should be the pair.
  *
  * AUTOFIX=0 still turns it off, for a run that has no business committing to `main`.
  */

@@ -51,7 +51,7 @@ function set(next: IssuesState) {
   for (const notify of subs) notify()
 }
 
-/** Re-read the list now. No-op without a coach token, or if one is in flight. */
+/** Re-read the list now. No-op without an issue token, or if one is in flight. */
 export function refreshIssues(): void {
   if (!enabled || inFlight) return
   inFlight = true
@@ -87,7 +87,7 @@ function subscribe(notify: () => void): () => void {
   }
 }
 
-/** The shared issue list. `hasToken` gates it: the read needs the coach token. */
+/** The shared issue list. `hasToken` gates it: the read needs the issue token. */
 export function useTrackedIssues(hasToken: boolean): IssuesState {
   const current = useSyncExternalStore(subscribe, snapshot, snapshot)
   useEffect(() => {
