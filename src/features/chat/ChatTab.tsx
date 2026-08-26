@@ -13,7 +13,7 @@ import {
 } from '../../services/issues'
 import { refreshIssues } from '../../store/useTrackedIssues'
 import { dayOrder, exerciseName, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
-import { DAY_TYPES } from '../../config/plan'
+import { DAY_TYPES, STRETCH_CORE } from '../../config/plan'
 import {
   DISCOMFORT_SPOTS,
   discomfortEdit,
@@ -301,7 +301,7 @@ function planSnapshot(
     planEdits
       ? 'CURRENT STRETCH ROUTINES (use routine key + block label + stretch key with update_flex_routine):'
       : 'CURRENT STRETCH ROUTINES:',
-    'The two alternate: whichever was done last, the app offers the other next. Both end with the same four weighted sit-ups — except that the second stretch of a day skips them, because the first one already did them.',
+    `The two alternate: whichever was done last, the app offers the other next. Both end with the same four sets of key=${STRETCH_CORE.key} — ${STRETCH_CORE.name}, done flat on the mat, which is a different movement from the incline weighted sit-up the push day trains and keeps its own history and its own weight. The second stretch of a day skips them, because the first one already did them.`,
   )
   for (const r of FLEX_ROUTINE_KEYS) {
     lines.push('', `routine=${r} — the ${FLEX_ROUTINES[r].label} routine:`)

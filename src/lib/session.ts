@@ -1,5 +1,5 @@
 import type { DayType, WorkoutRow, WorkoutSession } from '../types'
-import { DEAD_BUG_KEY } from '../config/plan'
+import { DEAD_BUG_KEY, MAT_SITUP_KEY } from '../config/plan'
 import { noteSegments } from './discomfort'
 import { isMaxAttempt } from './maxAttempt'
 
@@ -7,20 +7,26 @@ import { isMaxAttempt } from './maxAttempt'
  * The note written on the core rows a Stretch + Core session logs, marking them as
  * that session's accessory work (see DataContext.logCore).
  *
- * It has to be the ROW that says so rather than the exercise: the core block trains
- * the weighted sit-up, which is also real programmed work on push and on pull, so
- * the key alone can't tell a stretch's four sets from a training day's.
+ * The row saying so used to be the only way to tell: the block trained the same
+ * weighted sit-up push and pull did, so the key couldn't say which session a set
+ * came out of. The mat sit-up carries its own key now and is supplemental by key
+ * alone, but the note stays — it's what names the session in the sheet, it's what
+ * marks the core rows written before the split, and it's what would cover a
+ * movement the block took on that some day also trains.
  */
 export const CORE_SESSION_NOTE = 'stretch + core'
 
 /**
- * Exercise keys that are only ever supplemental core work: the retired dead bug,
- * which held the Stretch + Core session's core slot and which no day of the plan
- * ever prescribed. Its rows carry no note — they predate CORE_SESSION_NOTE — so
- * the key is what identifies them. That also covers legacy rows saved under the
- * removed `abs` day, since those were dead-bug rows too.
+ * Exercise keys that are only ever supplemental core work, whatever their rows say.
+ *
+ * The mat sit-up, which only the Stretch + Core block trains (see
+ * plan.MAT_SITUP_KEY); and the retired dead bug, which held that block's slot
+ * before it and which no day of the plan ever prescribed. The dead bug's rows carry
+ * no note at all — they predate CORE_SESSION_NOTE — so the key is the only thing
+ * that identifies them, which also covers legacy rows saved under the removed `abs`
+ * day, since those were dead-bug rows too.
  */
-export const SUPPLEMENTAL_EXERCISE_KEYS = new Set<string>([DEAD_BUG_KEY])
+export const SUPPLEMENTAL_EXERCISE_KEYS = new Set<string>([MAT_SITUP_KEY, DEAD_BUG_KEY])
 
 /**
  * Whether a logged set is supplemental: accessory work that's charted like any

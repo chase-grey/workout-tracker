@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
+  ALL_EXERCISES,
   COPENHAGEN_HOLD_SEC,
   DAY_TYPES,
   DEFAULT_PLAN,
+  MAT_SITUP_KEY,
+  STRETCH_CORE,
   TODAY_DAY_ORDER,
   PLAN_REVISION,
+  absExerciseKeys,
   dayOrder,
   exerciseName,
   sideOrderedExercises,
@@ -667,6 +671,65 @@ describe('the two-dumbbell movements as they ship', () => {
     const raise = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'lateral_raise_l')
     expect(raise?.dumbbellPair).toBeUndefined()
     expect(raise?.increment).toBe(2.5)
+  })
+})
+
+describe('the two weighted sit-ups', () => {
+  it('trains them as separate movements under separate keys', () => {
+    const incline = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'weighted_situp')
+    expect(incline?.name).toBe('incline weighted sit-up')
+    expect(STRETCH_CORE.key).toBe(MAT_SITUP_KEY)
+    expect(STRETCH_CORE.key).not.toBe(incline?.key)
+  })
+
+  it('names the mat one, which no day of the plan prescribes', () => {
+    expect(DEFAULT_PLAN.push.exercises.some((e) => e.key === MAT_SITUP_KEY)).toBe(false)
+    expect(exerciseName(MAT_SITUP_KEY)).toBe('mat weighted sit-up')
+  })
+
+  it('offers both to chart, the mat one last', () => {
+    const keys = ALL_EXERCISES.map((e) => e.key)
+    expect(keys).toContain('weighted_situp')
+    expect(keys.at(-1)).toBe(MAT_SITUP_KEY)
+  })
+
+  it('counts the mat one as core work wherever the plan is edited', () => {
+    // It's on no day, so nothing derived from the plan would find it.
+    expect(absExerciseKeys(DEFAULT_PLAN).has(MAT_SITUP_KEY)).toBe(true)
+  })
+
+  it('renames a stored push day to say which bench its sit-up is done on', () => {
+    const stored: Plan = {
+      ...DEFAULT_PLAN,
+      push: {
+        ...DEFAULT_PLAN.push,
+        exercises: DEFAULT_PLAN.push.exercises.map((e) =>
+          e.key === 'weighted_situp' ? { ...e, name: 'weighted sit-up' } : e,
+        ),
+      },
+    }
+    // Stamped with the current revision, so nothing is re-adopted wholesale: the
+    // rename has to reach the day through LEGACY_EXERCISE_NAMES to reach it at all.
+    const merged = withPlanDefaults(stored, PLAN_REVISION)
+    expect(merged.push.exercises.find((e) => e.key === 'weighted_situp')?.name).toBe(
+      'incline weighted sit-up',
+    )
+  })
+
+  it("leaves a name the user chose for it alone", () => {
+    const stored: Plan = {
+      ...DEFAULT_PLAN,
+      push: {
+        ...DEFAULT_PLAN.push,
+        exercises: DEFAULT_PLAN.push.exercises.map((e) =>
+          e.key === 'weighted_situp' ? { ...e, name: 'decline sit-up' } : e,
+        ),
+      },
+    }
+    expect(
+      withPlanDefaults(stored, PLAN_REVISION).push.exercises.find((e) => e.key === 'weighted_situp')
+        ?.name,
+    ).toBe('decline sit-up')
   })
 })
 

@@ -9,6 +9,7 @@ import {
   trainingSessions,
 } from './session'
 import { discomfortReports, withDiscomfort } from './discomfort'
+import { MAT_SITUP_KEY } from '../config/plan'
 
 function row(p: Partial<WorkoutRow> = {}): WorkoutRow {
   return {
@@ -47,7 +48,17 @@ describe('trainingSessions', () => {
     expect(trainingSessions(rows)).toEqual([])
   })
 
-  it("excludes a stretch's core block, marked by its note rather than its key", () => {
+  it("excludes a stretch's core block, which is the mat sit-up's own key", () => {
+    const rows = [
+      row({ session_id: 'core', exercise: MAT_SITUP_KEY, notes: CORE_SESSION_NOTE }),
+      row({ session_id: 'core', exercise: MAT_SITUP_KEY, set_number: 2, notes: CORE_SESSION_NOTE }),
+    ]
+    expect(trainingSessions(rows)).toEqual([])
+  })
+
+  it("excludes a pre-split stretch's core, which is the note's whole job", () => {
+    // Before the mat sit-up had its own key, the note was the only thing telling a
+    // stretch's four sets from a training day's.
     const rows = [
       row({ session_id: 'core', exercise: 'weighted_situp', notes: CORE_SESSION_NOTE }),
       row({
@@ -60,7 +71,7 @@ describe('trainingSessions', () => {
     expect(trainingSessions(rows)).toEqual([])
   })
 
-  it('counts a training day that trains the same core movement for real', () => {
+  it('counts a training day that trains its own sit-up for real', () => {
     const rows = [
       row({ session_id: 'push', exercise: 'flat_bench' }),
       row({ session_id: 'push', exercise: 'weighted_situp', set_number: 2 }),
@@ -89,8 +100,13 @@ describe('isSupplementalSet', () => {
     expect(isSupplementalSet({ exercise: 'weighted_situp', notes })).toBe(true)
   })
 
-  it('leaves an ordinary set of the same movement alone', () => {
+  it("leaves a training day's incline sit-up alone", () => {
     expect(isSupplementalSet({ exercise: 'weighted_situp', notes: '' })).toBe(false)
+  })
+
+  it('reads the mat sit-up as supplemental on its key alone', () => {
+    // No day of the plan prescribes it, so a note is no longer what says so.
+    expect(isSupplementalSet({ exercise: MAT_SITUP_KEY, notes: '' })).toBe(true)
   })
 
   it('still recognizes the retired dead bug, whose rows carry no note', () => {

@@ -7,6 +7,7 @@ import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
 import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
+import { withMatSitups } from '../lib/stretchCore'
 import { DAY_TYPES, STRETCH_CORE } from '../config/plan'
 import { maxAttemptRow } from '../lib/maxAttempt'
 import { toISODate, weekStartISO } from '../lib/dates'
@@ -391,7 +392,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       await flush()
       const [w, bw] = await Promise.all([api.fetchWorkouts(), api.fetchBodyWeight()])
-      persistWorkouts(w)
+      // The sheet still holds the stretch block's early sit-ups under the key the
+      // training days' one has to itself now, so they're re-keyed as they arrive
+      // (see lib/stretchCore.withMatSitups).
+      persistWorkouts(withMatSitups(w))
       persistWeights(bw)
       setSync('idle')
       const now = new Date().toISOString()
@@ -965,16 +969,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   // Logs the core sets done during a Stretch + Core session as workout rows (one
-  // shared session_id, weight × reps per set) under the weighted sit-up's key, so
-  // they feed that movement's own history and the core-progress series alongside
-  // the sets the plan days train it with. Silent — the stretch save toasts — and no
-  // celebration.
+  // shared session_id, weight × reps per set) under the mat sit-up's own key, so
+  // they build that movement's history and feed the core-progress series without
+  // being mistaken for the incline sit-ups the training days press out (see
+  // plan.MAT_SITUP_KEY). Silent — the stretch save toasts — and no celebration.
   //
-  // Every row carries CORE_SESSION_NOTE, which is what keeps the session out of the
-  // week's workout count, the streak, and the push variant's alternation. It has to
-  // be the note rather than the exercise: the same sit-up is real programmed work on
-  // push and pull, so the key can't say which session this was. The day_type is
-  // cosmetic for the same reason — nothing counts these rows as a push day.
+  // The key is what keeps the session out of the week's workout count, the streak
+  // and the push variant's alternation (see session.SUPPLEMENTAL_EXERCISE_KEYS);
+  // CORE_SESSION_NOTE says on the row itself which session it came out of, which is
+  // what the rows written before the split are read by. The day_type is cosmetic —
+  // nothing counts these rows as a push day.
   const logCore = useCallback(
     async (sets: CoreSet[]) => {
       const done = sets.filter((s) => s.reps > 0)

@@ -104,7 +104,17 @@ describe('matchExercise', () => {
   it('matches a sit-up however it was written down', () => {
     // "situp" closed up is one token where the display name is two, so it only
     // lands via an alias — and the log could just as well spell it either way.
+    // Unqualified, it's the incline one: an imported log predates the mat one,
+    // whose sets only ever came out of a stretch the app itself logged.
     for (const raw of ['weighted situps', 'weighted sit-ups', 'sit ups', 'situp']) {
+      expect(matchExercise(raw).key, raw).toBe('weighted_situp')
+    }
+  })
+  it('sends a sit-up that says which one it was to the right key', () => {
+    for (const raw of ['mat situps', 'mat weighted sit-ups', 'floor situps']) {
+      expect(matchExercise(raw).key, raw).toBe('mat_situp')
+    }
+    for (const raw of ['incline situps', 'incline weighted sit-ups']) {
       expect(matchExercise(raw).key, raw).toBe('weighted_situp')
     }
   })

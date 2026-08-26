@@ -11,6 +11,7 @@ import type { MeasurementEntry } from '../lib/bodyComp'
 import type { LockedProjections } from '../lib/goalLock'
 import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
+import { withMatSitups } from '../lib/stretchCore'
 import type { RestTally } from '../lib/rest'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
 import { toFastMode, type FastMode } from '../lib/fastMode'
@@ -209,7 +210,9 @@ export const storage = {
   saveActiveSession: (s: WorkoutSession | null) =>
     s ? write(KEYS.activeSession, s) : localStorage.removeItem(KEYS.activeSession),
 
-  loadWorkouts: (): WorkoutRow[] => read(KEYS.cacheWorkouts, []),
+  // Re-keyed on the way out, not on the way in: the cache can hold rows written by
+  // a build that predates the mat sit-up's own key (see lib/stretchCore).
+  loadWorkouts: (): WorkoutRow[] => withMatSitups(read(KEYS.cacheWorkouts, [])),
   saveWorkouts: (rows: WorkoutRow[]) => write(KEYS.cacheWorkouts, rows),
 
   loadBodyWeights: (): BodyWeightEntry[] => read(KEYS.cacheBodyWeight, []),

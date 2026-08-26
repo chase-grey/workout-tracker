@@ -270,19 +270,29 @@ export const VARIANT_DAY_TYPES: DayType[] = ['push']
 export const QUICK_LOG_KEY = '__quicklog__'
 
 /**
- * The core work at the end of the Stretch + Core session: the weighted sit-up,
- * under the same key the push and pull days train it with, so one movement keeps
- * one history and one progression no matter which session it was done in.
+ * The mat sit-up: the weighted sit-up done flat on the yoga mat at the end of a
+ * Stretch + Core session, with nothing holding the feet down.
  *
- * Its own sets and rest, though — this is a block appended to a mobility routine
- * rather than a copy of either day's slot. Each set is logged as a workout row of
- * weight × reps (see DataContext.logCore), and a session made up only of those
- * rows is supplemental: it feeds the charts and never counts toward the weekly
- * workout goal (see session.CORE_SESSION_NOTE).
+ * Its own key, and so its own history and its own progression, because it is not
+ * the sit-up the training days train. Those are done on an incline bench with the
+ * feet strapped in — a longer range against a steeper angle, and a plate the mat
+ * version has no business asking for. One ladder across both would prefill the mat
+ * with what the bench earned and read the bench's next target off the floor, so
+ * each one climbs on what it actually did.
+ */
+export const MAT_SITUP_KEY = 'mat_situp'
+
+/**
+ * The core work at the end of the Stretch + Core session: four sets of the mat
+ * sit-up, with its own sets and rest — a block appended to a mobility routine
+ * rather than a copy of a training day's slot. Each set is logged as a workout row
+ * of weight × reps (see DataContext.logCore), and the session those rows make up
+ * is supplemental: it feeds the charts and never counts toward the weekly workout
+ * goal (see session.SUPPLEMENTAL_EXERCISE_KEYS).
  */
 export const STRETCH_CORE: PlannedExercise = {
-  key: 'weighted_situp',
-  name: 'weighted sit-up',
+  key: MAT_SITUP_KEY,
+  name: 'mat weighted sit-up',
   sets: 4,
   repMin: 10,
   repMax: 15,
@@ -366,7 +376,11 @@ export const DEFAULT_PLAN: Plan = {
       // at the chest gives the abs somewhere to progress once the reps are there,
       // which a hanging raise capped at 20 doesn't. The raise isn't gone — it still
       // runs on pull + legs and full body, so it's trained twice a week.
-      { key: 'weighted_situp', name: 'weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      //
+      // Named for the incline bench with the feet strapped in, which is where it's
+      // actually done — and which is why the mat sit-up a stretch ends with is a
+      // separate movement with a separate ladder (see MAT_SITUP_KEY).
+      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
 
       // Incline leads variant A (upper-chest emphasis is the aesthetic priority);
       // flat leads variant B. The non-primary press drops to 3 sets that day,
@@ -620,9 +634,13 @@ export function withCircuitRoundRest(
 /**
  * All exercises across every day of the DEFAULT plan, for import matching + name
  * fallback. Keys repeat across days (leg press and bench appear on Full Body too),
- * so the first occurrence of each key wins. The Stretch + Core session's core move
- * needs no appending — it's the weighted sit-up the plan days already train (see
- * STRETCH_CORE).
+ * so the first occurrence of each key wins.
+ *
+ * The Stretch + Core session's mat sit-up is appended last: it's a movement no
+ * training day prescribes (see STRETCH_CORE), so nothing else would give it a name
+ * to chart under — and coming last is what makes an old log that just says
+ * "weighted sit-ups" resolve to the incline one the training days train, which is
+ * what such a log meant.
  */
 export const ALL_EXERCISES: PlannedExercise[] = (() => {
   const seen = new Set<string>()
@@ -631,6 +649,7 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     ...DEFAULT_PLAN.push.exercises,
     ...DEFAULT_PLAN.pull.exercises,
     ...DEFAULT_PLAN.fullbody.exercises,
+    STRETCH_CORE,
   ]) {
     if (seen.has(e.key)) continue
     seen.add(e.key)
@@ -660,6 +679,10 @@ const LEGACY_LABELS: Record<DayType, string[]> = {
  */
 const LEGACY_EXERCISE_NAMES: Record<string, string[]> = {
   [HANGING_RAISE_KEY]: ['hanging leg raise'],
+  // Named plainly while it was the only weighted sit-up in the app. Now that the
+  // stretch has its own on the mat, the training days' one says which bench it's
+  // done on (see MAT_SITUP_KEY).
+  weighted_situp: ['weighted sit-up'],
   // The tempo cue read as a status — "calf raise (paused)" looked like a movement
   // the app had suspended rather than one to pause at the bottom of.
   calf_raise: ['calf raise (paused)'],
@@ -956,10 +979,13 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
   iso_chest: ['pec fly', 'pec deck', 'chest fly'],
   db_overhead_press: ['shoulder press', 'overhead press'],
   // "situp" written closed up is one token where the display name is two ("sit-up"
-  // normalizes to "sit up"), so it needs saying explicitly. The bare "overhead
-  // press" stays with the dumbbell key — that's what every log written before the
-  // machine took over the push day meant.
-  weighted_situp: ['situp', 'weighted situp'],
+  // normalizes to "sit up"), so it needs saying explicitly. The unqualified names
+  // stay with the incline key: a log that just says "weighted sit-ups" is a
+  // training day's, since the mat ones only ever came out of a stretch. The bare
+  // "overhead press" stays with the dumbbell key for the same reason — that's what
+  // every log written before the machine took over the push day meant.
+  weighted_situp: ['situp', 'weighted situp', 'weighted sit-up', 'incline situp'],
+  [MAT_SITUP_KEY]: ['mat situp', 'mat weighted situp', 'floor situp', 'yoga mat situp'],
   machine_overhead_press: ['machine shoulder press'],
 }
 
@@ -1026,11 +1052,10 @@ function displayName(e: PlannedExercise): string {
  * added ab exercises are picked up automatically.
  */
 export function absExerciseKeys(plan: Plan): Set<string> {
-  // The retired dead bug is on no day of the plan, so seed it explicitly to keep
-  // the reps it did log in the combined core series. The Stretch + Core session's
-  // own move needs no seeding: it's the weighted sit-up, which the plan days carry
-  // in an ab group already.
-  const keys = new Set<string>([DEAD_BUG_KEY])
+  // Neither the retired dead bug nor the Stretch + Core session's mat sit-up is on
+  // any day of the plan, so both are seeded explicitly — the reps they log are core
+  // reps, and the combined series would otherwise lose them.
+  const keys = new Set<string>([DEAD_BUG_KEY, MAT_SITUP_KEY])
   for (const day of Object.values(plan)) {
     for (const e of day.exercises) {
       if (/^(abs|core)$/i.test(e.group)) keys.add(e.key)

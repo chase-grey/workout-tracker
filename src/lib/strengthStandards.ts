@@ -418,6 +418,11 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   neck_flexion: { ladder: 'load', muscles: ['neck'] },
   cable_crunch: { ladder: 'load', muscles: ['core'] },
   weighted_situp: { ladder: 'load', muscles: ['core'] },
+  // The stretch block's mat sit-up: the same muscles and the same load ladder as
+  // the incline one above, and a separate reading, because it's a separate movement
+  // trained with a separate weight (see plan.MAT_SITUP_KEY). Both feed the core, so
+  // whichever is further along is what the avatar's midsection shows.
+  mat_situp: { ladder: 'load', muscles: ['core'] },
   hanging_leg_raise: { ladder: 'reps', muscles: ['core'] },
   // Retired, and kept for the reason the hip machines are: the sessions logged
   // under it are part of what the core has to show, and the weighted sit-up that
@@ -593,6 +598,7 @@ const LADDER_ORDER: string[] = [
   'neck_flexion',
   'cable_crunch',
   'weighted_situp',
+  'mat_situp',
   'hanging_leg_raise',
   'deadbug',
   'leg_adductor',

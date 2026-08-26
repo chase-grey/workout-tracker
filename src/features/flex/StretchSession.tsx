@@ -189,8 +189,9 @@ export function StretchSession({
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
   // Progression target for the core sets — weight and reps both prefilled and both
-  // editable. Read from the movement's whole history, which includes the sets the
-  // push and pull days train it with: it's one lift, wherever it was done.
+  // editable. Read from the mat sit-up's own history and nothing else: what the
+  // training days press out on a strapped-in incline says nothing about what to
+  // hold on the floor (see plan.MAT_SITUP_KEY).
   const coreTarget = useMemo(
     () =>
       nextTarget(workouts, STRETCH_CORE.key, {
