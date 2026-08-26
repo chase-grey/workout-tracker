@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MdCameraAlt, MdCameraswitch, MdPhotoLibrary, MdSave } from 'react-icons/md'
+import { MdCameraAlt, MdCameraswitch, MdIosShare, MdPhotoLibrary, MdSave } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { detectPose } from '../../lib/pose'
 import {
@@ -37,9 +37,9 @@ const DETECT_NOTE = {
 } as const
 
 /**
- * Hand the JPEG to the browser's download manager. On Android that means the
- * Downloads folder and nowhere else, which is why this is the fallback rather
- * than the first choice.
+ * Hand the JPEG to the browser's download manager. On Android the file lands in
+ * Downloads, which the gallery apps index as a device folder, so the photo does
+ * show up alongside the camera roll. On iOS it only reaches Files.
  */
 function downloadPhoto(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob)
@@ -50,22 +50,44 @@ function downloadPhoto(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+function photoFile(blob: Blob, name: string): File {
+  return new File([blob], name, { type: blob.type || 'image/jpeg' })
+}
+
+/** Whether this browser can hand a JPEG to the system share sheet. */
+function canSharePhoto(blob: Blob, name: string): boolean {
+  return navigator.canShare?.({ files: [photoFile(blob, name)] }) ?? false
+}
+
 /**
- * Put the measured JPEG somewhere the phone's photo apps will find it. A web
- * page can't write to the media collections Gallery and Photos index, so a
- * plain download lands in Downloads instead of the camera roll; the share sheet
- * is the only route there. Falls back to downloading where files can't be
- * shared, and treats a dismissed sheet as a no rather than downloading anyway.
+ * iOS is the one place a download can't reach the camera roll — the file goes
+ * to Files and stops there, and "Save Image" on the share sheet is the only way
+ * into Photos. Everywhere else a download is the surer route, because the
+ * Android sheet lists apps and offers no save of its own.
+ */
+function needsShareSheetToSave(): boolean {
+  const ua = navigator.userAgent
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+}
+
+/** Offer the JPEG to the share sheet. Resolves once the sheet is done with it. */
+async function sharePhoto(blob: Blob, name: string): Promise<void> {
+  try {
+    await navigator.share({ files: [photoFile(blob, name)] })
+  } catch (err) {
+    // A dismissed sheet is a no, not a reason to write the file anyway.
+    if ((err as DOMException | undefined)?.name !== 'AbortError') downloadPhoto(blob, name)
+  }
+}
+
+/**
+ * Put the measured JPEG wherever this phone's photo apps will find it: through
+ * the share sheet on iOS, straight down as a file everywhere else.
  */
 async function savePhoto(blob: Blob, name: string): Promise<void> {
-  const file = new File([blob], name, { type: blob.type || 'image/jpeg' })
-  if (navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file] })
-      return
-    } catch (err) {
-      if ((err as DOMException | undefined)?.name === 'AbortError') return
-    }
+  if (needsShareSheetToSave() && canSharePhoto(blob, name)) {
+    await sharePhoto(blob, name)
+    return
   }
   downloadPhoto(blob, name)
 }
@@ -515,9 +537,10 @@ export function CameraMeasure({
   }
 
   /** Answer the save prompt, then hand the reading on. */
-  const finishSave = (save: boolean) => {
+  const finishSave = (how: 'discard' | 'save' | 'share') => {
     if (!pending) return
-    if (save) void savePhoto(pending.blob, pending.name)
+    if (how === 'save') void savePhoto(pending.blob, pending.name)
+    else if (how === 'share') void sharePhoto(pending.blob, pending.name)
     const { result } = pending
     setPending(null)
     onDone(result)
@@ -532,6 +555,10 @@ export function CameraMeasure({
   }
 
   if (pending) {
+    // Where save already goes through the sheet, a share button would just be
+    // the same button twice.
+    const canShare =
+      !needsShareSheetToSave() && canSharePhoto(pending.blob, pending.name)
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-bg px-4 pt-8">
         <h2 className="text-xl font-bold">save this photo?</h2>
@@ -543,21 +570,31 @@ export function CameraMeasure({
           />
         </div>
         <div
-          className="flex gap-2"
+          className="flex flex-col gap-2"
           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
         >
-          <button
-            onClick={() => finishSave(false)}
-            className="min-h-[56px] flex-1 rounded-2xl bg-surface-2 font-semibold active:opacity-80"
-          >
-            don't save
-          </button>
-          <button
-            onClick={() => finishSave(true)}
-            className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
-          >
-            <MdSave aria-hidden /> save
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => finishSave('discard')}
+              className="min-h-[56px] flex-1 rounded-2xl bg-surface-2 font-semibold active:opacity-80"
+            >
+              don't save
+            </button>
+            <button
+              onClick={() => finishSave('save')}
+              className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+            >
+              <MdSave aria-hidden /> save
+            </button>
+          </div>
+          {canShare && (
+            <button
+              onClick={() => finishSave('share')}
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-surface-2 font-semibold active:opacity-80"
+            >
+              <MdIosShare aria-hidden /> share
+            </button>
+          )}
         </div>
       </div>
     )
