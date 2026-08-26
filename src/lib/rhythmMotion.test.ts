@@ -121,8 +121,8 @@ describe('hitRepTarget', () => {
 })
 
 describe('repGlow', () => {
-  it('lights the closing rep a step early when the set ends itself', () => {
-    expect(repGlow(5, 5, true)).toBe('final')
+  it('lights the closing rep for a set that ends itself, since nothing follows it', () => {
+    expect(repGlow(5, 5, true)).toBe('done')
   })
 
   it('leaves the closing rep alone when you end the set by tapping', () => {

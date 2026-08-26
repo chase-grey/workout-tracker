@@ -57,9 +57,9 @@ const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
  * Every shape draws from the same palette so that hitting the set's target lights
  * the whole guide up at once: the accent goes from a washed-out fill to near-full
  * opacity, which over the dark background is the difference between a dim green
- * and an unmistakably bright one. 'final' sits between the two — a set that ends
- * itself lifts its closing rep just enough to notice without pre-empting the
- * brightening that marks the set actually being done.
+ * and an unmistakably bright one. A set that ends itself brightens on its closing
+ * rep rather than after it — see `repGlow` — because after it there is no guide
+ * left to look at.
  */
 const TONES: Record<RepGlow, {
   fill: string
@@ -83,14 +83,6 @@ const TONES: Record<RepGlow, {
     track: 'bg-accent-bright/15',
     dimmest: 0.2,
     brightest: 0.7,
-  },
-  final: {
-    fill: 'bg-accent-bright/55',
-    ring: 'ring-1 ring-accent-bright/85',
-    border: 'border-accent-bright/85',
-    track: 'bg-accent-bright/25',
-    dimmest: 0.33,
-    brightest: 0.85,
   },
   done: {
     fill: 'bg-accent-bright/80',
@@ -346,9 +338,10 @@ export function RhythmGuide({
    */
   onTargetHit?: () => void
   /**
-   * The set ends on its own when the target rep does (hands-free), which the
-   * guide gives away by lighting that last rep a step brighter than the ones
-   * before it — see `repGlow`.
+   * The set ends on its own when the target rep does, which the guide gives away
+   * by lighting that last rep at full brightness — the brightening that would
+   * otherwise land after the target, on a shape that by then is gone. See
+   * `repGlow`.
    */
   endsOnTarget?: boolean
 }) {
@@ -443,9 +436,10 @@ export function RhythmGuide({
 
   // Once you've finished the target the shape brightens, and that is the whole of
   // how the guide says you're done — a change you catch out of the corner of your
-  // eye rather than a number to read. It waits for the last rep to end, not to
-  // begin, so the brightening lands as the set closes. When the set will close
-  // itself, the last rep is already lit a step above the others on its way there.
+  // eye rather than a number to read. Tapping your own sets it waits for the last
+  // rep to end, so the brightening lands as the set closes. When the set closes
+  // itself there is no "after" to brighten in, so the closing rep is bright the
+  // whole way through it.
   const glow = repGlow(rep, reps, endsOnTarget)
 
   return (
