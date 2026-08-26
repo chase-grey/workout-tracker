@@ -89,9 +89,15 @@ export type MetricKey = keyof WeekCounts
 
 /**
  * The days of the Mon–Sun week each metric is actually done on, counted from
- * Monday. Flex sessions land by the end of Friday — the weekend isn't part of the
- * plan for them, so pacing them over seven days let two undone sessions look
- * comfortable on Thursday when only two intended days were left.
+ * Monday. Flex sessions land by the end of Saturday — Sunday isn't part of the
+ * plan for them, so pacing them over seven days let undone sessions look
+ * comfortable on Thursday when fewer intended days were left than it appeared.
+ *
+ * Six, not the five it was. Five was sized for two sessions a week and had room
+ * to spare; three sessions in five days leaves none at all, and a window with no
+ * slack in it reports being behind as the normal state, which is the fastest way
+ * to make a pacer worth ignoring. Six keeps Sunday out — the point of the window
+ * — and gives the third session somewhere to go.
  *
  * A goal can still be rescued outside its window; that's what
  * {@link MetricPace.missed} is for. The window is about where you're *supposed*
@@ -99,7 +105,7 @@ export type MetricKey = keyof WeekCounts
  */
 export const METRIC_WINDOW: Record<MetricKey, number> = {
   workouts: DAYS_IN_WEEK,
-  flex: 5,
+  flex: 6,
   calDays: DAYS_IN_WEEK,
   vitaminDays: DAYS_IN_WEEK,
   whiteningDays: DAYS_IN_WEEK,

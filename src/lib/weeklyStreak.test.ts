@@ -5,8 +5,10 @@ import {
   splitAtCurrentRun,
   weeklyStreakHistory,
   DEFAULT_WEEKLY_GOALS,
+  FLEX_GOAL_3_FROM,
   type WeekResult,
 } from './weeklyStreak'
+import { parseISODate } from './dates'
 
 // A fixed "today". 2026-07-10 is a Friday; its Monday is 2026-07-06,
 // so the current in-progress week is [2026-07-06 .. 2026-07-12].
@@ -35,24 +37,24 @@ const WK3 = '2026-06-29'
 // The week TODAY sits in, still in progress.
 const CUR = '2026-07-06'
 
-// Defaults: full = w>=2, f>=2, cal>=6, pills>=6; half = w>=1, f>=1, cal>=5, pills>=5.
+// Defaults: full = w>=2, f>=3, cal>=6, pills>=6; half = w>=1, f>=2, cal>=5, pills>=5.
 
 describe('classifyWeek', () => {
   it('classifies a full week (exactly at goal, not exceeded)', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 }),
+      classifyWeek({ workouts: 2, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 }),
     ).toEqual({ tier: 'full', exceeded: false })
   })
 
   it('classifies an exceeded full week', () => {
     expect(
-      classifyWeek({ workouts: 3, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 }),
+      classifyWeek({ workouts: 3, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 }),
     ).toEqual({ tier: 'full', exceeded: true })
   })
 
   it('classifies a half week', () => {
     expect(
-      classifyWeek({ workouts: 1, flex: 1, calDays: 5, vitaminDays: 5, whiteningDays: 5 }),
+      classifyWeek({ workouts: 1, flex: 2, calDays: 5, vitaminDays: 5, whiteningDays: 5 }),
     ).toEqual({ tier: 'half', exceeded: false })
   })
 
@@ -64,19 +66,19 @@ describe('classifyWeek', () => {
 
   it('is under when one dimension misses the half threshold', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 4, vitaminDays: 6, whiteningDays: 6 }),
+      classifyWeek({ workouts: 2, flex: 3, calDays: 4, vitaminDays: 6, whiteningDays: 6 }),
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
   it('is under when the pills miss the half threshold', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 4, whiteningDays: 4 }),
+      classifyWeek({ workouts: 2, flex: 3, calDays: 6, vitaminDays: 4, whiteningDays: 4 }),
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
   it('leaves a goal of zero unjudged', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 2, calDays: 6, vitaminDays: 0, whiteningDays: 0 }, {
+      classifyWeek({ workouts: 2, flex: 3, calDays: 6, vitaminDays: 0, whiteningDays: 0 }, {
         ...DEFAULT_WEEKLY_GOALS,
         vitaminDays: 0,
         halfVitaminDays: 0,
@@ -243,6 +245,43 @@ describe('computeWeeklyStreak', () => {
     })
     // Half week, 0 freezes -> streak resets to 0.
     expect(result).toEqual({ streak: 0, freezes: 0 })
+  })
+})
+
+describe('weeklyStreakHistory — the stretch goal going to three', () => {
+  // Raising a goal re-judges every week ever logged, so a two-stretch week from
+  // before the change would drop out of `full` and take the run down with it.
+  // These pin that it doesn't — see FLEX_GOAL_3_FROM.
+  const before = '2026-08-17'
+  const after = FLEX_GOAL_3_FROM
+  const laterToday = parseISODate('2026-09-14')
+  const week = (monday: string, flex: number) => ({
+    workoutDates: daysInWeek(monday, 2),
+    flexDates: daysInWeek(monday, flex),
+    calorieHitDates: daysInWeek(monday, 6),
+    today: laterToday,
+  })
+
+  it('still calls a two-stretch week full when it predates the change', () => {
+    const [wk] = weeklyStreakHistory(week(before, 2))
+    expect(wk.week).toBe(before)
+    expect(wk.counts.flex).toBe(2)
+    expect(wk.tier).toBe('full')
+  })
+
+  it('asks a week from the change onward for three', () => {
+    const [wk] = weeklyStreakHistory(week(after, 2))
+    expect(wk.week).toBe(after)
+    expect(wk.tier).not.toBe('full')
+    expect(weeklyStreakHistory(week(after, 3))[0].tier).toBe('full')
+  })
+
+  // A caller handing in its own config is asking for that config over every week,
+  // change date or not.
+  it('leaves an explicit config alone on both sides of the date', () => {
+    const goals = { ...DEFAULT_WEEKLY_GOALS, flex: 3, halfFlex: 3 }
+    expect(weeklyStreakHistory({ ...week(before, 2), config: goals })[0].tier).not.toBe('full')
+    expect(weeklyStreakHistory({ ...week(before, 3), config: goals })[0].tier).toBe('full')
   })
 })
 

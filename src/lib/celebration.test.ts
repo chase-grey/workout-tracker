@@ -158,7 +158,7 @@ describe('weekAchievements', () => {
   it('marks full goal when every target is met exactly', () => {
     expect(
       weekAchievements(
-        { workouts: 2, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
+        { workouts: 2, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
         g,
       ),
     ).toEqual({
@@ -175,7 +175,7 @@ describe('weekAchievements', () => {
 
   it('withholds the full goal until the pills are in too', () => {
     const a = weekAchievements(
-      { workouts: 2, flex: 2, calDays: 6, vitaminDays: 5, whiteningDays: 6 },
+      { workouts: 2, flex: 3, calDays: 6, vitaminDays: 5, whiteningDays: 6 },
       g,
     )
     expect(a.vitaminGoal).toBe(false)
@@ -184,7 +184,7 @@ describe('weekAchievements', () => {
 
   it('withholds the full goal until the strips are in too', () => {
     const a = weekAchievements(
-      { workouts: 2, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 5 },
+      { workouts: 2, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 5 },
       g,
     )
     expect(a.whiteningGoal).toBe(false)
@@ -194,7 +194,7 @@ describe('weekAchievements', () => {
   it('marks exceeded only once the full goal is met and a metric is over', () => {
     expect(
       weekAchievements(
-        { workouts: 3, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
+        { workouts: 3, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
         g,
       ).exceeded,
     ).toBe(true)
@@ -208,7 +208,7 @@ describe('weekAchievements', () => {
   })
 
   it('reaches the checkpoint at the half-goal marker', () => {
-    const half = { workouts: 1, flex: 1, calDays: 5, vitaminDays: 5, whiteningDays: 5 }
+    const half = { workouts: 1, flex: 2, calDays: 5, vitaminDays: 5, whiteningDays: 5 }
     expect(overallProgress(half, g)).toBeCloseTo(checkpointFraction(g), 6)
     expect(weekAchievements(half, g).checkpoint).toBe(true)
     expect(
@@ -223,8 +223,8 @@ describe('weekAchievements', () => {
 describe('newlyEarned', () => {
   it('returns only achievements that flipped false → true', () => {
     const earned = newlyEarned(
-      { workouts: 1, flex: 1, calDays: 4, vitaminDays: 5, whiteningDays: 5 },
-      { workouts: 1, flex: 1, calDays: 5, vitaminDays: 5, whiteningDays: 5 },
+      { workouts: 1, flex: 2, calDays: 4, vitaminDays: 5, whiteningDays: 5 },
+      { workouts: 1, flex: 2, calDays: 5, vitaminDays: 5, whiteningDays: 5 },
       DEFAULT_WEEKLY_GOALS,
     )
     expect(earned).toContain('checkpoint')
@@ -233,8 +233,8 @@ describe('newlyEarned', () => {
 
   it('reports the full-goal crossing', () => {
     const earned = newlyEarned(
-      { workouts: 1, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
-      { workouts: 2, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
+      { workouts: 1, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
+      { workouts: 2, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
       DEFAULT_WEEKLY_GOALS,
     )
     expect(earned).toContain('workoutGoal')
@@ -269,7 +269,7 @@ describe('composeCelebration', () => {
     const pr = prCelebration([{ exercise: 'Bench', est1RM: 225 }])
     const goal = achievementCelebration(
       'fullGoal',
-      { workouts: 2, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
+      { workouts: 2, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
       DEFAULT_WEEKLY_GOALS,
     )
     const c = composeCelebration([goal, pr])
@@ -281,7 +281,7 @@ describe('composeCelebration', () => {
   it('keeps the ack flag when a louder win leads the session-end cheer', () => {
     const goal = achievementCelebration(
       'fullGoal',
-      { workouts: 2, flex: 2, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
+      { workouts: 2, flex: 3, calDays: 6, vitaminDays: 6, whiteningDays: 6 },
       DEFAULT_WEEKLY_GOALS,
     )
     const c = composeCelebration([goal, stretchDoneCelebration])
@@ -292,7 +292,7 @@ describe('composeCelebration', () => {
   it('leaves ack unset when nothing earned asks for it', () => {
     const goal = achievementCelebration(
       'checkpoint',
-      { workouts: 1, flex: 1, calDays: 3, vitaminDays: 3, whiteningDays: 3 },
+      { workouts: 1, flex: 2, calDays: 3, vitaminDays: 3, whiteningDays: 3 },
       DEFAULT_WEEKLY_GOALS,
     )
     expect(composeCelebration([goal])?.ack).toBeUndefined()
