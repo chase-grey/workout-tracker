@@ -24,7 +24,7 @@ import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement, type StretchFinishSummary } from '../../store/DataContext'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import { stretchSplit } from '../../lib/stretchSplit'
-import { canResumeRest, staleRestSec } from '../../lib/rest'
+import { canResumeRest, restScreenSec, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type RestState } from '../../services/storage'
@@ -142,10 +142,12 @@ export function StretchSession({
     saved?.rest && canResumeRest(saved.rest.endsAt, Date.now()) ? saved.rest : null,
   )
   // Hands-free: every rest rolls into the next set on its own and the
-  // get-into-position counts are skipped — until the fast-forward toggle is
-  // switched back off. Stretch sets roll into their rest either way. Kept in the
-  // session's snapshot so a reload mid-routine doesn't quietly start waiting for
-  // taps again.
+  // get-into-position counts that stand alone — a side switch, the crossing into
+  // the core block — are skipped, until the fast-forward toggle is switched back
+  // off. The count a rest ends on stays: the rest gave up its seconds for it, so
+  // skipping it would only mean arriving at the pose late. Stretch sets roll into
+  // their rest either way. Kept in the session's snapshot so a reload mid-routine
+  // doesn't quietly start waiting for taps again.
   const [fast, setFast] = useState(!!saved?.fast)
   // True so the routine opens with the same "get into position" countdown that
   // follows each rest — but not over a resumed rest, which owns the screen first,
@@ -391,16 +393,15 @@ export function StretchSession({
   }
 
   // Bank the rest slice just spent, then hand the screen to the get-ready count.
-  // `expired` is a rest that ran itself out under fast-forward: you've had the
-  // whole rest, so the routine goes straight on to the set. Cutting a rest short
-  // with a tap still gets the count — you asked to move on early, not to be
-  // already in position.
-  const closeRest = (expired?: boolean) => {
+  //
+  // Every rest ends on that count, however it ended: the rest was shortened by it
+  // when it opened (see advanceFrom), so a rest run out hands-free and one cut
+  // short by a tap both land on the same settle-in. The exception is a set with
+  // no settle-in at all — one inside the core block — which goes straight on.
+  const closeRest = () => {
     bankRest()
     setRest(null)
-    // Hand off to the get-into-position count only when the upcoming set has one;
-    // otherwise (a set inside the core block) go straight to the set.
-    setPreparing(getReadySec > 0 && !(fast && expired))
+    setPreparing(getReadySec > 0)
   }
 
   /**
@@ -444,15 +445,22 @@ export function StretchSession({
       straightToGetReady(finished.sideSwitchSec)
       return
     }
-    // A stretch that prescribes no rest at all (the feet and calf holds) hands
-    // straight to the next set's own settle-in rather than flashing a rest screen
-    // that's already over.
-    if (finished.restSec <= 0) {
-      straightToGetReady(settleInSec(steps[index + 1], finished))
+    // The rest ends on the coming set's settle-in, and those seconds come out of
+    // the rest rather than being added after it (see lib/rest's restScreenSec):
+    // what the stretch prescribes is how long until the next set starts, and a
+    // routine of twelve sets would otherwise run minutes long.
+    //
+    // A stretch that prescribes no rest at all (the feet and calf holds) and one
+    // whose whole rest is settle-in both hand straight to the count rather than
+    // flashing a rest screen that's already over.
+    const ready = settleInSec(steps[index + 1], finished)
+    const restSec = restScreenSec(finished.restSec, ready)
+    if (restSec <= 0) {
+      straightToGetReady(ready)
       return
     }
     restStartRef.current = Date.now()
-    setRest({ seconds: finished.restSec, endsAt: Date.now() + finished.restSec * 1000 })
+    setRest({ seconds: restSec, endsAt: Date.now() + restSec * 1000 })
   }
 
   /**
@@ -531,8 +539,15 @@ export function StretchSession({
     // settle-in for the coming set.
     setPreparing(false)
     setReadyOverrideSec(null)
+    // Shortened by the count it ends on, like any other rest, and all count when
+    // there's nothing left over for a rest screen.
+    const restSec = restScreenSec(sec, getReadySec)
+    if (restSec <= 0) {
+      straightToGetReady(getReadySec)
+      return
+    }
     restStartRef.current = Date.now()
-    setRest({ seconds: sec, endsAt: Date.now() + sec * 1000 })
+    setRest({ seconds: restSec, endsAt: Date.now() + restSec * 1000 })
   }
 
   // Shared by the header and the rest screen, so the same actions stay reachable

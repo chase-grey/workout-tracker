@@ -25,6 +25,25 @@ export function canResumeRest(endsAt: number, now: number): boolean {
 }
 
 /**
+ * How long the rest screen itself runs, given the whole break prescribed and the
+ * get-into-position count that closes it out (see components/GetReady).
+ *
+ * Every rest ends on that count, and the count comes *out* of the rest rather
+ * than after it: what's prescribed is how long you have before the next set
+ * starts, so a ninety-second rest is eighty-five on the clock and five walking
+ * back to the bar, not ninety-five all told. Without that, adding the count to
+ * every rest would quietly add a minute to a session.
+ *
+ * Zero for a break too short to carry its own count — the caller hands straight
+ * to the count in that case rather than shortening it, since getting into
+ * position takes as long as it takes and the seconds are better lost off the
+ * front than off the settle-in.
+ */
+export function restScreenSec(prescribedSec: number, countSec: number): number {
+  return Math.max(0, prescribedSec - Math.max(0, countSec))
+}
+
+/**
  * The load/reps line a rest screen shows for the set it leads into, or `null`
  * when that rest shouldn't carry one. `target` is the already-formatted line
  * ("135 × 8", "12 reps") and `setIndex` is the 0-based position of the coming

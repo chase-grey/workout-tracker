@@ -7,6 +7,7 @@ import {
   openRest,
   restBeforeNextSet,
   restLabel,
+  restScreenSec,
   resumeRestTally,
   staleRestSec,
   upNextSetLabel,
@@ -293,6 +294,24 @@ describe('canResumeRest', () => {
 
   it('drops a rest left over from a much earlier session', () => {
     expect(canResumeRest(now - sec(8 * 60 * 60), now)).toBe(false)
+  })
+})
+
+describe('restScreenSec', () => {
+  it('takes the get-into-position count out of the rest, not on top of it', () => {
+    // 90 prescribed = 85 on the rest clock + a 5s count: the set still starts 90
+    // seconds after the last one ended.
+    expect(restScreenSec(90, 5)).toBe(85)
+  })
+
+  it('leaves a rest with no count to run alone', () => {
+    expect(restScreenSec(120, 0)).toBe(120)
+  })
+
+  it('rests for nothing when the whole break is shorter than its count', () => {
+    // The count keeps its length — the caller hands straight to it.
+    expect(restScreenSec(15, 20)).toBe(0)
+    expect(restScreenSec(0, 5)).toBe(0)
   })
 })
 
