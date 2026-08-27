@@ -3,10 +3,12 @@
  * ladder's numbers read out loud.
  *
  * A ladder is several rungs measured on one series: the two squat targets read
- * the same estimated 1RM, and the four pull-up rungs the same sustained-reps
- * line. Those are drawn as one block with one chart (see LiftLadderBlock), the
- * way the stretch ladders and the bodyweight pair already are. Bench has a
- * single goal, so there's no ladder to draw and it keeps its own row and chart.
+ * the same estimated 1RM, the two bench targets the same combined-press estimate,
+ * and the four pull-up rungs the same sustained-reps line. Those are drawn as one
+ * block with one chart (see LiftLadderBlock), the way the stretch ladders and the
+ * bodyweight pair already are. A lift left out of this map keeps a row and a chart
+ * of its own — which is what bench did while bodyweight was the only thing it was
+ * chasing, and why its card read as a different kind of thing from the squat's.
  *
  * The wording lives here rather than in the block because it's lift-specific
  * knowledge with rules worth stating and checking: a pull-up rung is measured on
@@ -18,7 +20,7 @@
  * Pure module — no React/DOM.
  */
 
-import { LEG_PRESS_KEY, PULLUP_GOAL_SETS, PULLUP_KEY } from './goals'
+import { BENCH_KEY, LEG_PRESS_KEY, PULLUP_GOAL_SETS, PULLUP_KEY } from './goals'
 
 /** How one lift's ladder is named and read. */
 export type LiftLadder = {
@@ -41,6 +43,16 @@ export const LIFT_LADDERS: Record<string, LiftLadder> = {
     headline: (v) => `${Math.round(v)} lbs est. 1rm`,
     goalLabel: (t) => `goal ${t}`,
     empty: 'log leg press or squats to project these goals',
+  },
+  // Both presses feed the reading (see goals.BENCH_ALSO_KEYS), so the empty state
+  // names either one rather than sending you to the flat bench the goals are cued
+  // on.
+  [BENCH_KEY]: {
+    title: 'bench',
+    seriesName: 'est. 1rm',
+    headline: (v) => `${Math.round(v)} lbs est. 1rm`,
+    goalLabel: (t) => `goal ${t}`,
+    empty: 'log a bench press to project these goals',
   },
   [PULLUP_KEY]: {
     title: 'pull-ups',

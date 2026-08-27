@@ -229,6 +229,7 @@ export const GOAL_IDS = {
   weight180: 'bodyweight_180',
   weight190: 'bodyweight_190',
   benchBodyweight: 'bench_bodyweight',
+  benchTwoHundred: 'bench_200',
   squatBodyweight: 'squat_bodyweight',
   squatOneAndAHalf: 'squat_1_5x_bodyweight',
   sixPack: 'six_pack',
@@ -670,7 +671,7 @@ export function buildGoals({
     },
     {
       id: GOAL_IDS.benchBodyweight,
-      title: `bench my bodyweight (${currentBw || '—'} lbs)`,
+      title: 'bench my bodyweight',
       unit: 'lbs',
       exerciseKey: BENCH_KEY,
       alsoCounts: BENCH_ALSO_KEYS,
@@ -679,6 +680,24 @@ export function buildGoals({
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
+      decayPerWeek: STRENGTH_GAIN_DECAY,
+      capPerWeek: BENCH_GAIN_CAP,
+    },
+    // The rung above bodyweight, and the one bench number that doesn't move: two
+    // plates a side is the milestone the lift is talked about in, so it's worth
+    // chasing as itself rather than as whatever multiple of bodyweight it happens
+    // to be this month. Same series and the same single to settle it — only the
+    // target is fixed.
+    {
+      id: GOAL_IDS.benchTwoHundred,
+      title: 'bench 200 lbs',
+      unit: 'lbs',
+      exerciseKey: BENCH_KEY,
+      alsoCounts: BENCH_ALSO_KEYS,
+      points: benchPoints,
+      singles: benchSingles,
+      target: 200,
+      direction: 'up',
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: BENCH_GAIN_CAP,
     },

@@ -606,6 +606,7 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     for (const id of [
       GOAL_IDS.weight180,
       GOAL_IDS.benchBodyweight,
+      GOAL_IDS.benchTwoHundred,
       GOAL_IDS.squatBodyweight,
       GOAL_IDS.squatOneAndAHalf,
       GOAL_IDS.sixPack,
@@ -1004,5 +1005,41 @@ describe('the bench goal is settled the same way', () => {
 
     const done = benchGoal([bench('2026-08-08', 150, 8), bench('2026-08-12', 175, 1)])
     expect(isReached(done)).toBe(true)
+  })
+
+  describe('and the 200 above it', () => {
+    const twoHundred = (workouts: WorkoutRow[]) =>
+      buildGoals({ ...inputs(HOT_FORTNIGHT), workouts }).find(
+        (g) => g.id === GOAL_IDS.benchTwoHundred,
+      )!
+
+    it('reads off the same series and asks for 200 flat', () => {
+      const g = twoHundred([bench('2026-08-08', 150, 8)])
+      expect(g.target).toBe(200)
+      expect(g.movingTarget).toBeUndefined()
+      expect(g.exerciseKey).toBe('flat_bench')
+      expect(g.alsoCounts).toEqual(['incline_bench'])
+      expect(g.points).toEqual(benchGoal([bench('2026-08-08', 150, 8)]).points)
+      expect(attemptWeight(g, 'flat_bench')).toBe(200)
+    })
+
+    it('waits on the single the bodyweight rung waits on', () => {
+      // 170×8 estimates 215, so the estimate is there and the goal is asking for
+      // the attempt rather than calling itself done.
+      const ready = twoHundred([bench('2026-08-08', 170, 8)])
+      expect(isReached(ready)).toBe(false)
+      expect(isReadyToAttempt(ready)).toBe(true)
+
+      const done = twoHundred([bench('2026-08-08', 170, 8), bench('2026-08-12', 200, 1)])
+      expect(isReached(done)).toBe(true)
+    })
+
+    it('stays open on a bodyweight rung that got cleared under it', () => {
+      // A single at bodyweight settles "bench my bodyweight" and leaves 200 to go —
+      // which is the whole reason the rung is there.
+      const rows = [bench('2026-08-08', 150, 8), bench('2026-08-12', 175, 1)]
+      expect(isReached(benchGoal(rows))).toBe(true)
+      expect(isReached(twoHundred(rows))).toBe(false)
+    })
   })
 })
