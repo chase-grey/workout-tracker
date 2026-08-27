@@ -42,6 +42,14 @@ describe('isIronDay', () => {
     expect(isIronDay(log, '2026-08-25')).toBe(true)
   })
 
+  it('asks again the day after a skipped iron day rather than waiting out a cycle', () => {
+    // Iron Monday, then two days that logged nothing at all. The dose is owed
+    // on the first day back, not deferred to whichever day the parity says.
+    const log = [day('2026-08-24', true, true)]
+    expect(isIronDay(log, '2026-08-26')).toBe(true)
+    expect(isIronDay(log, '2026-08-27')).toBe(true)
+  })
+
   it('never asks for iron two days running', () => {
     let log: VitaminEntry[] = []
     const dates = ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28']
@@ -52,6 +60,30 @@ describe('isIronDay', () => {
       log = setVitaminDay(log, d, { vitamins: true, iron: ironDay })
     }
     expect(asked).toEqual([true, false, true, false, true])
+  })
+
+  it('never lands two iron days together even when a dose gets skipped', () => {
+    // Take iron only every other time it is asked for. The skipped days push
+    // the dose to the next day; no two consecutive days ever record it.
+    let log: VitaminEntry[] = []
+    const taken: string[] = []
+    let skip = false
+    for (let i = 0; i < 10; i++) {
+      const d = `2026-08-${String(10 + i).padStart(2, '0')}`
+      const asked = isIronDay(log, d)
+      const take = asked && !skip
+      if (asked) skip = !skip
+      if (take) taken.push(d)
+      log = setVitaminDay(log, d, { vitamins: true, iron: take })
+    }
+    for (let i = 1; i < taken.length; i++) {
+      expect(isIronDay(log, taken[i - 1])).toBe(true)
+      expect(taken[i] > taken[i - 1]).toBe(true)
+      // consecutive dates would differ by one day
+      const prev = new Date(`${taken[i - 1]}T00:00:00Z`)
+      prev.setUTCDate(prev.getUTCDate() + 1)
+      expect(taken[i]).not.toBe(prev.toISOString().slice(0, 10))
+    }
   })
 })
 

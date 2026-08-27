@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { GiMetalBar } from 'react-icons/gi'
 import { MdAutoAwesome, MdCheck, MdLocalFireDepartment, MdMedication } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { CALORIE_GOAL, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
@@ -33,7 +34,10 @@ const BACKFILL = CALORIE_GOAL
  * separate buttons — nothing, then the multivitamin, then the iron that rides
  * along every other day — so an iron day that quietly dropped the iron is still
  * a state you can record and see (lime, not the full green), which is the whole
- * reason the pill log tracks the two doses apart.
+ * reason the pill log tracks the two doses apart. Whether the selected day is
+ * one of the iron days is on the toggle itself — it wears an iron ingot instead
+ * of the capsule — rather than spelled out in the header, where a lone "fe"
+ * sat beside the calorie status and belonged to neither it nor the button.
  */
 export function DailyHabits() {
   const { calorieEntries, vitaminEntries, whiteningEntries, logCalories, logVitamins, logWhitening } =
@@ -93,7 +97,6 @@ export function DailyHabits() {
         <p className="text-xs tracking-wider text-neutral-500">
           daily
           {selLabel && <> · {selLabel}</>}
-          {sel.ironDay && <> · fe</>}
         </p>
         <p className="text-sm tabular-nums text-neutral-400">
           <span
@@ -193,10 +196,12 @@ export function DailyHabits() {
         </button>
         <button
           onClick={cyclePills}
-          aria-label="vitamins"
+          aria-label={sel.ironDay ? 'vitamins and iron' : 'vitamins'}
           className={`flex min-h-[44px] w-11 items-center justify-center rounded-xl active:opacity-80 ${pillTone}`}
         >
-          <MdMedication aria-hidden />
+          {/* The ingot carries more line work than the capsule, so it needs the
+              extra couple of pixels to keep its middle from filling in. */}
+          {sel.ironDay ? <GiMetalBar className="text-lg" aria-hidden /> : <MdMedication aria-hidden />}
         </button>
         <button
           onClick={() => void logWhitening(!selStrip, selDate)}
