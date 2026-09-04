@@ -5,8 +5,6 @@ import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../config/flexRoutines'
 import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
-import type { VitaminEntry } from '../lib/vitamins'
-import type { WhiteningEntry } from '../lib/whitening'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { LockedProjections } from '../lib/goalLock'
 import type { TrackedIssue } from './issues'
@@ -24,8 +22,6 @@ const KEYS = {
   cacheBodyWeight: 'wt.cache.bodyweight',
   cacheFlex: 'wt.cache.flex',
   cacheCalories: 'wt.cache.calories',
-  cacheVitamins: 'wt.cache.vitamins',
-  cacheWhitening: 'wt.cache.whitening',
   cacheMeasurements: 'wt.cache.measurements',
   cacheDurations: 'wt.cache.durations',
   cacheIssues: 'wt.cache.issues',
@@ -95,6 +91,8 @@ export type StretchState = {
   coreWeights?: Record<number, number | null>
   /** Rep the current stretch set's rhythm guide had reached (1-based). */
   rep?: number
+  /** Exercise keys omitted from this run of the routine. */
+  skipped?: string[]
   /** The rest countdown that was on screen, if any. */
   rest?: RestState | null
   /**
@@ -223,12 +221,6 @@ export const storage = {
 
   loadCalories: (): CalorieEntry[] => read(KEYS.cacheCalories, []),
   saveCalories: (entries: CalorieEntry[]) => write(KEYS.cacheCalories, entries),
-
-  loadVitamins: (): VitaminEntry[] => read(KEYS.cacheVitamins, []),
-  saveVitamins: (entries: VitaminEntry[]) => write(KEYS.cacheVitamins, entries),
-
-  loadWhitening: (): WhiteningEntry[] => read(KEYS.cacheWhitening, []),
-  saveWhitening: (entries: WhiteningEntry[]) => write(KEYS.cacheWhitening, entries),
 
   caloriesRepaired: (): boolean => read(KEYS.caloriesRepaired, false),
   markCaloriesRepaired: () => write(KEYS.caloriesRepaired, true),

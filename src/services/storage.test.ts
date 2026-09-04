@@ -90,11 +90,18 @@ describe('loadFlexPlans', () => {
 describe('the stretch session snapshot', () => {
   beforeEach(() => backing.clear())
 
-  it('remembers the routine and the core decision across a reload', () => {
-    storage.saveStretch({ step: 3, done: ['a'], routine: 'head_to_toe', core: false })
+  it('remembers the routine, core decision, and skipped exercises across a reload', () => {
+    storage.saveStretch({
+      step: 3,
+      done: ['a'],
+      routine: 'head_to_toe',
+      core: false,
+      skipped: ['calf_stretch'],
+    })
     const saved = storage.loadStretch()!
     expect(saved.routine).toBe('head_to_toe')
     expect(saved.core).toBe(false)
+    expect(saved.skipped).toEqual(['calf_stretch'])
   })
 
   // A session that predates the two routines carries neither field; the callers

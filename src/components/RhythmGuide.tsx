@@ -14,10 +14,9 @@ import {
   phaseEfforts,
   repGlow,
   strain,
-  type MotionKind,
   type RepGlow,
 } from '../lib/rhythmMotion'
-import { createRotation, type Rotation } from '../lib/variantRotation'
+import { rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
 
 /**
  * An abstract, nature-inspired rhythm animation that paces a stretch's tempo.
@@ -44,28 +43,7 @@ import { createRotation, type Rotation } from '../lib/variantRotation'
  * count sits under the shape, because knowing which rep you're on is the only way
  * to know when to tap.
  */
-const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
-const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
-// Fewer shapes here than in the other families, and all three say the same thing
-// the same way round: the direction has to be unmistakable at a glance, which is
-// not something every abstract shape can carry.
-const PUSHPULL_VARIANTS = ['anvil', 'chevrons', 'gauge'] as const
-type Variant =
-  | (typeof BREATHE_VARIANTS)[number]
-  | (typeof DESCENT_VARIANTS)[number]
-  | (typeof PUSHPULL_VARIANTS)[number]
-
-// One rotation per family, held across mounts (each set remounts the guide): the
-// order stays random, but a shape never follows itself and none of them sits out
-// for long. See lib/variantRotation.
-const rotations: Record<MotionKind, Rotation<Variant>> = {
-  breathe: createRotation(BREATHE_VARIANTS),
-  descent: createRotation(DESCENT_VARIANTS),
-  pushpull: createRotation(PUSHPULL_VARIANTS),
-}
-function pickVariant(kind: MotionKind): Variant {
-  return rotations[kind].next()
-}
+type Variant = RhythmVariant
 
 /** Depth 0–1 (0 = neutral/top, 1 = deepest) mapped to a breathing orb's scale. */
 const SCALE_MIN = 0.55
@@ -458,6 +436,7 @@ const STRAIN_PCT = 0.7
 export function RhythmGuide({
   tempo,
   reps,
+  variant: chosenVariant,
   running = true,
   startRep = 1,
   onRep,
@@ -466,6 +445,8 @@ export function RhythmGuide({
 }: {
   tempo: string
   reps?: number
+  /** A session-owned choice, used when two sides belong to the same set. */
+  variant?: RhythmVariant
   running?: boolean
   /** Rep to resume counting from — lets a reloaded session pick up where it left off. */
   startRep?: number
@@ -492,7 +473,7 @@ export function RhythmGuide({
   const efforts = useMemo(() => phaseEfforts(phases), [phases])
   const closes = useMemo(() => cycleCloses(phases), [phases])
   const motion = useMemo(() => motionForPhases(phases), [phases])
-  const [variant] = useState<Variant>(() => pickVariant(motion))
+  const [variant] = useState<Variant>(() => chosenVariant ?? rhythmVariantForMotion(motion))
   const [idx, setIdx] = useState(0)
   const [rep, setRep] = useState(startRep)
   // The rep count also lives in a ref so the animation loop increments from the

@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { ThisWeek } from './ThisWeek'
 import { DailyHabits } from './DailyHabits'
@@ -26,6 +26,13 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
     useData()
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
+  const [habitWeek, setHabitWeek] = useState<string | null>(null)
+  const habitsRef = useRef<HTMLDivElement>(null)
+
+  const showHabitWeek = (week: string) => {
+    setHabitWeek(week)
+    requestAnimationFrame(() => habitsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }
 
   const lastPhoto =
     [settings.lastProgressPhoto, ...PROGRESS_PHOTO_HISTORY]
@@ -113,9 +120,11 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
         <div className="rounded-xl bg-accent-2/20 p-2 text-center text-sm text-accent-2">{flash}</div>
       )}
 
-      <ThisWeek />
+      <ThisWeek onSelectWeek={showHabitWeek} />
 
-      <DailyHabits />
+      <div ref={habitsRef}>
+        <DailyHabits weekStart={habitWeek} onShowCurrentWeek={() => setHabitWeek(null)} />
+      </div>
 
       <WeightCard />
 

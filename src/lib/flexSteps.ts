@@ -62,6 +62,14 @@ export type CoreSet = { reps: number; weightLbs: number | null }
 /** A step in the Stretch + Core session: a mobility set or a core set. */
 export type SessionStep = FlexSetStep | CoreSetStep
 
+/**
+ * Identity of one stretch round, shared by its left and right steps. The two
+ * sides still keep distinct `stepKey`s for completion tracking.
+ */
+export function flexRoundKey(step: FlexSetStep): string {
+  return step.side ? step.stepKey.slice(0, -(step.side.length + 1)) : step.stepKey
+}
+
 /** Assumed seconds per rep, for a stretch whose tempo says nothing usable. */
 export const SEC_PER_REP = 5
 

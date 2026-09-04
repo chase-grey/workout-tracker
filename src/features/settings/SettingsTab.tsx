@@ -8,6 +8,7 @@ import {
   type TrackedIssue,
 } from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
+import { PoseCheck } from './PoseCheck'
 import { PlanEditor } from './PlanEditor'
 import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
@@ -141,6 +142,8 @@ export function SettingsTab({
           {checkingUpdate ? 'checking…' : 'check for updates & reload'}
         </button>
       </section>
+
+      <PoseCheck />
 
       {settings.chatToken.trim() && (
         <section className="flex flex-col gap-2">

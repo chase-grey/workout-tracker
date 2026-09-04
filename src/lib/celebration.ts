@@ -14,8 +14,6 @@ import { toISODate, weekStartISO } from './dates'
 import { exerciseName } from '../config/plan'
 import { trainingDates } from './session'
 import type { WeeklyGoalConfig } from './weeklyStreak'
-import { vitaminGoalDates, type VitaminEntry } from './vitamins'
-import { whiteningGoalDates, type WhiteningEntry } from './whitening'
 
 /** Energy level, quietest → loudest. PRs are the loudest thing there is. */
 export type CelebrationTier = 'small' | 'medium' | 'large' | 'epic'
@@ -136,22 +134,17 @@ export type WeekCounts = {
   workouts: number
   flex: number
   calDays: number
-  vitaminDays: number
-  whiteningDays: number
 }
 
 /**
  * This-week counts, mirroring DataContext's derivation exactly: distinct dates
  * trained (supplemental core-only sessions excluded), distinct stretch dates,
- * calorie-goal days, days that took every pill they owed, and days the whitening
- * strip went on.
+ * calorie-goal days.
  */
 export function currentWeekCounts(
   workouts: WorkoutRow[],
   flexDates: string[],
   calorieEntries: CalorieEntry[],
-  vitaminEntries: VitaminEntry[] = [],
-  whiteningEntries: WhiteningEntry[] = [],
   today: Date = new Date(),
 ): WeekCounts {
   const wk = weekStartISO(toISODate(today))
@@ -161,8 +154,6 @@ export function currentWeekCounts(
     workouts: trainingDates(workouts).filter(inWeek).length,
     flex: new Set(flexDates.filter(inWeek)).size,
     calDays: calorieHitDates(calorieEntries).filter(inWeek).length,
-    vitaminDays: vitaminGoalDates(vitaminEntries).filter(inWeek).length,
-    whiteningDays: whiteningGoalDates(whiteningEntries).filter(inWeek).length,
   }
 }
 
@@ -171,10 +162,8 @@ export function overallProgress(c: WeekCounts, g: WeeklyGoalConfig): number {
   return (
     (Math.min(c.workouts, g.workouts) / g.workouts +
       Math.min(c.flex, g.flex) / g.flex +
-      Math.min(c.calDays, g.calDays) / g.calDays +
-      Math.min(c.vitaminDays, g.vitaminDays) / g.vitaminDays +
-      Math.min(c.whiteningDays, g.whiteningDays) / g.whiteningDays) /
-    5
+      Math.min(c.calDays, g.calDays) / g.calDays) /
+    3
   )
 }
 
@@ -183,10 +172,8 @@ export function checkpointFraction(g: WeeklyGoalConfig): number {
   return (
     (g.halfWorkouts / g.workouts +
       g.halfFlex / g.flex +
-      g.halfCalDays / g.calDays +
-      g.halfVitaminDays / g.vitaminDays +
-      g.halfWhiteningDays / g.whiteningDays) /
-    5
+      g.halfCalDays / g.calDays) /
+    3
   )
 }
 
@@ -194,8 +181,6 @@ export type WeekAchievements = {
   workoutGoal: boolean
   flexGoal: boolean
   calGoal: boolean
-  vitaminGoal: boolean
-  whiteningGoal: boolean
   checkpoint: boolean
   fullGoal: boolean
   exceeded: boolean
@@ -205,8 +190,6 @@ const ACHIEVEMENT_KEYS: (keyof WeekAchievements)[] = [
   'workoutGoal',
   'flexGoal',
   'calGoal',
-  'vitaminGoal',
-  'whiteningGoal',
   'checkpoint',
   'fullGoal',
   'exceeded',
@@ -217,23 +200,17 @@ export function weekAchievements(c: WeekCounts, g: WeeklyGoalConfig): WeekAchiev
   const workoutGoal = c.workouts >= g.workouts
   const flexGoal = c.flex >= g.flex
   const calGoal = c.calDays >= g.calDays
-  const vitaminGoal = c.vitaminDays >= g.vitaminDays
-  const whiteningGoal = c.whiteningDays >= g.whiteningDays
-  const fullGoal = workoutGoal && flexGoal && calGoal && vitaminGoal && whiteningGoal
+  const fullGoal = workoutGoal && flexGoal && calGoal
   const overAny =
     c.workouts > g.workouts ||
     c.flex > g.flex ||
-    c.calDays > g.calDays ||
-    c.vitaminDays > g.vitaminDays ||
-    c.whiteningDays > g.whiteningDays
+    c.calDays > g.calDays
   // 1e-9 guards floating-point equality when progress exactly meets the marker.
   const checkpoint = overallProgress(c, g) + 1e-9 >= checkpointFraction(g)
   return {
     workoutGoal,
     flexGoal,
     calGoal,
-    vitaminGoal,
-    whiteningGoal,
     checkpoint,
     fullGoal,
     exceeded: fullGoal && overAny,
@@ -273,20 +250,6 @@ export function achievementCelebration(
         tier: 'medium',
         title: 'weekly calorie days done',
         subtitle: `${counts.calDays} of ${goals.calDays} days this week.`,
-        icon: 'medal',
-      }
-    case 'vitaminGoal':
-      return {
-        tier: 'medium',
-        title: 'weekly vitamins done',
-        subtitle: `${counts.vitaminDays} of ${goals.vitaminDays} days this week.`,
-        icon: 'medal',
-      }
-    case 'whiteningGoal':
-      return {
-        tier: 'medium',
-        title: 'weekly whitening done',
-        subtitle: `${counts.whiteningDays} of ${goals.whiteningDays} days this week.`,
         icon: 'medal',
       }
     case 'checkpoint':

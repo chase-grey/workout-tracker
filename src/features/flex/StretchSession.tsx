@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
+import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
@@ -13,6 +13,7 @@ import { PhotoStep } from './PhotoStep'
 import { formatDuration, medianTotalSec, remainingSecs } from '../../lib/estimate'
 import {
   buildSessionSteps,
+  flexRoundKey,
   stepWorkSec,
   SEC_PER_REP,
   type CoreSetStep,
@@ -26,6 +27,7 @@ import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import { stretchSplit } from '../../lib/stretchSplit'
 import { canResumeRest, restScreenSec, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
+import { useBackGuard } from '../../lib/useBackGuard'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
@@ -37,6 +39,7 @@ import {
 } from '../../lib/settleIn'
 import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
+import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -83,6 +86,107 @@ function stepDetail(s: SessionStep): string {
   return [stepPosition(s) ? s.exName : '', setOfLabel(s)].filter(Boolean).join(' · ')
 }
 
+type RoutineChecklistProps = {
+  steps: SessionStep[]
+  currentKey?: string
+  done: Set<string>
+  skipped: Set<string>
+  onClose: () => void
+  onJump: (stepKey: string) => void
+  onToggleDone: (stepKey: string) => void
+  onToggleSkipped: (exKey: string, skip: boolean) => void
+}
+
+/** The full routine stays visible here even when an exercise leaves today's flow. */
+function RoutineChecklist({
+  steps,
+  currentKey,
+  done,
+  skipped,
+  onClose,
+  onJump,
+  onToggleDone,
+  onToggleSkipped,
+}: RoutineChecklistProps) {
+  const exercises = steps.reduce<Array<{ key: string; name: string; blockLabel: string; steps: SessionStep[] }>>(
+    (groups, step) => {
+      const group = groups.find((item) => item.key === step.exKey)
+      if (group) group.steps.push(step)
+      else groups.push({ key: step.exKey, name: step.exName, blockLabel: step.blockLabel, steps: [step] })
+      return groups
+    },
+    [],
+  )
+
+  return (
+    <div className="fixed inset-0 z-60 flex items-end bg-black/60" onClick={onClose}>
+      <div
+        className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
+        onClick={(e) => e.stopPropagation()}
+        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+      >
+        <h3 className="mb-1 text-lg font-bold">routine checklist</h3>
+        <p className="mb-3 text-xs text-neutral-500">tap a set to jump; tap the circle to mark it done.</p>
+        <div className="flex flex-col gap-3">
+          {exercises.map((exercise) => {
+            const isSkipped = skipped.has(exercise.key)
+            return (
+              <section key={exercise.key} className="rounded-xl bg-surface-2/40 px-2 py-1">
+                <div className="flex items-center gap-2">
+                  <div className={`min-w-0 flex-1 py-2 ${isSkipped ? 'opacity-50' : ''}`}>
+                    <span className="block text-[10px] tracking-wide text-neutral-500">{exercise.blockLabel}</span>
+                    <span className={`block font-semibold ${isSkipped ? 'line-through' : ''}`}>{exercise.name}</span>
+                  </div>
+                  <button
+                    onClick={() => onToggleSkipped(exercise.key, !isSkipped)}
+                    aria-label={isSkipped ? `unskip ${exercise.name}` : `skip ${exercise.name}`}
+                    className="p-2 text-2xl"
+                  >
+                    <MdBlock className={isSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                  </button>
+                </div>
+                {!isSkipped && (
+                  <div className="flex flex-col gap-1 pb-1">
+                    {exercise.steps.map((step) => {
+                      const isDone = done.has(step.stepKey)
+                      return (
+                        <div
+                          key={step.stepKey}
+                          className={`flex items-center gap-2 rounded-xl px-2 ${step.stepKey === currentKey ? 'bg-surface-2' : ''}`}
+                        >
+                          <button
+                            onClick={() => onJump(step.stepKey)}
+                            className="flex-1 py-2 text-left active:opacity-70"
+                          >
+                            <span className="block text-sm font-medium">
+                              {[stepPosition(step), setOfLabel(step)].filter(Boolean).join(' · ')}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => onToggleDone(step.stepKey)}
+                            aria-label={isDone ? 'mark incomplete' : 'mark complete'}
+                            className="p-2 text-2xl"
+                          >
+                            {isDone ? (
+                              <MdCheckCircle className="text-accent-2" aria-hidden />
+                            ) : (
+                              <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
+                            )}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /**
  * Guided, one-set-at-a-time Stretch + Core flow: the mobility routine (with a
  * tempo rhythm animation, or a hold clock for a static stretch) followed by a
@@ -127,6 +231,7 @@ export function StretchSession({
   const [withCore] = useState(saved?.core ?? true)
   const [current, setCurrent] = useState(saved?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(saved?.done ?? []))
+  const [skipped, setSkipped] = useState<Set<string>>(() => new Set(saved?.skipped ?? []))
   const [coreReps, setCoreReps] = useState<Record<number, number>>(() => saved?.coreReps ?? {})
   // Weight per core set. A round that's absent hasn't been touched and takes the
   // prescribed load; one present with null was deliberately cleared to bodyweight.
@@ -193,7 +298,17 @@ export function StretchSession({
   }
 
   const plan = flexPlans[routine] ?? FLEX_ROUTINES[routine].blocks
-  const steps = useMemo(() => buildSessionSteps(plan, { core: withCore }), [plan, withCore])
+  const allSteps = useMemo(() => buildSessionSteps(plan, { core: withCore }), [plan, withCore])
+  // Skipping is an exercise-level decision: all of its sides and sets leave the
+  // live flow, while allSteps keeps them available to restore from the checklist.
+  const steps = useMemo(
+    () => allSteps.filter((step) => !skipped.has(step.exKey)),
+    [allSteps, skipped],
+  )
+  // A per-side round is two mounted guides, but it is one set: draw once for the
+  // round so either side gets the same animation. A later round has another key
+  // and therefore takes the next random choice from the rotation.
+  const [rhythmVariantFor] = useState(() => createRhythmVariantSelector())
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
@@ -224,6 +339,7 @@ export function StretchSession({
       coreReps,
       coreWeights,
       rep,
+      skipped: [...skipped],
       rest,
       // Written on every snapshot: `rest` flipping to null is the tick right after
       // a rest was banked, so the two always go to storage together.
@@ -231,12 +347,17 @@ export function StretchSession({
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, done, startedAt, routine, withCore, coreReps, coreWeights, rep, rest, seenGates, fast])
+  }, [safeCurrent, done, startedAt, routine, withCore, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
   // otherwise keep rolling the routine forward while it's out of sight.
   useOnHidden(fast, () => setFast(false))
+
+  // Android back (the button or the edge swipe) belongs to the checklist while
+  // it is open. Close the sheet and keep the routine underneath active; the
+  // session-level guard in App can handle a later press.
+  useBackGuard(showList, () => setShowList(false))
 
   // A static hold has nothing to animate, so it runs on a clock of its own — see
   // HoldTimer. Read here rather than beside the set below, because the wake lock
@@ -278,7 +399,7 @@ export function StretchSession({
       totalSteps: N,
       fallbackItems,
     })
-  }, [steps, done, durations, completed, N, coreTarget])
+  }, [steps, done, durations, completed, N, coreTarget, routine])
 
   /**
    * What the session that just happened was projected to cost, split the way the
@@ -312,7 +433,9 @@ export function StretchSession({
       .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
     void finishStretch({
       routine,
-      withCore,
+      // The core block may have been offered at session start and then skipped
+      // from the checklist; don't describe that session as "stretch + core".
+      withCore: withCore && !skipped.has(STRETCH_CORE.key),
       coreSets,
       duration: startedAt
         ? {
@@ -326,12 +449,48 @@ export function StretchSession({
   }
 
   if (N === 0) {
+    const allSkipped = allSteps.length > 0
     return (
-      <div className="flex flex-col gap-4 pb-24 pt-16 text-center">
-        <p className="text-neutral-500">no stretches in your routine. add some in settings → edit stretch routine.</p>
-        <button onClick={onClose} className="min-h-[44px] rounded-xl bg-surface font-medium">
-          back
-        </button>
+      <div className="flex min-h-full flex-col gap-4 pb-24 pt-16 text-center">
+        <p className="text-neutral-500">
+          {allSkipped ? 'all exercises skipped.' : 'no stretches in your routine. add some in settings → edit stretch routine.'}
+        </p>
+        {allSkipped ? (
+          <>
+            <button onClick={() => setShowList(true)} className="min-h-[44px] rounded-xl bg-surface font-medium">
+              routine checklist
+            </button>
+            <button onClick={() => finishWith(done)} className="min-h-[56px] rounded-2xl bg-accent text-lg font-bold text-black">
+              finish &amp; log session
+            </button>
+          </>
+        ) : (
+          <button onClick={onClose} className="min-h-[44px] rounded-xl bg-surface font-medium">
+            back
+          </button>
+        )}
+        {showList && (
+          <RoutineChecklist
+            steps={allSteps}
+            done={done}
+            skipped={skipped}
+            onClose={() => setShowList(false)}
+            onJump={() => {}}
+            onToggleDone={() => {}}
+            onToggleSkipped={(key, skip) => {
+              setSkipped((current) => {
+                const next = new Set(current)
+                if (skip) next.add(key)
+                else next.delete(key)
+                return next
+              })
+              if (!skip) {
+                setCurrent(0)
+                setPreparing(!fast)
+              }
+            }}
+          />
+        )}
       </div>
     )
   }
@@ -390,6 +549,35 @@ export function StretchSession({
   const goToStep = (i: number) => {
     setCurrent(i)
     setRep(1)
+  }
+
+  /** Drop every set of an exercise from this run, or put the exercise back. */
+  const setExerciseSkipped = (key: string, skip: boolean) => {
+    const nextSkipped = new Set(skipped)
+    if (skip) nextSkipped.add(key)
+    else nextSkipped.delete(key)
+
+    const nextSteps = allSteps.filter((candidate) => !nextSkipped.has(candidate.exKey))
+    const leaving = skip && step.exKey === key
+    const currentAllIndex = allSteps.findIndex((candidate) => candidate.stepKey === step.stepKey)
+    const landing = leaving
+      ? (allSteps.slice(currentAllIndex + 1).find((candidate) => !nextSkipped.has(candidate.exKey) && !done.has(candidate.stepKey))
+        ?? nextSteps.find((candidate) => !done.has(candidate.stepKey))
+        ?? nextSteps[0])
+      : nextSteps.find((candidate) => candidate.stepKey === step.stepKey) ?? nextSteps[0]
+
+    setSkipped(nextSkipped)
+    setCurrent(landing ? nextSteps.findIndex((candidate) => candidate.stepKey === landing.stepKey) : 0)
+    setRep(1)
+
+    if (leaving) {
+      // A rest or setup count aimed at the exercise being removed no longer has a
+      // destination. Start the replacement exercise with its ordinary setup.
+      if (rest) bankRest()
+      setRest(null)
+      setReadyOverrideSec(null)
+      setPreparing(!!landing && !fast && settleInSec(landing) > 0)
+    }
   }
 
   // Bank the rest slice just spent, then hand the screen to the get-ready count.
@@ -648,6 +836,7 @@ export function StretchSession({
             key={step.stepKey}
             tempo={step.tempo}
             reps={step.reps}
+            variant={rhythmVariantFor(flexRoundKey(step), step.tempo)}
             running={setLive}
             startRep={rep}
             onRep={setRep}
@@ -756,54 +945,31 @@ export function StretchSession({
 
       {showList && (
         // Above the rest overlay (z-50) — reachable from the rest screen's menu.
-        <div className="fixed inset-0 z-60 flex items-end bg-black/60" onClick={() => setShowList(false)}>
-          <div
-            className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
-            onClick={(e) => e.stopPropagation()}
-            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
-          >
-            <h3 className="mb-1 text-lg font-bold">routine checklist</h3>
-            <p className="mb-3 text-xs text-neutral-500">tap a set to jump; tap the circle to mark it done.</p>
-            <div className="flex flex-col gap-1">
-              {steps.map((s, i) => {
-                const isDone = done.has(s.stepKey)
-                return (
-                  <div
-                    key={s.stepKey}
-                    className={`flex items-center gap-2 rounded-xl px-2 ${i === safeCurrent ? 'bg-surface-2' : ''}`}
-                  >
-                    <button
-                      onClick={() => {
-                        goToStep(i)
-                        // Jumping is a decision to start that set now, so an
-                        // in-flight rest ends rather than covering it back up.
-                        if (rest) closeRest()
-                        setShowList(false)
-                      }}
-                      className="flex-1 py-3 text-left active:opacity-70"
-                    >
-                      <span className="text-[10px] tracking-wide text-neutral-500">{s.blockLabel}</span>
-                      <span className="block font-medium">
-                        {[s.exName, stepPosition(s), setOfLabel(s)].filter(Boolean).join(' · ')}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => toggleDone(s.stepKey)}
-                      aria-label={isDone ? 'mark incomplete' : 'mark complete'}
-                      className="p-2 text-2xl"
-                    >
-                      {isDone ? (
-                        <MdCheckCircle className="text-accent-2" aria-hidden />
-                      ) : (
-                        <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
-                      )}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
+        <RoutineChecklist
+          steps={allSteps}
+          currentKey={step.stepKey}
+          done={done}
+          skipped={skipped}
+          onClose={() => setShowList(false)}
+          onToggleDone={toggleDone}
+          onToggleSkipped={setExerciseSkipped}
+          onJump={(stepKey) => {
+            const i = steps.findIndex((candidate) => candidate.stepKey === stepKey)
+            if (i < 0) return
+            const destination = steps[i]
+            // A checklist jump changes the physical position without following
+            // the routine's normal rest transition, so put its setup in between.
+            const ready = settleInSec(destination, step)
+            goToStep(i)
+            if (rest) {
+              bankRest()
+              setRest(null)
+            }
+            setReadyOverrideSec(ready > 0 ? ready : null)
+            setPreparing(ready > 0)
+            setShowList(false)
+          }}
+        />
       )}
     </div>
   )

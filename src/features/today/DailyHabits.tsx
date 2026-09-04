@@ -1,50 +1,23 @@
 import { useEffect, useState } from 'react'
-import { GiMetalBar } from 'react-icons/gi'
-import { MdAutoAwesome, MdCheck, MdLocalFireDepartment, MdMedication } from 'react-icons/md'
+import { MdLocalFireDepartment } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { CALORIE_GOAL, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
-import { mondayOf, toISODate } from '../../lib/dates'
-import { vitaminDayState } from '../../lib/vitamins'
-import { usedStrips } from '../../lib/whitening'
+import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
 const QUICK_ADDS = [100, 500]
-
-// A whole day's goal in one tap. Only ever right for a day that is already over
-// and went unlogged, so it stays out of the row until you select one; on today it
-// is one mis-tap between an honest count and a filled-in lie.
 const BACKFILL = CALORIE_GOAL
 
-/**
- * The three things every day owes — the calories, the pills, and the whitening
- * strip — on one week timeline.
- *
- * They used to be three cards, each with its own Mon–Sun strip, which meant the
- * same week was drawn three times and the page scrolled to hold it. One strip
- * says everything the three said: a day shows an icon per habit it got, and a
- * day that got all three collapses to a single check, because at that point
- * which icons are lit is no longer information. The dim icons matter as much as
- * the bright ones — a day that is already spent draws all three slots, so the
- * gap you have to close is visible rather than absent. A day that hasn't
- * happened yet has no gap to show, so it draws the check dim instead: the shape
- * of a day you could still finish, without three unlit icons reading as failure.
- *
- * The selected day drives everything below the strip: the calorie readout and
- * bar, and the two toggles. The pill toggle cycles rather than branching into
- * separate buttons — nothing, then the multivitamin, then the iron that rides
- * along every other day — so an iron day that quietly dropped the iron is still
- * a state you can record and see (lime, not the full green), which is the whole
- * reason the pill log tracks the two doses apart. Whether the selected day is
- * one of the iron days is on the toggle itself — it wears an iron ingot instead
- * of the capsule — rather than spelled out in the header, where a lone "fe"
- * sat beside the calorie status and belonged to neither it nor the button.
- */
-export function DailyHabits() {
-  const { calorieEntries, vitaminEntries, whiteningEntries, logCalories, logVitamins, logWhitening } =
-    useData()
+type Props = {
+  /** A Monday selected from streak history; null keeps following the current week. */
+  weekStart: string | null
+  onShowCurrentWeek: () => void
+}
 
-  // Ticks so the "2h ago" since the last log ages on screen instead of freezing
-  // at whatever it read when the card mounted — the card is left open all day.
+/** The daily food log and its editable Mon-Sun timeline. */
+export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
+  const { calorieEntries, logCalories } = useData()
+
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000)
@@ -53,59 +26,62 @@ export function DailyHabits() {
 
   const today = toISODate(now)
   const [selDate, setSelDate] = useState(today)
-
-  const monday = mondayOf(now)
+  const currentWeek = weekStartISO(today)
+  const historical = weekStart != null && weekStart !== currentWeek
+  const monday = weekStart ? parseISODate(weekStart) : mondayOf(now)
   const week = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
     return toISODate(d)
   })
 
+  useEffect(() => {
+    if (historical && weekStart) {
+      const sunday = parseISODate(weekStart)
+      sunday.setDate(sunday.getDate() + 6)
+      setSelDate(toISODate(sunday))
+    } else {
+      setSelDate(today)
+    }
+  }, [weekStart, historical, today])
+
   const selTotal = totalForDate(calorieEntries, selDate)
   const pct = Math.min(selTotal / CALORIE_GOAL, 1) * 100
   const { label: selLabel } = foodLogStatus(calorieEntries, selDate, now)
-
-  // Pace marker: where you should be eating constantly across the 9am–9pm window.
   const pace = selDate === today ? caloriePaceFraction(now) : null
 
-  const sel = vitaminDayState(vitaminEntries, selDate)
-  const selStrip = usedStrips(whiteningEntries, selDate)
-
-  const addCalories = (cal: number) => {
-    if (cal === 0) return
-    void logCalories(cal, selDate)
+  const addCalories = (calories: number) => {
+    if (calories !== 0) void logCalories(calories, selDate)
   }
-
-  // none → multivitamin → multivitamin + iron → none. Only iron days have the
-  // middle step; on the others the multivitamin alone is the whole day.
-  const cyclePills = () => {
-    if (sel.done) void logVitamins({ vitamins: false, iron: false }, selDate)
-    else if (sel.ironDue && sel.vitamins) void logVitamins({ iron: true }, selDate)
-    else void logVitamins({ vitamins: true }, selDate)
-  }
-
-  const pillTone = sel.done
-    ? 'bg-accent-2/15 text-accent-2'
-    : sel.vitamins
-      ? 'bg-surface-2 text-lime-400'
-      : 'bg-surface-2 text-neutral-500'
-  const stripTone = selStrip ? 'bg-accent-2/15 text-accent-2' : 'bg-surface-2 text-neutral-500'
 
   return (
     <div className="rounded-2xl bg-surface p-3">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-2">
         <p className="text-xs tracking-wider text-neutral-500">
-          daily
+          {historical
+            ? `week of ${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+            : 'daily calories'}
           {selLabel && <> · {selLabel}</>}
         </p>
-        <p className="text-sm tabular-nums text-neutral-400">
-          <span
-            className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}
-          >
-            {selTotal}
-          </span>{' '}
-          / {CALORIE_GOAL}
-        </p>
+        <div className="flex shrink-0 items-baseline gap-2">
+          {historical && (
+            <button
+              type="button"
+              onClick={onShowCurrentWeek}
+              className="rounded-lg bg-surface-2 px-2 py-1 text-xs font-medium text-neutral-300 active:opacity-70"
+            >
+              this week
+            </button>
+          )}
+          <p className="text-sm tabular-nums text-neutral-400">
+            <span
+              className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}
+            >
+              {selTotal}
+            </span>{' '}
+            / {CALORIE_GOAL}
+          </p>
+        </div>
       </div>
 
       <div className="relative mt-1.5">
@@ -121,63 +97,38 @@ export function DailyHabits() {
         )}
       </div>
 
-      {/* Mon–Sun week: tap a day to view, log, or correct it. */}
       <div className="mt-2 flex gap-1">
-        {week.map((d, i) => {
-          const cal = totalForDate(calorieEntries, d) >= CALORIE_GOAL
-          const vit = vitaminDayState(vitaminEntries, d).done
-          const wht = usedStrips(whiteningEntries, d)
-          const all = cal && vit && wht
-          const future = d > today
+        {week.map((date, i) => {
+          const hit = totalForDate(calorieEntries, date) >= CALORIE_GOAL
           return (
             <button
-              key={d}
-              onClick={() => setSelDate(d)}
-              aria-label={d}
+              key={date}
+              onClick={() => setSelDate(date)}
+              aria-label={date}
               className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1 ${
-                d === selDate ? 'bg-surface-2 ring-1 ring-accent' : ''
+                date === selDate ? 'bg-surface-2 ring-1 ring-accent' : ''
               }`}
             >
-              <span className={`text-[10px] leading-none ${d === today ? 'text-accent' : 'text-neutral-500'}`}>
+              <span className={`text-[10px] leading-none ${date === today ? 'text-accent' : 'text-neutral-500'}`}>
                 {DOW[i]}
               </span>
-              {/* Every branch shares the row height so the strip stays level. */}
-              <span className="flex h-4 items-center gap-px">
-                {future ? (
-                  <MdCheck className="text-base text-neutral-700" aria-hidden />
-                ) : all ? (
-                  <MdCheck className="text-base text-accent-2" aria-hidden />
-                ) : (
-                  <>
-                    <MdLocalFireDepartment
-                      className={`text-[11px] ${cal ? 'text-accent' : 'text-neutral-700'}`}
-                      aria-hidden
-                    />
-                    <MdMedication
-                      className={`text-[11px] ${vit ? 'text-emerald-400' : 'text-neutral-700'}`}
-                      aria-hidden
-                    />
-                    <MdAutoAwesome
-                      className={`text-[11px] ${wht ? 'text-accent-bright' : 'text-neutral-700'}`}
-                      aria-hidden
-                    />
-                  </>
-                )}
-              </span>
+              <MdLocalFireDepartment
+                className={`text-sm ${hit ? 'text-accent' : date > today ? 'text-neutral-800' : 'text-neutral-700'}`}
+                aria-hidden
+              />
             </button>
           )
         })}
       </div>
 
-      {/* One row for the whole day: the calorie taps, then the two toggles. */}
       <div className="mt-2 flex gap-1.5">
-        {QUICK_ADDS.map((cal) => (
+        {QUICK_ADDS.map((calories) => (
           <button
-            key={cal}
-            onClick={() => addCalories(cal)}
+            key={calories}
+            onClick={() => addCalories(calories)}
             className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
           >
-            +{cal}
+            +{calories}
           </button>
         ))}
         {selDate < today && (
@@ -193,22 +144,6 @@ export function DailyHabits() {
           className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
         >
           −100
-        </button>
-        <button
-          onClick={cyclePills}
-          aria-label={sel.ironDay ? 'vitamins and iron' : 'vitamins'}
-          className={`flex min-h-[44px] w-11 items-center justify-center rounded-xl active:opacity-80 ${pillTone}`}
-        >
-          {/* The ingot carries more line work than the capsule, so it needs the
-              extra couple of pixels to keep its middle from filling in. */}
-          {sel.ironDay ? <GiMetalBar className="text-lg" aria-hidden /> : <MdMedication aria-hidden />}
-        </button>
-        <button
-          onClick={() => void logWhitening(!selStrip, selDate)}
-          aria-label="whitening"
-          className={`flex min-h-[44px] w-11 items-center justify-center rounded-xl active:opacity-80 ${stripTone}`}
-        >
-          <MdAutoAwesome aria-hidden />
         </button>
       </div>
     </div>

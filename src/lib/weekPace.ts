@@ -107,8 +107,6 @@ export const METRIC_WINDOW: Record<MetricKey, number> = {
   workouts: DAYS_IN_WEEK,
   flex: 6,
   calDays: DAYS_IN_WEEK,
-  vitaminDays: DAYS_IN_WEEK,
-  whiteningDays: DAYS_IN_WEEK,
 }
 
 /** One metric's standing against both the schedule and the days left. */
@@ -162,8 +160,6 @@ export const METRIC_KEYS: MetricKey[] = [
   'workouts',
   'flex',
   'calDays',
-  'vitaminDays',
-  'whiteningDays',
 ]
 
 /**

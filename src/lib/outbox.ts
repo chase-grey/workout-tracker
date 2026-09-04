@@ -2,8 +2,6 @@ import type { BodyWeightEntry, WorkoutRow } from '../types'
 import type { Plan } from '../config/plan'
 import type { FlexEntry } from './flex'
 import type { CalorieEntry } from './calories'
-import type { VitaminEntry } from './vitamins'
-import type { WhiteningEntry } from './whitening'
 import type { MeasurementEntry } from './bodyComp'
 import type { SessionDuration, SessionTimeSamples } from './estimate'
 import type { SyncedSettings } from './settingsSync'
@@ -27,8 +25,6 @@ export type WritePayload =
   | { type: 'bodyweight'; entry: BodyWeightEntry }
   | { type: 'flex'; entry: FlexEntry }
   | { type: 'calorie'; entry: CalorieEntry }
-  | { type: 'vitamin'; entry: VitaminEntry }
-  | { type: 'whitening'; entry: WhiteningEntry }
   | { type: 'measurement'; entry: MeasurementEntry }
   | { type: 'duration'; entry: SessionDuration }
   | { type: 'exerciseTimes'; samples: SessionTimeSamples }
@@ -52,17 +48,13 @@ export function newWrite(payload: WritePayload, id: string): QueuedWrite {
  *
  * A calorie entry carries a date's whole running total, so an older pending
  * total for that date is not just redundant, it's actively wrong: delivering it
- * after the newer one would roll the sheet back. A pill day is the same shape —
- * both of that date's doses, sent whole — as is a strip day, as are the plan and
- * the settings, and
+ * after the newer one would roll the sheet back. The plan, settings, and
  * a note rewrite, which carries the exercise's whole note: flag a knee and then
  * a hip and the second write says "knee, hip", so landing the first afterwards
  * would drop the hip again. Everything else appends a row and has to be kept.
  */
 export function supersedes(w: WritePayload): string | null {
   if (w.type === 'calorie') return `calorie:${w.entry.date}`
-  if (w.type === 'vitamin') return `vitamin:${w.entry.date}`
-  if (w.type === 'whitening') return `whitening:${w.entry.date}`
   if (w.type === 'notes') return `notes:${w.edit.session}:${w.edit.exercise}`
   if (w.type === 'plan') return 'plan'
   if (w.type === 'settings') return 'settings'

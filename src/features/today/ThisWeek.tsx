@@ -58,7 +58,7 @@ function MetricBar({ label, m }: { label: string; m: MetricPace }) {
   )
 }
 
-export function ThisWeek() {
+export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => void }) {
   const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
     useData()
 
@@ -114,7 +114,14 @@ export function ThisWeek() {
         </button>
       </div>
 
-      {showStreak && <StreakHistoryPanel />}
+      {showStreak && (
+        <StreakHistoryPanel
+          onSelectWeek={(week) => {
+            onSelectWeek(week)
+            setShowStreak(false)
+          }}
+        />
+      )}
 
       {/* Milestone bar: fill = progress; white line = where the schedule expects you; the grey and
           green ticks are the checkpoint and the goal, unlabelled — the two marks read on their own. */}
@@ -138,8 +145,6 @@ export function ThisWeek() {
         <MetricBar label="workouts" m={byKey.get('workouts')!} />
         <MetricBar label="flex sessions" m={byKey.get('flex')!} />
         <MetricBar label="calorie days" m={byKey.get('calDays')!} />
-        <MetricBar label="vitamins" m={byKey.get('vitaminDays')!} />
-        <MetricBar label="whitening" m={byKey.get('whiteningDays')!} />
       </div>
 
       {summary.weightTrend !== null && (

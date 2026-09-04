@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MdAcUnit, MdLocalFireDepartment, MdStar } from 'react-icons/md'
+import { MdAcUnit, MdChevronRight, MdLocalFireDepartment, MdStar } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { parseISODate } from '../../lib/dates'
 import { splitAtCurrentRun, type WeekResult } from '../../lib/weeklyStreak'
@@ -47,14 +47,20 @@ function Outcome({ row }: { row: WeekResult }) {
   return <span className="shrink-0 text-sm font-semibold text-amber-400">streak lost</span>
 }
 
-function Row({ row }: { row: WeekResult }) {
+function Row({ row, onSelectWeek }: { row: WeekResult; onSelectWeek: (week: string) => void }) {
   // Each week against the bar it was actually held to, not today's: a goal a week
   // predates was zeroed out for it (see weeklyStreak.weeklyStreakHistory), and
   // reporting it here as missed would blame the week for a habit that wasn't
   // being tracked yet.
   const goals = row.goals
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0">
+    <button
+      type="button"
+      onClick={() => onSelectWeek(row.week)}
+      disabled={row.inProgress}
+      aria-label={`edit ${row.inProgress ? 'this week' : weekLabel(row.week)}`}
+      className="flex min-h-[44px] w-full items-center justify-between gap-3 border-b border-border py-2 text-left last:border-0 enabled:active:opacity-70"
+    >
       <div className="min-w-0">
         <div className="text-sm font-medium text-neutral-300">
           {row.inProgress ? 'this week' : weekLabel(row.week)}
@@ -63,16 +69,13 @@ function Row({ row }: { row: WeekResult }) {
           <Count label="workouts" value={row.counts.workouts} goal={goals.workouts} />
           <Count label="flex" value={row.counts.flex} goal={goals.flex} />
           <Count label="cal days" value={row.counts.calDays} goal={goals.calDays} />
-          {goals.vitaminDays > 0 && (
-            <Count label="pills" value={row.counts.vitaminDays} goal={goals.vitaminDays} />
-          )}
-          {goals.whiteningDays > 0 && (
-            <Count label="strips" value={row.counts.whiteningDays} goal={goals.whiteningDays} />
-          )}
         </div>
       </div>
-      <Outcome row={row} />
-    </div>
+      <span className="flex shrink-0 items-center gap-1">
+        <Outcome row={row} />
+        {!row.inProgress && <MdChevronRight className="text-neutral-500" aria-hidden />}
+      </span>
+    </button>
   )
 }
 
@@ -87,7 +90,7 @@ function Row({ row }: { row: WeekResult }) {
  * It scrolls past a few weeks rather than growing without bound, so a long
  * history doesn't push the week's bars off the screen they were opened from.
  */
-export function StreakHistoryPanel() {
+export function StreakHistoryPanel({ onSelectWeek }: { onSelectWeek: (week: string) => void }) {
   const { streakHistory } = useData()
   const { earlier, run } = splitAtCurrentRun(streakHistory)
   const [showEarlier, setShowEarlier] = useState(run.length === 0)
@@ -99,7 +102,7 @@ export function StreakHistoryPanel() {
   return (
     <div className="mb-3 max-h-[45vh] overflow-y-auto rounded-xl bg-surface-2 px-3 py-1">
       {runRows.map((row) => (
-        <Row key={row.week} row={row} />
+        <Row key={row.week} row={row} onSelectWeek={onSelectWeek} />
       ))}
 
       {earlierRows.length > 0 && (
@@ -115,7 +118,7 @@ export function StreakHistoryPanel() {
           {showEarlier && (
             <div className="opacity-70">
               {earlierRows.map((row) => (
-                <Row key={row.week} row={row} />
+                <Row key={row.week} row={row} onSelectWeek={onSelectWeek} />
               ))}
             </div>
           )}

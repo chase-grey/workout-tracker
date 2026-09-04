@@ -591,8 +591,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // set still owed, as jumping to any other exercise does.
     const owed = logFor(key)?.sets.findIndex((s) => !s.done) ?? -1
     setPendingStepKey(`${key}:${owed >= 0 ? owed : 0}`)
-    activeStartRef.current = Date.now()
+    // A checklist jump is a move to a set, not the start of that set. Keep its
+    // active clock stopped while the same get-into-position count used after rest
+    // gives the user time to get there. closeRest also banks an in-flight rest.
+    activeStartRef.current = 0
     if (rest) closeRest()
+    else setPreparing(true)
   }
 
   // Rest again before the set on screen — for the rest that was cut short, or the
@@ -1208,11 +1212,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                         if (isSkipped) unskipAndJump(e.key)
                         else {
                           if (jumpStep >= 0) setCurrent(jumpStep)
-                          // Jumping is a decision to start that exercise now, so an
-                          // in-flight rest ends rather than covering it back up.
-                          // The set we're landing on is the one the count is for,
-                          // not the one the rest was counting down to.
+                          // Jumping chooses the exercise to do next, but the set
+                          // must not become live while the user is still walking
+                          // over and getting into position. An in-flight rest is
+                          // banked first; without one, hand straight to the same
+                          // countdown here.
+                          activeStartRef.current = 0
                           if (rest) closeRest()
+                          else setPreparing(true)
                         }
                         setShowList(false)
                       }}

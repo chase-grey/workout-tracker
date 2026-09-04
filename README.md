@@ -31,7 +31,7 @@ was done last dimmed so the other reads as up next. Guided sessions advance on a
 tap anywhere: rest timer with animated shapes, get-into-position counts, paced-rep
 and hold timers, pause curtain, per-set grading, a recap when you finish. Plus this
 week at a glance, streak with freeze credits, body weight, the daily habits
-(food log against an on-pace calorie target, vitamins, whitening), and a progress
+(food log against an on-pace calorie target), and a progress
 photo nudge when one is due.
 
 **Progress** — per-exercise charts (est. 1RM, top set, volume), body weight, body

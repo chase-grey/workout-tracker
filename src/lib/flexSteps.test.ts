@@ -4,6 +4,7 @@ import {
   buildCoreSteps,
   buildFlexSteps,
   buildSessionSteps,
+  flexRoundKey,
   stepWorkSec,
 } from './flexSteps'
 import type { FlexBlock } from '../config/flexPlan'
@@ -119,6 +120,12 @@ describe('buildFlexSteps — per-side stretches', () => {
     expect(new Set(steps.map((s) => s.stepKey)).size).toBe(steps.length)
     expect(steps[0].stepKey).toBe('0:floss:0:left')
     expect(steps[1].stepKey).toBe('0:floss:0:right')
+  })
+
+  it('groups both sides for one animation, but not the next round', () => {
+    const steps = buildFlexSteps([{ label: 'B', exercises: [perSide()] }])
+    expect(flexRoundKey(steps[0])).toBe(flexRoundKey(steps[1]))
+    expect(flexRoundKey(steps[2])).not.toBe(flexRoundKey(steps[0]))
   })
 
   it('leaves a two-sided stretch as one step per round, with no side', () => {
