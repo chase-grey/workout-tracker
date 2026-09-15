@@ -1,15 +1,4 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
-import {
-  BEAD_COUNT,
-  BEAD_R,
-  createCoalescence,
-  createFission,
-  createGathering,
-  createShedding,
-  fieldAt,
-  type BeadField,
-  type BeadPlan,
-} from '../lib/beads'
 import { bulbPath, createBulbs, sandLevels, waistY } from '../lib/bulbs'
 import { type ExtraVariant } from '../lib/restShapes'
 import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
@@ -35,10 +24,6 @@ import { usePrefersReducedMotion } from '../lib/useReducedMotion'
  *  - an *angle* — `scale`.
  *  - a *width* — `ice`, which is the only shape here that reads horizontally.
  *  - a *radius* — `moon`, `spiral`, `globe`.
- *  - a *count* — the glass beads, which are the only shapes here that need nothing
- *    measured against anything: `beads` joins seven of them down to one, `split`
- *    breaks one into seven, `shed` empties a mass of them off the pane altogether,
- *    and `gather` collects seven out of the dark into one.
  *  - an *area* — `bulbs`, the curvy sand timer, where the walls bow too much for a
  *    level to be honest and how much sand you can see is the reading instead.
  *
@@ -65,8 +50,8 @@ const pct = (n: number) => `${n}%`
 /* ------------------------------------------------------------------ recharge */
 
 /**
- * The 'recharge' shape: a cell that fills as the rest runs down, reaching full
- * exactly as rest ends.
+ * The 'recharge' shape: a rack of familiar cells that fills as the rest runs down,
+ * reaching full exactly as rest ends.
  *
  * The only shape here that reads as *finished* rather than *empty* at zero, which
  * is the whole reason it exists — a rest between sets is a recharge, and a shape
@@ -76,20 +61,24 @@ const pct = (n: number) => `${n}%`
  * Across the empty part it would read as charge that isn't there, and the level
  * would stop being the reading.
  */
-function RechargeCell({ fraction }: { fraction: number }) {
-  const charged = 1 - clamp01(fraction)
-  const full = charged > 0.995
+function RechargeBattery({
+  label,
+  bodyClass,
+  charged,
+}: {
+  label: string
+  bodyClass: string
+  charged: number
+}) {
   return (
-    <div className="absolute inset-y-[9%] left-1/2 w-[44%] -translate-x-1/2" aria-hidden>
-      {/* The terminal, so the shape reads as a cell and not as a bar. */}
-      <div className="absolute left-1/2 top-0 h-[3.5%] w-[26%] -translate-x-1/2 rounded-t-full bg-accent-bright/60" />
-      <div className="absolute inset-x-0 bottom-0 top-[3.5%] overflow-hidden rounded-[7%] ring-2 ring-accent-bright/50">
+    <div className={`relative flex h-full flex-col items-center justify-end ${bodyClass}`}>
+      <div className="h-[5%] w-[42%] rounded-t-full bg-accent-bright/70" />
+      <div className="relative min-h-0 flex-1 w-full overflow-hidden rounded-[12%] ring-2 ring-accent-bright/50">
         <div className="absolute inset-0 bg-accent-bright/10" />
         <div
-          className="absolute inset-x-0 bottom-0 overflow-hidden bg-accent-bright/75"
+          className="absolute inset-x-0 bottom-0 h-full bg-accent-bright/75"
           style={{ height: pct(charged * 100), ...drainOf('height') }}
         >
-          {/* The charge line is the reading; everything below it is texture. */}
           <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
           <div
             className="rest-charge-sweep absolute inset-x-0 bottom-0 h-[26%]"
@@ -99,21 +88,23 @@ function RechargeCell({ fraction }: { fraction: number }) {
             }}
           />
         </div>
-        {/* Drawn over the fill, so it reads against the charged part and the empty
-            part alike, and goes solid once the cell is full. */}
-        <svg
-          className={`absolute left-1/2 top-1/2 h-[30%] w-[42%] -translate-x-1/2 -translate-y-1/2 text-accent-bright ${
-            full ? 'rest-charge-done' : 'rest-glow'
-          }`}
-          viewBox="0 0 24 34"
-          fill={full ? 'currentColor' : 'none'}
-          stroke="currentColor"
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-        >
-          <path d="M14 1 L3 19 h7 l-2 14 13-20 h-7 z" />
-        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-[clamp(0.45rem,1.5vw,0.8rem)] font-bold tracking-tight text-accent-bright/90">
+          {label}
+        </span>
       </div>
+    </div>
+  )
+}
+
+function RechargeCell({ fraction }: { fraction: number }) {
+  const charged = 1 - clamp01(fraction)
+  return (
+    <div className="absolute inset-y-[10%] left-1/2 flex w-[76%] -translate-x-1/2 items-end justify-center gap-[2.5%]" aria-hidden>
+      <RechargeBattery label="D" bodyClass="w-[22%] h-[70%]" charged={charged} />
+      <RechargeBattery label="C" bodyClass="w-[18%] h-[62%]" charged={charged} />
+      <RechargeBattery label="AA" bodyClass="w-[13%] h-[76%]" charged={charged} />
+      <RechargeBattery label="AAA" bodyClass="w-[10%] h-[84%]" charged={charged} />
+      <RechargeBattery label="9V" bodyClass="w-[19%] h-[58%]" charged={charged} />
     </div>
   )
 }
@@ -883,8 +874,8 @@ function SnowGlobe({ fraction }: { fraction: number }) {
       </div>
 
       {/* The payoff, once the last flake is down: one pulse around the glass, and it
-          stays lit. The same job the cell's bolt does at full charge — a rest that
-          is over should look unlike a rest that is nearly over, and a globe quietly
+          stays lit. A rest that is over should look unlike a rest that is nearly over,
+          and a globe quietly
           running out of moving parts is too easy to miss. Outside the dome, and in
           a wrapper that holds the centring, because the pulse is a `transform`: in
           the dome it would be clipped, and on the dome it would undo its own
@@ -969,275 +960,6 @@ function IcicleGap({ fraction }: { fraction: number }) {
       )}
     </div>
   )
-}
-
-/* --------------------------------------------------------------------- beads */
-
-/**
- * The four glass-bead shapes: drops of liquid lying on a pane of black glass, and what
- * tells the time is *how many bodies* of it there are.
- *
- * A count is the one reading here that needs nothing measured against anything. A level
- * has to be judged against the vessel around it, where four bodies is four bodies — and
- * every step of a count lands as an event you can watch happen rather than as a line
- * creeping past a mark, which is what makes zero legible: whatever the shape has been
- * doing all rest, it does it for the last time exactly on the tick.
- *
- * `beads` and `shed` run one way, `split` and `gather` are those two run backwards
- * (see lib/beads, which owns the runs), so each of the four ends on a pane that looks
- * like no other moment of any of them: one body dead centre, seven spread across the
- * glass, nothing at all, or one body holding all seven.
- *
- * Drawn as liquid rather than as glass, through the same goo filter a lava lamp is
- * made of (blur the field, then crush the alpha back to an edge — see
- * {@link BeadPane}). Every drop is one opaque body lit from its upper left, always the
- * same size, and what the filter does is make one surface out of any two that have come
- * near enough. So a body of liquid here is however many drops are travelling together
- * (see lib/beads), and a join is the pair carrying on into each other until the two of
- * them read as one: nothing pops in, nothing swells, nothing is swapped for anything.
- * The pane holds seven drops from the first frame to the last, and the only thing that
- * changes at a join is which of them belong to the same body.
- *
- * Nothing changes pace in a step either. Every drop carries the momentum it had into
- * whatever happens to it — a pair keeps closing after it touches, and pours; a drop
- * torn off the mass leaves with what the mass gave it and the mass rocks back the other
- * way — which is the whole of why the four of them read as liquid rather than as an
- * arrangement being stepped through. The stir each drop does on top of its schedule
- * belongs to lib/beads too, so it can be answered for there.
- *
- * The one motion that lives up here is a turn of the whole field about the middle of the
- * pane, in the two shapes that can afford it (see {@link BeadPane}'s `swirl`). It can
- * reach nothing: a turn about a point changes no gap between two drops and no drop's
- * distance from that point.
- */
-
-/**
- * A run, worked out once when the rest starts, and read at whatever fraction the
- * countdown is at rather than stepped along — so a rest resumed after a reload picks the
- * pane up exactly where it left it.
- */
-function useBeadField(make: () => BeadPlan, fraction: number): BeadField {
-  const [plan] = useState(make)
-  return fieldAt(plan, fraction)
-}
-
-/**
- * How far the goo filter spreads a drop before it is crushed back, in CSS pixels.
- * This alone sets how close two drops have to get before they reach for each other:
- * about twice this much glass between their surfaces. Sized against the drop itself
- * (a fifth of the pane, so ~60px on a phone) so a merge is a quick pour and not a
- * long rubbery stretch — and comfortably under the glass lib/beads keeps between two
- * bodies that are not each other's business, which is what stops seven drops sitting
- * still from fusing into a doughnut.
- */
-const GOO_BLUR = 8
-
-/**
- * The alpha crush that turns the blur back into a liquid: `alpha * SLOPE - FLOOR`,
- * clamped. Everything under about 0.41 opacity goes to nothing and everything over
- * 0.46 goes to solid, so a blob keeps its own size and only the narrow band where
- * two hazes have added together becomes the neck between them.
- */
-const GOO_SLOPE = 22
-const GOO_FLOOR = -9
-
-/** The blob's own lighting: pale at the upper left, bright through it, deep at the rim. */
-const BLOB_FILL =
-  'radial-gradient(circle at 34% 28%, #bbf7d0 0%, var(--color-accent-bright) 46%, #15803d 100%)'
-
-/**
- * The pane the four of them share, and the liquid lying on it.
- *
- * Every drop sits in one filtered layer so any two of them can make one surface:
- * {@link GOO_BLUR} spreads each into a haze, and the alpha crush that follows throws away
- * everything below half-opaque and takes the rest to solid. A drop on its own comes back
- * exactly the size it started, because the middle of it never left full opacity; two
- * whose hazes overlap come back as one body with a neck between them, because the glass
- * between them crossed the threshold together. Only the drops go through it — the pane,
- * its sheen and the glow all sit outside, where a crushed alpha would flatten them.
- *
- * Nothing here is drawn per body: the drops are drawn, and the bodies are what the filter
- * makes of them. That is why a join needs no animation and gets none.
- *
- * `settled` is the shape's payoff — the pane holding the one arrangement it holds at no
- * other point in the rest — and everything it changes is a light coming up: the pane's
- * edge firms and the liquid's glow widens.
- */
-function BeadPane({
-  field,
-  settled,
-  swirl,
-}: {
-  field: BeadField
-  settled: boolean
-  /**
-   * Whether the whole field may turn slowly about the middle of the pane, a few degrees
-   * either way (see `rest-bead-swirl`).
-   *
-   * Safe wherever it is used because it is rigid: a turn about a point changes no gap
-   * between any two drops and no drop's distance from the middle either, so it can neither
-   * grow a neck nor carry anything into the rim, and it leaves the body a coalescence ends
-   * on exactly centred — a turn about a point being the one motion that lets whatever sits
-   * on that point alone.
-   *
-   * Which is also the whole of why `shed` and `gather` go without it. Their reading is a
-   * drop crossing the rim on its tick, and a turn that can't take a drop any *nearer* the
-   * rim does still slide it along one — moving the one moment those two shapes are built
-   * to land.
-   */
-  swirl?: boolean
-}) {
-  const calm = usePrefersReducedMotion()
-  const goo = useId().replace(/\W/g, '')
-  return (
-    <div className="absolute inset-0" aria-hidden>
-      <div
-        className={`absolute inset-[5%] overflow-hidden rounded-[11%] ring-1 transition-shadow duration-500 ${
-          // A ring is a box-shadow, so this carries on `transition-shadow`.
-          settled ? 'ring-accent-bright/60' : 'ring-accent-bright/20'
-        }`}
-      >
-        {/* The pane: barely lit, and a shade brighter at the top, so it reads as a
-            surface the liquid is lying on rather than a hole cut in the screen. It
-            also cuts off everything crossing it, which is how a blob leaves. */}
-        <div className="absolute inset-0 bg-gradient-to-b from-accent-bright/7 to-accent-bright/2" />
-        {/* One band of light crossing it, slowly. Texture, like the drops' own stir: it
-            passes behind them and touches nothing that tells the time. Dropped under
-            reduced motion, where the schedule is all that is left moving. */}
-        {!calm && (
-          <div
-            className="rest-bead-sheen absolute -inset-y-1/3 -left-1/3 w-1/3"
-            style={{
-              backgroundImage:
-                'linear-gradient(to right, transparent, var(--color-accent-bright), transparent)',
-            }}
-          />
-        )}
-        <svg className="absolute h-0 w-0" aria-hidden>
-          <defs>
-            <filter id={goo} x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation={GOO_BLUR} result="haze" />
-              <feColorMatrix
-                in="haze"
-                mode="matrix"
-                values={`1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${GOO_SLOPE} ${GOO_FLOOR}`}
-              />
-            </filter>
-          </defs>
-        </svg>
-        {/* Every drop in one filtered layer, so any pair of them can make one surface. The
-            glow rides on the end of the same filter chain, which puts it around the body
-            they came to be rather than around each drop that went into it. */}
-        <div
-          className={`absolute inset-0 ${swirl && !calm ? 'rest-bead-swirl' : ''}`}
-          style={{
-            filter: `url(#${goo}) drop-shadow(0 0 ${settled ? 16 : 8}px rgba(74, 222, 128, ${
-              settled ? 0.5 : 0.3
-            }))`,
-            transition: 'filter 500ms linear',
-          }}
-        >
-          {field.beads.map((bead) => (
-            <div
-              key={bead.id}
-              // Positioned by translating a pane-sized box, so a percentage here is a
-              // share of the pane and no element has to be measured. A drop's size never
-              // changes, so this transform is the only thing the countdown moves — one
-              // property, one element, and the whole journey rides on it.
-              className="absolute inset-0"
-              style={{
-                transform: `translate(${(bead.x - 0.5) * 100}%, ${(bead.y - 0.5) * 100}%)`,
-                ...drainOf('transform'),
-              }}
-            >
-              <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                style={{
-                  width: pct(BEAD_R * 200),
-                  aspectRatio: '1',
-                  backgroundImage: BLOB_FILL,
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * The 'beads' shape: seven drops of liquid finding each other as the rest runs down, until
- * one body of them is left as it ends.
- *
- * Two more readings ride along with the count and agree with it: the biggest body only ever
- * grows, and the gaps are closing on every side at once. What makes zero legible is that
- * the last two bodies *touch* on the tick — every join lands as an event rather than a
- * fade, the pair meeting and pouring into itself, so the final one reads as the same thing
- * happening for the last time.
- */
-function GlassBeads({ fraction }: { fraction: number }) {
-  const field = useBeadField(createCoalescence, fraction)
-  // One body on the pane happens at exactly one moment, the last join, and that lands
-  // on zero: this is the shape's payoff, not a state it passes through.
-  return <BeadPane field={field} settled={field.bodies.length === 1} swirl />
-}
-
-/**
- * The 'split' shape: one body of liquid coming apart into seven, which is 'beads' run
- * backwards.
- *
- * The count is the reading the other way up — one at the start, seven when the rest is up,
- * one more at every sixth of the way through — and the body in the middle reads narrower
- * every time it lets one go, so a glance at nothing but its width says roughly as much as
- * counting does.
- *
- * Where a join lands on the tick as two bodies touching, a break lands as two that have
- * only just stopped touching: the seventh comes away exactly at zero, still against what it
- * came off, and the pane is left with a full spread of seven where every other moment of
- * the rest had fewer. It opens on the payoff of a coalescence — one body, dead centre,
- * perfectly still — because that is precisely what running that one backwards begins with.
- */
-function GlassSplit({ fraction }: { fraction: number }) {
-  const field = useBeadField(createFission, fraction)
-  return <BeadPane field={field} settled={field.bodies.length === BEAD_COUNT} swirl />
-}
-
-/**
- * The 'shed' shape: a mass of liquid in the middle of the pane emptying itself, one drop at
- * a time, out through the rim.
- *
- * The mass is the reading and it only ever shrinks, by a seventh of the liquid on the pane
- * at every seventh of the rest. Each drop tears out of it, crosses to the edge and is cut
- * off by it — the pane keeps nothing it lets go of — and because a drop is wholly gone on
- * the tick rather than fading out near it, the leaving is the beat.
- *
- * The mass rocks back as each one goes, harder the emptier it gets, and is dead centre
- * again by the time the next one comes away (see lib/beads): a mass throwing off a seventh
- * of itself has to answer for the momentum somewhere.
- *
- * What zero looks like here is the one thing none of the other three ever shows: clear
- * glass, with the rim lit and nothing standing on it.
- */
-function GlassShed({ fraction }: { fraction: number }) {
-  const field = useBeadField(createShedding, fraction)
-  return <BeadPane field={field} settled={field.beads.length === 0} />
-}
-
-/**
- * The 'gather' shape: drops arriving out of the dark beyond the pane, one every seventh of
- * the rest, into a mass in the middle that ends up holding all seven — which is 'shed' run
- * backwards.
- *
- * The reading is what the middle has gathered, and it only ever grows. Alone among the
- * shapes on the rest screen it opens on an empty vessel: nothing on the glass at all, and
- * the first drop already on its way in. Each one dives into the mass and is taken into it,
- * nudging it as it goes, and the last of them lands exactly at zero.
- */
-function GlassGather({ fraction }: { fraction: number }) {
-  const field = useBeadField(createGathering, fraction)
-  const whole = field.bodies.length === 1 && field.bodies[0].mass === BEAD_COUNT
-  return <BeadPane field={field} settled={whole} />
 }
 
 /* --------------------------------------------------------------------- bulbs */
@@ -1429,6 +1151,123 @@ function FuseLine({ fraction }: { fraction: number }) {
   )
 }
 
+/* --------------------------------------------------------------- black hole */
+
+/**
+ * The 'blackhole' shape: a hungry event horizon grows through the rest while
+ * little bits of the workout universe orbit it, spiral inward, and disappear.
+ * The hole's radius is the reading; the motion is just the drama around it.
+ */
+const BLACK_HOLE_DEBRIS = [
+  { angle: 0, radius: 40, size: 2.1, orbit: 'rest-black-hole-orbit-a', delay: '-1.1s' },
+  { angle: 72, radius: 34, size: 1.5, orbit: 'rest-black-hole-orbit-b', delay: '-2.8s' },
+  { angle: 145, radius: 42, size: 2.4, orbit: 'rest-black-hole-orbit-c', delay: '-0.4s' },
+  { angle: 220, radius: 36, size: 1.7, orbit: 'rest-black-hole-orbit-d', delay: '-3.6s' },
+  { angle: 292, radius: 39, size: 1.3, orbit: 'rest-black-hole-orbit-e', delay: '-1.9s' },
+] as const
+
+function BlackHole({ fraction }: { fraction: number }) {
+  const eaten = 1 - clamp01(fraction)
+  const horizon = 12 + eaten * 25
+
+  return (
+    <div className="absolute inset-0 overflow-hidden text-accent-bright" aria-hidden>
+      <div className="rest-black-hole-stars absolute inset-0 opacity-50" />
+      <div className="absolute inset-[7%]">
+        <div className="rest-black-hole-disc absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full">
+          <div
+            className="rest-black-hole-horizon absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-black"
+            style={{ width: `${horizon * 2}%`, transition: 'width 260ms linear' }}
+          />
+          <div className="rest-black-hole-glow absolute inset-[18%] rounded-full" />
+        </div>
+        {BLACK_HOLE_DEBRIS.map((piece) => (
+          <span
+            key={piece.orbit}
+            className={`rest-black-hole-debris ${piece.orbit}`}
+            style={{
+              '--angle': `${piece.angle}deg`,
+              '--radius': `${piece.radius}%`,
+              '--current-radius': `${piece.radius * (1 - eaten * 0.92)}%`,
+              '--debris-scale': 1 - eaten * 0.55,
+              left: '50%',
+              top: '50%',
+              width: `${piece.size}%`,
+              height: `${piece.size}%`,
+              animationDelay: piece.delay,
+            } as CSSProperties}
+          />
+        ))}
+      </div>
+      <div className="rest-black-hole-accretion absolute left-1/2 top-1/2 aspect-[2.6/1] w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-accent-bright/60" />
+    </div>
+  )
+}
+
+/* --------------------------------------------------------------------- comet */
+
+const COMET_IMPACT = 0.66
+const EARTH_BITS = [
+  { d: 'M 42 44 l 4 -3 4 3 -2 5 -5 1 z', dx: -66, dy: -46, r: -55 },
+  { d: 'M 51 39 l 5 -2 4 4 -2 5 -6 -1 z', dx: 54, dy: -54, r: 42 },
+  { d: 'M 59 46 l 5 2 1 5 -5 4 -4 -5 z', dx: 68, dy: 16, r: 78 },
+  { d: 'M 56 57 l 5 -2 4 4 -2 6 -6 -1 z', dx: 42, dy: 61, r: -35 },
+  { d: 'M 45 58 l 5 1 1 5 -5 4 -5 -4 z', dx: -35, dy: 58, r: 64 },
+  { d: 'M 38 51 l 5 -4 4 4 -2 6 -6 1 z', dx: -72, dy: 12, r: -80 },
+] as const
+
+/** The impact happens before the end so the final third of the rest is the debris flight. */
+function CometEarth({ fraction }: { fraction: number }) {
+  const elapsed = 1 - clamp01(fraction)
+  const approach = clamp01(elapsed / COMET_IMPACT)
+  const debris = clamp01((elapsed - COMET_IMPACT) / (1 - COMET_IMPACT))
+  const impacted = elapsed >= COMET_IMPACT
+  const cometX = -18 + approach * 68
+  const cometY = 14 + approach * 35
+  const transition = 'transform 260ms linear, opacity 260ms linear'
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden text-accent-bright" aria-hidden>
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+          <radialGradient id="comet-earth-glow">
+            <stop offset="0" stopColor="currentColor" stopOpacity="0.75" />
+            <stop offset="1" stopColor="currentColor" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <g transform={`translate(${cometX - 50} ${cometY - 50})`} style={{ transition }} opacity={0.8}>
+          <path d="M -28 50 C -14 45 -5 46 0 50 C -8 53 -17 54 -28 50 Z" fill="currentColor" opacity="0.28" />
+          <circle cx="0" cy="50" r="3.2" fill="currentColor" />
+          <circle cx="0" cy="50" r="7" fill="url(#comet-earth-glow)" />
+        </g>
+        <g style={{ opacity: impacted ? 0 : 1, transition }}>
+          <circle cx="50" cy="50" r="14" fill="currentColor" opacity="0.1" />
+          <circle cx="50" cy="50" r="12" fill="currentColor" opacity="0.7" />
+          <path d="M 42 47 C 46 43 48 47 52 44 S 58 45 61 49 M 42 54 C 47 52 50 58 55 55 S 60 54 62 57" fill="none" stroke="black" strokeOpacity="0.32" strokeWidth="2" />
+        </g>
+        <g style={{ opacity: impacted ? 1 : 0, transition }}>
+          <circle cx="50" cy="50" r={10 + debris * 18} fill="url(#comet-earth-glow)" opacity={0.8 - debris * 0.55} />
+          <circle cx="50" cy="50" r={3 + debris * 7} fill="currentColor" opacity={1 - debris * 0.7} />
+        </g>
+        {EARTH_BITS.map((bit) => (
+          <path
+            key={bit.d}
+            d={bit.d}
+            fill="currentColor"
+            opacity={impacted ? 1 - debris : 0}
+            transform={`translate(${bit.dx * debris} ${bit.dy * debris}) rotate(${bit.r * debris} 50 50)`}
+            style={{ transition }}
+          />
+        ))}
+      </svg>
+      <div
+        className="rest-comet-flash absolute left-1/2 top-1/2 aspect-square w-[18%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-bright"
+        style={{ opacity: impacted && debris < 0.32 ? 1 : 0, transform: `translate(-50%, -50%) scale(${impacted ? 1 + debris * 2 : 0.2})`, transition }}
+      />
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ rotation */
 
 /**
@@ -1471,23 +1310,18 @@ export function ExtraRestShape({
     // An icicle and a stalagmite closing on each other, meeting at zero.
     case 'icicle':
       return <IcicleGap fraction={fraction} />
-    // Beads of black glass joining one pair at a time, down to a single bead.
-    case 'beads':
-      return <GlassBeads fraction={fraction} />
-    // The same pane run backwards: one bead of glass coming apart into seven.
-    case 'split':
-      return <GlassSplit fraction={fraction} />
-    // A mass in the middle dropping a bead at a time, each one out through the rim.
-    case 'shed':
-      return <GlassShed fraction={fraction} />
-    // And that backwards: beads arriving out of the dark into a mass that takes them.
-    case 'gather':
-      return <GlassGather fraction={fraction} />
     // A curvy sand timer: the area of sand left in the upper bulb is the reading.
     case 'bulbs':
       return <SandBulbs fraction={fraction} />
+    // A growing event horizon eats orbiting debris as the rest runs out.
+    case 'blackhole':
+      return <BlackHole fraction={fraction} />
     // A cord burning in from both edges of the screen.
     case 'fuse':
+      return <FuseLine fraction={fraction} />
+    // A comet hits Earth; every fragment reaches its off-screen endpoint at zero.
+    case 'comet':
+      return <CometEarth fraction={fraction} />
     default:
       return <FuseLine fraction={fraction} />
   }

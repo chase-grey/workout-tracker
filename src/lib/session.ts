@@ -82,13 +82,16 @@ export function trainingDates(rows: WorkoutRow[]): string[] {
 /** Flatten a session into the per-set rows stored in the sheet. */
 export function sessionToRows(s: WorkoutSession): WorkoutRow[] {
   const rows: WorkoutRow[] = []
+  // Ad-hoc keys only exist for the duration of the active session. Store their
+  // entered name in the flat history row so later screens do not show a UUID.
+  const adHocNames = new Map((s.adHocExercises ?? []).map((e) => [e.key, e.name]))
   for (const ex of s.exercises) {
     for (const set of ex.sets) {
       rows.push({
         session_id: s.sessionId,
         date: s.date,
         day_type: s.dayType,
-        exercise: ex.exercise,
+        exercise: adHocNames.get(ex.exercise) ?? ex.exercise,
         set_number: set.setNumber,
         weight_lbs: set.weightLbs,
         reps: set.reps,

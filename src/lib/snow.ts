@@ -88,6 +88,9 @@ const SINK_TAU = 0.45
  */
 const SETTLE_SPAN = 0.95
 
+/** Small positive floor for the final settling slot; zero would trigger only after the countdown ends. */
+const MIN_SETTLE_AT = 0.005
+
 /**
  * Globe-heights per second a called-down flake works up to. Slow: the drop it has
  * left is only its `clearance`, and a rate that covers that in a blink reads as the
@@ -129,7 +132,8 @@ export type Flake = {
   /**
    * The remaining-rest fraction below which this flake is called down. Spread
    * across 0–`SETTLE_SPAN` at creation, so the number still airborne *is* the
-   * fraction of the rest still to come, and the last flake lands on the tick.
+   * fraction of the rest still to come. The final slot has a small positive floor,
+   * keeping the last flake from being called down only at zero.
    *
    * It is also where the flake floats: `settleAt / fraction` is how far down the
    * air column it sits, which is 1 — the drift — exactly when its turn comes.
@@ -220,11 +224,11 @@ const inGlass = (flake: Flake, y: number, floor: number) =>
  * flake's height is read off the same number, an even spread of slots is also what
  * fills the column evenly.
  *
- * The last flake down is pinned to zero rather than given a slot of its own. Its
- * slot is worth a couple of seconds of a long rest, and spent anywhere in that slot
- * it would leave the globe finished and still while the clock was visibly still
- * running. Pinned, it is called on the tick and lands just after it, so the globe
- * comes to rest *on* the end of the rest whatever the rest was set to.
+ * The last slot has a small positive floor rather than being pinned to zero. A zero
+ * slot puts that flake at the lid on the first frame and calls it down only when the
+ * countdown has already ended, which reads as an outlier falling after zero. The
+ * floor moves that call just inside the end of the rest while keeping the last
+ * landing close enough to the end to remain visible on long rests.
  *
  * The flakes are placed against an empty glass, since a rest that has just started
  * has no drift yet; the first step settles them against whatever floor is really
@@ -234,7 +238,7 @@ export function createSnow(count: number, rng: () => number = Math.random): Snow
   const n = Math.max(0, Math.floor(count))
   const flakes: Flake[] = []
   for (let i = 0; i < n; i++) {
-    const settleAt = i === 0 ? 0 : (SETTLE_SPAN * (i + rng())) / n
+    const settleAt = i === 0 ? MIN_SETTLE_AT : (SETTLE_SPAN * (i + rng())) / n
     const flake: Flake = { ...draw(rng), settleAt, sink: 0, y: 0 }
     flake.sink = sinkTarget(flake, 1, 1)
     flake.y = inGlass(flake, flake.sink + bobAt(flake, 0), 1)
@@ -266,8 +270,8 @@ export function isSettled(flake: Flake, t: number): boolean {
  * height from the clock and eases into a sink of its own, and the drift keeps it.
  * Only the vertical changes hands — it carries its swing the whole way down — so
  * the drop reads as the same flake still drifting, and what marks the end is that
- * it reaches the snow. The last one touches down as the clock reaches zero, and
- * nothing in the glass is moving.
+ * it reaches the snow. The last one touches down near the end of the rest, and
+ * nothing in the glass is moving by the time the countdown reaches zero.
  */
 export function stepSnow(snow: Snow, dt: number, floor: number, fraction: number): void {
   const step = clamp(dt, 0, MAX_DT)

@@ -81,6 +81,12 @@ describe('createSnow', () => {
     }
   })
 
+  it('does not start a flake at the lid for a zero-time drop', () => {
+    const snow = createSnow(34, seeded(5))
+    expect(snow.flakes.every((flake) => flake.settleAt > 0)).toBe(true)
+    expect(snow.flakes[0].y).toBeGreaterThan(snow.flakes[0].size / 2)
+  })
+
   it('holds the first settling back from the very start of the rest', () => {
     // A flake called down on the first tick reads as snow that never got going.
     for (const seed of [40, 41, 42, 43]) {

@@ -150,6 +150,7 @@ function AppShell() {
       storage.saveStretch({
         step: 0,
         done: [],
+        started: false,
         startedAt: new Date().toISOString(),
         routine,
         // Both routines end with the same sit-ups, so the second stretch of a day

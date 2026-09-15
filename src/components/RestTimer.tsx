@@ -912,9 +912,7 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
   // The shapes that live in RestShapes — a cell charging, a tap filling a glass, a
   // bar loading, a balance tipping, a moon waning, a coil paying out, ice melting,
   // a snow globe settling, an icicle closing on its stalagmite, a curvy sand timer
-  // running on area rather than level, and a pane of black glass counting its
-  // beads: joining seven of them into one, breaking one into seven, shedding them
-  // off the pane, or gathering them onto it.
+  // running on area rather than level.
   if (isExtraVariant(variant)) return <ExtraRestShape variant={variant} fraction={fraction} />
 
   switch (variant) {

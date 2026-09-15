@@ -68,6 +68,8 @@ export type RestState = {
 export type StretchState = {
   step: number
   done: string[]
+  /** Whether the user has tapped Start on the routine's first-exercise preview. */
+  started?: boolean
   startedAt?: string
   /**
    * Which routine is in progress. Absent on a session started before this

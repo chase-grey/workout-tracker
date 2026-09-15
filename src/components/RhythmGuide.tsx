@@ -181,6 +181,33 @@ function BreatheShape({ variant, scale, glow }: { variant: Variant; scale: numbe
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
+/** A square-wave path, traversed right-to-left once per rep. */
+const SQUARE_WAVE_POINTS = [
+  [100, 76], [88, 76], [88, 20], [62, 20], [62, 76],
+  [38, 76], [38, 20], [12, 20], [12, 76], [0, 76],
+] as const
+const SQUARE_WAVE_LENGTHS = SQUARE_WAVE_POINTS.slice(1).map(([x, y], i) => {
+  const [fromX, fromY] = SQUARE_WAVE_POINTS[i]
+  return Math.hypot(x - fromX, y - fromY)
+})
+const SQUARE_WAVE_LENGTH = SQUARE_WAVE_LENGTHS.reduce((sum, length) => sum + length, 0)
+
+function squareWavePoint(progress: number): readonly [number, number] {
+  const distance = (1 - clamp01(progress)) * SQUARE_WAVE_LENGTH
+  let travelled = 0
+  for (let i = 0; i < SQUARE_WAVE_LENGTHS.length; i++) {
+    const length = SQUARE_WAVE_LENGTHS[i]
+    if (distance <= travelled + length) {
+      const amount = length === 0 ? 0 : (distance - travelled) / length
+      const [fromX, fromY] = SQUARE_WAVE_POINTS[i]
+      const [toX, toY] = SQUARE_WAVE_POINTS[i + 1]
+      return [fromX + (toX - fromX) * amount, fromY + (toY - fromY) * amount]
+    }
+    travelled += length
+  }
+  return SQUARE_WAVE_POINTS[SQUARE_WAVE_POINTS.length - 1]
+}
+
 /** Descent family: a shape that reaches/folds downward and settles deep. */
 function DescentShape({ variant, depth, glow }: { variant: Variant; depth: number; glow: RepGlow }) {
   const tone = TONES[glow]
@@ -309,18 +336,41 @@ function PushPullShape({
   prime,
   primeDir,
   glow,
+  cycle,
 }: {
   variant: Variant
   drive: number
   prime: number
   primeDir: number
   glow: RepGlow
+  cycle: number
 }) {
   const tone = TONES[glow]
   // How lit each end is: fully while you drive into it, filling while a rest primes
   // it. `side` is +1 for the bottom (pressing down) and −1 for the top.
   const endLit = (side: number) => Math.max(clamp01(drive * side), primeDir === side ? prime : 0)
   switch (variant) {
+    case 'wave': {
+      const [dotX, dotY] = squareWavePoint(cycle)
+      const path = SQUARE_WAVE_POINTS
+        .map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x} ${y}`)
+        .join(' ')
+      return (
+        <div className="absolute inset-[10%]">
+          <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible text-accent-bright" aria-hidden>
+            <path
+              d={path}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="square"
+              opacity={tone.dimmest}
+            />
+            <circle cx={dotX} cy={dotY} r="5.5" fill="currentColor" opacity={tone.brightest} />
+          </svg>
+        </div>
+      )
+    }
     case 'chevrons':
       // Arrows pointing the way to drive, lighting from the middle outward so the
       // stack itself reads as the push travelling. A rest empties both stacks and
@@ -619,6 +669,7 @@ export function RhythmGuide({
               prime={prime}
               primeDir={primeDir}
               glow={glow}
+              cycle={cycleProgress(phases, i, progress)}
             />
           </div>
         ) : (

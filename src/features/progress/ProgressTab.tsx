@@ -24,10 +24,7 @@ import {
   fmtDateLabel,
   LINE_PRIMARY,
   LINE_SECONDARY,
-  MARK_OFF_SLOT,
   niceScale,
-  offSlotDot,
-  OFF_SLOT_NAME,
   timeXAxis,
   withTime,
 } from '../../lib/chart'
@@ -91,18 +88,50 @@ const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
 
 /**
- * The two presses on one set of rows, plus the sessions neither line reads.
+ * The two presses on one set of rows, split by whether each was first or second.
  *
- * The off-slot sessions share a column because they can't collide: incline leads
- * variant A and flat leads variant B, so exactly one of the two presses is the
- * day's second one, and a date never has an off-slot reading for both.
+ * Incline leads variant A and flat leads variant B, so the variant tells us the
+ * performed position for each press. Dashed lines make the second-position
+ * history visible without implying it belongs to the first-position trend.
  */
-function mergeSeries(flat: Point[], incline: Point[], offSlot: Point[] = []) {
-  const m = new Map<string, { date: string; flat?: number; incline?: number; off?: number }>()
-  for (const p of flat) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), flat: p.value })
-  for (const p of incline) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), incline: p.value })
-  for (const p of offSlot) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), off: p.value })
+function mergeSeries(
+  flatFirst: Point[],
+  inclineFirst: Point[],
+  flatSecond: Point[] = [],
+  inclineSecond: Point[] = [],
+) {
+  const m = new Map<
+    string,
+    { date: string; flatFirst?: number; inclineFirst?: number; flatSecond?: number; inclineSecond?: number }
+  >()
+  const add = (points: Point[], key: 'flatFirst' | 'inclineFirst' | 'flatSecond' | 'inclineSecond') => {
+    for (const p of points) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), [key]: p.value })
+  }
+  add(flatFirst, 'flatFirst')
+  add(inclineFirst, 'inclineFirst')
+  add(flatSecond, 'flatSecond')
+  add(inclineSecond, 'inclineSecond')
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/** Keep untagged legacy history on the first-position series, never duplicated
+ * on the second-position series. Tagged sessions are split by the actual
+ * variant/order relationship: incline is first in A, flat is first in B. */
+function benchPositionSeries(
+  rows: Parameters<typeof exerciseSeries>[0],
+  exerciseKey: string,
+  metric: Metric,
+  variant: 'A' | 'B',
+  includeLegacy: boolean,
+) {
+  const points = exerciseSeries(rows, exerciseKey, metric, variant)
+  if (includeLegacy) return points
+  const datesWithVariant = new Set(
+    rows
+      .filter((r) => r.exercise === exerciseKey && r.variant === variant)
+      .map((r) => r.date),
+  )
+  return points.filter((p) => datesWithVariant.has(p.date))
 }
 
 function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit: string }) {
@@ -110,11 +139,12 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   const yScale = useMemo(
     () =>
       niceScale(
-        data.flatMap((r) => [r.flat, r.incline, r.off]).filter((v): v is number => v != null),
+        data
+          .flatMap((r) => [r.flatFirst, r.inclineFirst, r.flatSecond, r.inclineSecond])
+          .filter((v): v is number => v != null),
       ),
     [data],
   )
-  const hasOff = data.some((r) => r.off != null)
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
@@ -142,20 +172,10 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
             formatter={(v, n) => [`${v} ${unit}`, n]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="flat" name="flat" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-          <Line type="monotone" dataKey="incline" name="incline" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-          {/* Whichever press followed the other that day. Rings rather than a
-              third line: it's a session, not a series of its own. */}
-          {hasOff && (
-            <Line
-              dataKey="off"
-              name={OFF_SLOT_NAME}
-              stroke={MARK_OFF_SLOT}
-              strokeWidth={0}
-              dot={offSlotDot('#171717')}
-              activeDot={{ r: 4 }}
-            />
-          )}
+          <Line type="monotone" dataKey="flatFirst" name="flat · 1st" stroke={LINE_PRIMARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          <Line type="monotone" dataKey="inclineFirst" name="incline · 1st" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          <Line type="monotone" dataKey="flatSecond" name="flat · 2nd" stroke={LINE_PRIMARY} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3 }} connectNulls />
+          <Line type="monotone" dataKey="inclineSecond" name="incline · 2nd" stroke={LINE_SECONDARY} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3 }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -256,12 +276,10 @@ export function ProgressTab() {
   const benchSeries = useMemo(
     () =>
       mergeSeries(
-        exerciseSeries(workouts, 'flat_bench', metric),
-        exerciseSeries(workouts, 'incline_bench', metric),
-        [
-          ...offSlotSeries(workouts, 'flat_bench', metric),
-          ...offSlotSeries(workouts, 'incline_bench', metric),
-        ],
+        benchPositionSeries(workouts, 'flat_bench', metric, 'B', true),
+        benchPositionSeries(workouts, 'incline_bench', metric, 'A', true),
+        benchPositionSeries(workouts, 'flat_bench', metric, 'A', false),
+        benchPositionSeries(workouts, 'incline_bench', metric, 'B', false),
       ),
     [workouts, metric],
   )

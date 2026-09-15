@@ -23,6 +23,10 @@ import { type Gesture, gestureFrom, type Mark, withinReach } from './chartReadou
 export function useChartReadout() {
   const card = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  // Recharts can track the active dot from a touch, but its hover-triggered
+  // tooltip is not reliably activated by that same pointer stream. Keep the
+  // selected row ourselves so a finger scrub can drive both pieces together.
+  const [selectedIndex, setSelectedIndex] = useState<number | undefined>()
   /** Where the finger went down, and what the gesture has turned out to be. */
   const touch = useRef<{ x: number; y: number; gesture: Gesture } | null>(null)
 
@@ -37,17 +41,27 @@ export function useChartReadout() {
     return () => document.removeEventListener('pointerdown', onDown, true)
   }, [open])
 
-  const aimedAtData = (e: { clientX: number; clientY: number }) =>
-    card.current != null && withinReach(marksIn(card.current), e.clientX, e.clientY)
+  const pointAt = (e: { clientX: number; clientY: number }) => {
+    if (card.current == null) return null
+    const marks = marksIn(card.current)
+    if (!withinReach(marks, e.clientX, e.clientY)) return null
+    return nearestMarkIndex(marks, e.clientX)
+  }
 
   const onPointerDown = (e: ReactPointerEvent) => {
     touch.current = { x: e.clientX, y: e.clientY, gesture: 'tap' }
-    if (e.pointerType === 'mouse') setOpen(aimedAtData(e))
+    const index = pointAt(e)
+    if (e.pointerType === 'mouse') {
+      setSelectedIndex(index ?? undefined)
+      setOpen(index != null)
+    }
   }
 
   const onPointerMove = (e: ReactPointerEvent) => {
     if (e.pointerType === 'mouse') {
-      setOpen(aimedAtData(e))
+      const index = pointAt(e)
+      setSelectedIndex(index ?? undefined)
+      setOpen(index != null)
       return
     }
     const down = touch.current
@@ -58,9 +72,22 @@ export function useChartReadout() {
       if (down.gesture === 'scroll') setOpen(false)
       if (down.gesture !== 'scrub') return
     }
-    // Scrubbing along the curve: once a reading is up, Recharts walks it from
-    // point to point, so only reaching the data has to be earned.
-    if (!open && aimedAtData(e)) setOpen(true)
+    // Scrubbing along the curve: keep the popup on the nearest plotted row.
+    // Once the gesture has been identified as a scrub, the finger may drift
+    // above or below the line while it travels horizontally.
+    if (down.gesture === 'scrub') {
+      const index = nearestMarkIndex(marksIn(card.current!), e.clientX)
+      if (index != null) {
+        setSelectedIndex(index)
+        setOpen(true)
+      }
+    } else if (!open) {
+      const index = pointAt(e)
+      if (index != null) {
+        setSelectedIndex(index)
+        setOpen(true)
+      }
+    }
   }
 
   const onPointerUp = (e: ReactPointerEvent) => {
@@ -68,7 +95,9 @@ export function useChartReadout() {
     touch.current = null
     // A scrub is already showing what it found, and a scroll asked for nothing.
     if (e.pointerType === 'mouse' || down?.gesture !== 'tap') return
-    setOpen(aimedAtData(e))
+    const index = pointAt(e)
+    setSelectedIndex(index ?? undefined)
+    setOpen(index != null)
   }
 
   const onPointerCancel = () => {
@@ -82,10 +111,10 @@ export function useChartReadout() {
     /** For the chart — see above for why its own focus layer is off. */
     chart: { accessibilityLayer: false },
     /**
-     * For the `<Tooltip>`: undefined leaves Recharts to track the pointer as it
-     * normally would, false keeps the readout shut whatever the pointer did last.
+     * For the `<Tooltip>`: the hook owns visibility so touch scrubbing can show
+     * the same popup as mouse hover. `defaultIndex` is the row under the finger.
      */
-    tooltip: { active: open ? undefined : false },
+    tooltip: { active: open, defaultIndex: selectedIndex },
   }
 }
 
@@ -98,4 +127,15 @@ function marksIn(card: HTMLElement): Mark[] {
     const box = dot.getBoundingClientRect()
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   })
+}
+
+/** Return the row at the nearest x coordinate, collapsing multiple series. */
+function nearestMarkIndex(marks: Mark[], x: number): number | null {
+  const xs = [...new Set(marks.map((mark) => mark.x))].sort((a, b) => a - b)
+  if (xs.length === 0) return null
+  let best = 0
+  for (let i = 1; i < xs.length; i += 1) {
+    if (Math.abs(xs[i] - x) < Math.abs(xs[best] - x)) best = i
+  }
+  return best
 }

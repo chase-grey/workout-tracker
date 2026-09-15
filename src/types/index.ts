@@ -13,7 +13,8 @@ export type SetLog = {
 }
 
 export type ExerciseLog = {
-  exercise: string // matches a plan config key
+  /** A plan key, or the temporary key for an ad-hoc exercise in this session. */
+  exercise: string
   sets: SetLog[]
   notes?: string
 }
@@ -23,6 +24,8 @@ export type WorkoutSession = {
   date: string // YYYY-MM-DD
   dayType: DayType
   exercises: ExerciseLog[]
+  /** Exercises added only to this in-progress workout from the checklist. */
+  adHocExercises?: import('../config/plan').PlannedExercise[]
   isHistorical: boolean
   /** ISO timestamp the session was started — used to learn typical durations. */
   startedAt?: string

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
@@ -40,6 +40,7 @@ import {
 import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
+import { useScreenTap } from '../../lib/useScreenTap'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -254,10 +255,14 @@ export function StretchSession({
   // their rest either way. Kept in the session's snapshot so a reload mid-routine
   // doesn't quietly start waiting for taps again.
   const [fast, setFast] = useState(!!saved?.fast)
+  // Fresh routines pause on a preview of the first exercise so the user can get
+  // oriented before the get-ready countdown begins. Older saved sessions did not
+  // have this field and are treated as already started for backwards compatibility.
+  const [started, setStarted] = useState(saved?.started ?? true)
   // True so the routine opens with the same "get into position" countdown that
   // follows each rest — but not over a resumed rest, which owns the screen first,
   // and not when the session is already running itself forward.
-  const [preparing, setPreparing] = useState(rest == null && !fast)
+  const [preparing, setPreparing] = useState(rest == null && !fast && started)
   const [showList, setShowList] = useState(false)
   // A one-off, longer get-into-position count that replaces the upcoming set's
   // own — set when a photo screen hands the routine straight to a stretch, and
@@ -333,6 +338,7 @@ export function StretchSession({
     storage.saveStretch({
       step: safeCurrent,
       done: [...done],
+      started,
       startedAt,
       routine,
       core: withCore,
@@ -347,7 +353,7 @@ export function StretchSession({
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, done, startedAt, routine, withCore, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
+  }, [safeCurrent, done, started, startedAt, routine, withCore, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -370,7 +376,7 @@ export function StretchSession({
   // holds and a hold's clock starts only then — a set counting down behind a
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
-  const setLive = rest == null && photos == null && !paused && !showList && !preparing
+  const setLive = started && rest == null && photos == null && !paused && !showList && !preparing
 
   // And while it's on, the screen stays lit — a paced routine is one nobody is
   // tapping, and the phone would dim mid-hold. A hold's clock runs unattended
@@ -448,6 +454,15 @@ export function StretchSession({
     onClose()
   }
 
+  const atLast = N === 0 || safeCurrent >= N - 1
+
+  // Keep this hook before the empty-routine return so its order is stable across
+  // sessions. It is disabled while an overlay, hold, or terminal set owns input.
+  const screenTap = useScreenTap(() => {
+    if (N === 0 || safeCurrent >= N - 1 || !setLive || holdSec) return
+    completeSetAndAdvance()
+  }, N > 0 && safeCurrent < N - 1 && setLive && !holdSec)
+
   if (N === 0) {
     const allSkipped = allSteps.length > 0
     return (
@@ -496,7 +511,6 @@ export function StretchSession({
   }
 
   const step = steps[safeCurrent]
-  const atLast = safeCurrent >= N - 1
   // The step this one follows. It decides two things: whether the settle-in ahead
   // of this set is a reposition within a stretch already built or the full setup of
   // a new one, and whether a rest led into the set on screen.
@@ -685,7 +699,10 @@ export function StretchSession({
       advanceFrom(index, done)
       return
     }
-    if (then === 'start' && tookAny && !fast) straightToGetReady(POST_PHOTO_GET_READY_SEC)
+    if (then === 'start') {
+      if (tookAny && !fast) straightToGetReady(POST_PHOTO_GET_READY_SEC)
+      else if (!fast && getReadySec > 0) setPreparing(true)
+    }
   }
 
   // Tapping the screen finishes the set — your hands are busy mid-stretch, so
@@ -694,12 +711,6 @@ export function StretchSession({
   // swallows the tap, and the last set still needs its explicit finish button.
   // A timed hold is exempt: it runs on a clock of its own and closes itself, and a
   // stray tap shouldn't cut ninety seconds of it short.
-  const onScreenTap = (e: MouseEvent) => {
-    if (atLast || !setLive || holdSec) return
-    if ((e.target as HTMLElement).closest('button, input, label, a')) return
-    completeSetAndAdvance()
-  }
-
   // The set ending itself is worth a buzz: mid-stretch you're rarely looking at
   // the screen, so rest starting would otherwise be silent (the rest timer buzzes
   // when it runs out for the same reason). Not for a hold, which buzzes at its
@@ -811,8 +822,30 @@ export function StretchSession({
   )
 
   return (
-    <div className="flex min-h-full flex-col gap-3" onClick={onScreenTap}>
+    <div className="flex min-h-full flex-col gap-3" {...screenTap}>
       {topBar}
+
+      {!started && (
+        <div className="fixed inset-0 z-80 flex flex-col items-center justify-center gap-6 bg-black px-6 text-center">
+          <div>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">first exercise</p>
+            <h1 className="text-3xl font-bold">{stepTitle(step)}</h1>
+            <p className="mt-2 text-base text-neutral-400">{stepDetail(step)}</p>
+            <p className="mt-1 text-sm text-neutral-500">{step.blockLabel}</p>
+          </div>
+          <button
+            onClick={(event) => {
+              event.stopPropagation()
+              setStarted(true)
+              setReadyOverrideSec(null)
+              if (!fast && photos == null && getReadySec > 0) setPreparing(true)
+            }}
+            className="min-h-[60px] w-full max-w-sm rounded-2xl bg-accent px-6 text-xl font-bold text-black active:opacity-80"
+          >
+            start
+          </button>
+        </div>
+      )}
 
       {step.kind === 'flex' ? (
         holdSec ? (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { DayType, SetLog, WorkoutSession } from '../../types'
+import type { PlannedExercise } from '../../config/plan'
 import { storage } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { useData } from '../../store/DataContext'
@@ -112,6 +113,43 @@ export function useActiveSession() {
     [mutateExercise],
   )
 
+  const addExercise = useCallback(
+    (input: { name: string; sets: number; reps: number; weightLbs: number | null }) => {
+      const key = `adhoc:${uuid()}`
+      const exercise: PlannedExercise = {
+        key,
+        name: input.name,
+        sets: input.sets,
+        repMin: input.reps,
+        repMax: input.reps,
+        restSec: 60,
+        group: 'ad hoc',
+      }
+      setSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              adHocExercises: [...(prev.adHocExercises ?? []), exercise],
+              exercises: [
+                ...prev.exercises,
+                {
+                  exercise: key,
+                  sets: Array.from({ length: input.sets }, (_, i) => ({
+                    setNumber: i + 1,
+                    weightLbs: input.weightLbs,
+                    reps: input.reps,
+                    done: false,
+                  })),
+                },
+              ],
+            }
+          : prev,
+      )
+      return key
+    },
+    [],
+  )
+
   const updateSet = useCallback(
     (exKey: string, index: number, patch: Partial<SetLog>) => {
       mutateExercise(exKey, (sets) => sets.map((s, i) => (i === index ? { ...s, ...patch } : s)))
@@ -163,5 +201,5 @@ export function useActiveSession() {
     setSession(null)
   }, [])
 
-  return { session, start, addSet, updateSet, carrySet, removeSet, clear }
+  return { session, start, addSet, addExercise, updateSet, carrySet, removeSet, clear }
 }

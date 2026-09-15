@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   MdBlock,
   MdBolt,
@@ -55,6 +55,7 @@ import {
 import { toISODate } from '../../lib/dates'
 import { toWeight } from '../../lib/weightField'
 import { usePressAction } from '../../lib/usePressAction'
+import { useScreenTap } from '../../lib/useScreenTap'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useBackGuard } from '../../lib/useBackGuard'
@@ -174,6 +175,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // appears in the flow once the log it's counted from has updated (see addSet).
   const [pendingStepKey, setPendingStepKey] = useState<string | null>(null)
   const [showList, setShowList] = useState(false)
+  const [showAddExercise, setShowAddExercise] = useState(false)
+  const [newExerciseName, setNewExerciseName] = useState('')
+  const [newExerciseSets, setNewExerciseSets] = useState('1')
+  const [newExerciseReps, setNewExerciseReps] = useState('10')
+  const [newExerciseWeight, setNewExerciseWeight] = useState('')
   const [paused, setPaused] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
@@ -241,8 +247,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // counts and press order, and which arm leads the one-arm-at-a-time work —
   // both pinned when the session started.
   const exercises = useMemo(
-    () => sideOrderedExercises(variantExercises(day, session.variant ?? null), session.startSide),
-    [day, session.variant, session.startSide],
+    () => [
+      ...sideOrderedExercises(variantExercises(day, session.variant ?? null), session.startSide),
+      ...(session.adHocExercises ?? []),
+    ],
+    [day, session.variant, session.startSide, session.adHocExercises],
   )
 
   // The exercises actually being performed. Everything the workout is measured
@@ -732,6 +741,29 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     controls.addSet(planned.key)
   }
 
+  const addAdHocExercise = () => {
+    const name = newExerciseName.trim()
+    const sets = Math.max(1, Math.min(20, Number(newExerciseSets) || 1))
+    const reps = Math.max(1, Math.min(999, Number(newExerciseReps) || 1))
+    if (!name) return
+    const key = controls.addExercise({
+      name,
+      sets,
+      reps,
+      weightLbs: newExerciseWeight === '' ? null : toWeight(newExerciseWeight),
+    })
+    setPendingStepKey(`${key}:0`)
+    activeStartRef.current = 0
+    if (rest) closeRest()
+    else setPreparing(true)
+    setNewExerciseName('')
+    setNewExerciseSets('1')
+    setNewExerciseReps('10')
+    setNewExerciseWeight('')
+    setShowAddExercise(false)
+    setShowList(false)
+  }
+
   const advancePress = usePressAction(completeSetAndAdvance)
 
   // Turbo: the set on screen logs itself, so a workout of prefilled targets runs
@@ -807,15 +839,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Before the first set is under way the tap starts the workout instead, which is
   // all the old start press ever did (see `awaitingStart`): loading the bar stays
   // off that exercise's active-time average, without asking for a press to say so.
-  const onScreenTap = (e: MouseEvent) => {
+  const screenTap = useScreenTap(() => {
     if (atLast || !setScreenLive) return
-    if ((e.target as HTMLElement).closest('button, input, label, a')) return
     if (awaitingStart) {
       start()
       return
     }
     completeSetAndAdvance()
-  }
+  }, !atLast && setScreenLive)
 
   // The stations of the circuit in play, in the order they're rotated through —
   // the whole circuit rather than just the station on screen, because "rest only
@@ -929,7 +960,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   )
 
   return (
-    <div className="flex flex-col gap-3 pb-6" onClick={onScreenTap}>
+    <div className="flex flex-col gap-3 pb-6" {...screenTap}>
       {topBar}
 
       {set && (
@@ -1188,11 +1219,18 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
             <h3 className="mb-1 text-lg font-bold">workout checklist</h3>
-            <p className="mb-3 text-xs text-neutral-500">tap a name to jump; tap the circle to mark done.</p>
+            <p className="mb-3 text-xs text-neutral-500">tap a name to jump; edit any set below.</p>
+            <button
+              onClick={() => setShowAddExercise(true)}
+              className="mb-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-accent px-3 font-semibold text-black active:opacity-80"
+            >
+              + add exercise
+            </button>
             <div className="flex flex-col gap-1">
               {exercises.map((e) => {
                 const isSkipped = skipped.has(e.key)
                 const complete = isComplete(e.key)
+                const exerciseLog = logFor(e.key)
                 // Land on the first set of it still owed — picking an exercise you
                 // half finished means carrying on with it, not redoing set one.
                 // Falls back to its first set when they're all logged. By key
@@ -1201,64 +1239,147 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 const firstStep = steps.findIndex((s, si) => s.ex.key === e.key && !stepDone[si])
                 const jumpStep = firstStep >= 0 ? firstStep : steps.findIndex((s) => s.ex.key === e.key)
                 return (
-                  <div
-                    key={e.key}
-                    className={`flex items-center gap-2 rounded-xl px-2 ${planned.key === e.key ? 'bg-surface-2' : ''}`}
-                  >
-                    <button
-                      onClick={() => {
-                        // A skipped exercise has no step to jump to until it's
-                        // back in the flow, so choosing it puts it back.
-                        if (isSkipped) unskipAndJump(e.key)
-                        else {
-                          if (jumpStep >= 0) setCurrent(jumpStep)
-                          // Jumping chooses the exercise to do next, but the set
-                          // must not become live while the user is still walking
-                          // over and getting into position. An in-flight rest is
-                          // banked first; without one, hand straight to the same
-                          // countdown here.
-                          activeStartRef.current = 0
-                          if (rest) closeRest()
-                          else setPreparing(true)
-                        }
-                        setShowList(false)
-                      }}
-                      className={`flex-1 py-3 text-left active:opacity-70 ${isSkipped ? 'opacity-50' : ''}`}
-                    >
-                      <span className="text-[10px] tracking-wide text-neutral-500">{e.group}</span>
-                      <span className={`block font-medium ${isSkipped ? 'line-through' : ''}`}>{e.name}</span>
-                      <span className="text-xs text-neutral-500 tabular-nums">
-                        {doneCount(e.key)}/{logFor(e.key)?.sets.length ?? e.sets} sets
-                      </span>
-                    </button>
-                    {(isSkipped || skippable(e.key)) && (
+                  <div key={e.key} className={`rounded-xl px-2 ${planned.key === e.key ? 'bg-surface-2' : ''}`}>
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setExerciseSkipped(e.key, !isSkipped)}
-                        aria-label={isSkipped ? `unskip ${e.name}` : `skip ${e.name}`}
-                        className="p-2 text-2xl"
+                        onClick={() => {
+                          // A skipped exercise has no step to jump to until it's
+                          // back in the flow, so choosing it puts it back.
+                          if (isSkipped) unskipAndJump(e.key)
+                          else {
+                            if (jumpStep >= 0) setCurrent(jumpStep)
+                            // Jumping chooses the exercise to do next, but the set
+                            // must not become live while the user is still walking
+                            // over and getting into position. An in-flight rest is
+                            // banked first; without one, hand straight to the same
+                            // countdown here.
+                            activeStartRef.current = 0
+                            if (rest) closeRest()
+                            else setPreparing(true)
+                          }
+                          setShowList(false)
+                        }}
+                        className={`flex-1 py-3 text-left active:opacity-70 ${isSkipped ? 'opacity-50' : ''}`}
                       >
-                        <MdBlock className={isSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                        <span className="text-[10px] tracking-wide text-neutral-500">{e.group}</span>
+                        <span className={`block font-medium ${isSkipped ? 'line-through' : ''}`}>{e.name}</span>
+                        <span className="text-xs text-neutral-500 tabular-nums">
+                          {doneCount(e.key)}/{exerciseLog?.sets.length ?? e.sets} sets
+                        </span>
                       </button>
-                    )}
-                    {/* Nothing to mark done on an exercise that isn't being done. */}
-                    {!isSkipped && (
-                      <button
-                        onClick={() => setExerciseComplete(e.key, !complete)}
-                        aria-label={complete ? 'mark incomplete' : 'mark complete'}
-                        className="p-2 text-2xl"
-                      >
-                        {complete ? (
-                          <MdCheckCircle className="text-accent-2" aria-hidden />
-                        ) : (
-                          <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
-                        )}
-                      </button>
+                      {(isSkipped || skippable(e.key)) && (
+                        <button
+                          onClick={() => setExerciseSkipped(e.key, !isSkipped)}
+                          aria-label={isSkipped ? `unskip ${e.name}` : `skip ${e.name}`}
+                          className="p-2 text-2xl"
+                        >
+                          <MdBlock className={isSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                        </button>
+                      )}
+                      {/* Nothing to mark done on an exercise that isn't being done. */}
+                      {!isSkipped && (
+                        <button
+                          onClick={() => setExerciseComplete(e.key, !complete)}
+                          aria-label={complete ? 'mark incomplete' : 'mark complete'}
+                          className="p-2 text-2xl"
+                        >
+                          {complete ? (
+                            <MdCheckCircle className="text-accent-2" aria-hidden />
+                          ) : (
+                            <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    {!isSkipped && exerciseLog && (
+                      <div className="mb-2 flex flex-col gap-1 border-t border-neutral-200/10 pt-1">
+                        {exerciseLog.sets.map((loggedSet, setIndex) => (
+                          <div key={loggedSet.setNumber} className="flex items-center gap-2 px-1">
+                            <span className="w-10 shrink-0 text-xs text-neutral-500">set {setIndex + 1}</span>
+                            {!e.repsOnly && (
+                              <label className="flex min-w-0 flex-1 items-center gap-1">
+                                <span className="sr-only">set {setIndex + 1} weight</span>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  aria-label={`${e.name} set ${setIndex + 1} weight`}
+                                  value={loggedSet.weightLbs ?? ''}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) => controls.updateSet(e.key, setIndex, { weightLbs: toWeight(event.target.value) })}
+                                  className="min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+                                />
+                                <span className="text-xs text-neutral-500">lb</span>
+                              </label>
+                            )}
+                            <label className="flex min-w-0 flex-1 items-center gap-1">
+                              <span className="sr-only">set {setIndex + 1} reps</span>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="0"
+                                aria-label={`${e.name} set ${setIndex + 1} reps`}
+                                value={loggedSet.reps || ''}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => controls.updateSet(e.key, setIndex, { reps: Number(event.target.value) || 0 })}
+                                className="min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+                              />
+                              <span className="text-xs text-neutral-500">reps</span>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {showAddExercise && (
+        <div className="fixed inset-0 z-70 flex items-end bg-black/60" onClick={() => setShowAddExercise(false)}>
+          <form
+            className="w-full rounded-t-3xl bg-surface p-4"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault()
+              addAdHocExercise()
+            }}
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+          >
+            <h3 className="mb-3 text-lg font-bold">add exercise</h3>
+            <div className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs tracking-wide text-neutral-500">name</span>
+                <input
+                  autoFocus
+                  value={newExerciseName}
+                  onChange={(event) => setNewExerciseName(event.target.value)}
+                  placeholder="e.g. farmer carry"
+                  className="min-h-[48px] rounded-xl bg-surface-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs tracking-wide text-neutral-500">sets</span>
+                  <input type="number" min="1" max="20" inputMode="numeric" value={newExerciseSets} onChange={(event) => setNewExerciseSets(event.target.value)} className="min-h-[48px] rounded-xl bg-surface-2 px-3 tabular-nums focus:outline-none focus:ring-2 focus:ring-accent" />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs tracking-wide text-neutral-500">reps</span>
+                  <input type="number" min="1" max="999" inputMode="numeric" value={newExerciseReps} onChange={(event) => setNewExerciseReps(event.target.value)} className="min-h-[48px] rounded-xl bg-surface-2 px-3 tabular-nums focus:outline-none focus:ring-2 focus:ring-accent" />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs tracking-wide text-neutral-500">weight (lb)</span>
+                  <input type="number" min="0" step="0.5" inputMode="decimal" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(event.target.value)} placeholder="optional" className="min-h-[48px] rounded-xl bg-surface-2 px-3 tabular-nums focus:outline-none focus:ring-2 focus:ring-accent" />
+                </label>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowAddExercise(false)} className="min-h-[48px] flex-1 rounded-xl bg-surface-2 font-semibold active:opacity-70">cancel</button>
+                <button type="submit" disabled={!newExerciseName.trim()} className="min-h-[48px] flex-1 rounded-xl bg-accent font-semibold text-black disabled:opacity-40">add to workout</button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
     </div>

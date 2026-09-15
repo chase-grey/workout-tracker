@@ -4,9 +4,9 @@ import { createRotation, type Rotation } from './variantRotation'
 
 const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
 const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
-// Fewer shapes here than in the other families, and all three say the same thing
+// Fewer shapes here than in the other families, and all four say the same thing
 // the same way round: the direction has to be unmistakable at a glance.
-const PUSHPULL_VARIANTS = ['anvil', 'chevrons', 'gauge'] as const
+const PUSHPULL_VARIANTS = ['anvil', 'chevrons', 'gauge', 'wave'] as const
 
 export type RhythmVariant =
   | (typeof BREATHE_VARIANTS)[number]
