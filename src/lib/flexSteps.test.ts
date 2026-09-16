@@ -21,6 +21,19 @@ const ex = (key: string, maxSets: number): FlexBlock['exercises'][number] => ({
 })
 
 describe('buildFlexSteps', () => {
+  it('puts the switch after the leading right side and round rest after the left', () => {
+    const plan: FlexBlock[] = [{ label: 'B', exercises: [
+      { ...ex('floss', 2), perSide: true, restAfterSides: true, sideSwitchSec: 7 },
+    ] }]
+    const steps = buildFlexSteps(plan, 'right')
+    expect(steps.map((s) => [s.side, s.restSec, s.sideSwitchSec])).toEqual([
+      ['right', 0, 7], ['left', 90, undefined],
+      ['right', 0, 7], ['left', 90, undefined],
+    ])
+    expect(steps.map((s) => s.stepKey).sort()).toEqual(
+      buildFlexSteps(plan, 'left').map((s) => s.stepKey).sort(),
+    )
+  })
   it('interleaves a superset round-robin', () => {
     const plan: FlexBlock[] = [
       { label: 'Superset', superset: true, exercises: [ex('tailors', 3), ex('horse', 3)] },
@@ -241,6 +254,12 @@ describe('buildFlexSteps — holds and set labels', () => {
 describe('stepWorkSec', () => {
   const workOf = (over: Partial<FlexBlock['exercises'][number]>) =>
     stepWorkSec(buildFlexSteps([{ label: 'B', exercises: [{ ...ex('x', 1), ...over }] }])[0])
+
+  it('skips only the last rep rest for pike lifts', () => {
+    expect(workOf({
+      key: 'pike_lift', tempo: '5s press down; 5s rest; 5s pull up; 5s rest', reps: 5,
+    })).toBe(95)
+  })
 
   it('counts a hold as its seconds, not its reps', () => {
     expect(workOf({ tempo: '', holdSec: 90 })).toBe(90)

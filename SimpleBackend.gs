@@ -97,6 +97,7 @@ const FLEX_HEADERS = [
   'cold_leg_lift_right_deg',
   'warm_leg_lift_left_deg',
   'warm_leg_lift_right_deg',
+  'start_sides',
 ]
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount']
@@ -408,6 +409,10 @@ function flexSheet() {
     })
   }
 
+  if (header[18] !== 'start_sides') {
+    sh.getRange(1, 1, 1, FLEX_HEADERS.length).setValues([FLEX_HEADERS])
+  }
+
   return sh
 }
 
@@ -484,6 +489,7 @@ function getFlex(since) {
       coldLegLiftRightDeg: numOrNull(r[15]),
       warmLegLiftLeftDeg: numOrNull(r[16]),
       warmLegLiftRightDeg: numOrNull(r[17]),
+      startSides: r[18] ? JSON.parse(String(r[18])) : undefined,
     })
   }
   return out
@@ -533,6 +539,7 @@ function appendFlex(body) {
             keep(e.coldLegLiftRightDeg, 15),
             keep(e.warmLegLiftLeftDeg, 16),
             keep(e.warmLegLiftRightDeg, 17),
+            e.startSides ? JSON.stringify(Object.assign({}, cur[18] ? JSON.parse(String(cur[18])) : {}, e.startSides)) : cur[18] || '',
           ],
         ])
       } else {
@@ -555,6 +562,7 @@ function appendFlex(body) {
           numOrBlank(e.coldLegLiftRightDeg),
           numOrBlank(e.warmLegLiftLeftDeg),
           numOrBlank(e.warmLegLiftRightDeg),
+          e.startSides ? JSON.stringify(e.startSides) : '',
         ])
         rowByDate[e.date] = sh.getLastRow()
       }

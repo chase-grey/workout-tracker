@@ -67,7 +67,7 @@ describe('stretchSplit', () => {
     const second = flexAt(steps, i + 1)
     const pair = splitOf([first, second])
     expect(pair.activeSec).toBe(
-      settleInSec(first) + stepWorkSec(first) + (first.sideSwitchSec ?? 0) + stepWorkSec(second),
+      settleInSec(first) + stepWorkSec(first) + 5 + stepWorkSec(second),
     )
     // The swap is a reposition, so none of it reads as rest.
     expect(pair.restSec).toBe(0)

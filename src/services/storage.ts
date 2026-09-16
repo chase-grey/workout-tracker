@@ -66,6 +66,7 @@ export type RestState = {
 
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
 export type StretchState = {
+  startSide?: 'left' | 'right'
   step: number
   done: string[]
   /** Whether the user has tapped Start on the routine's first-exercise preview. */

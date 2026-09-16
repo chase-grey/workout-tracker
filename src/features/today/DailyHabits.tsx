@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MdLocalFireDepartment } from 'react-icons/md'
+import { MdCheck } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { CALORIE_GOAL, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
 import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
@@ -112,7 +112,7 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
               <span className={`text-[10px] leading-none ${date === today ? 'text-accent' : 'text-neutral-500'}`}>
                 {DOW[i]}
               </span>
-              <MdLocalFireDepartment
+              <MdCheck
                 className={`text-sm ${hit ? 'text-accent' : date > today ? 'text-neutral-800' : 'text-neutral-700'}`}
                 aria-hidden
               />

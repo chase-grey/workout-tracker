@@ -390,9 +390,9 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   lateral_raise_l: { muscles: ['shoulders'] },
   lateral_raise_r: { muscles: ['shoulders'] },
   weighted_pullups: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
+  cable_pulldown: { ladder: 'load', muscles: ['back'] },
   pullups_or_pulldown: { lift: 'pullup', muscles: ['back'], toLoad: (e, bw) => e + bw },
-  // Retired from the plan — pull + legs trains back with weighted pull-ups alone
-  // now — but back still reads the rows already logged, so the muscle keeps the
+  // Retired from the plan, but back still reads the rows already logged, so the muscle keeps the
   // better of its two lifts rather than losing one outright.
   cable_row: { lift: 'row', muscles: ['back'] },
   incline_db_curl: { lift: 'curl', muscles: ['biceps'] },

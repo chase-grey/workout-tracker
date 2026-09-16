@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import type { Side, WorkoutRow } from '../types'
 import { lastStartSide, nextStartSide, otherSide } from './pushSide'
+import { DEFAULT_PLAN, sideOrderedExercises, variantExercises } from '../config/plan'
+import { sessionToRows } from './session'
+import { buildSetOrder } from './circuit'
 
 function row(over: Partial<WorkoutRow> = {}): WorkoutRow {
   return {
@@ -107,6 +110,32 @@ describe('lastStartSide', () => {
 })
 
 describe('nextStartSide', () => {
+  it('alternates every shipped strength pair through session creation, saving and reload', () => {
+    let history: WorkoutRow[] = []
+    for (let i = 0; i < 4; i++) {
+      for (const dayType of ['push', 'pull'] as const) {
+        const startSide = nextStartSide(history, dayType)
+        expect(startSide).toBe(i % 2 === 0 ? 'left' : 'right')
+        const planned = sideOrderedExercises(variantExercises(DEFAULT_PLAN[dayType], i % 2 ? 'B' : 'A'), startSide)
+        const flow = buildSetOrder(planned, planned.map((e) => e.sets))
+        const seen = new Set<string>()
+        for (const { exIndex } of flow) {
+          const ex = planned[exIndex]
+          if (!ex.side) continue
+          const pair = ex.key.replace(/_[lr]$/, '')
+          if (!seen.has(pair)) expect(ex.side).toBe(startSide)
+          seen.add(pair)
+        }
+        history = JSON.parse(JSON.stringify([...history, ...sessionToRows({
+          sessionId: `${dayType}${i}`, date: `2026-09-${10 + i}`, dayType,
+          isHistorical: false, startSide,
+          exercises: planned.map((e) => ({ exercise: e.key, sets: [
+            { setNumber: 1, weightLbs: null, reps: e.repMin, done: true },
+          ] })),
+        })]))
+      }
+    }
+  })
   it('starts a brand-new history on the left', () => {
     expect(nextStartSide([], 'push')).toBe('left')
   })

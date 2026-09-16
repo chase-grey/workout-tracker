@@ -1,6 +1,6 @@
 import type { FlexBlock, FlexExercise } from '../config/flexPlan'
 import { STRETCH_CORE } from '../config/plan'
-import { parseTempo } from './tempo'
+import { parseTempo, workPhaseCount } from './tempo'
 
 /** Which leg a per-side step is for. */
 export type Side = 'left' | 'right'
@@ -85,8 +85,12 @@ export const SEC_PER_REP = 5
  */
 export const stepWorkSec = (s: FlexSetStep): number => {
   if (s.holdSec) return s.holdSec
-  const paced = parseTempo(s.tempo).reduce((sum, p) => sum + p.seconds, 0)
-  return s.reps * (paced > 0 ? paced : SEC_PER_REP)
+  const phases = parseTempo(s.tempo)
+  const paced = phases.reduce((sum, p) => sum + p.seconds, 0)
+  const skippedRest = s.exKey === 'pike_lift' && s.reps > 0
+    ? phases.slice(workPhaseCount(phases)).reduce((sum, p) => sum + p.seconds, 0)
+    : 0
+  return s.reps * (paced > 0 ? paced : SEC_PER_REP) - skippedRest
 }
 
 /**
@@ -95,13 +99,10 @@ export const stepWorkSec = (s: FlexSetStep): number => {
  * set 1, Tailor's set 2, Horse set 2, … — matching how they're actually done.
  * Non-superset blocks run each exercise's sets in sequence.
  *
- * A `perSide` exercise becomes two steps per round, left then right — every
- * round, rather than trading which side leads: the whole point of taking the
- * sides one after the other is that the second one is done in the shape the
- * first one just set, and swapping the lead would only make the two legs'
- * histories harder to read against each other.
+ * A `perSide` exercise becomes two steps per round. The starting side is pinned
+ * for the session and alternates between completed sessions of the routine.
  */
-export function buildFlexSteps(plan: FlexBlock[]): FlexSetStep[] {
+export function buildFlexSteps(plan: FlexBlock[], startSide: Side = 'left'): FlexSetStep[] {
   const steps: FlexSetStep[] = []
   plan.forEach((block, bi) => {
     /** The steps one round of one exercise is: a pair for a per-side stretch, else one. */
@@ -124,15 +125,15 @@ export function buildFlexSteps(plan: FlexBlock[]): FlexSetStep[] {
       }
       // With `restAfterSides` the round's rest belongs to the second side, so the
       // first side prescribes none — which is also what earns it a side switch.
-      const leftRest = ex.restAfterSides ? 0 : ex.restSec
+      const firstRest = ex.restAfterSides ? 0 : ex.restSec
       const switchSec = ex.sideSwitchSec ?? SIDE_SWITCH_SEC
-      return (['left', 'right'] as Side[]).map((side) => ({
+      return ([startSide, startSide === 'left' ? 'right' : 'left'] as Side[]).map((side, index) => ({
         ...base,
         side,
-        restSec: side === 'left' ? leftRest : ex.restSec,
+        restSec: index === 0 ? firstRest : ex.restSec,
         // The side the round starts on is the one a switch follows — and only
         // when no real rest already sits between the two.
-        ...(side === 'left' && leftRest === 0 ? { sideSwitchSec: switchSec } : {}),
+        ...(index === 0 && firstRest === 0 ? { sideSwitchSec: switchSec } : {}),
         // The side is part of the identity: the two halves of a round track
         // their done-ness separately.
         stepKey: `${bi}:${ex.key}:${r}:${side}`,
@@ -182,8 +183,8 @@ export function buildCoreSteps(): CoreSetStep[] {
  */
 export function buildSessionSteps(
   plan: FlexBlock[],
-  opts?: { core?: boolean },
+  opts?: { core?: boolean; startSide?: Side },
 ): SessionStep[] {
   const core = opts?.core ?? true
-  return [...buildFlexSteps(plan), ...(core ? buildCoreSteps() : [])]
+  return [...buildFlexSteps(plan, opts?.startSide), ...(core ? buildCoreSteps() : [])]
 }

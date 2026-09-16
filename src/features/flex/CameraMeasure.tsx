@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MdCameraAlt, MdCameraswitch, MdIosShare, MdPhotoLibrary, MdSave } from 'react-icons/md'
-import { useData } from '../../store/DataContext'
-import { detectPose } from '../../lib/pose'
+import { GET_READY_SEC } from '../../lib/settleIn'
+import { detectMeasurementPose } from '../../lib/measurePose'
 import {
   HANDLES,
   SEGMENTS,
@@ -10,7 +10,6 @@ import {
   MEASURE_MODES,
   angleMarks,
   defaultHandles,
-  handlesFromLandmarks,
   summarizeResult,
   verticalGuide,
   type Handles,
@@ -26,8 +25,6 @@ type Facing = 'user' | 'environment'
 
 /** Pill fill per reading, matching the cold blue / warm green of the charts. */
 const TEMP_COLOR: Record<MeasureTemp, string> = { cold: '#38bdf8', warm: '#22c55e' }
-
-const TIMER_CHOICES = [10, 20, 30, 45] as const
 
 /** A detection that produced nothing usable, and what left the handles guessed. */
 const DETECT_NOTE = {
@@ -275,7 +272,7 @@ async function renderMeasuredPhoto(
 }
 
 /**
- * Full-screen camera flow: live preview, a self-timer (default 30s) so you can
+ * Full-screen camera flow: live preview, a self-timer (5s) so you can
  * get into position, then an auto-capture that runs pose detection and opens the
  * draggable AngleEditor. On save it shows the measured photo and asks whether to
  * keep it — the reading is logged either way, and nothing is kept here.
@@ -293,11 +290,10 @@ export function CameraMeasure({
   onDone: (result: MeasureResult) => void
   onClose: () => void
 }) {
-  const { settings, updateSettings } = useData()
   const [mode, setMode] = useState<MeasureMode>(initialMode)
   const [phase, setPhase] = useState<Phase>('setup')
   const [facing, setFacing] = useState<Facing>('user')
-  const [timerSec, setTimerSec] = useState<number>(settings.measureTimerSec ?? 30)
+  const timerSec = GET_READY_SEC
   const [remaining, setRemaining] = useState(timerSec)
   const [error, setError] = useState<string | null>(null)
 
@@ -407,12 +403,9 @@ export function CameraMeasure({
    */
   const runDetection = useCallback(
     async (canvas: HTMLCanvasElement): Promise<{ handles: Handles; note: string | null }> => {
-      const res = await detectPose(canvas)
+      const res = await detectMeasurementPose(canvas, mode, mirroredRef.current)
       if (!res.ok) return { handles: defaultHandles(mode), note: DETECT_NOTE[res.reason] }
-      const handles = handlesFromLandmarks(mode, res.landmarks, mirroredRef.current)
-      return handles
-        ? { handles, note: null }
-        : { handles: defaultHandles(mode), note: DETECT_NOTE.partial }
+      return { handles: res.handles, note: null }
     },
     [mode],
   )
@@ -476,7 +469,6 @@ export function CameraMeasure({
   }, [phase, timerSec, capture])
 
   const startTimer = () => {
-    updateSettings({ ...settings, measureTimerSec: timerSec })
     capturedRef.current = false
     setRemaining(timerSec)
     setPhase('countdown')
@@ -657,6 +649,13 @@ export function CameraMeasure({
       >
         {phase === 'setup' && (
           <>
+            {mode === 'toe_touch' && (
+              <p className="text-sm text-neutral-300">
+                Place the camera side-on at hip height. Keep your whole body in frame,
+                including your head and feet, with your shoulder, hip and ankle visible.
+                The angle is measured from your shoulder through your hip to your ankle.
+              </p>
+            )}
             {/* What we're measuring. Wrapping rather than one row: there are
                 five poses now, and five labels across a phone are unreadable. */}
             <div className="flex flex-wrap gap-2">
@@ -669,22 +668,6 @@ export function CameraMeasure({
                   }`}
                 >
                   {MEASURE_LABEL[m]}
-                </button>
-              ))}
-            </div>
-
-            {/* Self-timer length */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs tracking-wide text-neutral-400">timer</span>
-              {TIMER_CHOICES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setTimerSec(s)}
-                  className={`min-h-[40px] flex-1 rounded-xl text-sm font-semibold ${
-                    timerSec === s ? 'bg-white/90 text-black' : 'bg-white/10 text-neutral-200'
-                  }`}
-                >
-                  {s}s
                 </button>
               ))}
             </div>

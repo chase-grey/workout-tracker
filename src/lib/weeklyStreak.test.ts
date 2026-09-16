@@ -70,6 +70,23 @@ describe('classifyWeek', () => {
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
+  it.each([
+    { workouts: 2, flex: 1, calDays: 7 },
+    { workouts: 2, flex: 2, calDays: 7 },
+    { workouts: 4, flex: 2, calDays: 7 },
+    { workouts: 0, flex: 4, calDays: 6 },
+    { workouts: 3, flex: 3, calDays: 4 },
+  ])('uses surplus across goals but never calls a missed goal full: %o', (counts) => {
+    expect(classifyWeek(counts)).toEqual({ tier: 'half', exceeded: false })
+  })
+
+  it.each([
+    { workouts: 2, flex: 0, calDays: 7 },
+    { workouts: 0, flex: 1, calDays: 7 },
+  ])('requires enough surplus to cover all reduced-goal shortfalls: %o', (counts) => {
+    expect(classifyWeek(counts)).toEqual({ tier: 'under', exceeded: false })
+  })
+
 })
 
 describe('computeWeeklyStreak', () => {
@@ -269,6 +286,45 @@ describe('weeklyStreakHistory — the stretch goal going to three', () => {
 })
 
 describe('weeklyStreakHistory', () => {
+  it.each([1, 2])('spends one banked freeze for 2 workouts, %i stretches and 7 calorie days', (flex) => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
+      flexDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', flex)],
+      calorieHitDates: [...daysInWeek('2026-08-31', 6), ...daysInWeek('2026-09-07', 7)],
+      today: parseISODate('2026-09-15'),
+    })
+    expect(rows.at(-1)).toMatchObject({
+      week: '2026-09-07',
+      tier: 'half',
+      exceeded: false,
+      outcome: 'froze',
+      freezesSpent: 1,
+      freezesAfter: 0,
+      streakAfter: 1,
+    })
+  })
+
+  it('resets without a banked freeze even when surplus covers every missed goal', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek('2026-08-31', 2), ...daysInWeek('2026-09-07', 2)],
+      flexDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
+      calorieHitDates: [...daysInWeek('2026-08-31', 6), ...daysInWeek('2026-09-07', 7)],
+      today: parseISODate('2026-09-15'),
+    })
+    expect(rows.at(-1)).toMatchObject({ outcome: 'reset', freezesSpent: 0, freezesAfter: 0, streakAfter: 0 })
+  })
+
+  it('waits until the week ends to spend a freeze on offset goals', () => {
+    const rows = weeklyStreakHistory({
+      workoutDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
+      flexDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
+      calorieHitDates: [...daysInWeek('2026-08-31', 6), ...daysInWeek('2026-09-07', 7)],
+      today: parseISODate('2026-09-13'),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ week: '2026-08-31', freezesAfter: 1, streakAfter: 1 })
+  })
+
   it('returns no rows when there are no dates', () => {
     expect(
       weeklyStreakHistory({

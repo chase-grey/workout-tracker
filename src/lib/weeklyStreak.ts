@@ -68,10 +68,18 @@ export function classifyWeek(
     return { tier: 'full', exceeded }
   }
 
-  const isHalf =
-    counts.workouts >= config.halfWorkouts &&
-    counts.flex >= config.halfFlex &&
-    counts.calDays >= config.halfCalDays
+  // Extra days above a full goal cover shortfalls below the reduced goals
+  // one-for-one. Only actually meeting every full goal can advance the streak;
+  // even a surplus that covers every miss still requires one banked freeze.
+  const surplus =
+    Math.max(0, counts.workouts - config.workouts) +
+    Math.max(0, counts.flex - config.flex) +
+    Math.max(0, counts.calDays - config.calDays)
+  const halfShortfall =
+    Math.max(0, config.halfWorkouts - counts.workouts) +
+    Math.max(0, config.halfFlex - counts.flex) +
+    Math.max(0, config.halfCalDays - counts.calDays)
+  const isHalf = surplus >= halfShortfall
 
   if (isHalf) {
     return { tier: 'half', exceeded: false }

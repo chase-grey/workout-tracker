@@ -114,6 +114,7 @@ export type WorkoutFinishSummary = {
 /** A finished Stretch + Core session, as handed to `finishStretch`. */
 export type StretchFinishInput = {
   routine: FlexRoutineKey
+  startSide?: 'left' | 'right'
   /** Whether the core block was part of the session (see stretchCore). */
   withCore: boolean
   /** The core sets actually completed, in order. */
@@ -168,6 +169,7 @@ export type FlexMeasurement = {
   warmLegLiftRightDeg?: number | null
   /** The routine(s) this log completes — omitted by a pure measurement. */
   routines?: FlexRoutineKey[]
+  startSides?: FlexEntry['startSides']
   note?: string
 }
 
@@ -728,6 +730,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         warmLegLiftLeftDeg: m.warmLegLiftLeftDeg ?? null,
         warmLegLiftRightDeg: m.warmLegLiftRightDeg ?? null,
         ...(m.routines?.length ? { routines: m.routines } : {}),
+        ...(m.startSides ? { startSides: m.startSides } : {}),
         note: m.note,
       }
       const isMeasurement = FLEX_ANGLE_KEYS.some((k) => m[k] != null)
@@ -947,7 +950,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // says whether the core block was part of it, since with it skipped "stretch
       // + core" would be a plain misstatement of what happened.
       const ambient = await logFlex(
-        { note: withCore ? 'stretch + core' : 'stretch', routines: [routine] },
+        {
+          note: withCore ? 'stretch + core' : 'stretch',
+          routines: [routine],
+          startSides: input.startSide ? { [routine]: input.startSide } : {},
+        },
         { quiet: true },
       )
       // Read after that write, which is what puts today's readings in the log: an

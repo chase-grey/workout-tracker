@@ -82,6 +82,24 @@ describe('dayOrder', () => {
 })
 
 describe('withPlanDefaults', () => {
+  it('adds cable pull downs and restores sit-ups to an existing pull day', () => {
+    const stored = {
+      ...DEFAULT_PLAN,
+      pull: {
+        ...DEFAULT_PLAN.pull,
+        exercises: DEFAULT_PLAN.pull.exercises
+          .filter((e) => !['cable_pulldown', 'weighted_situp'].includes(e.key))
+          .map((e) => e.key === 'leg_press' ? { ...e, sets: 5 } : e),
+      },
+    }
+    const merged = withPlanDefaults(stored, PLAN_REVISION)
+    const keys = merged.pull.exercises.map((e) => e.key)
+    expect(keys).toContain('cable_pulldown')
+    expect(keys).toContain('weighted_situp')
+    expect(merged.pull.exercises.find((e) => e.key === 'leg_press')?.sets).toBe(5)
+    expect(withPlanDefaults(merged, PLAN_REVISION)).toEqual(merged)
+  })
+
   it('keeps only the current day types and fills any missing one from the defaults', () => {
     const stored = { push: DEFAULT_PLAN.push } as Partial<Plan>
     const merged = withPlanDefaults(stored)

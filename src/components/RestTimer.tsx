@@ -1118,6 +1118,15 @@ export function RestTimer({
       }
     }
     tick()
+    // Comet trajectories follow the wall clock every frame so the final fragment
+    // reaches the edge at zero without a CSS transition trailing the deadline.
+    const comet = variant === 'comet' || variant === 'comet-dissolve'
+    let frame = 0
+    const animate = () => {
+      tick()
+      if (endRef.current > Date.now()) frame = requestAnimationFrame(animate)
+    }
+    if (comet) frame = requestAnimationFrame(animate)
     const id = setInterval(tick, 250)
     // Recompute immediately when returning to the app (timers throttle while hidden).
     const onWake = () => tick()
@@ -1125,12 +1134,13 @@ export function RestTimer({
     window.addEventListener('focus', onWake)
     return () => {
       clearInterval(id)
+      cancelAnimationFrame(frame)
       document.removeEventListener('visibilitychange', onWake)
       window.removeEventListener('focus', onWake)
     }
-  }, [])
+  }, [variant])
 
-  const remaining = Math.round(remainingMs / 1000)
+  const remaining = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : Math.round(remainingMs / 1000)
   const over = remaining < 0
   const abs = Math.abs(remaining)
   const label = `${over ? '+' : ''}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, '0')}`

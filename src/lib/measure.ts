@@ -252,10 +252,11 @@ function legLift(side: 'left' | 'right'): ModeSpec {
     // The side is the mode, so there's no pair within a shot to trade.
     sidePair: null,
     defaults: {
-      hip: { x: 0.5, y: 0.5 },
-      ankleStand: { x: 0.52, y: 0.9 },
-      // Front-on, and the front camera mirrors, so your left reads on the left.
-      ankleLift: { x: side === 'left' ? 0.25 : 0.75, y: 0.62 },
+      // Both legs are photographed side-on against the same wall, on the
+      // camera's right. Changing the measured leg doesn't mirror the guide.
+      hip: { x: 0.7, y: 0.5 },
+      ankleStand: { x: 0.7, y: 0.9 },
+      ankleLift: { x: 0.25, y: 0.62 },
     },
     fromLandmarks: (lms, mirrored) => {
       const own = side === 'left' ? POSE.LEFT_ANKLE : POSE.RIGHT_ANKLE
@@ -408,21 +409,25 @@ const MODE: Record<MeasureMode, ModeSpec> = {
       hip: { x: 0.5, y: 0.45 },
       ankle: { x: 0.52, y: 0.9 },
     },
-    // Midpoints throughout, so a mirrored shot measures the same fold.
+    // A side-on photo naturally hides the far shoulder/hip. Use one complete,
+    // confidently visible side, never a mixture of near and far joints.
     fromLandmarks: (lms) => {
-      const need = [
-        POSE.LEFT_SHOULDER,
-        POSE.RIGHT_SHOULDER,
-        POSE.LEFT_HIP,
-        POSE.RIGHT_HIP,
-        POSE.LEFT_ANKLE,
-        POSE.RIGHT_ANKLE,
+      const sides = [
+        [POSE.LEFT_SHOULDER, POSE.LEFT_HIP, POSE.LEFT_ANKLE],
+        [POSE.RIGHT_SHOULDER, POSE.RIGHT_HIP, POSE.RIGHT_ANKLE],
       ]
-      if (!need.every((i) => seen(lms[i]))) return null
+        .map((indices) => indices.map((i) => lms[i]))
+        .filter((points) => points.every((p) => seen(p)
+          && Number.isFinite(p.x) && Number.isFinite(p.y)
+          && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1))
+        .sort((a, b) => Math.min(...b.map((p) => p.visibility ?? 1))
+          - Math.min(...a.map((p) => p.visibility ?? 1)))
+      const side = sides[0]
+      if (!side) return null
       return {
-        shoulder: midpoint(lms[POSE.LEFT_SHOULDER], lms[POSE.RIGHT_SHOULDER]),
-        hip: midpoint(lms[POSE.LEFT_HIP], lms[POSE.RIGHT_HIP]),
-        ankle: midpoint(lms[POSE.LEFT_ANKLE], lms[POSE.RIGHT_ANKLE]),
+        shoulder: pt(side[0]),
+        hip: pt(side[1]),
+        ankle: pt(side[2]),
       }
     },
     angles: (h, aspect) => ({ toeTouchDeg: angleAtVertex(h, 'hip', 'shoulder', 'ankle', aspect) }),

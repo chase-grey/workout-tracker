@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { bulbPath, createBulbs, sandLevels, waistY } from '../lib/bulbs'
+import { CometRest } from './CometRest'
 import { type ExtraVariant } from '../lib/restShapes'
 import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
 import { createSpiral, pointAt, shareAt, spiralPath } from '../lib/spiral'
@@ -50,7 +51,7 @@ const pct = (n: number) => `${n}%`
 /* ------------------------------------------------------------------ recharge */
 
 /**
- * The 'recharge' shape: a rack of familiar cells that fills as the rest runs down,
+ * The 'recharge' shape: one randomly chosen cell that fills as the rest runs down,
  * reaching full exactly as rest ends.
  *
  * The only shape here that reads as *finished* rather than *empty* at zero, which
@@ -61,50 +62,51 @@ const pct = (n: number) => `${n}%`
  * Across the empty part it would read as charge that isn't there, and the level
  * would stop being the reading.
  */
-function RechargeBattery({
-  label,
-  bodyClass,
-  charged,
-}: {
-  label: string
-  bodyClass: string
-  charged: number
-}) {
-  return (
-    <div className={`relative flex h-full flex-col items-center justify-end ${bodyClass}`}>
-      <div className="h-[5%] w-[42%] rounded-t-full bg-accent-bright/70" />
-      <div className="relative min-h-0 flex-1 w-full overflow-hidden rounded-[12%] ring-2 ring-accent-bright/50">
-        <div className="absolute inset-0 bg-accent-bright/10" />
-        <div
-          className="absolute inset-x-0 bottom-0 h-full bg-accent-bright/75"
-          style={{ height: pct(charged * 100), ...drainOf('height') }}
-        >
-          <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
-          <div
-            className="rest-charge-sweep absolute inset-x-0 bottom-0 h-[26%]"
-            style={{
-              backgroundImage:
-                'linear-gradient(to top, transparent, var(--color-accent-bright), transparent)',
-            }}
-          />
-        </div>
-        <span className="absolute inset-0 flex items-center justify-center text-[clamp(0.45rem,1.5vw,0.8rem)] font-bold tracking-tight text-accent-bright/90">
-          {label}
-        </span>
-      </div>
-    </div>
-  )
-}
+const BATTERY_FLAVORS = [
+  { shape: 'cylinder', bodyClass: 'w-[44%] h-[66%]' }, // D
+  { shape: 'cylinder', bodyClass: 'w-[36%] h-[60%]' }, // C
+  { shape: 'cylinder', bodyClass: 'w-[25%] h-[76%]' }, // AA
+  { shape: 'cylinder', bodyClass: 'w-[18%] h-[82%]' }, // AAA
+  { shape: '9v', bodyClass: 'w-[42%] h-[64%]' },
+  { shape: 'coin', bodyClass: 'w-[66%] aspect-square' },
+] as const
 
 function RechargeCell({ fraction }: { fraction: number }) {
+  // Keep the same silhouette throughout this rest, including countdown updates.
+  const [flavor] = useState(() => BATTERY_FLAVORS[Math.floor(Math.random() * BATTERY_FLAVORS.length)])
   const charged = 1 - clamp01(fraction)
+  const coin = flavor.shape === 'coin'
+
   return (
-    <div className="absolute inset-y-[10%] left-1/2 flex w-[76%] -translate-x-1/2 items-end justify-center gap-[2.5%]" aria-hidden>
-      <RechargeBattery label="D" bodyClass="w-[22%] h-[70%]" charged={charged} />
-      <RechargeBattery label="C" bodyClass="w-[18%] h-[62%]" charged={charged} />
-      <RechargeBattery label="AA" bodyClass="w-[13%] h-[76%]" charged={charged} />
-      <RechargeBattery label="AAA" bodyClass="w-[10%] h-[84%]" charged={charged} />
-      <RechargeBattery label="9V" bodyClass="w-[19%] h-[58%]" charged={charged} />
+    <div className="absolute inset-0 flex items-center justify-center" aria-hidden>
+      <div className={`relative flex flex-col items-center ${flavor.bodyClass}`}>
+        {flavor.shape === 'cylinder' && (
+          <div className="h-[5%] w-[42%] rounded-t-full bg-accent-bright/70" />
+        )}
+        {flavor.shape === '9v' && (
+          <div className="flex h-[8%] w-full items-end justify-around px-[12%]">
+            <div className="h-full w-[24%] rounded-t-sm bg-accent-bright/70" />
+            <div className="h-[75%] w-[32%] rounded-t-md border-2 border-accent-bright/70" />
+          </div>
+        )}
+        <div className={`relative min-h-0 flex-1 w-full overflow-hidden ring-2 ring-accent-bright/50 ${coin ? 'rounded-full' : 'rounded-[12%]'}`}>
+          <div className="absolute inset-0 bg-accent-bright/10" />
+          <div
+            className="absolute inset-x-0 bottom-0 h-full bg-accent-bright/75"
+            style={{ height: pct(charged * 100), ...drainOf('height') }}
+          >
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
+            <div
+              className="rest-charge-sweep absolute inset-x-0 bottom-0 h-[26%]"
+              style={{
+                backgroundImage:
+                  'linear-gradient(to top, transparent, var(--color-accent-bright), transparent)',
+              }}
+            />
+          </div>
+          {coin && <div className="absolute inset-[6%] rounded-full border-2 border-accent-bright/40" />}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1154,119 +1156,78 @@ function FuseLine({ fraction }: { fraction: number }) {
 /* --------------------------------------------------------------- black hole */
 
 /**
- * The 'blackhole' shape: a hungry event horizon grows through the rest while
- * little bits of the workout universe orbit it, spiral inward, and disappear.
- * The hole's radius is the reading; the motion is just the drama around it.
+ * A face-on view: a fixed horizon consumes a finite field of orbiting matter.
+ * The countdown shrinks each orbit; independent, continuous rotations never
+ * reset an object's distance. Staggered arrivals make the field empty over time.
  */
-const BLACK_HOLE_DEBRIS = [
-  { angle: 0, radius: 40, size: 2.1, orbit: 'rest-black-hole-orbit-a', delay: '-1.1s' },
-  { angle: 72, radius: 34, size: 1.5, orbit: 'rest-black-hole-orbit-b', delay: '-2.8s' },
-  { angle: 145, radius: 42, size: 2.4, orbit: 'rest-black-hole-orbit-c', delay: '-0.4s' },
-  { angle: 220, radius: 36, size: 1.7, orbit: 'rest-black-hole-orbit-d', delay: '-3.6s' },
-  { angle: 292, radius: 39, size: 1.3, orbit: 'rest-black-hole-orbit-e', delay: '-1.9s' },
-] as const
+const BLACK_HOLE_DEBRIS = Array.from({ length: 18 }, (_, i) => ({
+  angle: i * 137.508,
+  radius: 23 + ((i * 7) % 22),
+  size: 0.65 + (i % 4) * 0.22,
+  duration: 16 + (i % 6) * 2.4,
+  consumedAt: 0.22 + (i / 17) * 0.78,
+}))
 
 function BlackHole({ fraction }: { fraction: number }) {
   const eaten = 1 - clamp01(fraction)
-  const horizon = 12 + eaten * 25
+  const glowId = useId()
 
   return (
-    <div className="absolute inset-0 overflow-hidden text-accent-bright" aria-hidden>
-      <div className="rest-black-hole-stars absolute inset-0 opacity-50" />
-      <div className="absolute inset-[7%]">
-        <div className="rest-black-hole-disc absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full">
-          <div
-            className="rest-black-hole-horizon absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-black"
-            style={{ width: `${horizon * 2}%`, transition: 'width 260ms linear' }}
-          />
-          <div className="rest-black-hole-glow absolute inset-[18%] rounded-full" />
-        </div>
-        {BLACK_HOLE_DEBRIS.map((piece) => (
-          <span
-            key={piece.orbit}
-            className={`rest-black-hole-debris ${piece.orbit}`}
-            style={{
-              '--angle': `${piece.angle}deg`,
-              '--radius': `${piece.radius}%`,
-              '--current-radius': `${piece.radius * (1 - eaten * 0.92)}%`,
-              '--debris-scale': 1 - eaten * 0.55,
-              left: '50%',
-              top: '50%',
-              width: `${piece.size}%`,
-              height: `${piece.size}%`,
-              animationDelay: piece.delay,
-            } as CSSProperties}
-          />
-        ))}
-      </div>
-      <div className="rest-black-hole-accretion absolute left-1/2 top-1/2 aspect-[2.6/1] w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-accent-bright/60" />
-    </div>
+    <svg
+      className="pointer-events-none absolute inset-0 h-full w-full text-accent-bright"
+      viewBox="0 0 100 100"
+      aria-hidden
+    >
+      <defs>
+        <radialGradient id={glowId}>
+          <stop offset="0.38" stopColor="currentColor" stopOpacity="0" />
+          <stop offset="0.46" stopColor="currentColor" stopOpacity="0.26" />
+          <stop offset="0.62" stopColor="currentColor" stopOpacity="0.07" />
+          <stop offset="1" stopColor="currentColor" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <circle cx="50" cy="50" r="19" fill={`url(#${glowId})`} />
+      <g transform="translate(50 50)">
+        {BLACK_HOLE_DEBRIS.map((piece, i) => {
+          // Move fully behind the opaque horizon at each object's arrival time.
+          const pull = clamp01(eaten / piece.consumedAt)
+          const radius = piece.radius + (7 - piece.radius) * pull
+          return (
+            <g key={i} transform={`rotate(${piece.angle})`}>
+              <g
+                className="rest-black-hole-orbit"
+                style={{ animationDuration: `${piece.duration}s` }}
+              >
+                <g
+                  className="rest-black-hole-radius"
+                  style={{ transform: `scale(${radius})` }}
+                >
+                  {/* Short, tapered wakes follow the same orbit as their objects. */}
+                  <path
+                    d="M .94 -.342 A 1 1 0 0 1 .985 -.174"
+                    fill="none" stroke="currentColor" strokeWidth={0.36 / piece.radius}
+                    strokeLinecap="round" opacity="0.12"
+                  />
+                  <path
+                    d="M .985 -.174 A 1 1 0 0 1 1 0"
+                    fill="none" stroke="currentColor" strokeWidth={0.65 / piece.radius}
+                    strokeLinecap="round" opacity="0.32"
+                  />
+                  <circle cx="1" cy="0" r={piece.size / piece.radius} fill="currentColor" opacity="0.9" />
+                  <circle cx="1" cy="0" r={piece.size * 0.4 / piece.radius} fill="#effff6" />
+                </g>
+              </g>
+            </g>
+          )
+        })}
+      </g>
+      {/* Painted last so matter vanishes behind the horizon, never in a central pile. */}
+      <circle cx="50" cy="50" r="8.5" fill="black" stroke="currentColor" strokeOpacity="0.55" strokeWidth="0.35" />
+    </svg>
   )
 }
 
 /* --------------------------------------------------------------------- comet */
-
-const COMET_IMPACT = 0.66
-const EARTH_BITS = [
-  { d: 'M 42 44 l 4 -3 4 3 -2 5 -5 1 z', dx: -66, dy: -46, r: -55 },
-  { d: 'M 51 39 l 5 -2 4 4 -2 5 -6 -1 z', dx: 54, dy: -54, r: 42 },
-  { d: 'M 59 46 l 5 2 1 5 -5 4 -4 -5 z', dx: 68, dy: 16, r: 78 },
-  { d: 'M 56 57 l 5 -2 4 4 -2 6 -6 -1 z', dx: 42, dy: 61, r: -35 },
-  { d: 'M 45 58 l 5 1 1 5 -5 4 -5 -4 z', dx: -35, dy: 58, r: 64 },
-  { d: 'M 38 51 l 5 -4 4 4 -2 6 -6 1 z', dx: -72, dy: 12, r: -80 },
-] as const
-
-/** The impact happens before the end so the final third of the rest is the debris flight. */
-function CometEarth({ fraction }: { fraction: number }) {
-  const elapsed = 1 - clamp01(fraction)
-  const approach = clamp01(elapsed / COMET_IMPACT)
-  const debris = clamp01((elapsed - COMET_IMPACT) / (1 - COMET_IMPACT))
-  const impacted = elapsed >= COMET_IMPACT
-  const cometX = -18 + approach * 68
-  const cometY = 14 + approach * 35
-  const transition = 'transform 260ms linear, opacity 260ms linear'
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden text-accent-bright" aria-hidden>
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <defs>
-          <radialGradient id="comet-earth-glow">
-            <stop offset="0" stopColor="currentColor" stopOpacity="0.75" />
-            <stop offset="1" stopColor="currentColor" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <g transform={`translate(${cometX - 50} ${cometY - 50})`} style={{ transition }} opacity={0.8}>
-          <path d="M -28 50 C -14 45 -5 46 0 50 C -8 53 -17 54 -28 50 Z" fill="currentColor" opacity="0.28" />
-          <circle cx="0" cy="50" r="3.2" fill="currentColor" />
-          <circle cx="0" cy="50" r="7" fill="url(#comet-earth-glow)" />
-        </g>
-        <g style={{ opacity: impacted ? 0 : 1, transition }}>
-          <circle cx="50" cy="50" r="14" fill="currentColor" opacity="0.1" />
-          <circle cx="50" cy="50" r="12" fill="currentColor" opacity="0.7" />
-          <path d="M 42 47 C 46 43 48 47 52 44 S 58 45 61 49 M 42 54 C 47 52 50 58 55 55 S 60 54 62 57" fill="none" stroke="black" strokeOpacity="0.32" strokeWidth="2" />
-        </g>
-        <g style={{ opacity: impacted ? 1 : 0, transition }}>
-          <circle cx="50" cy="50" r={10 + debris * 18} fill="url(#comet-earth-glow)" opacity={0.8 - debris * 0.55} />
-          <circle cx="50" cy="50" r={3 + debris * 7} fill="currentColor" opacity={1 - debris * 0.7} />
-        </g>
-        {EARTH_BITS.map((bit) => (
-          <path
-            key={bit.d}
-            d={bit.d}
-            fill="currentColor"
-            opacity={impacted ? 1 - debris : 0}
-            transform={`translate(${bit.dx * debris} ${bit.dy * debris}) rotate(${bit.r * debris} 50 50)`}
-            style={{ transition }}
-          />
-        ))}
-      </svg>
-      <div
-        className="rest-comet-flash absolute left-1/2 top-1/2 aspect-square w-[18%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-bright"
-        style={{ opacity: impacted && debris < 0.32 ? 1 : 0, transform: `translate(-50%, -50%) scale(${impacted ? 1 + debris * 2 : 0.2})`, transition }}
-      />
-    </div>
-  )
-}
 
 /* ------------------------------------------------------------------ rotation */
 
@@ -1313,7 +1274,7 @@ export function ExtraRestShape({
     // A curvy sand timer: the area of sand left in the upper bulb is the reading.
     case 'bulbs':
       return <SandBulbs fraction={fraction} />
-    // A growing event horizon eats orbiting debris as the rest runs out.
+    // Orbiting matter spirals into a fixed horizon as the rest runs out.
     case 'blackhole':
       return <BlackHole fraction={fraction} />
     // A cord burning in from both edges of the screen.
@@ -1321,7 +1282,9 @@ export function ExtraRestShape({
       return <FuseLine fraction={fraction} />
     // A comet hits Earth; every fragment reaches its off-screen endpoint at zero.
     case 'comet':
-      return <CometEarth fraction={fraction} />
+      return <CometRest fraction={fraction} earth />
+    case 'comet-dissolve':
+      return <CometRest fraction={fraction} />
     default:
       return <FuseLine fraction={fraction} />
   }

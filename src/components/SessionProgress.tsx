@@ -11,6 +11,7 @@ export function SessionProgress({
   total,
   unit,
   timeLeftLabel,
+  onTimeClick,
   className = '',
 }: {
   done: number
@@ -18,6 +19,7 @@ export function SessionProgress({
   /** Set to caption how many are left (e.g. "sets"); omit for a bar with no labels. */
   unit?: string
   timeLeftLabel?: string | null
+  onTimeClick?: () => void
   className?: string
 }) {
   const fraction = total > 0 ? Math.max(0, Math.min(1, done / total)) : 0
@@ -37,7 +39,16 @@ export function SessionProgress({
               {left} {unit} left
             </span>
           )}
-          {timeLeftLabel && <span className="ml-auto">{timeLeftLabel}</span>}
+          {timeLeftLabel && (onTimeClick ? (
+            <button
+              onClick={(event) => { event.stopPropagation(); onTimeClick() }}
+              aria-label={`${timeLeftLabel.replace(/^~/, '')}. View session timing`}
+              aria-haspopup="dialog"
+              className="ml-auto min-h-[44px] px-1 underline decoration-neutral-600 underline-offset-4 active:text-accent-2"
+            >
+              {timeLeftLabel.replace(/^~/, '')}
+            </button>
+          ) : <span className="ml-auto">{timeLeftLabel.replace(/^~/, '')}</span>)}
         </div>
       )}
     </div>

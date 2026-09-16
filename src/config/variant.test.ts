@@ -124,22 +124,20 @@ describe('the pull + legs day', () => {
     expect(keys).not.toContain('cable_row')
   })
 
-  it('still trains back, on the movement worth the day pulling volume', () => {
+  it('trains back with weighted pull-ups and cable pull downs', () => {
     const back = DEFAULT_PLAN.pull.exercises.filter((e) => e.group === 'back')
-    expect(back.map((e) => e.key)).toEqual(['weighted_pullups'])
+    expect(back.map((e) => e.key)).toEqual(['weighted_pullups', 'cable_pulldown'])
   })
 
-  it('trains no abs at all, on what is already the longest day', () => {
+  it('includes weighted sit-ups for abs', () => {
     const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
-    expect(keys).not.toContain('weighted_situp')
+    expect(keys).toContain('weighted_situp')
     expect(keys).not.toContain('cable_crunch')
     expect(keys).not.toContain('hanging_leg_raise')
     expect(DEFAULT_PLAN.pull.exercises.some((e) => e.group === 'core')).toBe(false)
   })
 
-  it('gives up no weekly ab volume by dropping them, since push and stretch carry it', () => {
-    // The sets that left this day were the ones done last; the ones that remain are
-    // done first on push and on their own after a stretch.
+  it('keeps the ab volume on push and stretch', () => {
     expect(sets('A', 'cable_crunch')).toBe(4)
     expect(sets('A', 'weighted_situp')).toBe(4)
     expect(STRETCH_CORE.sets).toBe(4)

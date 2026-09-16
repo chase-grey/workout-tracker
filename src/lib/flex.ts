@@ -28,6 +28,8 @@ export type FlexEntry = {
    * entries, which were all side splits (see lib/stretchRotation).
    */
   routines?: FlexRoutineKey[]
+  /** Latest completed starting side for each routine on this date. */
+  startSides?: Partial<Record<FlexRoutineKey, 'left' | 'right'>>
   note?: string
 }
 
@@ -117,6 +119,7 @@ export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
         warmLegLiftLeftDeg: e.warmLegLiftLeftDeg ?? null,
         warmLegLiftRightDeg: e.warmLegLiftRightDeg ?? null,
         ...(e.routines?.length ? { routines: [...new Set(e.routines)] } : {}),
+        ...(e.startSides ? { startSides: { ...e.startSides } } : {}),
         ...(e.note != null && e.note !== '' ? { note: e.note } : {}),
       })
       continue
@@ -129,6 +132,7 @@ export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
       // last element is the routine that finished most recently.
       prev.routines = [...new Set([...(prev.routines ?? []), ...e.routines])]
     }
+    if (e.startSides) prev.startSides = { ...prev.startSides, ...e.startSides }
     if (e.note != null && e.note !== '') prev.note = e.note
   }
   return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1))

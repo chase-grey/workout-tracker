@@ -66,6 +66,7 @@ import { RestTimer } from '../../components/RestTimer'
 import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
+import { SessionTimingSheet } from '../../components/SessionTimingSheet'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
@@ -175,6 +176,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // appears in the flow once the log it's counted from has updated (see addSet).
   const [pendingStepKey, setPendingStepKey] = useState<string | null>(null)
   const [showList, setShowList] = useState(false)
+  const [showTiming, setShowTiming] = useState(false)
   const [showAddExercise, setShowAddExercise] = useState(false)
   const [newExerciseName, setNewExerciseName] = useState('')
   const [newExerciseSets, setNewExerciseSets] = useState('1')
@@ -358,7 +360,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // left alone, nor under an open sheet: a sheet sits above the pause curtain, and
   // reading one isn't being away.
   useIdleTimeout(
-    rest == null && !preparing && !paused && !showList && !showHistory && !showCircuitRest,
+    rest == null && !preparing && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest && !showTiming,
     IDLE_PAUSE_MS,
     () => {
       // Drop this set's active-time slice rather than carry it into the pause: it
@@ -373,6 +375,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // in the workout: a press meant for the sheet on top doesn't reach past it to set
   // the whole session aside, which is what the guard underneath does (see App).
   useBackGuard(showList, () => setShowList(false))
+  useBackGuard(showAddExercise, () => setShowAddExercise(false))
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its clocks are wall-clock, so they'd otherwise keep advancing
@@ -789,7 +792,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // both the turbo wait and a self-ending hold need to be true before they can
   // close a set on their own.
   const setScreenLive =
-    rest == null && !preparing && !paused && !showList && !showHistory && !showCircuitRest
+    rest == null && !preparing && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest && !showTiming
   const turboMs = turboSetMs(exerciseAverages, planned.key)
   const turboArmed =
     fastMode === 'turbo' &&
@@ -929,6 +932,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         total={totals.all}
         unit="sets"
         timeLeftLabel={`${formatDuration(timeLeft)} left`}
+        onTimeClick={() => setShowTiming(true)}
       />
 
       <header className="flex items-start justify-between gap-2">
@@ -1131,6 +1135,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           (z-60), which own the moment when one of them is up. */}
       {cheer && <SetCheer key={cheer.id} grade={cheer.grade} onDone={() => setCheer(null)} />}
 
+      {showTiming && (
+        <SessionTimingSheet
+          startedAt={session.startedAt}
+          readRestSec={(now) => tally.current.takenSec + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
+          projected={workoutSplit(exerciseAverages, priceFlow(steps))}
+          remainingSec={timeLeft}
+          onClose={() => setShowTiming(false)}
+        />
+      )}
       {paused && <PauseOverlay label="workout paused" onResume={() => setPaused(false)} />}
 
       {showHistory && (
@@ -1340,7 +1353,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {showAddExercise && (
         <div className="fixed inset-0 z-70 flex items-end bg-black/60" onClick={() => setShowAddExercise(false)}>
           <form
-            className="w-full rounded-t-3xl bg-surface p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-exercise-title"
+            className="max-h-[80dvh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
             onClick={(event) => event.stopPropagation()}
             onSubmit={(event) => {
               event.preventDefault()
@@ -1348,7 +1364,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             }}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-3 text-lg font-bold">add exercise</h3>
+            <h3 id="add-exercise-title" className="mb-1 text-lg font-bold">add exercise</h3>
+            <p className="mb-3 text-sm text-neutral-400">Add an extra exercise for this workout only.</p>
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1">
                 <span className="text-xs tracking-wide text-neutral-500">name</span>

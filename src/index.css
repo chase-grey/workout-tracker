@@ -636,68 +636,19 @@ input[type='number'] {
   mix-blend-mode: screen;
 }
 
-/* Black hole: the disk turns continuously, while the horizon itself is sized by
-   the countdown in RestShapes. Debris follows wide orbits and gets pulled toward
-   the center as `--pull` rises, so the end of rest feels like an event. */
-@keyframes rest-black-hole-disk {
-  to {
-    transform: translate(-50%, -50%) rotate(360deg);
-  }
-}
-.rest-black-hole-disc {
-  background: radial-gradient(
-    circle,
-    #000 0 42%,
-    var(--color-accent-bright) 44% 47%,
-    transparent 50%
-  );
-  animation: rest-black-hole-disk 8s linear infinite;
-  box-shadow: 0 0 28px rgb(0 0 0 / 0.8), 0 0 16px var(--color-accent-bright);
-  will-change: transform;
-}
-.rest-black-hole-glow {
-  background: radial-gradient(circle, rgb(0 0 0 / 0.98), rgb(0 0 0 / 0.7) 58%, transparent 72%);
-  box-shadow: inset 0 0 22px rgb(0 0 0 / 0.95);
-}
-.rest-black-hole-accretion {
-  pointer-events: none;
-  transform: translate(-50%, -50%) rotate(-14deg);
-  box-shadow: 0 0 12px var(--color-accent-bright), inset 0 0 12px var(--color-accent-bright);
-  animation: rest-black-hole-disk 4.8s linear infinite reverse;
-  will-change: transform;
-}
-.rest-black-hole-stars {
-  background-image: radial-gradient(circle at 18% 24%, currentColor 0 1px, transparent 1.5px),
-    radial-gradient(circle at 80% 18%, currentColor 0 1px, transparent 1.5px),
-    radial-gradient(circle at 88% 78%, currentColor 0 1px, transparent 1.5px),
-    radial-gradient(circle at 12% 74%, currentColor 0 1px, transparent 1.5px);
-}
-.rest-black-hole-debris {
-  position: absolute;
-  display: block;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
-  transform-origin: 0 0;
-  animation-name: rest-black-hole-orbit;
-  animation-duration: 5.8s;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  animation-fill-mode: both;
-  will-change: transform, opacity;
-}
+/* Keep rotation and countdown-driven radius on separate SVG groups so neither
+   restarts the other. All distances use the same square viewBox. */
 @keyframes rest-black-hole-orbit {
-  0% {
-    transform: rotate(var(--angle)) translateX(var(--radius)) rotate(calc(var(--angle) * -1)) scale(1);
-    opacity: 0.9;
-  }
-  70% {
-    opacity: 0.85;
-  }
-  100% {
-    transform: rotate(calc(var(--angle) + 360deg)) translateX(var(--current-radius)) rotate(calc((var(--angle) + 360deg) * -1)) scale(var(--debris-scale));
-    opacity: calc(0.9 - var(--pull) * 0.9);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.rest-black-hole-orbit {
+  transform-origin: 0 0;
+  animation: rest-black-hole-orbit 20s linear infinite;
+}
+.rest-black-hole-radius {
+  transform-origin: 0 0;
+  transition: transform 260ms linear;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -721,10 +672,11 @@ input[type='number'] {
   .rest-comet-flash {
     animation: none;
   }
-  .rest-black-hole-disc,
-  .rest-black-hole-accretion,
-  .rest-black-hole-debris {
+  .rest-black-hole-orbit {
     animation: none;
+  }
+  .rest-black-hole-radius {
+    transition: none;
   }
   /* Everything airborne is hidden rather than frozen: a spark or a drop parked
      halfway across reads as a mistake, where its absence reads as nothing at all.

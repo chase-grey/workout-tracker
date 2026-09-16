@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdKeyboardArrowDown, MdKeyboardArrowUp } from 'react-icons/md'
-import { parseTempo } from '../lib/tempo'
+import { parseTempo, workPhaseCount, type TempoPhase } from '../lib/tempo'
+import { rhythmWavePath, rhythmWavePoint } from '../lib/rhythmWave'
+import { FlossGuide } from './FlossGuide'
 import {
   attack,
   cycleCloses,
@@ -181,33 +183,6 @@ function BreatheShape({ variant, scale, glow }: { variant: Variant; scale: numbe
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
-/** A square-wave path, traversed right-to-left once per rep. */
-const SQUARE_WAVE_POINTS = [
-  [100, 76], [88, 76], [88, 20], [62, 20], [62, 76],
-  [38, 76], [38, 20], [12, 20], [12, 76], [0, 76],
-] as const
-const SQUARE_WAVE_LENGTHS = SQUARE_WAVE_POINTS.slice(1).map(([x, y], i) => {
-  const [fromX, fromY] = SQUARE_WAVE_POINTS[i]
-  return Math.hypot(x - fromX, y - fromY)
-})
-const SQUARE_WAVE_LENGTH = SQUARE_WAVE_LENGTHS.reduce((sum, length) => sum + length, 0)
-
-function squareWavePoint(progress: number): readonly [number, number] {
-  const distance = (1 - clamp01(progress)) * SQUARE_WAVE_LENGTH
-  let travelled = 0
-  for (let i = 0; i < SQUARE_WAVE_LENGTHS.length; i++) {
-    const length = SQUARE_WAVE_LENGTHS[i]
-    if (distance <= travelled + length) {
-      const amount = length === 0 ? 0 : (distance - travelled) / length
-      const [fromX, fromY] = SQUARE_WAVE_POINTS[i]
-      const [toX, toY] = SQUARE_WAVE_POINTS[i + 1]
-      return [fromX + (toX - fromX) * amount, fromY + (toY - fromY) * amount]
-    }
-    travelled += length
-  }
-  return SQUARE_WAVE_POINTS[SQUARE_WAVE_POINTS.length - 1]
-}
-
 /** Descent family: a shape that reaches/folds downward and settles deep. */
 function DescentShape({ variant, depth, glow }: { variant: Variant; depth: number; glow: RepGlow }) {
   const tone = TONES[glow]
@@ -336,38 +311,46 @@ function PushPullShape({
   prime,
   primeDir,
   glow,
-  cycle,
+  phases,
+  phaseIndex,
+  progress,
 }: {
   variant: Variant
   drive: number
   prime: number
   primeDir: number
   glow: RepGlow
-  cycle: number
+  phases: TempoPhase[]
+  phaseIndex: number
+  progress: number
 }) {
+  const wavePath = useMemo(() => rhythmWavePath(phases), [phases])
   const tone = TONES[glow]
   // How lit each end is: fully while you drive into it, filling while a rest primes
   // it. `side` is +1 for the bottom (pressing down) and −1 for the top.
   const endLit = (side: number) => Math.max(clamp01(drive * side), primeDir === side ? prime : 0)
   switch (variant) {
     case 'wave': {
-      const [dotX, dotY] = squareWavePoint(cycle)
-      const path = SQUARE_WAVE_POINTS
-        .map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x} ${y}`)
-        .join(' ')
+      const [dotX, dotY] = rhythmWavePoint(phases, phaseIndex, progress)
       return (
-        <div className="absolute inset-[10%]">
-          <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible text-accent-bright" aria-hidden>
+        <div className="absolute inset-y-[10%] left-1/2 w-screen -translate-x-1/2 overflow-hidden">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible text-accent-bright" aria-hidden>
             <path
-              d={path}
+              d={wavePath}
+              transform={`translate(${50 - dotX} 0)`}
               fill="none"
               stroke="currentColor"
               strokeWidth="3"
-              strokeLinecap="square"
+              vectorEffect="non-scaling-stroke"
+              strokeLinecap="round"
+              strokeLinejoin="round"
               opacity={tone.dimmest}
             />
-            <circle cx={dotX} cy={dotY} r="5.5" fill="currentColor" opacity={tone.brightest} />
           </svg>
+          <div
+            className="absolute left-1/2 h-[11%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-bright"
+            style={{ top: `${dotY}%`, opacity: tone.brightest }}
+          />
         </div>
       )
     }
@@ -487,16 +470,20 @@ export function RhythmGuide({
   tempo,
   reps,
   variant: chosenVariant,
+  movement,
   running = true,
   startRep = 1,
   onRep,
   onTargetHit,
   endsOnTarget = false,
+  skipFinalRepRest = false,
 }: {
   tempo: string
   reps?: number
   /** A session-owned choice, used when two sides belong to the same set. */
   variant?: RhythmVariant
+  /** Exercise-specific cues sharing the same phase and rep clock. */
+  movement?: 'floss'
   running?: boolean
   /** Rep to resume counting from — lets a reloaded session pick up where it left off. */
   startRep?: number
@@ -516,6 +503,8 @@ export function RhythmGuide({
    * `repGlow`.
    */
   endsOnTarget?: boolean
+  /** Finish the target rep before its trailing rest phases. */
+  skipFinalRepRest?: boolean
 }) {
   const phases = useMemo(() => parseTempo(tempo), [tempo])
   const depths = useMemo(() => phaseDepths(phases), [phases])
@@ -553,7 +542,10 @@ export function RhythmGuide({
     const tick = (now: number) => {
       const elapsed = now - start
       if (elapsed >= dur) {
-        const next = (idx + 1) % phases.length
+        const phaseCount = skipFinalRepRest && repRef.current === reps
+          ? workPhaseCount(phases)
+          : phases.length
+        const next = (idx + 1) % phaseCount
         setProgress(0)
         setIdx(next)
         // A full pass through every phase is one rep. Keep counting past the
@@ -575,7 +567,7 @@ export function RhythmGuide({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [idx, phases, running, reps])
+  }, [idx, phases, running, reps, skipFinalRepRest])
 
   if (phases.length === 0) return null
 
@@ -637,7 +629,9 @@ export function RhythmGuide({
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-3">
       <div className="relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
-        {motion === 'descent' ? (
+        {movement === 'floss' ? (
+          <FlossGuide phaseIndex={i} progress={progress} phases={phases} bright={glow === 'done'} />
+        ) : motion === 'descent' ? (
           <>
             {showPrevRep && (
               <div
@@ -661,7 +655,7 @@ export function RhythmGuide({
         ) : motion === 'pushpull' ? (
           <div
             className="absolute inset-0 flex items-center justify-center"
-            style={{ transform: `translateY(${tremor * STRAIN_PCT}%)` }}
+            style={{ transform: variant === 'wave' ? undefined : `translateY(${tremor * STRAIN_PCT}%)` }}
           >
             <PushPullShape
               variant={variant}
@@ -669,7 +663,9 @@ export function RhythmGuide({
               prime={prime}
               primeDir={primeDir}
               glow={glow}
-              cycle={cycleProgress(phases, i, progress)}
+              phases={phases}
+              phaseIndex={i}
+              progress={progress}
             />
           </div>
         ) : (

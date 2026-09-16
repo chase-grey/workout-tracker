@@ -366,7 +366,7 @@ describe('the head-to-toe poses', () => {
       expect(marks[0].deg).toBe(r.toeTouchDeg)
     })
 
-    it('places its handles on the body midlines', () => {
+    it('uses a complete side instead of averaging across the body', () => {
       const l = lms()
       l[POSE.LEFT_SHOULDER] = { x: 0.4, y: 0.3, visibility: 0.9 }
       l[POSE.RIGHT_SHOULDER] = { x: 0.6, y: 0.3, visibility: 0.9 }
@@ -375,12 +375,12 @@ describe('the head-to-toe poses', () => {
       l[POSE.LEFT_ANKLE] = { x: 0.45, y: 0.9, visibility: 0.9 }
       l[POSE.RIGHT_ANKLE] = { x: 0.55, y: 0.9, visibility: 0.9 }
       const h = handlesFromLandmarks('toe_touch', l)!
-      expect(h.shoulder).toEqual({ x: 0.5, y: 0.3 })
-      expect(h.hip).toEqual({ x: 0.5, y: 0.5 })
-      expect(h.ankle).toEqual({ x: 0.5, y: 0.9 })
+      expect(h.shoulder).toEqual({ x: 0.4, y: 0.3 })
+      expect(h.hip).toEqual({ x: 0.4, y: 0.5 })
+      expect(h.ankle).toEqual({ x: 0.45, y: 0.9 })
     })
 
-    // Built from midpoints, so a mirror image is the same fold.
+    // Anatomical side labels do not change the single fold angle.
     it('measures a mirrored shot identically', () => {
       const l = lms()
       l[POSE.LEFT_SHOULDER] = { x: 0.3, y: 0.3, visibility: 0.9 }
@@ -394,6 +394,41 @@ describe('the head-to-toe poses', () => {
       const l = lms()
       expect(handlesFromLandmarks('toe_touch', l)).not.toBeNull()
       l[POSE.LEFT_SHOULDER] = { x: 0.4, y: 0.3, visibility: 0.1 }
+      expect(handlesFromLandmarks('toe_touch', l)).not.toBeNull()
+      l[POSE.RIGHT_SHOULDER] = { x: 0.6, y: 0.3, visibility: 0.1 }
+      expect(handlesFromLandmarks('toe_touch', l)).toBeNull()
+    })
+
+    it.each(['left', 'right'])('accepts a side-on fold with only the %s side visible', (side) => {
+      const l: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0, y: 0, visibility: 0.1 }))
+      const ids = side === 'left'
+        ? [POSE.LEFT_SHOULDER, POSE.LEFT_HIP, POSE.LEFT_ANKLE]
+        : [POSE.RIGHT_SHOULDER, POSE.RIGHT_HIP, POSE.RIGHT_ANKLE]
+      l[ids[0]] = { x: 0.2, y: 0.5, visibility: 0.9 }
+      l[ids[1]] = { x: 0.5, y: 0.5, visibility: 0.9 }
+      l[ids[2]] = { x: 0.5, y: 0.9, visibility: 0.9 }
+      const h = handlesFromLandmarks('toe_touch', l)!
+      expect(anglesFromHandles('toe_touch', h, 0.75).toeTouchDeg).toBe(90)
+    })
+
+    it('chooses the side with the stronger weakest landmark', () => {
+      const l = lms()
+      l[POSE.LEFT_HIP].visibility = 0.55
+      l[POSE.RIGHT_HIP] = { x: 0.65, y: 0.5, visibility: 0.95 }
+      expect(handlesFromLandmarks('toe_touch', l)!.hip.x).toBe(0.65)
+    })
+
+    it('does not combine joints from opposite sides to invent a visible side', () => {
+      const l = lms()
+      l[POSE.LEFT_SHOULDER].visibility = 0.1
+      l[POSE.RIGHT_ANKLE].visibility = 0.1
+      expect(handlesFromLandmarks('toe_touch', l)).toBeNull()
+    })
+
+    it.each([NaN, Infinity, -0.2, 1.2])('rejects invalid or off-photo coordinates: %s', (x) => {
+      const l = lms()
+      l[POSE.LEFT_SHOULDER].x = x
+      l[POSE.RIGHT_SHOULDER].x = x
       expect(handlesFromLandmarks('toe_touch', l)).toBeNull()
     })
   })

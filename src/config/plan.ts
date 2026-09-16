@@ -491,6 +491,8 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
 
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+      { key: 'cable_pulldown', name: 'cable pull down', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'back' },
+      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
 
       // Both are a dumbbell in each hand, so both step in 10s (see dumbbellPair).
       { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 10, dumbbellPair: true, group: 'biceps' },
@@ -748,15 +750,6 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'cable_row',
     // Replaced by the weighted sit-up, as on push. Still shipped on full body.
     HANGING_RAISE_KEY,
-    // And now the sit-up that replaced it. This day trains abs last, behind the
-    // leg press, the Copenhagen holds, the sideways raises and the pull-ups — so
-    // the three sets cost a long day three more sets and bought the least
-    // stimulus in the week, since what limited the plate was trunk fatigue rather
-    // than the abs. Abs are still trained three times a week without it: four and
-    // four on push, where they run first and fresh, and four more in the
-    // Stretch + Core block (see STRETCH_CORE). Retired from THIS day only — the
-    // movement is unchanged everywhere else, and its logged history is untouched.
-    'weighted_situp',
     // The hand-added Copenhagen plank, now shipped as a left and a right station
     // (see COPENHAGEN_HOLD_SEC). It was only ever a custom entry, so what it was
     // keyed as depends on the name it was added under — the plausible slugs are all
@@ -985,6 +978,7 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
   // "overhead press" stays with the dumbbell key for the same reason — that's what
   // every log written before the machine took over the push day meant.
   weighted_situp: ['situp', 'weighted situp', 'weighted sit-up', 'incline situp'],
+  cable_pulldown: ['cable pulldown', 'lat pulldown', 'lat pull down'],
   [MAT_SITUP_KEY]: ['mat situp', 'mat weighted situp', 'floor situp', 'yoga mat situp'],
   machine_overhead_press: ['machine shoulder press'],
 }

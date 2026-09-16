@@ -30,6 +30,7 @@ import { useKeyboardOpen } from './lib/useKeyboardOpen'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
 import { MdFitnessCenter } from 'react-icons/md'
 import { coreDoneToday } from './lib/stretchCore'
+import { nextStretchSide } from './lib/stretchSide'
 import { toISODate } from './lib/dates'
 import type { FlexRoutineKey } from './config/flexRoutines'
 import type { DayType } from './types'
@@ -151,6 +152,7 @@ function AppShell() {
         step: 0,
         done: [],
         started: false,
+        startSide: nextStretchSide(storage.loadFlex(), routine),
         startedAt: new Date().toISOString(),
         routine,
         // Both routines end with the same sit-ups, so the second stretch of a day

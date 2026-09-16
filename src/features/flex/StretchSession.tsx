@@ -3,6 +3,7 @@ import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from '
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
+import { SessionTimingSheet } from '../../components/SessionTimingSheet'
 import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
@@ -33,6 +34,7 @@ import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { STRETCH_CORE, repRangeLabel } from '../../config/plan'
 import {
+  GET_READY_SEC,
   CORE_ENTRY_GET_READY_SEC,
   POST_PHOTO_GET_READY_SEC,
   settleInSec,
@@ -228,6 +230,8 @@ export function StretchSession({
   // The whole flow resumes from this snapshot, read once on mount: an app switch
   // or accidental refresh drops you back where you were, not at the top.
   const [saved] = useState(() => storage.loadStretch())
+  // Legacy active sessions already started left; preserve their step order.
+  const [startSide] = useState(saved?.startSide ?? 'left')
   // A session started before the core-skip rule shipped always had its core.
   const [withCore] = useState(saved?.core ?? true)
   const [current, setCurrent] = useState(saved?.step ?? 0)
@@ -264,6 +268,7 @@ export function StretchSession({
   // and not when the session is already running itself forward.
   const [preparing, setPreparing] = useState(rest == null && !fast && started)
   const [showList, setShowList] = useState(false)
+  const [showTiming, setShowTiming] = useState(false)
   // A one-off, longer get-into-position count that replaces the upcoming set's
   // own — set when a photo screen hands the routine straight to a stretch, and
   // when a side switch replaces the settle-in with a reposition.
@@ -303,7 +308,7 @@ export function StretchSession({
   }
 
   const plan = flexPlans[routine] ?? FLEX_ROUTINES[routine].blocks
-  const allSteps = useMemo(() => buildSessionSteps(plan, { core: withCore }), [plan, withCore])
+  const allSteps = useMemo(() => buildSessionSteps(plan, { core: withCore, startSide }), [plan, withCore, startSide])
   // Skipping is an exercise-level decision: all of its sides and sets leave the
   // live flow, while allSteps keeps them available to restore from the checklist.
   const steps = useMemo(
@@ -337,6 +342,7 @@ export function StretchSession({
   useEffect(() => {
     storage.saveStretch({
       step: safeCurrent,
+      startSide,
       done: [...done],
       started,
       startedAt,
@@ -353,7 +359,7 @@ export function StretchSession({
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, done, started, startedAt, routine, withCore, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
+  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -376,7 +382,7 @@ export function StretchSession({
   // holds and a hold's clock starts only then — a set counting down behind a
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
-  const setLive = started && rest == null && photos == null && !paused && !showList && !preparing
+  const setLive = started && rest == null && photos == null && !paused && !showList && !showTiming && !preparing
 
   // And while it's on, the screen stays lit — a paced routine is one nobody is
   // tapping, and the phone would dim mid-hold. A hold's clock runs unattended
@@ -439,6 +445,8 @@ export function StretchSession({
       .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
     void finishStretch({
       routine,
+      startSide: steps.filter((s) => s.kind === 'flex')
+        .find((s) => s.side && doneSet.has(s.stepKey))?.side,
       // The core block may have been offered at session start and then skipped
       // from the checklist; don't describe that session as "stretch + core".
       withCore: withCore && !skipped.has(STRETCH_CORE.key),
@@ -644,7 +652,7 @@ export function StretchSession({
     // be banked into the rest tally — the session's time-left estimate reads that
     // number, and counting every leg swap as rest would drift it badly.
     if (finished.kind === 'flex' && finished.sideSwitchSec) {
-      straightToGetReady(finished.sideSwitchSec)
+      straightToGetReady(GET_READY_SEC)
       return
     }
     // The rest ends on the coming set's settle-in, and those seconds come out of
@@ -790,6 +798,7 @@ export function StretchSession({
         total={N}
         unit="sets"
         timeLeftLabel={`${formatDuration(timeLeft)} left`}
+        onTimeClick={() => setShowTiming(true)}
       />
 
       <header className="flex items-start justify-between gap-2">
@@ -868,6 +877,8 @@ export function StretchSession({
           <RhythmGuide
             key={step.stepKey}
             tempo={step.tempo}
+            skipFinalRepRest={step.exKey === 'pike_lift'}
+            movement={step.exKey === 'sciatic_floss' ? 'floss' : undefined}
             reps={step.reps}
             variant={rhythmVariantFor(flexRoundKey(step), step.tempo)}
             running={setLive}
@@ -971,6 +982,15 @@ export function StretchSession({
             setPreparing(false)
             setReadyOverrideSec(null)
           }}
+        />
+      )}
+      {showTiming && (
+        <SessionTimingSheet
+          startedAt={startedAt}
+          readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
+          projected={stretchSplit(steps, coreRepsFor, medianTotalSec(durations, { kind: 'stretch', routine }))}
+          remainingSec={timeLeft}
+          onClose={() => setShowTiming(false)}
         />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
