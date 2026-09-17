@@ -31,6 +31,8 @@ export function fmtDateLabel(ms: number): string {
  */
 export const LINE_PRIMARY = '#22c55e'
 export const LINE_SECONDARY = '#15803d'
+/** Live pace alongside the green committed projection. */
+export const LINE_CURRENT_PACE = '#a3a3a3'
 export const LINE_GOAL = '#14532d'
 /** Goal labels step up the ladder: 9px type at {@link LINE_GOAL} is too dim to read. */
 export const LINE_GOAL_LABEL = LINE_SECONDARY

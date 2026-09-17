@@ -11,13 +11,14 @@ import {
   YAxis,
 } from 'recharts'
 import type { Point } from '../../lib/progress'
-import { projectedSeries, type LockedProjection } from '../../lib/goalLock'
+import { expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
 import { enumerateWeeks, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import {
   calorieWeekMark,
   fmtDateLabel,
   fmtTick,
   HIT_DAYS_DIM,
+  LINE_CURRENT_PACE,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
@@ -45,6 +46,7 @@ export type BodyWeightGoal = {
   target: number
   /** The line the goal was committed to, once locked in (and not yet reached). */
   lock?: LockedProjection
+  currentPace?: Point[]
 }
 
 /** Weigh-ins and each goal's locked line, one row per date. */
@@ -63,10 +65,18 @@ function mergeRows(points: Point[], goals: BodyWeightGoal[], from: string): Row[
   // on screen begin. Its shape is unchanged; it just enters from the left edge.
   goals.forEach((g, i) => {
     if (!g.lock) return
+    for (const p of g.currentPace ?? []) {
+      if (p.date >= from) at(p.date)[`pace${i}`] = p.value
+    }
     for (const p of projectedSeries(g.lock)) {
       if (p.date >= from) at(p.date)[`proj${i}`] = p.value
     }
   })
+  for (const row of m.values()) {
+    goals.forEach((g, i) => {
+      if (g.lock && row.date >= g.lock.lockedAt) row[`proj${i}`] = expectedAt(g.lock, row.date)
+    })
+  }
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
@@ -279,7 +289,7 @@ export function BodyWeightChart({
                 yAxisId="left"
                 type="monotone"
                 dataKey={`proj${i}`}
-                name={g.label}
+                name={`${g.label} expected`}
                 legendType="none"
                 stroke={LINE_GOAL}
                 strokeWidth={2}
@@ -289,6 +299,20 @@ export function BodyWeightChart({
               />
             ) : null,
           )}
+          {goals.map((g, i) => g.currentPace?.length ? (
+            <Line
+              key={`pace-${g.label}`}
+              yAxisId="left"
+              type="monotone"
+              dataKey={`pace${i}`}
+              name={`${g.label} current pace`}
+              stroke={LINE_CURRENT_PACE}
+              strokeWidth={2}
+              strokeDasharray="4 4"
+              dot={false}
+              connectNulls
+            />
+          ) : null)}
           <Line
             yAxisId="left"
             type="monotone"

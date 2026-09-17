@@ -416,6 +416,25 @@ export type Pace = {
   revisedEta: string | null
 }
 
+/** The current-pace curve, anchored and dated exactly like the pace readout. */
+export function currentPaceSeries(
+  lock: LockedProjection | undefined,
+  proj: Pick<Projection, 'current' | 'slopePerWeek'>,
+  actualDate: string | undefined,
+  today: Date = new Date(),
+): { date: string; value: number }[] {
+  if (!lock || !actualDate || !Number.isFinite(proj.current)) return []
+  const { revisedEta } = paceAgainstLock(lock, proj.current, actualDate, proj.slopePerWeek, today)
+  if (!revisedEta || revisedEta <= actualDate) return []
+  return projectedSeries({
+    ...lock,
+    lockedAt: actualDate,
+    startValue: proj.current,
+    slopePerWeek: proj.slopePerWeek,
+    etaDate: revisedEta,
+  })
+}
+
 /**
  * How a reading compares with the locked line, and what ETA the pace you've
  * really held implies.

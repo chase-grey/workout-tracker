@@ -7,8 +7,8 @@ import {
   toeTouchSeries,
   type FlexEntry,
 } from '../../lib/flex'
-import { isReached, type GoalSpec } from '../../lib/goals'
-import type { LockedProjections } from '../../lib/goalLock'
+import { isReached, projectGoal, type GoalSpec } from '../../lib/goals'
+import { currentPaceSeries, type LockedProjections } from '../../lib/goalLock'
 import { LINE_COLD, LINE_COLD_2, LINE_PRIMARY, LINE_SECONDARY } from '../../lib/chart'
 import { LadderChart, type LadderReading, type LadderSeries } from './LadderChart'
 
@@ -152,7 +152,12 @@ export function FlexLadderBlock({
       .filter((g, i) => i === 0 || locked[g.id])
       .map((g) => {
         const lock = locked[g.id]
-        return { label: `goal ${lock ? lock.target : g.target}°`, target: lock ? lock.target : g.target, lock }
+        return {
+          label: `goal ${lock ? lock.target : g.target}°`,
+          target: lock ? lock.target : g.target,
+          lock,
+          currentPace: currentPaceSeries(lock, projectGoal(g), g.points.at(-1)?.date),
+        }
       })
   }, [rungs, locked])
 

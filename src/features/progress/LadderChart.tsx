@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { projectedSeries, type LockedProjection } from '../../lib/goalLock'
-import { LINE_GOAL, LINE_GOAL_LABEL, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
@@ -35,6 +35,7 @@ export type LadderGoal = {
   label: string
   target: number
   lock?: LockedProjection
+  currentPace?: { date: string; value: number }[]
 }
 
 /** A date's readings, one field per {@link LadderSeries} key. */
@@ -58,6 +59,9 @@ function mergeRows(readings: LadderReading[], goals: LadderGoal[]): Row[] {
   const from = readings.reduce((min, r) => (r.date < min ? r.date : min), readings[0]?.date ?? '')
   goals.forEach((g, i) => {
     if (!g.lock) return
+    for (const p of g.currentPace ?? []) {
+      if (p.date >= from) at(p.date)[`pace${i}`] = p.value
+    }
     for (const p of projectedSeries(g.lock)) {
       if (p.date >= from) at(p.date)[`proj${i}`] = p.value
     }
@@ -165,6 +169,20 @@ export function LadderChart({
               />
             ) : null,
           )}
+          {goals.map((g, i) => g.currentPace?.length ? (
+            <Line
+              key={`pace-${g.label}`}
+              type="monotone"
+              dataKey={`pace${i}`}
+              name={`${g.label} current pace`}
+              legendType="none"
+              stroke={LINE_CURRENT_PACE}
+              strokeWidth={2}
+              strokeDasharray="4 4"
+              dot={false}
+              connectNulls
+            />
+          ) : null)}
           {series.map((s) => (
             <Line
               key={s.key}

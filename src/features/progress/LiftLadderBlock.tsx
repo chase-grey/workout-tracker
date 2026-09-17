@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { isReached, type GoalSpec } from '../../lib/goals'
-import type { LockedProjections } from '../../lib/goalLock'
+import { isReached, projectGoal, type GoalSpec } from '../../lib/goals'
+import { currentPaceSeries, type LockedProjections } from '../../lib/goalLock'
 import { LINE_PRIMARY } from '../../lib/chart'
 import type { DaySets } from '../../lib/goalSets'
 import { LIFT_LADDERS } from '../../lib/liftLadder'
@@ -65,7 +65,10 @@ export function LiftLadderBlock({
         // goal, or the chart and the row below it would disagree.
         const lock = locked[g.id]
         const target = lock ? lock.target : g.target
-        return { label: goalLabel(target), target, lock }
+        return {
+          label: goalLabel(target), target, lock,
+          currentPace: currentPaceSeries(lock, projectGoal(g), g.points.at(-1)?.date),
+        }
       })
   }, [rungs, locked, goalLabel])
 

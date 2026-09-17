@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import {
   MdAcUnit,
   MdCelebration,
@@ -14,6 +14,7 @@ import { buildGoals, goalsHitInWeek } from '../../lib/goals'
 import { weekPace, type MetricPace } from '../../lib/weekPace'
 import { checkpointFraction, overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
+import { Collapse } from '../../components/Collapse'
 
 /**
  * One metric's row: the fill is what's done, and the pale line is where the
@@ -66,6 +67,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   // panel down the Progress tab: the streak is read here, so that's where it
   // explains itself.
   const [showStreak, setShowStreak] = useState(false)
+  const streakId = useId()
 
   const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
   const calPR = caloriePR(calorieEntries)
@@ -102,6 +104,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
           onClick={() => setShowStreak((v) => !v)}
           disabled={streakHistory.length === 0}
           aria-expanded={showStreak}
+          aria-controls={streakId}
           aria-label="completed weeks"
           className="-m-2 flex items-center gap-3 p-2 text-sm font-semibold active:opacity-70"
         >
@@ -114,14 +117,14 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
         </button>
       </div>
 
-      {showStreak && (
+      <Collapse id={streakId} open={showStreak}>
         <StreakHistoryPanel
           onSelectWeek={(week) => {
             onSelectWeek(week)
             setShowStreak(false)
           }}
         />
-      )}
+      </Collapse>
 
       {/* Milestone bar: fill = progress; white line = where the schedule expects you; the grey and
           green ticks are the checkpoint and the goal, unlabelled — the two marks read on their own. */}
@@ -174,7 +177,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
           {summary.prs.map((pr) => (
             <li key={pr.exercise} className="text-accent-2">
               <MdEmojiEvents className="inline align-text-bottom mr-1" aria-hidden />
-              {pr.exercise} — {pr.est1RM} lbs est. 1rm
+              {pr.exercise} — {pr.weightLbs} lbs × {pr.reps}
             </li>
           ))}
           {calPR && (

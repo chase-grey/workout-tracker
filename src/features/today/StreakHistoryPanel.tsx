@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { MdAcUnit, MdChevronRight, MdLocalFireDepartment, MdStar } from 'react-icons/md'
+import { useId, useState } from 'react'
+import { MdAcUnit, MdChevronRight, MdLocalFireDepartment, MdMoreHoriz, MdStar } from 'react-icons/md'
+import { Collapse } from '../../components/Collapse'
 import { useData } from '../../store/DataContext'
 import { parseISODate } from '../../lib/dates'
 import { splitAtCurrentRun, type WeekResult } from '../../lib/weeklyStreak'
@@ -19,9 +20,9 @@ function weekLabel(mondayISO: string): string {
 }
 
 function Count({ label, value, goal }: { label: string; value: number; goal: number }) {
-  const met = value >= goal
+  const color = value > goal ? 'text-accent-bright' : value === goal ? 'text-accent-2' : 'text-neutral-400'
   return (
-    <span className={met ? 'text-accent-2' : 'text-amber-400'}>
+    <span className={color}>
       {label} {value}/{goal}
     </span>
   )
@@ -31,7 +32,7 @@ function Outcome({ row }: { row: WeekResult }) {
   if (row.outcome === 'advanced') {
     return (
       <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-accent">
-        {row.exceeded && <MdStar className="text-accent-2" aria-hidden />}
+        {row.exceeded && <MdStar className="text-accent-bright" aria-hidden />}
         <MdLocalFireDepartment aria-hidden />
         {row.streakAfter}
       </span>
@@ -44,7 +45,7 @@ function Outcome({ row }: { row: WeekResult }) {
       </span>
     )
   }
-  return <span className="shrink-0 text-sm font-semibold text-amber-400">streak lost</span>
+  return <span className="shrink-0 text-sm font-semibold text-neutral-400">streak lost</span>
 }
 
 function Row({ row, onSelectWeek }: { row: WeekResult; onSelectWeek: (week: string) => void }) {
@@ -94,6 +95,7 @@ export function StreakHistoryPanel({ onSelectWeek }: { onSelectWeek: (week: stri
   const { streakHistory } = useData()
   const { earlier, run } = splitAtCurrentRun(streakHistory)
   const [showEarlier, setShowEarlier] = useState(run.length === 0)
+  const earlierId = useId()
 
   // Most recent first: the week that decided the current streak reads at the top.
   const runRows = [...run].reverse()
@@ -108,20 +110,20 @@ export function StreakHistoryPanel({ onSelectWeek }: { onSelectWeek: (week: stri
       {earlierRows.length > 0 && (
         <>
           <button
+            type="button"
             onClick={() => setShowEarlier((v) => !v)}
             aria-expanded={showEarlier}
+            aria-controls={earlierId}
             aria-label={showEarlier ? 'hide earlier weeks' : 'earlier weeks'}
-            className="my-1 min-h-[36px] w-full rounded-lg bg-surface text-sm font-medium text-neutral-300 active:bg-border"
+            className="my-1 flex h-[36px] w-full items-center justify-center rounded-lg bg-surface text-sm font-medium leading-none text-neutral-300 active:bg-border"
           >
-            {showEarlier ? 'hide' : '…'}
+            {showEarlier ? 'hide' : <MdMoreHoriz className="h-6 w-6 shrink-0" aria-hidden />}
           </button>
-          {showEarlier && (
-            <div className="opacity-70">
-              {earlierRows.map((row) => (
-                <Row key={row.week} row={row} onSelectWeek={onSelectWeek} />
-              ))}
-            </div>
-          )}
+          <Collapse id={earlierId} open={showEarlier}>
+            {earlierRows.map((row) => (
+              <Row key={row.week} row={row} onSelectWeek={onSelectWeek} />
+            ))}
+          </Collapse>
         </>
       )}
     </div>

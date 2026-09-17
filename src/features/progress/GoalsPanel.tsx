@@ -32,8 +32,10 @@ import { isLiftLadder } from '../../lib/liftLadder'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptModel,
+  expectedAt,
   clampToRange,
   commitRange,
+  currentPaceSeries,
   dateWithinHorizon,
   lockProjectionByDate,
   paceAgainstLock,
@@ -44,6 +46,7 @@ import {
   type LockedProjections,
 } from '../../lib/goalLock'
 import {
+  LINE_CURRENT_PACE,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
@@ -72,10 +75,11 @@ function fmtDate(iso: string | null): string {
 const axisTick = { fill: '#737373', fontSize: 10 }
 
 /** Merge the actual series with the locked projection into one row per date. */
-function mergeActualProjected(actual: { date: string; value: number }[], projected: { date: string; value: number }[]) {
-  const m = new Map<string, { date: string; actual?: number; projected?: number }>()
+function mergeActualProjected(actual: Point[], projected: Point[], currentPace: Point[]) {
+  const m = new Map<string, { date: string; actual?: number; projected?: number; currentPace?: number }>()
   for (const p of actual) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), actual: p.value })
   for (const p of projected) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), projected: p.value })
+  for (const p of currentPace) m.set(p.date, { ...(m.get(p.date) ?? { date: p.date }), currentPace: p.value })
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
@@ -94,6 +98,7 @@ function mergeActualProjected(actual: { date: string; value: number }[], project
 function LockChart({
   lock,
   actual,
+  currentPace,
   revisedEta,
   behind,
   sets,
@@ -101,6 +106,7 @@ function LockChart({
 }: {
   lock: LockedProjection
   actual: { date: string; value: number }[]
+  currentPace: Point[]
   /** ETA implied by the pace actually being held, when it differs from the lock's. */
   revisedEta?: string | null
   behind?: boolean
@@ -110,12 +116,15 @@ function LockChart({
 }) {
   const readout = useChartReadout()
   const rows = useMemo(
-    () => withTime(mergeActualProjected(actual, projectedSeries(lock))),
-    [lock, actual],
+    () => withTime(mergeActualProjected(actual, projectedSeries(lock), currentPace).map((row) => ({
+      ...row,
+      projected: row.date >= lock.lockedAt ? expectedAt(lock, row.date) : undefined,
+    }))),
+    [lock, actual, currentPace],
   )
 
   const yScale = useMemo(
-    () => niceScale(rows.flatMap((r) => [r.actual, r.projected]).filter((v): v is number => v != null)),
+    () => niceScale(rows.flatMap((r) => [r.actual, r.projected, r.currentPace]).filter((v): v is number => v != null)),
     [rows],
   )
 
@@ -158,7 +167,7 @@ function LockChart({
             interval={0}
           />
           <AxisBreak broken={yScale.broken} bg="#262626" />
-          <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} />} />
+          <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} lock={lock} />} />
           {/* Where the projection was frozen: history to the left, the commitment
               it's being measured against to the right. */}
           <ReferenceLine
@@ -212,6 +221,16 @@ function LockChart({
             dataKey="projected"
             name="projected"
             stroke={LINE_SECONDARY}
+            strokeWidth={2}
+            strokeDasharray="4 4"
+            dot={false}
+            connectNulls
+          />
+          <Line
+            type="monotone"
+            dataKey="currentPace"
+            name="current pace"
+            stroke={LINE_CURRENT_PACE}
             strokeWidth={2}
             strokeDasharray="4 4"
             dot={false}
@@ -752,6 +771,7 @@ function GoalRow({
             <LockChart
               lock={lock}
               actual={goal.points}
+              currentPace={currentPaceSeries(lock, proj, lastReadingDate ?? undefined)}
               revisedEta={pace?.revisedEta ?? null}
               behind={pace?.status === 'behind'}
               sets={sets}
@@ -961,9 +981,10 @@ export function GoalsPanel() {
           label: g.title.replace('bodyweight → ', 'goal '),
           target: lock ? lock.target : g.target,
           lock,
+          currentPace: currentPaceSeries(lock, projections.get(g.id)!, g.points.at(-1)?.date),
         }
       }),
-    [weightGoals, locked],
+    [weightGoals, locked, projections],
   )
 
   // The sets behind every lift goal's readings, so its chart's tooltip can show

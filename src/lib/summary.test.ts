@@ -54,6 +54,22 @@ describe('weeklySummary', () => {
     expect(s.prs).toHaveLength(1)
     expect(s.prs[0].exercise).toBe('incline bench press')
     expect(s.prs[0].est1RM).toBe(128.3)
+    expect(s.prs[0].weightLbs).toBe(110)
+    expect(s.prs[0].reps).toBe(5)
+  })
+
+  it('reports the actual PR set when a heavier set has a lower estimated max', () => {
+    const workouts: WorkoutRow[] = [
+      row({ session_id: 'O', date: '2026-06-22', exercise: 'incline_bench', weight_lbs: 95, reps: 5 }),
+      row({ session_id: 'P', date: '2026-06-29', exercise: 'incline_bench', weight_lbs: 100, reps: 5 }),
+      row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_bench', weight_lbs: 110, reps: 10 }),
+      row({ session_id: 'A', date: '2026-07-07', exercise: 'incline_bench', weight_lbs: 120, reps: 3 }),
+    ]
+    for (const rows of [workouts, [...workouts].reverse()]) {
+      expect(weeklySummary(rows, [], TODAY).prs).toEqual([
+        { exercise: 'incline bench press', est1RM: 146.7, weightLbs: 110, reps: 10 },
+      ])
+    }
   })
 
   it('does NOT report a PR when this week does not beat prior weeks', () => {

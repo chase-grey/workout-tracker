@@ -1,5 +1,6 @@
+import { expectedAt, type LockedProjection } from '../../lib/goalLock'
 import { exerciseName } from '../../config/plan'
-import { fmtDateLabel } from '../../lib/chart'
+import { LINE_SECONDARY, fmtDateLabel } from '../../lib/chart'
 import { fmtSet } from '../../lib/exerciseHistory'
 import type { DaySets } from '../../lib/goalSets'
 
@@ -34,6 +35,7 @@ export function GoalTooltip({
   label,
   sets,
   unit,
+  lock,
 }: {
   active?: boolean
   payload?: Entry[]
@@ -42,11 +44,23 @@ export function GoalTooltip({
   /** The sets behind each date (see goalSets.setsByDate); absent for a goal with none. */
   sets?: Record<string, DaySets[]>
   unit: string
+  lock?: LockedProjection
 }) {
   if (!active || !payload?.length) return null
-  const plotted = payload.filter((p) => p.value != null)
+  let plotted = payload.filter((p) => p.value != null)
   const date = payload[0].payload?.date
   const day = (date && sets?.[date]) || []
+
+  const actual = plotted.find((p) => p.dataKey === 'actual')?.value
+  const expected = lock && date && date >= lock.lockedAt ? expectedAt(lock, date) : undefined
+  if (expected != null) {
+    plotted = [...plotted.filter((p) => p.dataKey !== 'projected'), {
+      dataKey: 'projected', name: 'goal expected', value: expected, color: LINE_SECONDARY,
+    }]
+  }
+  const ahead = expected != null && actual != null && lock
+    ? Math.round((Number(actual) - expected) * (Math.sign(lock.target - lock.startValue) || 1) * 10) / 10
+    : undefined
 
   return (
     <div style={tooltipStyle} className="px-2.5 py-1.5 text-xs">
@@ -57,9 +71,14 @@ export function GoalTooltip({
           {d.sets.map((s) => fmtSet(s)).join(' · ')}
         </p>
       ))}
+      {ahead != null && (
+        <p className="mt-0.5 text-neutral-200 tabular-nums">
+          {ahead === 0 ? 'on goal trend' : `${num(Math.abs(ahead))} ${unit} ${ahead > 0 ? 'ahead of' : 'behind'} goal trend`}
+        </p>
+      )}
       {plotted.map((p) => (
         <p key={String(p.dataKey)} className="mt-0.5 tabular-nums" style={{ color: p.color }}>
-          {p.name} {num(p.value)} {unit}
+          {p.dataKey === 'projected' ? 'goal expected' : p.name} {num(p.value)} {unit}
         </p>
       ))}
     </div>

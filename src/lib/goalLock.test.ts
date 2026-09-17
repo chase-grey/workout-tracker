@@ -5,6 +5,7 @@ import {
   adoptModel,
   clampToRange,
   commitRange,
+  currentPaceSeries,
   dateWithinHorizon,
   expectedAt,
   lockProjection,
@@ -63,6 +64,39 @@ const STALLED = [
   { date: '2025-12-01', value: 100 },
   { date: '2026-01-01', value: 101 },
 ]
+
+describe('currentPaceSeries', () => {
+  it.each([
+    { lock: CLIMB, current: 120, slopePerWeek: 5 },
+    { lock: FALL, current: 18, slopePerWeek: -0.5 },
+    { lock: { ...CLIMB, decayPerWeek: 0.98, paceFloorFraction: 0.4 }, current: 120, slopePerWeek: 5 },
+  ])('lands on the pace readout date with the same curve model ($slopePerWeek/wk)', ({ lock, current, slopePerWeek }) => {
+    const actualDate = '2026-01-22'
+    const today = new Date(2026, 0, 26)
+    const pace = paceAgainstLock(lock, current, actualDate, slopePerWeek, today)
+    const points = currentPaceSeries(lock, { current, slopePerWeek }, actualDate, today)
+    expect(points[0]).toEqual({ date: actualDate, value: current })
+    expect(points.at(-1)).toEqual({ date: pace.revisedEta, value: lock.target })
+    expect(points.at(-1)?.date).not.toBe(lock.etaDate)
+    const matchingCurve = { ...lock, lockedAt: actualDate, startValue: current, etaDate: pace.revisedEta! }
+    expect(points[1].value).toBe(expectedAt(matchingCurve, points[1].date))
+  })
+
+  it('omits a curve when no meaningful ETA is available', () => {
+    for (const slopePerWeek of [0, -1, 0.001]) {
+      expect(currentPaceSeries(CLIMB, { current: 120, slopePerWeek }, '2026-01-22', TODAY)).toEqual([])
+    }
+    expect(currentPaceSeries(undefined, { current: 120, slopePerWeek: 5 }, '2026-01-22', TODAY)).toEqual([])
+    expect(currentPaceSeries(CLIMB, { current: 120, slopePerWeek: 5 }, undefined, TODAY)).toEqual([])
+  })
+
+  it('matches a stale reading whose ETA is held to today', () => {
+    const today = new Date(2026, 8, 16)
+    const points = currentPaceSeries(CLIMB, { current: 190, slopePerWeek: 7 }, '2026-01-22', today)
+    expect(points[0]).toEqual({ date: '2026-01-22', value: 190 })
+    expect(points.at(-1)).toEqual({ date: '2026-09-16', value: 200 })
+  })
+})
 
 describe('withinHorizon', () => {
   it('is true for an eta inside six months', () => {
