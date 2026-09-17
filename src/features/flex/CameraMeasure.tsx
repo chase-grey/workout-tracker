@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MdCameraAlt, MdCameraswitch, MdIosShare, MdPhotoLibrary, MdSave } from 'react-icons/md'
-import { GET_READY_SEC } from '../../lib/settleIn'
 import { detectMeasurementPose } from '../../lib/measurePose'
 import {
   HANDLES,
@@ -272,7 +271,7 @@ async function renderMeasuredPhoto(
 }
 
 /**
- * Full-screen camera flow: live preview, a self-timer (5s) so you can
+ * Full-screen camera flow: live preview, a self-timer (20s) so you can
  * get into position, then an auto-capture that runs pose detection and opens the
  * draggable AngleEditor. On save it shows the measured photo and asks whether to
  * keep it — the reading is logged either way, and nothing is kept here.
@@ -293,7 +292,7 @@ export function CameraMeasure({
   const [mode, setMode] = useState<MeasureMode>(initialMode)
   const [phase, setPhase] = useState<Phase>('setup')
   const [facing, setFacing] = useState<Facing>('user')
-  const timerSec = GET_READY_SEC
+  const timerSec = 20
   const [remaining, setRemaining] = useState(timerSec)
   const [error, setError] = useState<string | null>(null)
 
