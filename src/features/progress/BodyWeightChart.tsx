@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { Point } from '../../lib/progress'
-import { expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
+import { currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
 import { enumerateWeeks, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import {
   calorieWeekMark,
@@ -75,6 +75,7 @@ function mergeRows(points: Point[], goals: BodyWeightGoal[], from: string): Row[
   for (const row of m.values()) {
     goals.forEach((g, i) => {
       if (g.lock && row.date >= g.lock.lockedAt) row[`proj${i}`] = expectedAt(g.lock, row.date)
+      if (g.lock) row[`pace${i}`] = currentPaceAt(g.lock, g.currentPace ?? [], row.date)
     })
   }
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))

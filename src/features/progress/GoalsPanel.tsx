@@ -36,6 +36,7 @@ import {
   clampToRange,
   commitRange,
   currentPaceSeries,
+  currentPaceAt,
   dateWithinHorizon,
   lockProjectionByDate,
   paceAgainstLock,
@@ -119,6 +120,7 @@ function LockChart({
     () => withTime(mergeActualProjected(actual, projectedSeries(lock), currentPace).map((row) => ({
       ...row,
       projected: row.date >= lock.lockedAt ? expectedAt(lock, row.date) : undefined,
+      currentPace: currentPaceAt(lock, currentPace, row.date),
     }))),
     [lock, actual, currentPace],
   )

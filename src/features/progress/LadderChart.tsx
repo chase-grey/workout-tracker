@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { projectedSeries, type LockedProjection } from '../../lib/goalLock'
+import { currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
 import { LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
@@ -66,6 +66,15 @@ function mergeRows(readings: LadderReading[], goals: LadderGoal[]): Row[] {
       if (p.date >= from) at(p.date)[`proj${i}`] = p.value
     }
   })
+  for (const row of m.values()) {
+    goals.forEach((g, i) => {
+      if (!g.lock) return
+      row[`pace${i}`] = currentPaceAt(g.lock, g.currentPace ?? [], row.date)
+      if (row.date >= g.lock.lockedAt && row.date <= g.lock.etaDate) {
+        row[`proj${i}`] = expectedAt(g.lock, row.date)
+      }
+    })
+  }
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 

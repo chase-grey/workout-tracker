@@ -405,6 +405,26 @@ export function projectedSeries(lock: LockedProjection): { date: string; value: 
   return out
 }
 
+/** Read the live curve on merged chart dates, without extending past its ends. */
+export function currentPaceAt(
+  lock: LockedProjection,
+  series: { date: string; value: number }[],
+  date: string,
+): number | undefined {
+  const first = series[0]
+  const last = series.at(-1)
+  if (!first || !last || date < first.date || date > last.date) return undefined
+  const sample = series.find((point) => point.date === date)
+  if (sample) return sample.value
+  return expectedAt({
+    ...lock,
+    lockedAt: first.date,
+    startValue: first.value,
+    etaDate: last.date,
+    target: last.value,
+  }, date)
+}
+
 export type Pace = {
   /** Positive = ahead of the locked line, negative = behind it. */
   aheadBy: number
