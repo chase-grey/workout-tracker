@@ -102,29 +102,31 @@ export function StreakHistoryPanel({ onSelectWeek }: { onSelectWeek: (week: stri
   const earlierRows = [...earlier].reverse()
 
   return (
-    <div className="mb-3 max-h-[45vh] overflow-y-auto rounded-xl bg-surface-2 px-3 py-1">
-      {runRows.map((row) => (
-        <Row key={row.week} row={row} onSelectWeek={onSelectWeek} />
-      ))}
-
-      {earlierRows.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setShowEarlier((v) => !v)}
-            aria-expanded={showEarlier}
-            aria-controls={earlierId}
-            aria-label={showEarlier ? 'hide earlier weeks' : 'earlier weeks'}
-            className="my-1 flex h-[36px] w-full items-center justify-center rounded-lg bg-surface text-sm font-medium leading-none text-neutral-300 active:bg-border"
-          >
-            {showEarlier ? 'hide' : <MdMoreHoriz className="h-6 w-6 shrink-0" aria-hidden />}
-          </button>
+    <div className="mb-3 flex max-h-[45vh] flex-col rounded-xl bg-surface-2 px-3 py-2">
+      <div className="min-h-0 overflow-y-auto">
+        {runRows.map((row) => (
+          <Row key={row.week} row={row} onSelectWeek={onSelectWeek} />
+        ))}
+        {earlierRows.length > 0 && (
           <Collapse id={earlierId} open={showEarlier}>
             {earlierRows.map((row) => (
               <Row key={row.week} row={row} onSelectWeek={onSelectWeek} />
             ))}
           </Collapse>
-        </>
+        )}
+      </div>
+
+      {earlierRows.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowEarlier((v) => !v)}
+          aria-expanded={showEarlier}
+          aria-controls={earlierId}
+          aria-label={showEarlier ? 'hide earlier weeks' : 'earlier weeks'}
+          className="mt-1 flex h-[44px] w-full shrink-0 items-center justify-center rounded-lg bg-surface text-sm font-medium leading-none text-neutral-300 active:bg-border"
+        >
+          {showEarlier ? 'hide' : <MdMoreHoriz className="h-6 w-6 shrink-0" aria-hidden />}
+        </button>
       )}
     </div>
   )
