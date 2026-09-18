@@ -81,7 +81,16 @@ export function useChartReadout() {
     tooltip: {
       active: open,
       isAnimationActive: false,
-      wrapperStyle: { zIndex: 50, maxWidth: 'calc(100vw - 32px)', whiteSpace: 'normal' as const },
+      // Follow the selected x position, with the entire popup above the plot.
+      // Percentage translation accommodates both short and multi-row readouts.
+      position: { y: 0 },
+      allowEscapeViewBox: { x: false, y: true },
+      wrapperStyle: {
+        zIndex: 50,
+        translate: '0 calc(-100% - 12px)',
+        maxWidth: 'calc(100vw - 32px)',
+        whiteSpace: 'normal' as const,
+      },
     },
   }
 }
