@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { Point } from '../../lib/progress'
-import { currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
+import { sharedCurrentPace, currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
 import { enumerateWeeks, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import {
   calorieWeekMark,
@@ -63,19 +63,20 @@ function mergeRows(points: Point[], goals: BodyWeightGoal[], from: string): Row[
   // A lock taken months ago would drag the visible window back to its own start,
   // undoing the range pill — so each locked line is clipped to where the weigh-ins
   // on screen begin. Its shape is unchanged; it just enters from the left edge.
+  const pace = sharedCurrentPace(goals)
+  for (const p of pace?.currentPace ?? []) {
+    if (p.date >= from) at(p.date).currentPace = p.value
+  }
   goals.forEach((g, i) => {
     if (!g.lock) return
-    for (const p of g.currentPace ?? []) {
-      if (p.date >= from) at(p.date)[`pace${i}`] = p.value
-    }
     for (const p of projectedSeries(g.lock)) {
       if (p.date >= from) at(p.date)[`proj${i}`] = p.value
     }
   })
   for (const row of m.values()) {
+    if (pace?.lock) row.currentPace = currentPaceAt(pace.lock, pace.currentPace!, row.date)
     goals.forEach((g, i) => {
       if (g.lock && row.date >= g.lock.lockedAt) row[`proj${i}`] = expectedAt(g.lock, row.date)
-      if (g.lock) row[`pace${i}`] = currentPaceAt(g.lock, g.currentPace ?? [], row.date)
     })
   }
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
@@ -261,6 +262,7 @@ export function BodyWeightChart({
           <AxisBreak broken={yScale.broken} bg="#171717" />
           <Tooltip
             {...readout.tooltip}
+            itemSorter={(entry) => -Number(entry.value)}
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
             labelFormatter={(ms) => labelWithWeek(Number(ms))}
@@ -300,20 +302,19 @@ export function BodyWeightChart({
               />
             ) : null,
           )}
-          {goals.map((g, i) => g.currentPace?.length ? (
+          {goals.some((g) => g.lock && g.currentPace?.length) && (
             <Line
-              key={`pace-${g.label}`}
               yAxisId="left"
               type="monotone"
-              dataKey={`pace${i}`}
-              name={`${g.label} current pace`}
+              dataKey="currentPace"
+              name="current pace"
               stroke={LINE_CURRENT_PACE}
               strokeWidth={2}
               strokeDasharray="4 4"
               dot={false}
               connectNulls
             />
-          ) : null)}
+          )}
           <Line
             yAxisId="left"
             type="monotone"

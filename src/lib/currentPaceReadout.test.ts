@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from './goalLock'
+import { sharedCurrentPace, currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from './goalLock'
 
 const lock: LockedProjection = {
   goalId: 'weight', lockedAt: '2026-08-01', etaDate: '2026-09-01',
@@ -9,6 +9,14 @@ const lock: LockedProjection = {
 describe('current pace readout on merged chart dates', () => {
   const live = { ...lock, lockedAt: '2026-08-04', startValue: 172, etaDate: '2026-09-08' }
   const series = projectedSeries(live)
+
+  it('shares the furthest projection regardless of goal order', () => {
+    const near = { lock, currentPace: projectedSeries(lock) }
+    const far = { lock: live, currentPace: series }
+    expect(sharedCurrentPace([near, far])).toBe(far)
+    expect(sharedCurrentPace([far, near])).toBe(far)
+    expect(sharedCurrentPace([{ lock }, { currentPace: series }])).toBeUndefined()
+  })
 
   it('supplies a value on dates sampled only by the committed line or history', () => {
     for (const date of ['2026-08-08', '2026-08-15', '2026-09-02']) {

@@ -76,7 +76,7 @@ export function GoalTooltip({
           {ahead === 0 ? 'on goal trend' : `${num(Math.abs(ahead))} ${unit} ${ahead > 0 ? 'ahead of' : 'behind'} goal trend`}
         </p>
       )}
-      {plotted.map((p) => (
+      {plotted.sort((a, b) => Number(b.value) - Number(a.value)).map((p) => (
         <p key={String(p.dataKey)} className="mt-0.5 tabular-nums" style={{ color: p.color }}>
           {p.dataKey === 'projected' ? 'goal expected' : p.name} {num(p.value)} {unit}
         </p>

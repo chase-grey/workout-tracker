@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
+import { sharedCurrentPace, currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
 import { LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
@@ -57,19 +57,20 @@ function mergeRows(readings: LadderReading[], goals: LadderGoal[]): Row[] {
   // the readings on screen begin, entering from the left edge with its shape
   // unchanged.
   const from = readings.reduce((min, r) => (r.date < min ? r.date : min), readings[0]?.date ?? '')
+  const pace = sharedCurrentPace(goals)
+  for (const p of pace?.currentPace ?? []) {
+    if (p.date >= from) at(p.date).currentPace = p.value
+  }
   goals.forEach((g, i) => {
     if (!g.lock) return
-    for (const p of g.currentPace ?? []) {
-      if (p.date >= from) at(p.date)[`pace${i}`] = p.value
-    }
     for (const p of projectedSeries(g.lock)) {
       if (p.date >= from) at(p.date)[`proj${i}`] = p.value
     }
   })
   for (const row of m.values()) {
+    if (pace?.lock) row.currentPace = currentPaceAt(pace.lock, pace.currentPace!, row.date)
     goals.forEach((g, i) => {
       if (!g.lock) return
-      row[`pace${i}`] = currentPaceAt(g.lock, g.currentPace ?? [], row.date)
       if (row.date >= g.lock.lockedAt && row.date <= g.lock.etaDate) {
         row[`proj${i}`] = expectedAt(g.lock, row.date)
       }
@@ -178,12 +179,11 @@ export function LadderChart({
               />
             ) : null,
           )}
-          {goals.map((g, i) => g.currentPace?.length ? (
+          {goals.some((g) => g.lock && g.currentPace?.length) && (
             <Line
-              key={`pace-${g.label}`}
               type="monotone"
-              dataKey={`pace${i}`}
-              name={`${g.label} current pace`}
+              dataKey="currentPace"
+              name="current pace"
               legendType="none"
               stroke={LINE_CURRENT_PACE}
               strokeWidth={2}
@@ -191,7 +191,7 @@ export function LadderChart({
               dot={false}
               connectNulls
             />
-          ) : null)}
+          )}
           {series.map((s) => (
             <Line
               key={s.key}

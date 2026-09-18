@@ -16,6 +16,17 @@ function reading(date: string, value: number, goal = lock) {
 }
 
 describe('goal readout comparison', () => {
+  it('orders numeric values highest first, including the computed goal value', () => {
+    const html = renderToStaticMarkup(createElement(GoalTooltip, {
+      active: true, unit: 'lbs', lock,
+      payload: [
+        { dataKey: 'currentPace', name: 'current pace', value: 169, payload: { date: '2026-08-04' } },
+        { dataKey: 'actual', name: 'actual', value: 175, payload: { date: '2026-08-04' } },
+      ],
+    }))
+    expect(html.indexOf('actual 175')).toBeLessThan(html.indexOf('goal expected 173'))
+    expect(html.indexOf('goal expected 173')).toBeLessThan(html.indexOf('current pace 169'))
+  })
   it('computes the expected value on a date with no weekly projection sample', () => {
     const html = reading('2026-08-04', 175)
     expect(html).toContain('goal expected 173 lbs')

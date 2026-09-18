@@ -405,6 +405,16 @@ export function projectedSeries(lock: LockedProjection): { date: string; value: 
   return out
 }
 
+/** One metric has one live trend; retain the projection reaching furthest out. */
+export function sharedCurrentPace(goals: {
+  lock?: LockedProjection
+  currentPace?: { date: string; value: number }[]
+}[]) {
+  return goals
+    .filter((g) => g.lock && g.currentPace?.length)
+    .sort((a, b) => b.currentPace!.at(-1)!.date.localeCompare(a.currentPace!.at(-1)!.date))[0]
+}
+
 /** Read the live curve on merged chart dates, without extending past its ends. */
 export function currentPaceAt(
   lock: LockedProjection,
