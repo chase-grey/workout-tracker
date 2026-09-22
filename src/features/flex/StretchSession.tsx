@@ -694,21 +694,24 @@ export function StretchSession({
     advanceFrom(safeCurrent, nextDone)
   }
 
-  // Leave a photo screen (shots taken or skipped) and pick the routine back up.
-  // The cold screen opens before the first-exercise preview. Once a session has
-  // started, returning from photos allows time to retrieve the phone.
-  const closePhotos = (tookAny: boolean) => {
+  // Photos interrupt the physical setup. Preview the coming exercise and wait
+  // for confirmation before starting any positioning countdown or movement.
+  const closePhotos = (_tookAny: boolean) => {
     if (!photos) return
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
     const { then, index } = photos
     setPhotos(null)
     if (then === 'advance' && index != null) {
-      advanceFrom(index, done)
-      return
+      if (index >= N - 1) {
+        finishWith(done)
+        return
+      }
+      goToStep(index + 1)
     }
-    if (then === 'start' && started) {
-      if (tookAny && !fast) straightToGetReady(POST_PHOTO_GET_READY_SEC)
-      else if (!fast && getReadySec > 0) setPreparing(true)
+    if (then !== 'stay') {
+      setStarted(false)
+      setPreparing(false)
+      setReadyOverrideSec(POST_PHOTO_GET_READY_SEC)
     }
   }
 
@@ -836,21 +839,22 @@ export function StretchSession({
       {!started && photos == null && (
         <div className="fixed inset-0 z-80 flex flex-col items-center justify-center gap-6 bg-black px-6 text-center">
           <div>
-            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">first exercise</p>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">{completed === 0 ? 'first exercise' : 'next exercise'}</p>
             <h1 className="text-3xl font-bold">{stepTitle(step)}</h1>
             <p className="mt-2 text-base text-neutral-400">{stepDetail(step)}</p>
             <p className="mt-1 text-sm text-neutral-500">{step.blockLabel}</p>
+            <p className="mt-4 text-sm text-neutral-400">When you’re ready, start the countdown to get into position.</p>
           </div>
           <button
             onClick={(event) => {
               event.stopPropagation()
               setStarted(true)
-              setReadyOverrideSec(null)
-              if (!fast && photos == null && getReadySec > 0) setPreparing(true)
+              setReadyOverrideSec(Math.max(POST_PHOTO_GET_READY_SEC, getReadySec))
+              setPreparing(true)
             }}
             className="min-h-[60px] w-full max-w-sm rounded-2xl bg-accent px-6 text-xl font-bold text-black active:opacity-80"
           >
-            start
+            I’m ready
           </button>
         </div>
       )}

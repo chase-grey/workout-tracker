@@ -69,7 +69,7 @@ export type StretchState = {
   startSide?: 'left' | 'right'
   step: number
   done: string[]
-  /** Whether the user has tapped Start on the routine's first-exercise preview. */
+  /** Whether the user has confirmed the exercise preview, including after photos. */
   started?: boolean
   startedAt?: string
   /**
