@@ -358,13 +358,19 @@ input[type='number'] {
    It rests at full brightness and dips in the middle — the reverse would start
    the pulse dim, so a segment newly promoted to leading would visibly drop the
    moment it took over. */
+/* Keep the pulse clock running; ease its strength to zero at segment handoffs. */
+@property --rest-pulse-strength {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
 @keyframes rest-pip {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.55;
+    opacity: calc(1 - 0.45 * var(--rest-pulse-strength));
   }
 }
 .rest-pip {
@@ -399,7 +405,7 @@ input[type='number'] {
     opacity: 1;
   }
   50% {
-    opacity: 0.5;
+    opacity: calc(1 - 0.5 * var(--rest-pulse-strength));
   }
 }
 .rest-glow {
@@ -921,4 +927,16 @@ input[type='number'] {
   .celebrate-shake {
     animation: none;
   }
+}
+
+/* Fade palette changes without delaying frame-driven geometry or effort. */
+.rhythm-shape {
+  transition: color 180ms ease-in-out;
+}
+.rhythm-shape * {
+  transition: background-color 180ms ease-in-out, border-color 180ms ease-in-out,
+    box-shadow 180ms ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rhythm-shape, .rhythm-shape * { transition: none; }
 }

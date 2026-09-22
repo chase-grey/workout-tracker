@@ -283,10 +283,12 @@ function LoadingBar({ fraction }: { fraction: number }) {
               {/* An empty slot, so the bar shows how much is still to come. */}
               <div className="absolute inset-0 rounded-[22%] bg-accent-bright/8" />
               <div
-                className={`absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-[22%] bg-accent-bright/80 ${
-                  arrived > 0 && arrived < 1 ? 'rest-glow' : ''
-                }`}
-                style={{ height: pct(arrived * 100), ...drainOf('height') }}
+                className="rest-glow absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-[22%] bg-accent-bright/80"
+                style={{
+                  height: pct(arrived * 100),
+                  '--rest-pulse-strength': 4 * arrived * (1 - arrived),
+                  transition: `height ${DRAIN}, --rest-pulse-strength ${DRAIN}`,
+                } as CSSProperties}
               />
             </div>
           )

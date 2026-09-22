@@ -214,3 +214,13 @@ export function loopFadeIn(phases: TempoPhase[], cyclePos: number): number {
   const fade = Math.min(1 / 3, LOOP_FADE_SECONDS / total)
   return Math.max(0, Math.min(1, cyclePos / fade))
 }
+
+/** Carry the fully lit rest cue into the push until its drive takes over. */
+export function phasePrime(
+  drives: number[], efforts: number[], idx: number, progress: number,
+): { direction: number; amount: number } {
+  if (efforts[idx] === 0) return { direction: nextDrive(drives, idx), amount: progress }
+  const prev = (idx - 1 + drives.length) % drives.length
+  if (efforts[prev] === 0) return { direction: nextDrive(drives, prev), amount: 1 }
+  return { direction: 0, amount: 0 }
+}

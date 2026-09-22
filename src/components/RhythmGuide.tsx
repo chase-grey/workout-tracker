@@ -9,7 +9,7 @@ import {
   hitRepTarget,
   loopFadeIn,
   motionForPhases,
-  nextDrive,
+  phasePrime,
   phaseDepths,
   phaseDrives,
   phaseEfforts,
@@ -17,6 +17,7 @@ import {
   strain,
   type RepGlow,
 } from '../lib/rhythmMotion'
+import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
 
 /**
@@ -90,15 +91,41 @@ const TONES: Record<RepGlow, {
   },
 }
 
+function useTone(glow: RepGlow) {
+  const reduced = usePrefersReducedMotion()
+  const target = glow === 'done' ? 1 : 0
+  const [amount, setAmount] = useState(target)
+  const current = useRef(target)
+  useEffect(() => {
+    const from = current.current
+    const start = performance.now()
+    let frame = 0
+    const tick = (now: number) => {
+      const t = reduced ? 1 : Math.min(1, (now - start) / 180)
+      current.current = from + (target - from) * t * t * (3 - 2 * t)
+      setAmount(current.current)
+      if (t < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [target, reduced])
+  return {
+    ...TONES[glow],
+    dimmest: 0.2 + amount * 0.3,
+    brightest: 0.7 + amount * 0.3,
+  }
+}
+
+type Tone = (typeof TONES)[RepGlow]
+
 /** Opacity of a part that's `lit` (0–1) of the way in, within its tone's range. */
 const litOpacity = (tone: (typeof TONES)[RepGlow], lit: number) =>
   tone.dimmest + lit * (tone.brightest - tone.dimmest)
 
 /** Breathing family: a shape that expands (neutral) and contracts (deep). */
-function BreatheShape({ variant, scale, glow }: { variant: Variant; scale: number; glow: RepGlow }) {
+function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: number; tone: Tone }) {
   // Scale is interpolated per animation frame by the parent, so the shape needs
   // no CSS transition of its own — that would only lag behind the live value.
-  const tone = TONES[glow]
   switch (variant) {
     case 'square':
       return (
@@ -182,8 +209,7 @@ function BreatheShape({ variant, scale, glow }: { variant: Variant; scale: numbe
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
 /** Descent family: a shape that reaches/folds downward and settles deep. */
-function DescentShape({ variant, depth, glow }: { variant: Variant; depth: number; glow: RepGlow }) {
-  const tone = TONES[glow]
+function DescentShape({ variant, depth, tone }: { variant: Variant; depth: number; tone: Tone }) {
   switch (variant) {
     case 'fold':
       // A panel that hinges shut — upright when neutral, folded flat when deep,
@@ -308,7 +334,7 @@ function PushPullShape({
   drive,
   prime,
   primeDir,
-  glow,
+  tone,
   phases,
   phaseIndex,
   progress,
@@ -317,13 +343,12 @@ function PushPullShape({
   drive: number
   prime: number
   primeDir: number
-  glow: RepGlow
+  tone: Tone
   phases: TempoPhase[]
   phaseIndex: number
   progress: number
 }) {
   const wavePath = useMemo(() => rhythmWavePath(phases), [phases])
-  const tone = TONES[glow]
   // How lit each end is: fully while you drive into it, filling while a rest primes
   // it. `side` is +1 for the bottom (pressing down) and −1 for the top.
   const endLit = (side: number) => Math.max(clamp01(drive * side), primeDir === side ? prime : 0)
@@ -525,6 +550,7 @@ export function RhythmGuide({
   // The target is crossed once per set (the guide is remounted per set), so the
   // reps that keep counting past it don't fire it again.
   const hitOnce = useRef(false)
+  const phaseElapsed = useRef(0)
 
   useEffect(() => {
     // Hold at the very start of the first phase until the set actually begins,
@@ -532,7 +558,8 @@ export function RhythmGuide({
     // phase descends from standing) rather than mid-cycle.
     if (!running || phases.length === 0) return
     const dur = phases[idx % phases.length].seconds * 1000
-    const start = performance.now()
+    const start = performance.now() - phaseElapsed.current
+    let completed = false
     let raf = 0
     const tick = (now: number) => {
       const elapsed = now - start
@@ -540,9 +567,12 @@ export function RhythmGuide({
         const phaseCount = skipFinalRepRest && repRef.current === reps
           ? workPhaseCount(phases)
           : phases.length
-        const next = (idx + 1) % phaseCount
+        const next = (idx % phases.length + 1) % phaseCount
+        completed = true
+        phaseElapsed.current = elapsed - dur
         setProgress(0)
-        setIdx(next)
+        // Keep a changing index even for a one-phase tempo.
+        setIdx(next === 0 ? idx + phases.length - idx % phases.length : idx + 1)
         // A full pass through every phase is one rep. Keep counting past the
         // target — the goal is shown for reference, and reps continue until the
         // set is ended, by a tap or by `onTargetHit` rolling it into rest.
@@ -561,8 +591,14 @@ export function RhythmGuide({
       }
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      if (!completed) phaseElapsed.current = performance.now() - start
+    }
   }, [idx, phases, running, reps, skipFinalRepRest])
+
+  const glow = repGlow(rep, reps, endsOnTarget)
+  const tone = useTone(glow)
 
   if (phases.length === 0) return null
 
@@ -603,8 +639,7 @@ export function RhythmGuide({
 
   // Which way the next push goes, and how close it is: a rest fills the end it's
   // resting before, so the change of direction is known before it's asked for.
-  const primeDir = efforts[i] === 0 ? nextDrive(drives, i) : 0
-  const prime = primeDir === 0 ? 0 : progress
+  const { direction: primeDir, amount: prime } = phasePrime(drives, efforts, i, progress)
 
   // Fallback for the frozen-curve case only: for the first moment of the new rep
   // the shape fades in up top while the finished one lingers deep and dissolves, so
@@ -619,8 +654,6 @@ export function RhythmGuide({
   // rep to end, so the brightening lands as the set closes. When the set closes
   // itself there is no "after" to brighten in, so the closing rep is bright the
   // whole way through it.
-  const glow = repGlow(rep, reps, endsOnTarget)
-
   return (
     <div className="rhythm-guide flex flex-1 flex-col items-center justify-center py-3">
       <div className={`rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center ${
@@ -633,7 +666,7 @@ export function RhythmGuide({
                 className="absolute inset-0 flex items-center justify-center"
                 style={{ opacity: 1 - fadeIn }}
               >
-                <DescentShape variant={variant} depth={depths[depths.length - 1]} glow={glow} />
+                <DescentShape variant={variant} depth={depths[depths.length - 1]} tone={tone} />
               </div>
             )}
             <div
@@ -644,7 +677,7 @@ export function RhythmGuide({
                 transform: `translateY(${tremor * STRAIN_PCT}%)`,
               }}
             >
-              <DescentShape variant={variant} depth={depth} glow={glow} />
+              <DescentShape variant={variant} depth={depth} tone={tone} />
             </div>
           </>
         ) : motion === 'pushpull' ? (
@@ -657,14 +690,14 @@ export function RhythmGuide({
               drive={drive}
               prime={prime}
               primeDir={primeDir}
-              glow={glow}
+              tone={tone}
               phases={phases}
               phaseIndex={i}
               progress={progress}
             />
           </div>
         ) : (
-          <BreatheShape variant={variant} scale={scaleFromDepth(depth)} glow={glow} />
+          <BreatheShape variant={variant} scale={scaleFromDepth(depth)} tone={tone} />
         )}
       </div>
 
@@ -672,7 +705,7 @@ export function RhythmGuide({
           with the shape, so the target being met reads the same in both. */}
       {!endsOnTarget && (
         <p
-          className={`text-2xl font-bold tabular-nums ${
+          className={`transition-colors duration-200 motion-reduce:transition-none text-2xl font-bold tabular-nums ${
             glow === 'done' ? 'text-white' : 'text-neutral-500'
           }`}
         >

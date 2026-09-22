@@ -938,16 +938,17 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
       // down the meter continuously instead of hopping segment to segment.
       const total = 6
       const exact = fraction * total
-      const leading = Math.floor(exact)
       return (
         <div className="absolute inset-y-[10%] left-1/2 flex w-[26%] -translate-x-1/2 flex-col-reverse gap-1.5">
           {Array.from({ length: total }, (_, i) => (
             <div key={i} className="relative flex-1 overflow-hidden rounded-full bg-accent-bright/12">
               <div
-                className={`absolute inset-x-0 bottom-0 rounded-full bg-accent-bright/80 ${
-                  i === leading ? 'rest-pip' : ''
-                }`}
-                style={{ height: `${clamp01(exact - i) * 100}%`, ...drain }}
+                className="rest-pip absolute inset-x-0 bottom-0 rounded-full bg-accent-bright/80"
+                style={{
+                  height: `${clamp01(exact - i) * 100}%`,
+                  '--rest-pulse-strength': 4 * clamp01(exact - i) * (1 - clamp01(exact - i)),
+                  transition: 'height 260ms linear, --rest-pulse-strength 260ms linear',
+                } as CSSProperties}
               />
             </div>
           ))}

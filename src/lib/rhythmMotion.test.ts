@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseTempo } from './tempo'
 import {
   attack,
+  phasePrime,
   cycleCloses,
   cycleProgress,
   hitRepTarget,
@@ -225,5 +226,25 @@ describe('loopFadeIn', () => {
   it('never spends more than a third of a short rep fading', () => {
     const quick = parseTempo('1s down · 1s hang')
     expect(loopFadeIn(quick, 1 / 3)).toBe(1)
+  })
+})
+
+describe('phasePrime continuity', () => {
+  const drives = [1, 0, -1, 0]
+  const efforts = [1, 0, 1, 0]
+  it('keeps the upcoming end lit across both rest-to-work boundaries', () => {
+    for (const rest of [1, 3]) {
+      const work = (rest + 1) % drives.length
+      expect(phasePrime(drives, efforts, rest, 1))
+        .toEqual(phasePrime(drives, efforts, work, 0))
+      expect(phasePrime(drives, efforts, work, 0.5).amount).toBe(1)
+    }
+  })
+  it('starts priming the opposite end at zero while the old drive releases', () => {
+    expect(phasePrime(drives, efforts, 1, 0)).toEqual({ direction: -1, amount: 0 })
+    expect(phasePrime(drives, efforts, 3, 0)).toEqual({ direction: 1, amount: 0 })
+  })
+  it('does not invent a cue for consecutive working phases', () => {
+    expect(phasePrime([1, -1], [1, 1], 1, 0)).toEqual({ direction: 0, amount: 0 })
   })
 })
