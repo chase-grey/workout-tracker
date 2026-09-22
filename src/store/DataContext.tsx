@@ -6,7 +6,7 @@ import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
-import { mergePendingBodyWeights } from '../lib/bodyWeightSync'
+import { reconcileBodyWeights } from '../lib/bodyWeightSync'
 import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
 import { withMatSitups } from '../lib/stretchCore'
 import { DAY_TYPES, STRETCH_CORE } from '../config/plan'
@@ -408,9 +408,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // A log (or newer refresh) made while this request was in flight must
       // survive even if its POST has already succeeded and left the outbox.
       // Failed writes present before the fetch also stay visible until retried.
-      if (weightRevision.current === weightsAtFetch) {
-        persistWeights(mergePendingBodyWeights(bw, pendingWeights))
-      }
+      persistWeights(reconcileBodyWeights(
+        bw, pendingWeights, storage.loadBodyWeights(), weightsAtFetch, weightRevision.current,
+      ))
       setSync('idle')
       const now = new Date().toISOString()
       setLastSync(now)
