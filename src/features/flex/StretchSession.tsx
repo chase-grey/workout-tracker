@@ -695,9 +695,8 @@ export function StretchSession({
   }
 
   // Leave a photo screen (shots taken or skipped) and pick the routine back up.
-  // The cold screen opens the session, so the routine goes straight into its
-  // first stretch from here — and if a shot was taken, the get-into-position
-  // count is stretched to cover retrieving the phone.
+  // The cold screen opens before the first-exercise preview. Once a session has
+  // started, returning from photos allows time to retrieve the phone.
   const closePhotos = (tookAny: boolean) => {
     if (!photos) return
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
@@ -707,7 +706,7 @@ export function StretchSession({
       advanceFrom(index, done)
       return
     }
-    if (then === 'start') {
+    if (then === 'start' && started) {
       if (tookAny && !fast) straightToGetReady(POST_PHOTO_GET_READY_SEC)
       else if (!fast && getReadySec > 0) setPreparing(true)
     }
@@ -834,7 +833,7 @@ export function StretchSession({
     <div className="flex min-h-full flex-col gap-3" {...screenTap}>
       {topBar}
 
-      {!started && (
+      {!started && photos == null && (
         <div className="fixed inset-0 z-80 flex flex-col items-center justify-center gap-6 bg-black px-6 text-center">
           <div>
             <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">first exercise</p>
@@ -971,7 +970,7 @@ export function StretchSession({
       {/* The get-into-position count waits its turn behind a photo screen, and
           only shows for a set that has one — mobility sets, a side switch, and the
           first core set; skipped inside the core block, which rests instead. */}
-      {preparing && photos == null && (readyOverrideSec ?? getReadySec) > 0 && (
+      {started && preparing && photos == null && (readyOverrideSec ?? getReadySec) > 0 && (
         <GetReady
           seconds={readyOverrideSec ?? getReadySec}
           // The same top of the screen the set behind it has, exactly as rest
