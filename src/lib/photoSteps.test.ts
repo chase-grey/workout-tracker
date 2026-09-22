@@ -92,9 +92,7 @@ describe('gateAfterStep', () => {
 })
 
 describe('gateAfterStep — head to toe', () => {
-  // The routine as it runs: the pike work, then the calves behind it. The pike
-  // lift's second side is where the three readings are earned, and the calf holds
-  // after it are not what they should be measured off.
+  // Warm photos wait until both sides of the final calf stretch are complete.
   const plan: FlexBlock[] = [
     { label: 'pike', exercises: [{ ...ex('pike_lift', 2), perSide: true }] },
     { label: 'calves', exercises: [{ ...ex('calf_stretch', 2), perSide: true }] },
@@ -105,29 +103,25 @@ describe('gateAfterStep — head to toe', () => {
   const lastFlex = flexAt[flexAt.length - 1]
   const lastPike = flexAt.filter((i) => steps[i].exKey.includes('pike')).pop()!
 
-  it('offers all three warm shots on one screen after the last pike set', () => {
-    expect(gateAt(lastPike)).toEqual({
+  it('offers all three warm shots on one screen after the last calf set', () => {
+    expect(steps[lastFlex].exKey).toBe('calf_stretch')
+    expect(gateAt(lastFlex)).toEqual({
       id: 'warm-h2t',
       title: 'warm photos',
       shots: ['warm-toe-touch', 'warm-leg-lift-left', 'warm-leg-lift-right'],
     })
   })
 
-  // The whole point of anchoring to the pike rather than to the end: the calf
-  // block runs after the screen, and asking for the readings again there would
-  // measure a fold that has been sitting still for six minutes.
-  it('offers nothing on the calf holds that follow it', () => {
+  it('offers nothing after the pike or intermediate calf holds', () => {
     expect(lastFlex).toBeGreaterThan(lastPike)
-    for (let i = lastPike + 1; i <= lastFlex; i++) expect(gateAt(i)).toBeNull()
+    for (let i = lastPike; i < lastFlex; i++) expect(gateAt(i)).toBeNull()
   })
 
-  it('offers nothing anywhere earlier — both pike sides warm all three poses', () => {
+  it('offers nothing anywhere earlier in the routine', () => {
     for (let i = 0; i < lastPike; i++) expect(gateAt(i)).toBeNull()
   })
 
-  // A coach edit that drops or renames the pike leaves nothing to anchor to, and
-  // late warm shots beat none at all.
-  it('falls back to the last stretch set with no pike in the plan', () => {
+  it('still offers photos after the last stretch with no pike in the plan', () => {
     const noPike = buildSessionSteps([
       { label: 'calves', exercises: [{ ...ex('calf_stretch', 2), perSide: true }] },
     ])

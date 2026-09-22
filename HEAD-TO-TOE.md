@@ -861,3 +861,10 @@ Raised in the review, deliberately left out of this change:
   hips: nothing thoracic, nothing shoulder.
 - **A progression variable.** Both routines are fixed sets, reps and holds. The
   app measures the outcome; nothing changes the input.
+
+### Warm-photo timing correction (2026-09-22)
+
+The head-to-toe warm photos now follow the final stretch set, after both sides
+of the calf stretches. This supersedes the earlier decision to anchor photos to
+the last pike set. All three warm shots remain together on one screen, and edited
+plans likewise offer that screen after their final stretch set.
