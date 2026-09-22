@@ -13,7 +13,7 @@ export function reconcileBodyWeights(
 }
 
 /** Keep unconfirmed entries visible without duplicating rows already on the server. */
-function mergePendingBodyWeights(
+export function mergePendingBodyWeights(
   remote: BodyWeightEntry[],
   pending: BodyWeightEntry[],
 ): BodyWeightEntry[] {
