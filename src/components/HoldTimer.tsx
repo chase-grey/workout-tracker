@@ -137,10 +137,12 @@ export function HoldTimer({
   }, [remaining, onTargetEnd])
 
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="hold-timer flex flex-col items-center gap-3">
       {/* The hold drawn as well as counted, in the bright green the rest shapes
           use: the level is the time left, so the shape is the clock. */}
-      <CountdownShape fraction={fraction} />
+      <div className="hold-visual">
+        <CountdownShape fraction={fraction} />
+      </div>
       {/* Dark green for a timer readout, matching the rest screen's countdown — the
           brighter accent belongs to the animations that are calling for attention.
           Before the clock starts this is the hold you're about to do, since nothing

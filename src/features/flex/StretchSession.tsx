@@ -830,7 +830,7 @@ export function StretchSession({
   )
 
   return (
-    <div className="flex min-h-full flex-col gap-3" {...screenTap}>
+    <div className="stretch-session flex min-h-full flex-col gap-3" {...screenTap}>
       {topBar}
 
       {!started && photos == null && (

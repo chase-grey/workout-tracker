@@ -1007,7 +1007,7 @@ const holdRotation = createRotation(BOX_VARIANTS)
 export function CountdownShape({ fraction }: { fraction: number }) {
   const [variant] = useState<Variant>(() => holdRotation.next())
   return (
-    <div className="relative flex aspect-square w-[min(72vw,34vh,20rem)] items-center justify-center">
+    <div className="countdown-shape relative flex aspect-square w-[min(72vw,34vh,20rem)] items-center justify-center">
       <RestShape variant={variant} fraction={clamp01(fraction)} />
     </div>
   )

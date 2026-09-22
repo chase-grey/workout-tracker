@@ -201,7 +201,7 @@ function DescentShape({ variant, depth, glow }: { variant: Variant; depth: numbe
       return (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center"
-          style={{ fontSize: 'min(22vw, 8rem)' }}
+          style={{ fontSize: 'var(--descent-arrow-size, min(22vw, 8rem))' }}
         >
           {[0, 1, 2].map((i) => {
             const lit = clamp01(depth * 3 - i)
@@ -360,7 +360,7 @@ function PushPullShape({
       return (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center"
-          style={{ fontSize: 'min(17vw, 6rem)' }}
+          style={{ fontSize: 'var(--pushpull-arrow-size, min(17vw, 6rem))' }}
         >
           {[-1, 1].map((side) => {
             const lit = endLit(side)
@@ -623,8 +623,8 @@ export function RhythmGuide({
   const glow = repGlow(rep, reps, endsOnTarget)
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center py-3">
-      <div className="relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
+    <div className="rhythm-guide flex flex-1 flex-col items-center justify-center py-3">
+      <div className="rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
         {motion === 'descent' ? (
           <>
             {showPrevRep && (
