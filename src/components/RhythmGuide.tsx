@@ -51,12 +51,11 @@ const SCALE_MIN = 0.55
 const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
 
 /**
- * Every shape draws from the same palette so that hitting the set's target lights
- * the whole guide up at once: the accent goes from a washed-out fill to near-full
- * opacity, which over the dark background is the difference between a dim green
- * and an unmistakably bright one. A set that ends itself brightens on its closing
- * rep rather than after it — see `repGlow` — because after it there is no guide
- * left to look at.
+ * Every shape inherits the guide's colour: green during the set, white for the
+ * finishing cue. Brightness still conveys effort, depth and direction within a
+ * rep, so the finish needs a separate colour as well as higher opacity. A set
+ * that ends itself turns white on its closing rep (see `repGlow`), because after
+ * it there is no guide left to look at.
  */
 const TONES: Record<RepGlow, {
   fill: string
@@ -74,18 +73,18 @@ const TONES: Record<RepGlow, {
   brightest: number
 }> = {
   base: {
-    fill: 'bg-accent-bright/40',
-    ring: 'ring-1 ring-accent-bright/70',
-    border: 'border-accent-bright/70',
-    track: 'bg-accent-bright/15',
+    fill: 'bg-current/40',
+    ring: 'ring-1 ring-current/70',
+    border: 'border-current/70',
+    track: 'bg-current/15',
     dimmest: 0.2,
     brightest: 0.7,
   },
   done: {
-    fill: 'bg-accent-bright/80',
-    ring: 'ring-1 ring-accent-bright',
-    border: 'border-accent-bright',
-    track: 'bg-accent-bright/40',
+    fill: 'bg-current/80',
+    ring: 'ring-1 ring-current',
+    border: 'border-current',
+    track: 'bg-current/40',
     dimmest: 0.5,
     brightest: 1,
   },
@@ -209,7 +208,7 @@ function DescentShape({ variant, depth, glow }: { variant: Variant; depth: numbe
               <MdKeyboardArrowDown
                 key={i}
                 aria-hidden
-                className="-my-[6%] text-accent-bright"
+                className="-my-[6%] text-current"
                 style={{
                   opacity: litOpacity(tone, lit),
                   transform: `translateY(${lit * 10}%)`,
@@ -248,7 +247,7 @@ function DescentShape({ variant, depth, glow }: { variant: Variant; depth: numbe
             return (
               <div
                 key={i}
-                className="absolute h-[7%] w-[28%] rounded-full bg-accent-bright"
+                className="absolute h-[7%] w-[28%] rounded-full bg-current"
                 style={{
                   left: `${18 + i * 12}%`,
                   top: `${24 + i * 15}%`,
@@ -333,7 +332,7 @@ function PushPullShape({
       const [dotX, dotY] = rhythmWavePoint(phases, phaseIndex, progress)
       return (
         <div className="absolute inset-y-[10%] left-1/2 w-screen -translate-x-1/2 overflow-hidden">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible text-accent-bright" aria-hidden>
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible text-current" aria-hidden>
             <path
               d={wavePath}
               transform={`translate(${50 - dotX} 0)`}
@@ -347,7 +346,7 @@ function PushPullShape({
             />
           </svg>
           <div
-            className="absolute left-1/2 h-[11%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-bright"
+            className="absolute left-1/2 h-[11%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
             style={{ top: `${dotY}%`, opacity: tone.brightest }}
           />
         </div>
@@ -373,7 +372,7 @@ function PushPullShape({
                   <Arrow
                     key={k}
                     aria-hidden
-                    className="-my-[7%] text-accent-bright"
+                    className="-my-[7%] text-current"
                     style={{
                       opacity: litOpacity(tone, clamp01(lit * 3 - step)),
                       transform: `translateY(${side * clamp01(drive * side) * 8}%)`,
@@ -411,7 +410,7 @@ function PushPullShape({
             style={{ top: `${drive >= 0 ? 50 : 50 - reach}%`, height: `${reach}%` }}
           />
           <div
-            className="absolute left-1/2 top-1/2 h-[3%] w-[26%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-bright"
+            className="absolute left-1/2 top-1/2 h-[3%] w-[26%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
             style={{ opacity: tone.dimmest }}
           />
         </div>
@@ -614,7 +613,7 @@ export function RhythmGuide({
     motion === 'descent' && !closes ? loopFadeIn(phases, cycleProgress(phases, i, progress)) : 1
   const showPrevRep = fadeIn < 1 && rep > startRep
 
-  // Once you've finished the target the shape brightens, and that is the whole of
+  // Once you've finished the target the shape turns white, and that is the whole of
   // how the guide says you're done — a change you catch out of the corner of your
   // eye rather than a number to read. Tapping your own sets it waits for the last
   // rep to end, so the brightening lands as the set closes. When the set closes
@@ -624,7 +623,9 @@ export function RhythmGuide({
 
   return (
     <div className="rhythm-guide flex flex-1 flex-col items-center justify-center py-3">
-      <div className="rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
+      <div className={`rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center ${
+        glow === 'done' ? 'text-white' : 'text-accent-bright'
+      }`}>
         {motion === 'descent' ? (
           <>
             {showPrevRep && (
@@ -672,7 +673,7 @@ export function RhythmGuide({
       {!endsOnTarget && (
         <p
           className={`text-2xl font-bold tabular-nums ${
-            glow === 'done' ? 'text-accent-bright' : 'text-neutral-500'
+            glow === 'done' ? 'text-white' : 'text-neutral-500'
           }`}
         >
           {reps ? `${rep} / ${reps}` : rep}
