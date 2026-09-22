@@ -82,21 +82,27 @@ describe('dayOrder', () => {
 })
 
 describe('withPlanDefaults', () => {
-  it('adds cable pull downs and restores sit-ups to an existing pull day', () => {
+  it('migrates pull day to cable crunches first with no other ab exercises', () => {
     const stored = {
       ...DEFAULT_PLAN,
       pull: {
         ...DEFAULT_PLAN.pull,
         exercises: DEFAULT_PLAN.pull.exercises
-          .filter((e) => !['cable_pulldown', 'weighted_situp'].includes(e.key))
+          .filter((e) => e.key !== 'cable_crunch')
+          .concat([
+            { key: 'cable_pulldown', name: 'cable pull down', sets: 3, repMin: 10, repMax: 15, restSec: 90, group: 'back' },
+            DEFAULT_PLAN.push.exercises.find((e) => e.key === 'weighted_situp')!,
+          ])
           .map((e) => e.key === 'leg_press' ? { ...e, sets: 5 } : e),
       },
     }
-    const merged = withPlanDefaults(stored, PLAN_REVISION)
+    const merged = withPlanDefaults(stored, 12)
     const keys = merged.pull.exercises.map((e) => e.key)
-    expect(keys).toContain('cable_pulldown')
-    expect(keys).toContain('weighted_situp')
-    expect(merged.pull.exercises.find((e) => e.key === 'leg_press')?.sets).toBe(5)
+    expect(keys[0]).toBe('cable_crunch')
+    expect(keys).not.toContain('cable_pulldown')
+    expect(keys).not.toContain('weighted_situp')
+    expect(merged.pull.exercises.filter((e) => /^(abs|core)$/i.test(e.group)).map((e) => e.key))
+      .toEqual(['cable_crunch'])
     expect(withPlanDefaults(merged, PLAN_REVISION)).toEqual(merged)
   })
 

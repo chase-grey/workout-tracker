@@ -251,7 +251,8 @@ export type Plan = Record<DayType, DayPlan>
  *     trained fresh: push's four-and-four, and the Stretch + Core block twice a
  *     week.
  */
-export const PLAN_REVISION = 12
+// 13: pull + legs opens with cable crunches as its only ab exercise.
+export const PLAN_REVISION = 13
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -434,6 +435,8 @@ export const DEFAULT_PLAN: Plan = {
     label: 'pull + legs',
     required: false,
     exercises: [
+      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+
       // The day's heavy leg movement. It's the leg press rather than a barbell
       // squat because there's no rack to squat in — the press is what's actually
       // trainable, and the squat goals read it through a conversion rather than
@@ -491,8 +494,6 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
 
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
-      { key: 'cable_pulldown', name: 'cable pull down', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'back' },
-      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
 
       // Both are a dumbbell in each hand, so both step in 10s (see dumbbellPair).
       { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 10, dumbbellPair: true, group: 'biceps' },
@@ -735,6 +736,9 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'iso_chest',
   ],
   pull: [
+    // Cable ab pulldowns use the existing cable-crunch history and lead the day.
+    'cable_pulldown',
+    'weighted_situp',
     // The barbell squat, replaced by the leg press on both leg days: there's no
     // rack to squat in. Retiring it rather than leaving it means a device that
     // already saved a plan doesn't end up prescribing both.
@@ -989,6 +993,7 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
  * readout and the AI prompt all still ask for these keys by name.
  */
 const RETIRED_EXERCISE_NAMES: Record<string, string> = {
+  cable_pulldown: 'cable pull down',
   lateral_raise: 'lateral raise',
   pullups_or_pulldown: 'weighted pull-ups or lat pulldown',
   barbell_squat: 'barbell squat',
