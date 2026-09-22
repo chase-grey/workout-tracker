@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MdKeyboardArrowDown, MdKeyboardArrowUp } from 'react-icons/md'
 import { parseTempo, workPhaseCount, type TempoPhase } from '../lib/tempo'
 import { rhythmWavePath, rhythmWavePoint } from '../lib/rhythmWave'
-import { FlossGuide } from './FlossGuide'
 import {
   attack,
   cycleCloses,
@@ -470,7 +469,6 @@ export function RhythmGuide({
   tempo,
   reps,
   variant: chosenVariant,
-  movement,
   running = true,
   startRep = 1,
   onRep,
@@ -482,8 +480,6 @@ export function RhythmGuide({
   reps?: number
   /** A session-owned choice, used when two sides belong to the same set. */
   variant?: RhythmVariant
-  /** Exercise-specific cues sharing the same phase and rep clock. */
-  movement?: 'floss'
   running?: boolean
   /** Rep to resume counting from — lets a reloaded session pick up where it left off. */
   startRep?: number
@@ -629,9 +625,7 @@ export function RhythmGuide({
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-3">
       <div className="relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center">
-        {movement === 'floss' ? (
-          <FlossGuide phaseIndex={i} progress={progress} phases={phases} bright={glow === 'done'} />
-        ) : motion === 'descent' ? (
+        {motion === 'descent' ? (
           <>
             {showPrevRep && (
               <div
