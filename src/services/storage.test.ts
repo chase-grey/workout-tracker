@@ -81,6 +81,22 @@ describe('loadFlexPlans', () => {
     expect(plans.head_to_toe).toEqual(FLEX_ROUTINES.head_to_toe.blocks)
   })
 
+  it('updates saved calf stretches while preserving the other exercises', () => {
+    const blocks = [{ label: 'calves', exercises: [
+      { key: 'calf_stretch', name: 'calf stretch', sets: '2', maxSets: 2, reps: 1,
+        tempo: '', holdSec: 90, perSide: true, restSec: 60, setLabels: ['knee straight', 'knee bent'] },
+      ...CUSTOM[0].exercises,
+    ] }]
+    storage.saveFlexPlans({ side_split: CUSTOM, head_to_toe: blocks })
+    const plans = storage.loadFlexPlans()
+    expect(plans.head_to_toe[0].exercises[0]).toMatchObject({
+      holdSec: 30, maxSets: 3, restSec: 0, sideSwitchSec: 5,
+      setLabels: ['foot straight', 'foot in', 'foot out'],
+    })
+    expect(plans.head_to_toe[0].exercises[1]).toEqual(CUSTOM[0].exercises[0])
+    expect(plans.side_split).toEqual(CUSTOM)
+  })
+
   it('round-trips a saved map', () => {
     storage.saveFlexPlans({ side_split: CUSTOM, head_to_toe: CUSTOM })
     expect(storage.loadFlexPlans()).toEqual({ side_split: CUSTOM, head_to_toe: CUSTOM })

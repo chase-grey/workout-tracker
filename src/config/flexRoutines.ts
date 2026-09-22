@@ -123,24 +123,19 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
   },
   {
     label: 'calves',
-    // Four holds, not six — six minutes rather than nine. The three it dropped to
-    // two were all knee-straight, and pointing the toes in or out doesn't
-    // meaningfully move the load between the heads of the gastroc. Knee angle
-    // does: straight is the gastroc, bent takes it slack and hands the stretch to
-    // the soleus underneath, which is usually what actually caps ankle range and
-    // which the routine had no stretch for at all.
+    // Alternate feet at each angle: three 30-second holds per foot.
     exercises: [
       {
         key: 'calf_stretch',
         name: 'calf stretch',
-        sets: '2',
-        maxSets: 2,
+        sets: '3',
+        maxSets: 3,
         reps: 1,
         tempo: '',
-        holdSec: 90,
+        holdSec: 30,
         perSide: true,
         restSec: 0,
-        setLabels: ['knee straight', 'knee bent'],
+        setLabels: ['foot straight', 'foot in', 'foot out'],
       },
     ],
   },

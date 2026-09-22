@@ -30,11 +30,9 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
  * reading another screen wasn't time in the pose, and it isn't grounds for
  * starting ninety seconds over either.
  *
- * A buzz marks the prescribed time passing, since the one place you aren't looking
- * mid-plank is the screen. For the same reason the clock is drawn as well as
- * counted: one of the shapes rest tells its time with runs above the number, its
- * level draining as the hold does (see RestTimer's CountdownShape), so a plank or
- * a ninety-second calf stretch reads from the corner of an eye.
+ * A buzz marks the prescribed time passing. The draining shape shows time left
+ * without a visible numeric countdown; the clock text remains available to
+ * screen readers.
  */
 export function HoldTimer({
   targetSec,
@@ -114,7 +112,7 @@ export function HoldTimer({
   // How much of the prescribed hold is left, for the shape that draws it: taken
   // from the millisecond value so its level moves every tick rather than once a
   // second. It bottoms out at zero and stays there through overtime, which the
-  // number is left to say on its own.
+  // accessible clock continues to report.
   const fraction = targetSec > 0 ? clamp01(remainingMs / (targetSec * 1000)) : 0
 
   useEffect(() => {
@@ -143,13 +141,7 @@ export function HoldTimer({
       <div className="hold-visual">
         <CountdownShape fraction={fraction} />
       </div>
-      {/* Dark green for a timer readout, matching the rest screen's countdown — the
-          brighter accent belongs to the animations that are calling for attention.
-          Before the clock starts this is the hold you're about to do, since nothing
-          has come off it yet. */}
-      <div className={`font-mono text-6xl font-bold tabular-nums ${over ? 'text-accent-2' : 'text-accent'}`}>
-        {label}
-      </div>
+      <span className="sr-only" role="timer">{label}</span>
     </div>
   )
 }

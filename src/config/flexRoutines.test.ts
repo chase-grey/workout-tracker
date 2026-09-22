@@ -1,3 +1,5 @@
+import { buildFlexSteps, stepWorkSec } from '../lib/flexSteps'
+import { settleInSec } from '../lib/settleIn'
 import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, flexRoutineOf } from './flexRoutines'
 import { DEFAULT_FLEX_ROUTINE } from './flexPlan'
@@ -71,7 +73,7 @@ describe('the head-to-toe routine', () => {
 
   it('holds the feet and the calves, and paces the rest', () => {
     expect(byKey('rolling_feet').holdSec).toBe(90)
-    expect(byKey('calf_stretch').holdSec).toBe(90)
+    expect(byKey('calf_stretch').holdSec).toBe(30)
     for (const key of ['sciatic_floss', 'pike_block_crush', 'pike_lift']) {
       expect(byKey(key).holdSec).toBeUndefined()
       expect(byKey(key).tempo).not.toBe('')
@@ -84,14 +86,18 @@ describe('the head-to-toe routine', () => {
     for (const e of exercises) expect(e.holdSec && e.tempo).toBeFalsy()
   })
 
-  // Two knee angles rather than three foot angles: bending the knee is what takes
-  // the gastroc slack and hands the stretch to the soleus, and toe direction isn't
-  // doing comparable work. Four holds instead of six.
-  it('names the calf stretch’s two sets as the knee angles they are', () => {
-    const calf = byKey('calf_stretch')
-    expect(calf.maxSets).toBe(2)
-    expect(calf.setLabels).toEqual(['knee straight', 'knee bent'])
-    expect(calf.setLabels).toHaveLength(calf.maxSets)
+  it('alternates feet for three 30-second angles with only positioning time', () => {
+    for (const startSide of ['left', 'right'] as const) {
+      const steps = buildFlexSteps(HEAD_TO_TOE.blocks, startSide).filter(s => s.exKey === 'calf_stretch')
+      const other = startSide === 'left' ? 'right' : 'left'
+      expect(steps.map(s => [s.side, s.setLabel])).toEqual([
+        [startSide, 'foot straight'], [other, 'foot straight'],
+        [startSide, 'foot in'], [other, 'foot in'],
+        [startSide, 'foot out'], [other, 'foot out'],
+      ])
+      expect(steps.every(s => s.holdSec === 30 && s.restSec === 0 && settleInSec(s) === 5)).toBe(true)
+      expect(steps.filter(s => s.side === startSide).reduce((sum, s) => sum + stepWorkSec(s), 0)).toBe(90)
+    }
   })
 
   it('gives every set-labelled stretch a label per set', () => {
