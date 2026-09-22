@@ -28,9 +28,7 @@ import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
 import { MdFitnessCenter } from 'react-icons/md'
-import { coreDoneToday } from './lib/stretchCore'
 import { nextStretchSide } from './lib/stretchSide'
-import { toISODate } from './lib/dates'
 import type { FlexRoutineKey } from './config/flexRoutines'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
@@ -51,7 +49,7 @@ function AppShell() {
   const [resumedTab] = useState(takeResumeTab)
   const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
-  const { saveSession, settings, updateSettings, workouts } = useData()
+  const { saveSession, settings, updateSettings } = useData()
   // Chat needs the dev server's proxy to hold the Epic key, so the coach exists
   // only where that proxy does: a desktop, or a phone that loaded the dev server
   // itself over Epic wifi. The deployed site never has it (see lib/device).
@@ -139,7 +137,11 @@ function AppShell() {
   // already set a height are never prompted.
   if (!settings.setupComplete && settings.heightIn == null) return <HeightSetup />
 
-  const startStretch = (routine: FlexRoutineKey) => {
+  const startStretch = (routine: FlexRoutineKey, officeAbs = false) => {
+    if (controls.session) {
+      setMinimized(false)
+      return
+    }
     // A routine already in progress is picked back up rather than restarted, so
     // the button that was tapped doesn't matter — including which routine it was.
     const saved = storage.loadStretch()
@@ -153,9 +155,8 @@ function AppShell() {
         startSide: nextStretchSide(storage.loadFlex(), routine),
         startedAt: new Date().toISOString(),
         routine,
-        // Both routines end with the same sit-ups, so the second stretch of a day
-        // skips them. Decided here, at the start, and pinned into the session.
-        core: !coreDoneToday(workouts, toISODate(new Date())),
+        core: officeAbs,
+        officeAbs,
       })
       setStretching(routine)
     }
@@ -164,6 +165,7 @@ function AppShell() {
 
   const startWorkout = (dayType: DayType, variant?: VariantKey) => {
     setMinimized(false)
+    if (sessionActive) return
     controls.start(dayType, variant)
   }
 
@@ -240,7 +242,7 @@ function AppShell() {
         {session && <div className={minimized ? 'hidden' : 'contents'}>{session}</div>}
         {(!session || minimized) && (
           <>
-            {tab === 'today' && <TodayTab onStart={startWorkout} onStartStretch={startStretch} />}
+            {tab === 'today' && <TodayTab onStart={startWorkout} onStartStretch={startStretch} onStartAbs={() => startStretch('side_split', true)} />}
             {tab === 'progress' && <ProgressTab />}
             {tab === 'coach' && showChat && (
               <ChatTab answering={answering} onAnsweringDone={() => setAnswering(null)} />
@@ -264,7 +266,7 @@ function AppShell() {
           className="flex min-h-[52px] items-center justify-center gap-2 border-t border-border bg-accent text-base font-bold text-black active:opacity-80"
         >
           <MdFitnessCenter className="text-xl" aria-hidden />
-          {controls.session ? 'back to your workout' : 'back to your stretch'}
+          {controls.session ? 'back to your workout' : storage.loadStretch()?.officeAbs ? 'back to office abs' : 'back to your stretch'}
         </button>
       )}
       {!immersive && !typingToCoach && (

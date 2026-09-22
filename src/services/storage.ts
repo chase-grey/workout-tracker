@@ -66,6 +66,8 @@ export type RestState = {
 
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
 export type StretchState = {
+  /** A standalone office ab session, sharing the guided set flow. */
+  officeAbs?: boolean
   startSide?: 'left' | 'right'
   step: number
   done: string[]
@@ -290,6 +292,16 @@ export const storage = {
     for (const key of FLEX_ROUTINE_KEYS) {
       out[key] =
         stored[key] ?? (key === 'side_split' ? legacy : FLEX_ROUTINES[key].blocks)
+      if (key === 'head_to_toe' && stored[key]) {
+        out[key] = out[key].map((block) => ({
+          ...block,
+          exercises: block.exercises.map((exercise) => exercise.key === 'calf_stretch'
+            ? { ...exercise, sets: '3', maxSets: 3, reps: 1, tempo: '', holdSec: 30,
+                perSide: true, restSec: 0, sideSwitchSec: 5,
+                setLabels: ['foot straight', 'foot in', 'foot out'] }
+            : exercise),
+        }))
+      }
     }
     return out
   },

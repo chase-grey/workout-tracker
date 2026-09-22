@@ -64,6 +64,17 @@ export const FLEX_TREND_WINDOW: TrendWindow = {
 }
 
 /**
+ * Read weight pace over six weeks so a few lower or higher weigh-ins don't
+ * dominate the forecast. Keep the latest weight as the starting value and let
+ * older history fall out of the window so sustained changes still register.
+ */
+export const BODYWEIGHT_TREND_WINDOW: TrendWindow = {
+  windowDays: 42,
+  minPoints: 3,
+  minSpanDays: 10,
+}
+
+/**
  * The fastest weekly bodyweight change the goals will project against, in lbs.
  *
  * Lean gain runs about half a pound to a pound a week, and a pound is what a very
@@ -658,6 +669,7 @@ export function buildGoals({
       target: 180,
       direction: 'up',
       capPerWeek: BODYWEIGHT_GAIN_CAP,
+      window: BODYWEIGHT_TREND_WINDOW,
     },
     {
       id: GOAL_IDS.weight190,
@@ -668,6 +680,7 @@ export function buildGoals({
       target: 190,
       direction: 'up',
       capPerWeek: BODYWEIGHT_GAIN_CAP,
+      window: BODYWEIGHT_TREND_WINDOW,
     },
     {
       id: GOAL_IDS.benchBodyweight,

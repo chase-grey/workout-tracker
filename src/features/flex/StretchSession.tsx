@@ -14,6 +14,7 @@ import { PhotoStep } from './PhotoStep'
 import { formatDuration, medianTotalSec, remainingSecs } from '../../lib/estimate'
 import {
   buildSessionSteps,
+  buildCoreSteps,
   flexRoundKey,
   stepWorkSec,
   SEC_PER_REP,
@@ -191,16 +192,9 @@ function RoutineChecklist({
 }
 
 /**
- * Guided, one-set-at-a-time Stretch + Core flow: the mobility routine (with a
- * tempo rhythm animation, or a hold clock for a static stretch) followed by a
- * core block whose sets are logged as workout rows. Finishing counts as a
- * stretch/flex day.
- *
- * Which routine is running — side split or head to toe — comes in as a prop and
- * decides the blocks, the photos offered and what gets logged at the end. Whether
- * the core block is appended was decided when the session started and rides in the
- * saved snapshot: pinned, so a session resumed after another one logged core keeps
- * the shape it began with rather than growing four steps mid-routine.
+ * Guided stretching or standalone office abs, selected by the saved snapshot.
+ * Stretching offers mobility sets and photos; office abs offers only core sets
+ * and logs workout rows without recording a stretch day.
  */
 export function StretchSession({
   routine,
@@ -221,8 +215,9 @@ export function StretchSession({
     workouts,
     flexEntries,
     logFlex,
-    durations,
+    durations: allDurations,
     finishStretch,
+    logCore,
   } = useData()
   // Held for the session's lifetime: which Mon–Sun week the photo cadence is
   // measured against.
@@ -232,8 +227,9 @@ export function StretchSession({
   const [saved] = useState(() => storage.loadStretch())
   // Legacy active sessions already started left; preserve their step order.
   const [startSide] = useState(saved?.startSide ?? 'left')
-  // A session started before the core-skip rule shipped always had its core.
-  const [withCore] = useState(saved?.core ?? true)
+  const [officeAbs] = useState(saved?.officeAbs ?? false)
+  const durations = useMemo(() => officeAbs ? [] : allDurations, [officeAbs, allDurations])
+  const withCore = officeAbs
   const [current, setCurrent] = useState(saved?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(saved?.done ?? []))
   const [skipped, setSkipped] = useState<Set<string>>(() => new Set(saved?.skipped ?? []))
@@ -280,6 +276,7 @@ export function StretchSession({
   // that's already past the first set is past that moment, so it doesn't re-ask,
   // and neither does a week that already has the readings.
   const [photos, setPhotos] = useState<PendingPhotos | null>(() => {
+    if (officeAbs) return null
     const cold = coldGate(routine)
     if (seenGates.has(cold.id) || (saved?.step ?? 0) > 0 || (saved?.done?.length ?? 0) > 0) {
       return null
@@ -308,7 +305,7 @@ export function StretchSession({
   }
 
   const plan = flexPlans[routine] ?? FLEX_ROUTINES[routine].blocks
-  const allSteps = useMemo(() => buildSessionSteps(plan, { core: withCore, startSide }), [plan, withCore, startSide])
+  const allSteps = useMemo(() => officeAbs ? buildCoreSteps() : buildSessionSteps(plan, { core: false, startSide }), [plan, officeAbs, startSide])
   // Skipping is an exercise-level decision: all of its sides and sets leave the
   // live flow, while allSteps keeps them available to restore from the checklist.
   const steps = useMemo(
@@ -348,6 +345,7 @@ export function StretchSession({
       startedAt,
       routine,
       core: withCore,
+      officeAbs,
       coreReps,
       coreWeights,
       rep,
@@ -359,7 +357,7 @@ export function StretchSession({
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
+  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -443,6 +441,11 @@ export function StretchSession({
     const coreSets = steps
       .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
       .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
+    if (officeAbs) {
+      logCore(coreSets, 'office abs')
+      onClose()
+      return
+    }
     void finishStretch({
       routine,
       startSide: steps.filter((s) => s.kind === 'flex')

@@ -12,6 +12,7 @@ import { lastStretchRoutine } from '../../lib/stretchRotation'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
+import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
 
 const sessionButton =
   'min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2'
@@ -19,9 +20,10 @@ const sessionButton =
 type Props = {
   onStart: (dayType: DayType, variant?: VariantKey) => void
   onStartStretch: (routine: FlexRoutineKey) => void
+  onStartAbs: () => void
 }
 
-export function TodayTab({ onStart, onStartStretch }: Props) {
+export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries } =
     useData()
   const [flash, setFlash] = useState<string | null>(null)
@@ -65,6 +67,8 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
   // The two stretch routines dim the same way and for the same reason: whichever
   // was done last steps back so the other reads as up next.
   const dimmedStretch = lastStretchRoutine(flexEntries)
+  const abDays = weeklyAbsDays(workouts, plan, toISODate(new Date()))
+  const absRemaining = Math.max(0, WEEKLY_ABS_GOAL - abDays.length)
 
   // Whichever half of an alternating pair reads as up next takes the top row:
   // the dimmed one was just done, so it steps down and the button you're
@@ -128,11 +132,8 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
 
       <WeightCard />
 
-      {/* One grid rather than a row per kind: the lift days run down the left
-          column, the stretch routines down the right, and full body takes the
-          bottom row on its own. Each dimming pair still sits together, up next
-          over just-done, and nothing is full width except the day that trains
-          everything, so the page still fits without scrolling. */}
+      {/* Lift days and stretches alternate within their columns; full body and
+          standalone office abs share the final row. */}
       <div className="grid grid-cols-2 gap-2">
         {Array.from({ length: Math.max(liftDays.length, stretchRoutines.length) }, (_, i) => {
           const t = liftDays[i]
@@ -162,9 +163,18 @@ export function TodayTab({ onStart, onStartStretch }: Props) {
             </Fragment>
           )
         })}
-        <button onClick={() => onStart('fullbody')} className={`${sessionButton} col-span-2`}>
+        <button onClick={() => onStart('fullbody')} className={sessionButton}>
           {plan.fullbody.label}
         </button>
+        <button onClick={onStartAbs} className={`${sessionButton} ${absRemaining === 0 ? 'opacity-50' : ''}`}>
+          office abs
+        </button>
+      </div>
+      <div className="rounded-2xl bg-surface px-3 py-2" role="status">
+        <p className="text-sm font-semibold">abs this week: {abDays.length} / {WEEKLY_ABS_GOAL} days</p>
+        <p className="text-xs text-neutral-400">
+          {absRemaining > 0 ? `${absRemaining} more ${absRemaining === 1 ? 'day' : 'days'} to go.` : 'weekly goal met.'} Workout ab sets and office abs both count. Once per day, Monday–Sunday.
+        </p>
       </div>
     </div>
   )

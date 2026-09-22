@@ -30,6 +30,7 @@ import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './f
 import type { FlexEntry } from './flex'
 import type { WorkoutRow } from '../types'
 import { isPaceCapped, project } from './predictions'
+import { currentPaceSeries, paceAgainstLock, type LockedProjection } from './goalLock'
 
 /** A fortnight of weigh-ins climbing 3 lbs a week — a good run, plus water. */
 const HOT_FORTNIGHT = [
@@ -600,11 +601,8 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
     )
   })
 
-  it('leaves the strength and bodyweight ladders on the default window', () => {
-    // The six-week window is a flexibility measurement's answer to warm-up
-    // scatter (see FLEX_TREND_WINDOW); nothing else asks for it.
+  it('leaves strength and body-fat goals on the default window', () => {
     for (const id of [
-      GOAL_IDS.weight180,
       GOAL_IDS.benchBodyweight,
       GOAL_IDS.benchTwoHundred,
       GOAL_IDS.squatBodyweight,
@@ -615,6 +613,48 @@ describe('projectGoal runs a goal through the model its spec declares', () => {
       expect(g).toBeDefined()
       expect(g.window).toBeUndefined()
     }
+  })
+
+  it('keeps weight forecasts ahead after a brief dip in a longer gaining trend', () => {
+    const weights = Array.from({ length: 43 }, (_, day) => ({
+      date: toISO(new Date(2026, 0, 1 + day)),
+      weightLbs: 168 + day / 7 - (day >= 39 ? 1.2 : 0),
+    }))
+    const date = weights.at(-1)!.date
+    const now = new Date(2026, 1, 12)
+    for (const id of [GOAL_IDS.weight180, GOAL_IDS.weight190]) {
+      const goal = buildGoals(inputs(weights)).find((g) => g.id === id)!
+      const p = projectGoal(goal, now)
+      const short = project(goal.points, goal.target, now, { capPerWeek: BODYWEIGHT_GAIN_CAP })
+      expect(p.basis.spanDays).toBe(42)
+      expect(p.current).toBe(172.8)
+      expect(p.slopePerWeek).toBeGreaterThan(short.slopePerWeek)
+      const lock: LockedProjection = {
+        goalId: id, lockedAt: '2026-01-01', startValue: 168,
+        target: goal.target, etaDate: id === GOAL_IDS.weight180 ? '2026-05-21' : '2026-09-14',
+        slopePerWeek: 0.6,
+      }
+      const pace = paceAgainstLock(lock, p.current, date, p.slopePerWeek, now)
+      expect(pace.status).toBe('ahead')
+      expect(pace.revisedEta).not.toBeNull()
+      expect(pace.revisedEta! < lock.etaDate).toBe(true)
+      const curve = currentPaceSeries(lock, p, date, now)
+      expect(curve[0]).toEqual({ date, value: p.current })
+      expect(curve.at(-1)).toEqual({ date: pace.revisedEta, value: goal.target })
+    }
+  })
+
+  it('recognizes sustained weight loss despite older gains', () => {
+    const weights = Array.from({ length: 85 }, (_, day) => ({
+      date: toISO(new Date(2026, 0, 1 + day)),
+      weightLbs: day < 42 ? 160 + day / 3 : 174 - (day - 42) / 7,
+    }))
+    const goal = buildGoals(inputs(weights)).find((g) => g.id === GOAL_IDS.weight180)!
+    const p = projectGoal(goal, new Date(2026, 2, 26))
+    expect(p.basis.spanDays).toBe(42)
+    expect(p.slopePerWeek).toBe(-1)
+    expect(p.onTrack).toBe(false)
+    expect(p.etaDate).toBeNull()
   })
 
   it('leaves a bodyweight goal reading off the latest weigh-in', () => {

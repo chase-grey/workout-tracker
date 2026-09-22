@@ -233,7 +233,7 @@ type DataContextValue = {
    * The core sets of a Stretch + Core session — see the implementation. Returns
    * the PRs they set, which the finish recap leads with.
    */
-  logCore: (sets: CoreSet[]) => PR[]
+  logCore: (sets: CoreSet[], note?: string) => PR[]
   /** File a finished Stretch + Core session and hand back its recap. */
   finishStretch: (input: StretchFinishInput) => Promise<StretchFinishSummary>
   /** A single at `weightLbs` on `exerciseKey`, the way a strength goal is settled. */
@@ -880,7 +880,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Synchronous, so the recap can be built in the same breath as the write: the
   // push to the backend is kicked off and left to finish on its own.
   const logCore = useCallback(
-    (sets: CoreSet[]): PR[] => {
+    (sets: CoreSet[], note = CORE_SESSION_NOTE): PR[] => {
       const done = sets.filter((s) => s.reps > 0)
       if (done.length === 0) return []
       const sessionId = uuid()
@@ -893,7 +893,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         set_number: i + 1,
         weight_lbs: s.weightLbs,
         reps: s.reps,
-        notes: CORE_SESSION_NOTE,
+        notes: note,
         is_historical: false,
       }))
       const prev = storage.loadWorkouts()
