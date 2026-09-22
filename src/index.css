@@ -668,6 +668,26 @@ input[type='number'] {
   animation: rest-fuse-spark 1.1s ease-out infinite;
 }
 
+/* Small local vibration keeps the rock centered while its trail conveys speed. */
+@keyframes rest-comet-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(.22px, -.16px); }
+  50% { transform: translate(-.18px, .18px); }
+  75% { transform: translate(.12px, .08px); }
+}
+.rest-comet-shake { animation: rest-comet-shake 160ms linear infinite; }
+@keyframes rest-comet-fire {
+  0%, 100% { transform: scale(1, 1); opacity: .85; }
+  45% { transform: scale(1.08, .92); opacity: 1; }
+  70% { transform: scale(.96, 1.06); opacity: .9; }
+}
+.rest-comet-fire { animation: rest-comet-fire 420ms ease-in-out infinite; }
+@keyframes rest-comet-cinder {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-48px, 0); opacity: 0; }
+}
+.rest-comet-cinder { animation: rest-comet-cinder 1s linear infinite; }
+
 /* The flash is only impact texture; the countdown owns the debris motion. */
 .rest-comet-flash {
   filter: blur(5px);
@@ -708,6 +728,9 @@ input[type='number'] {
   .rest-frost,
   .rest-fuse-head,
   .rest-comet-flash {
+    animation: none;
+  }
+  .rest-comet-shake, .rest-comet-fire, .rest-comet-cinder {
     animation: none;
   }
   .rest-black-hole-orbit {
