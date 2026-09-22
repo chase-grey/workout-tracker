@@ -21,7 +21,8 @@ export function CelebrationProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(0)
 
   const celebrate = useCallback((c: Celebration | null) => {
-    if (c) setQueue((q) => [...q, { id: nextId.current++, celebration: c }])
+    if (!c || (c.tier === 'small' && !c.ack)) return
+    setQueue((q) => [...q, { id: nextId.current++, celebration: c }])
   }, [])
 
   const current = queue[0] ?? null

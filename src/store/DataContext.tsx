@@ -6,6 +6,7 @@ import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
+import { mergePendingBodyWeights } from '../lib/bodyWeightSync'
 import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
 import { withMatSitups } from '../lib/stretchCore'
 import { DAY_TYPES, STRETCH_CORE } from '../config/plan'
@@ -68,7 +69,7 @@ import {
 import { newRecords, type RecordSnapshot } from '../lib/records'
 import { goalPaceNotes, type GoalPaceNote } from '../lib/goalPace'
 import { graduationNote } from '../lib/graduation'
-import { applyNotesEdit, parseDiscomfort, type NotesEdit } from '../lib/discomfort'
+import { applyNotesEdit, type NotesEdit } from '../lib/discomfort'
 
 export type WeekProgress = {
   workouts: number
@@ -194,8 +195,6 @@ const FLEX_ANGLE_KEYS = [
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
 
-export type Toast = { msg: string; ok: boolean }
-
 type DataContextValue = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
@@ -210,7 +209,6 @@ type DataContextValue = {
   flexPlans: Record<FlexRoutineKey, FlexBlock[]>
   sync: SyncState
   lastSync: string | null
-  toast: Toast | null
   pendingWrites: number
   streaks: StreakState
   streakHistory: WeekResult[]
@@ -271,14 +269,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<QueuedWrite[]>(() => storage.loadQueue())
   const [sync, setSync] = useState<SyncState>('idle')
   const [lastSync, setLastSync] = useState<string | null>(() => storage.loadLastSync())
-  const [toast, setToast] = useState<Toast | null>(null)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const notify = useCallback((msg: string, ok: boolean) => {
-    setToast({ msg, ok })
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 2600)
-  }, [])
 
   const { celebrate } = useCelebrate()
 
@@ -294,7 +284,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setWorkouts(rows)
     storage.saveWorkouts(rows)
   }, [])
+  const weightRevision = useRef(0)
   const persistWeights = useCallback((e: BodyWeightEntry[]) => {
+    weightRevision.current += 1
     setBodyWeights(e)
     storage.saveBodyWeights(e)
   }, [])
@@ -404,12 +396,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setSync('syncing')
     try {
       await flush()
+      const weightsAtFetch = weightRevision.current
+      const pendingWeights = storage.loadQueue().flatMap((write) =>
+        write.type === 'bodyweight' ? [write.entry] : [],
+      )
       const [w, bw] = await Promise.all([api.fetchWorkouts(), api.fetchBodyWeight()])
       // The sheet still holds the stretch block's early sit-ups under the key the
       // training days' one has to itself now, so they're re-keyed as they arrive
       // (see lib/stretchCore.withMatSitups).
       persistWorkouts(withMatSitups(w))
-      persistWeights(bw)
+      // A log (or newer refresh) made while this request was in flight must
+      // survive even if its POST has already succeeded and left the outbox.
+      // Failed writes present before the fetch also stay visible until retried.
+      if (weightRevision.current === weightsAtFetch) {
+        persistWeights(mergePendingBodyWeights(bw, pendingWeights))
+      }
       setSync('idle')
       const now = new Date().toISOString()
       setLastSync(now)
@@ -592,9 +593,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // The outbox entry is written synchronously; delivery runs in the
       // background so the finish recap can show immediately.
       const pending = enqueue({ type: 'session', rows })
-      void deliver(pending).then((ok) =>
-        notify(ok ? 'workout saved' : "couldn't save — queued to retry", ok),
-      )
+      void deliver(pending)
 
       // Headline achievements shown in the finish recap.
       const prs = detectPRs(prev, rows)
@@ -651,7 +650,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         notes,
       }
     },
-    [challengeOptsByKey, deliver, enqueue, notify, persistWorkouts, weeklyCelebrations],
+    [challengeOptsByKey, deliver, enqueue, persistWorkouts, weeklyCelebrations],
   )
 
   /**
@@ -667,34 +666,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const flagDiscomfort = useCallback(
     async (edit: NotesEdit) => {
       persistWorkouts(applyNotesEdit(storage.loadWorkouts(), edit))
-      const ok = await deliver(enqueue({ type: 'notes', edit }))
-      const saved = parseDiscomfort(edit.notes).length > 0 ? 'discomfort noted' : 'flag cleared'
-      notify(ok ? saved : "couldn't save — queued to retry", ok)
+      await deliver(enqueue({ type: 'notes', edit }))
     },
-    [deliver, enqueue, notify, persistWorkouts],
+    [deliver, enqueue, persistWorkouts],
   )
 
   const logBodyWeight = useCallback(
     async (weightLbs: number, date?: string) => {
       const entry: BodyWeightEntry = { date: date ?? toISODate(new Date()), weightLbs }
       persistWeights([...storage.loadBodyWeights(), entry])
-      const ok = await deliver(enqueue({ type: 'bodyweight', entry }))
-      notify(ok ? 'weight saved' : "couldn't save — queued to retry", ok)
+      await deliver(enqueue({ type: 'bodyweight', entry }))
     },
-    [deliver, enqueue, notify, persistWeights],
+    [deliver, enqueue, persistWeights],
   )
 
   const importData = useCallback(
     async (rows: WorkoutRow[], bws: BodyWeightEntry[]) => {
       if (rows.length) persistWorkouts([...storage.loadWorkouts(), ...rows])
       if (bws.length) persistWeights([...storage.loadBodyWeights(), ...bws])
-      let ok = true
       if (rows.length) {
         try {
           await api.postImport(rows)
         } catch {
           enqueue({ type: 'session', rows })
-          ok = false
         }
       }
       if (bws.length) {
@@ -702,12 +696,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await api.postBodyWeightBulk(bws)
         } catch {
           for (const entry of bws) enqueue({ type: 'bodyweight', entry })
-          ok = false
         }
       }
-      notify(ok ? 'imported to sheet' : "couldn't save import — queued to retry", ok)
     },
-    [enqueue, notify, persistWorkouts, persistWeights],
+    [enqueue, persistWorkouts, persistWeights],
   )
 
   const logFlex = useCallback(
@@ -775,13 +767,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       }
       // Delivery runs in the background, so nothing on screen waits for it.
-      const saved = isMeasurement ? 'measurement saved' : 'stretch logged'
-      void deliver(enqueue({ type: 'flex', entry })).then((ok) =>
-        notify(ok ? saved : "couldn't save — queued to retry", ok),
-      )
+      void deliver(enqueue({ type: 'flex', entry }))
       return ambient
     },
-    [celebrate, deliver, enqueue, notify, persistFlex, weeklyCelebrations],
+    [celebrate, deliver, enqueue, persistFlex, weeklyCelebrations],
   )
 
   const logCalories = useCallback(
@@ -813,12 +802,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // background, the tab closing — is still there to retry. Enqueuing also
       // coalesces, leaving at most the newest running total per date, so a stale
       // earlier total can never overwrite a newer one on the way out.
-      const ok = await deliver(enqueue({ type: 'calorie', entry }))
-      // No toast on success: the card's own readout moves the instant the tap
-      // lands and already says the helping and the new total, so a pill saying
-      // it again is one more thing covering the screen mid-meal. A failure
-      // still speaks up — that's the one outcome the card can't show.
-      if (!ok) notify("couldn't save — queued to retry", false)
+      await deliver(enqueue({ type: 'calorie', entry }))
       // Cheer: this date's total just crossed the goal + any weekly calorie-day goal.
       try {
         const crossed =
@@ -840,7 +824,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         /* a missed cheer must never break a save */
       }
     },
-    [celebrate, deliver, enqueue, notify, persistCalories, weeklyCelebrations],
+    [celebrate, deliver, enqueue, persistCalories, weeklyCelebrations],
   )
 
   const logMeasurement = useCallback(
@@ -848,15 +832,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const { date, ...rest } = m
       const entry: MeasurementEntry = { date: date ?? toISODate(new Date()), ...rest }
       persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), entry]))
-      const ok = await deliver(enqueue({ type: 'measurement', entry }))
-      notify(ok ? 'measurement saved' : "couldn't save — queued to retry", ok)
+      await deliver(enqueue({ type: 'measurement', entry }))
     },
-    [deliver, enqueue, notify, persistMeasurements],
+    [deliver, enqueue, persistMeasurements],
   )
 
   // Records a finished session's length for time-left learning + time-spent
-  // reporting. Silent (the workout/stretch save already toasts) and drops
-  // implausible durations so a backgrounded session can't skew the numbers.
+  // reporting. Drops implausible durations so a backgrounded session can't
+  // skew the numbers.
   const logSessionDuration = useCallback(
     async (entry: SessionDuration) => {
       if (!isSaneDuration(entry.totalSec)) return
@@ -885,7 +868,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // shared session_id, weight × reps per set) under the mat sit-up's own key, so
   // they build that movement's history and feed the core-progress series without
   // being mistaken for the incline sit-ups the training days press out (see
-  // plan.MAT_SITUP_KEY). Silent — the stretch save toasts — and cheered by the
+  // plan.MAT_SITUP_KEY). Cheered by the
   // finish recap rather than here: the PRs are returned for it to lead with.
   //
   // The key is what keeps the session out of the week's workout count, the streak
@@ -1024,11 +1007,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     (p: Plan) => {
       setPlan(p)
       storage.savePlan(p)
-      void deliver(enqueue({ type: 'plan', plan: p })).then((ok) =>
-        notify(ok ? 'plan saved' : "couldn't save plan — queued to retry", ok),
-      )
+      void deliver(enqueue({ type: 'plan', plan: p }))
     },
-    [deliver, enqueue, notify],
+    [deliver, enqueue],
   )
 
   // Flex routines persist per-device for now (not yet synced to the Sheet).
@@ -1094,7 +1075,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     flexPlans,
     sync,
     lastSync,
-    toast,
     pendingWrites: queue.length,
     streaks,
     streakHistory,

@@ -7,7 +7,6 @@ import {
 } from './store/DataContext'
 import { CelebrationProvider, useCelebrate } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
-import { ToastHost } from './components/ToastHost'
 import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { StretchFinishOverlay } from './components/StretchFinishOverlay'
@@ -41,7 +40,6 @@ export default function App() {
     <CelebrationProvider>
       <DataProvider>
         <AppShell />
-        <ToastHost />
       </DataProvider>
     </CelebrationProvider>
   )
