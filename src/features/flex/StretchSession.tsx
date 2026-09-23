@@ -442,7 +442,7 @@ export function StretchSession({
       .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
       .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
     if (officeAbs) {
-      logCore(coreSets, 'office abs')
+      logCore(coreSets, 'core')
       onClose()
       return
     }

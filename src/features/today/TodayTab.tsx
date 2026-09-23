@@ -78,8 +78,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const nextUpFirst = <T,>(pair: T[], dimmed: T | null) =>
     dimmed && pair.length === 2 && pair[0] === dimmed ? [pair[1], pair[0]] : pair
 
-  // The left column of the session grid. Full body is placed rather than
-  // ordered — it sits on the bottom row whatever Settings says — so the order
+  // The alternating lifts in the left column. Full body is placed rather than
+  // ordered — it sits at bottom right whatever Settings says — so the order
   // chosen there applies to the two days that alternate.
   const liftDays = nextUpFirst(
     dayOrder(plan).filter((t) => t !== 'fullbody'),
@@ -132,8 +132,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
 
       <WeightCard />
 
-      {/* Lift days and stretches alternate within their columns; full body and
-          standalone office abs share the final row. */}
+      {/* Lift days and stretches alternate within their columns; core sits at
+          the bottom left beside full body. */}
       <div className="grid grid-cols-2 gap-2">
         {Array.from({ length: Math.max(liftDays.length, stretchRoutines.length) }, (_, i) => {
           const t = liftDays[i]
@@ -163,18 +163,12 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
             </Fragment>
           )
         })}
+        <button onClick={onStartAbs} className={`${sessionButton} ${absRemaining === 0 ? 'opacity-50' : ''}`}>
+          core
+        </button>
         <button onClick={() => onStart('fullbody')} className={sessionButton}>
           {plan.fullbody.label}
         </button>
-        <button onClick={onStartAbs} className={`${sessionButton} ${absRemaining === 0 ? 'opacity-50' : ''}`}>
-          office abs
-        </button>
-      </div>
-      <div className="rounded-2xl bg-surface px-3 py-2" role="status">
-        <p className="text-sm font-semibold">abs this week: {abDays.length} / {WEEKLY_ABS_GOAL} days</p>
-        <p className="text-xs text-neutral-400">
-          {absRemaining > 0 ? `${absRemaining} more ${absRemaining === 1 ? 'day' : 'days'} to go.` : 'weekly goal met.'} Workout ab sets and office abs both count. Once per day, Monday–Sunday.
-        </p>
       </div>
     </div>
   )

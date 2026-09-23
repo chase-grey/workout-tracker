@@ -11,7 +11,9 @@ import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
-import { weekPace, type MetricPace } from '../../lib/weekPace'
+import { requiredByNow, weekDaysDue, weekPace, type MetricPace } from '../../lib/weekPace'
+import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
+import { toISODate } from '../../lib/dates'
 import { checkpointFraction, overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
 import { Collapse } from '../../components/Collapse'
@@ -27,7 +29,7 @@ import { Collapse } from '../../components/Collapse'
  * goal lands — a marker pinned to the end is what said nothing the check beside
  * the numbers doesn't.
  */
-function MetricBar({ label, m }: { label: string; m: MetricPace }) {
+function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | 'goal' | 'met' | 'required'> }) {
   const over = m.done > m.goal
   const pct = Math.min(m.done / m.goal, 1) * 100
   return (
@@ -60,7 +62,7 @@ function MetricBar({ label, m }: { label: string; m: MetricPace }) {
 }
 
 export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => void }) {
-  const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
+  const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings, plan } =
     useData()
 
   // The weeks behind the flame drop open right under it rather than living in a
@@ -95,6 +97,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   // rather than parked on the goal marker, which already says the same thing.
   const pace = weekPace(wp, goals)
   const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
+  const coreDays = weeklyAbsDays(workouts, plan, toISODate(new Date())).length
 
   return (
     <div className="rounded-2xl bg-surface p-3">
@@ -146,6 +149,12 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
 
       <div className="mt-3 flex flex-col gap-2">
         <MetricBar label="workouts" m={byKey.get('workouts')!} />
+        <MetricBar label="core" m={{
+          done: coreDays,
+          goal: WEEKLY_ABS_GOAL,
+          met: coreDays >= WEEKLY_ABS_GOAL,
+          required: requiredByNow(WEEKLY_ABS_GOAL, weekDaysDue()),
+        }} />
         <MetricBar label="flex sessions" m={byKey.get('flex')!} />
         <MetricBar label="calorie days" m={byKey.get('calDays')!} />
       </div>
