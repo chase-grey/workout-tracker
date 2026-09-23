@@ -124,15 +124,17 @@ describe('the pull + legs day', () => {
     expect(keys).not.toContain('cable_row')
   })
 
-  it('trains back with weighted pull-ups and cable pull downs', () => {
+  it('trains back with weighted pull-ups', () => {
     const back = DEFAULT_PLAN.pull.exercises.filter((e) => e.group === 'back')
-    expect(back.map((e) => e.key)).toEqual(['weighted_pullups', 'cable_pulldown'])
+    expect(back.map((e) => e.key)).toEqual(['weighted_pullups'])
   })
 
-  it('includes weighted sit-ups for abs', () => {
+  it('starts with cable crunches as its only ab exercise', () => {
     const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
-    expect(keys).toContain('weighted_situp')
-    expect(keys).not.toContain('cable_crunch')
+    expect(keys[0]).toBe('cable_crunch')
+    expect(DEFAULT_PLAN.pull.exercises.filter((e) => e.group === 'abs').map((e) => e.key)).toEqual(['cable_crunch'])
+    expect(keys).not.toContain('weighted_situp')
+    expect(keys).not.toContain('cable_pulldown')
     expect(keys).not.toContain('hanging_leg_raise')
     expect(DEFAULT_PLAN.pull.exercises.some((e) => e.group === 'core')).toBe(false)
   })

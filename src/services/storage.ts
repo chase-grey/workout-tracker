@@ -302,16 +302,6 @@ export const storage = {
             : exercise),
         }))
       }
-      if (key === 'head_to_toe' && stored[key]) {
-        out[key] = out[key].map((block) => ({
-          ...block,
-          exercises: block.exercises.map((exercise) => exercise.key === 'calf_stretch'
-            ? { ...exercise, sets: '3', maxSets: 3, reps: 1, tempo: '', holdSec: 30,
-                perSide: true, restSec: 0, sideSwitchSec: 5,
-                setLabels: ['foot straight', 'foot in', 'foot out'] }
-            : exercise),
-        }))
-      }
     }
     return out
   },

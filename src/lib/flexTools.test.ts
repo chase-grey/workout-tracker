@@ -170,6 +170,7 @@ describe('applyFlexPlanEdits', () => {
 
   it('sends an edit to the routine it names, leaving the other alone', () => {
     const before = plans()
+    const snapshot = JSON.stringify(before)
     const { plans: after, applied, errors } = applyFlexPlanEdits(before, [
       {
         op: 'setExercise',
@@ -188,7 +189,7 @@ describe('applyFlexPlanEdits', () => {
     // Untouched routines come back by reference, so nothing else looks changed.
     expect(after.side_split).toBe(before.side_split)
     // And the input is never mutated.
-    expect(calves(before.head_to_toe).holdSec).toBe(90)
+    expect(JSON.stringify(before)).toBe(snapshot)
   })
 
   // Written when there was only one routine to edit — it still means that one.
