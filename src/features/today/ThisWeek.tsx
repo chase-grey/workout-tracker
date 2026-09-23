@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import {
   MdAcUnit,
   MdCelebration,
@@ -11,7 +11,7 @@ import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
-import { requiredByNow, weekDaysDue, weekPace, type MetricPace } from '../../lib/weekPace'
+import { requiredByNow, weekPace, type MetricPace } from '../../lib/weekPace'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
 import { toISODate } from '../../lib/dates'
 import { checkpointFraction, overallProgress } from '../../lib/celebration'
@@ -91,11 +91,20 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   const overallToGoal = overallProgress(wp, goals)
   const checkpointFrac = checkpointFraction(goals)
 
-  // The pace marker used to track elapsed time, which demanded fractions of a
-  // workout mid-Monday; it now follows the schedule in whole units, reaching the
-  // goal end of the bar at the week's 9pm Sunday deadline. It's dropped there
-  // rather than parked on the goal marker, which already says the same thing.
-  const pace = weekPace(wp, goals)
+  // Refresh while open and immediately after returning from a suspended tab.
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const refresh = () => setNow(new Date())
+    const timer = window.setInterval(refresh, 60_000)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [])
+  const pace = weekPace(wp, goals, now)
   const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
   const coreDays = weeklyAbsDays(workouts, plan, toISODate(new Date())).length
 
@@ -142,7 +151,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
           <div
             className="absolute -top-0.5 h-4 w-0.5 -translate-x-1/2 rounded bg-white"
             style={{ left: `${pace.requiredFraction * 100}%` }}
-            title="where the week's schedule expects you"
+            title="steady pace to finish the week"
           />
         )}
       </div>
@@ -153,7 +162,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
           done: coreDays,
           goal: WEEKLY_ABS_GOAL,
           met: coreDays >= WEEKLY_ABS_GOAL,
-          required: requiredByNow(WEEKLY_ABS_GOAL, weekDaysDue()),
+          required: requiredByNow(WEEKLY_ABS_GOAL, now),
         }} />
         <MetricBar label="flex sessions" m={byKey.get('flex')!} />
         <MetricBar label="calorie days" m={byKey.get('calDays')!} />
