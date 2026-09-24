@@ -840,26 +840,19 @@ export function StretchSession({
       {topBar}
 
       {!started && photos == null && (
-        <div className="fixed inset-0 z-80 flex flex-col items-center justify-center gap-6 bg-black px-6 text-center">
-          <div>
-            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">{completed === 0 ? 'first exercise' : 'next exercise'}</p>
-            <h1 className="text-3xl font-bold">{stepTitle(step)}</h1>
-            <p className="mt-2 text-base text-neutral-400">{stepDetail(step)}</p>
-            <p className="mt-1 text-sm text-neutral-500">{step.blockLabel}</p>
-            <p className="mt-4 text-sm text-neutral-400">When you’re ready, start the countdown to get into position.</p>
-          </div>
-          <button
-            onClick={(event) => {
-              event.stopPropagation()
-              setStarted(true)
-              setReadyOverrideSec(Math.max(POST_PHOTO_GET_READY_SEC, getReadySec))
-              setPreparing(true)
-            }}
-            className="min-h-[60px] w-full max-w-sm rounded-2xl bg-accent px-6 text-xl font-bold text-black active:opacity-80"
-          >
-            I’m ready
-          </button>
-        </div>
+        <button
+          type="button"
+          aria-label={`Begin ${stepTitle(step)}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            setStarted(true)
+            setReadyOverrideSec(Math.max(POST_PHOTO_GET_READY_SEC, getReadySec))
+            setPreparing(true)
+          }}
+          className="fixed inset-0 z-80 flex h-full w-full items-center justify-center bg-black px-6 text-center text-3xl font-bold focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-accent"
+        >
+          {stepTitle(step)}
+        </button>
       )}
 
       {step.kind === 'flex' ? (
