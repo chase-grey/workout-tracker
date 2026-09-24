@@ -92,17 +92,22 @@ function RechargeCell({ fraction }: { fraction: number }) {
         <div className={`relative min-h-0 flex-1 w-full overflow-hidden ring-2 ring-accent-bright/50 ${coin ? 'rounded-full' : 'rounded-[12%]'}`}>
           <div className="absolute inset-0 bg-accent-bright/10" />
           <div
-            className="absolute inset-x-0 bottom-0 h-full bg-accent-bright/75"
-            style={{ height: pct(charged * 100), ...drainOf('height') }}
+            className="absolute inset-0"
+            style={coin ? { maskImage: 'radial-gradient(circle closest-side, transparent 88%, black 88%)' } : undefined}
           >
-            <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
             <div
-              className="rest-charge-sweep absolute inset-x-0 bottom-0 h-[26%]"
-              style={{
-                backgroundImage:
-                  'linear-gradient(to top, transparent, var(--color-accent-bright), transparent)',
-              }}
-            />
+              className="absolute inset-x-0 bottom-0 h-full bg-accent-bright/75"
+              style={{ height: pct(charged * 100), ...drainOf('height') }}
+            >
+              <div className="absolute inset-x-0 top-0 h-[3px] bg-accent-bright" />
+              <div
+                className="rest-charge-sweep absolute inset-x-0 bottom-0 h-[26%]"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(to top, transparent, var(--color-accent-bright), transparent)',
+                }}
+              />
+            </div>
           </div>
           {coin && <div className="absolute inset-[6%] rounded-full border-2 border-accent-bright/40" />}
         </div>
