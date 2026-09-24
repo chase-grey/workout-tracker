@@ -697,14 +697,18 @@ export function StretchSession({
     advanceFrom(safeCurrent, nextDone)
   }
 
-  // Photos interrupt the physical setup. Preview the coming exercise and wait
-  // for confirmation before starting any positioning countdown or movement.
+  // The warm tailor's photo pauses between sets: taking or skipping it resumes
+  // the normal rest. Other photo exits preview the coming exercise first.
   const closePhotos = (_tookAny: boolean) => {
     if (!photos) return
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
     const { then, index } = photos
     setPhotos(null)
     if (then === 'advance' && index != null) {
+      if (photos.gate.id === 'warm-tailors') {
+        advanceFrom(index, done)
+        return
+      }
       if (index >= N - 1) {
         finishWith(done)
         return
