@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSessionFade } from '../../lib/useSessionFade'
 import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
@@ -474,6 +475,10 @@ export function StretchSession({
     completeSetAndAdvance()
   }, N > 0 && safeCurrent < N - 1 && setLive && !holdSec)
 
+  const fadeRef = useSessionFade(
+    photos ? `photo:${photos.gate.id}` : !started ? 'preview' : rest ? 'rest' : preparing ? 'ready' : steps[safeCurrent]?.stepKey ?? 'empty',
+  )
+
   if (N === 0) {
     const allSkipped = allSteps.length > 0
     return (
@@ -840,7 +845,7 @@ export function StretchSession({
   )
 
   return (
-    <div className="stretch-session flex min-h-full flex-col gap-3" {...screenTap}>
+    <div ref={fadeRef} className="stretch-session flex min-h-full flex-col gap-3" {...screenTap}>
       {topBar}
 
       {!started && photos == null && (

@@ -71,6 +71,7 @@ import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { SetCheer } from '../../components/SetCheer'
+import { useSessionFade } from '../../lib/useSessionFade'
 
 type Props = {
   session: WorkoutSession
@@ -963,8 +964,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     </div>
   )
 
+  const fadeRef = useSessionFade(
+    rest ? 'rest' : preparing ? 'ready' : `${step.stepKey}:${awaitingStart ? 'preview' : 'work'}`,
+  )
+
   return (
-    <div className="flex flex-col gap-3 pb-6" {...screenTap}>
+    <div ref={fadeRef} className="flex flex-col gap-3 pb-6" {...screenTap}>
       {topBar}
 
       {set && (
