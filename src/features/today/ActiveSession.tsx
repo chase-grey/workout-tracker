@@ -46,8 +46,6 @@ import {
 import { ExerciseHistorySheet } from '../../components/ExerciseHistorySheet'
 import {
   formatDuration,
-  remainingWorkoutSecs,
-  workoutSplit,
   WORK_PER_SET_SEC,
   type ExerciseTimeSample,
   type RemainingStep,
@@ -67,6 +65,8 @@ import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { SessionTimingSheet } from '../../components/SessionTimingSheet'
+import { remainingTiming, workoutTimingKey, sumTiming } from '../../lib/remainingTiming'
+import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
@@ -173,6 +173,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     return saved && canResumeRest(saved.endsAt, Date.now()) ? saved : null
   })
   const [current, setCurrent] = useState(() => storage.loadActiveStep())
+  // Resuming halfway through a set cannot supply a complete timing sample.
+  const [resumedPartialKey] = useState(() => rest == null ? storage.loadActiveStepKey() : null)
   // A step to jump to as soon as it exists — a set added mid-rest, which only
   // appears in the flow once the log it's counted from has updated (see addSet).
   const [pendingStepKey, setPendingStepKey] = useState<string | null>(null)
@@ -238,12 +240,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // When the rest on screen opened — for a resumed one that's before the reload,
   // so it's credited from its real start.
   const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)
-  // Per-exercise active-time learning: activeStartRef marks when the current set
-  // screen became active; the accumulators sum active seconds + set counts per
-  // exercise.
+  // Existing flow handlers use this marker to disqualify interrupted samples.
+  // The active clock below measures time, excluding overlays and rest; completed
+  // observations are persisted by set so reloads do not discard the history.
   const activeStartRef = useRef(Date.now())
-  const activeAccum = useRef(new Map<string, number>())
-  const activeSets = useRef(new Map<string, number>())
+  const [savedExerciseTimes] = useState(() => storage.loadActiveExerciseTimes())
+  const activeSamples = useRef<Record<string, ExerciseTimeSample[]>>(
+    savedExerciseTimes?.sessionId === session.sessionId ? savedExerciseTimes.samples : {},
+  )
 
   const day = plan[session.dayType]
   // The day as this session is actually performing it: the A/B variant's set
@@ -456,14 +460,28 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setStarted(true)
   }
 
-  const timeLeft = useMemo(() => {
-    // The sets still owed, in the order the flow will reach them — not everything
-    // from here to the end of the list, which after a jump counts sets already
-    // logged and misses the ones left behind.
-    const remaining = remainingFlow(stepDone, safeCurrent).map((idx) => steps[idx])
-    return remainingWorkoutSecs(exerciseAverages, priceFlow(remaining))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps, stepDone, safeCurrent, exerciseAverages])
+  const readActiveSec = useStepElapsed(step.stepKey, !awaitingStart && !set?.done &&
+    rest == null && !preparing && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest && !showTiming)
+  const [estimateNow, setEstimateNow] = useState(Date.now)
+  useEffect(() => {
+    if (!rest) return
+    const timer = window.setInterval(() => setEstimateNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [rest])
+  const remaining = remainingFlow(stepDone, safeCurrent).filter((i) => !stepDone[i]).map((i) => steps[i])
+  const timingFor = (flow: SetStep[], live = false) => priceFlow(flow).map((price, i, prices) => ({
+    ...price,
+    exercise: workoutTimingKey(price.exercise, logFor(price.exercise)?.sets[flow[i].setIndex]?.reps ?? flow[i].ex.repMin),
+    fallbackExercise: price.exercise,
+    fixedActiveSec: flow[i].ex.timed ? logFor(price.exercise)?.sets[flow[i].setIndex]?.reps ?? flow[i].ex.repMin : undefined,
+    key: flow[i].stepKey,
+    label: `${flow[i].ex.name} · set ${flow[i].setIndex + 1}`,
+    prescribedRestSec: restScreenSec(price.prescribedRestSec, GET_READY_SEC),
+    setupSec: (i > 0 ? prices[i - 1].prescribedRestSec > 0 : live && (preparing || rest != null)) ? GET_READY_SEC : 0,
+  }))
+  const remainingRows = remainingTiming(exerciseAverages, timingFor(remaining, true), remaining[0]?.stepKey === step.stepKey ? readActiveSec() : 0,
+    rest ? Math.max(0, (rest.endsAt - Math.max(estimateNow, Date.now())) / 1000) : 0)
+  const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
   // clock starts the wait over instead of logging a half-typed number.
@@ -483,11 +501,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // range slices (app left open, instant mis-tap) so they can't skew the average.
   const recordActiveForCurrent = (exerciseKey: string) => {
     if (!activeStartRef.current) return
-    const sec = (Date.now() - activeStartRef.current) / 1000
+    const sec = readActiveSec()
     activeStartRef.current = 0
     if (sec < MIN_SET_ACTIVE_SEC || sec > MAX_SET_ACTIVE_SEC) return
-    activeAccum.current.set(exerciseKey, (activeAccum.current.get(exerciseKey) ?? 0) + sec)
-    activeSets.current.set(exerciseKey, (activeSets.current.get(exerciseKey) ?? 0) + 1)
+    if (set?.done || fastMode === 'turbo' || step.stepKey === resumedPartialKey) return
+    // Keep the broad average for old consumers, and learn matching rep counts separately.
+    activeSamples.current[step.stepKey] = [exerciseKey, workoutTimingKey(exerciseKey, set?.reps ?? planned.repMin)]
+      .map((exercise) => ({ exercise, totalActiveSec: sec, sets: 1 }))
+    storage.saveActiveExerciseTimes({ sessionId: session.sessionId, samples: activeSamples.current })
   }
 
   /** Update the rest tally and mirror it, so a reload resumes it rather than restarting. */
@@ -516,17 +537,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       })
     }
     // Fold this session's per-exercise active times + rests into the estimator.
-    const exercises: ExerciseTimeSample[] = []
-    for (const [ex, totalActiveSec] of activeAccum.current) {
-      const sets = activeSets.current.get(ex) ?? 0
-      if (sets > 0) exercises.push({ exercise: ex, totalActiveSec, sets })
-    }
+    const performed = new Set(steps.filter((s, i) => stepDone[i] || s.stepKey === step.stepKey).map((s) => s.stepKey))
+    const exercises = Object.entries(activeSamples.current).filter(([key]) => performed.has(key)).flatMap(([, samples]) => samples)
     void logExerciseTimes({
       exercises,
       restTotalSec: restSec,
       restPrescribedSec: rested.prescribedSec,
       restCount: rested.count,
     })
+    storage.saveActiveExerciseTimes(null)
 
     const cleaned: WorkoutSession = {
       ...session,
@@ -540,7 +559,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // with two exercises skipped out of it was never going to take what the full
     // one would, and a recap comparing against that number would read as time
     // saved instead of work dropped.
-    const projected = workoutSplit(exerciseAverages, priceFlow(steps))
+    const projected = sumTiming(remainingTiming(exerciseAverages, timingFor(steps)))
     onFinish(cleaned, { totalSec, restSec, projected })
   }
 
@@ -1144,8 +1163,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         <SessionTimingSheet
           startedAt={session.startedAt}
           readRestSec={(now) => tally.current.takenSec + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
-          projected={workoutSplit(exerciseAverages, priceFlow(steps))}
+          projected={sumTiming(remainingTiming(exerciseAverages, timingFor(steps)))}
           remainingSec={timeLeft}
+          remainingRows={remainingRows}
           onClose={() => setShowTiming(false)}
         />
       )}

@@ -47,6 +47,7 @@ const KEYS = {
   activeStepKey: 'wt.activeStepKey',
   activeRest: 'wt.activeRest',
   activeRestTally: 'wt.activeRestTally',
+  activeExerciseTimes: 'wt.activeExerciseTimes',
   activeFastForward: 'wt.activeFastForward',
   activeSkipped: 'wt.activeSkipped',
   stretch: 'wt.stretch',
@@ -64,8 +65,15 @@ export type RestState = {
   endsAt: number
 }
 
+export type ActiveExerciseTimes = {
+  sessionId: string
+  samples: Record<string, import('../lib/estimate').ExerciseTimeSample[]>
+}
+
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
 export type StretchState = {
+  timingSamples?: Record<string, import('../lib/estimate').ExerciseTimeSample>
+  restLearning?: { totalSec: number; prescribedSec: number; count: number }
   /** A standalone office ab session, sharing the guided set flow. */
   officeAbs?: boolean
   startSide?: 'left' | 'right'
@@ -328,6 +336,9 @@ export const storage = {
    * lib/rest.resumeRestTally, which drops a tally belonging to another session.
    */
   loadRestTally: (): RestTally | null => read<RestTally | null>(KEYS.activeRestTally, null),
+  loadActiveExerciseTimes: (): ActiveExerciseTimes | null => read(KEYS.activeExerciseTimes, null),
+  saveActiveExerciseTimes: (value: ActiveExerciseTimes | null) =>
+    value ? write(KEYS.activeExerciseTimes, value) : localStorage.removeItem(KEYS.activeExerciseTimes),
   saveRestTally: (t: RestTally | null) =>
     t ? write(KEYS.activeRestTally, t) : localStorage.removeItem(KEYS.activeRestTally),
 

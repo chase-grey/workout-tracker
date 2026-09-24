@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkoutSplit } from '../lib/estimate'
+import type { TimingRow } from '../lib/remainingTiming'
 import { useBackGuard } from '../lib/useBackGuard'
 
 function clock(sec: number) {
@@ -10,11 +11,12 @@ function clock(sec: number) {
 }
 
 /** Live view of the same wall-clock/rest accounting used by the finish recap. */
-export function SessionTimingSheet({ startedAt, readRestSec, projected, remainingSec, onClose }: {
+export function SessionTimingSheet({ startedAt, readRestSec, projected, remainingSec, remainingRows, onClose }: {
   startedAt?: string
   readRestSec: (now: number) => number
   projected: WorkoutSplit
   remainingSec: number
+  remainingRows: TimingRow[]
   onClose: () => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -55,6 +57,18 @@ export function SessionTimingSheet({ startedAt, readRestSec, projected, remainin
           <div className="text-3xl font-black tabular-nums text-accent-2">{elapsed == null ? '—' : clock(elapsed)}</div>
           <div className="mt-1 text-xs text-neutral-400">elapsed · {clock(remainingSec)} estimated remaining</div>
         </div>
+        <h3 className="mb-2 font-bold">Remaining checklist · {clock(remainingSec)}</h3>
+        <p className="mb-3 text-xs text-neutral-400">Exercise time includes positioning. Rest follows each set; the final set has no rest. Recorded exercise averages are used where available. Future rests use your recorded rest-to-prescription average, or the prescribed rest until there is history. Photos and open-ended pauses are not included.</p>
+        <table className="mb-6 w-full text-left text-sm">
+          <thead className="text-xs text-neutral-400"><tr><th className="pb-2">Exercise</th><th className="pb-2 text-right">Active</th><th className="pb-2 text-right">Rest</th><th className="pb-2 text-right">Total</th></tr></thead>
+          <tbody>{remainingRows.map((row) => (
+            <tr key={row.key} className="border-t border-neutral-200/10">
+              <th className="py-3 pr-2 font-medium">{row.label}<span className="mt-1 block text-[10px] font-normal text-neutral-400">{row.source}</span></th>
+              <td className="text-right tabular-nums">{clock(row.activeSec)}</td><td className="text-right tabular-nums">{clock(row.restSec)}</td><td className="pl-2 text-right font-semibold tabular-nums">{clock(row.totalSec)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        {remainingRows.length === 0 && <p className="mb-4 text-sm text-neutral-400">All checklist items are complete.</p>}
         <table className="w-full text-left text-sm">
           <thead className="text-xs text-neutral-400">
             <tr><th className="pb-3 font-normal">time</th><th className="pb-3 text-right font-normal">so far</th><th className="pb-3 text-right font-normal">projected total</th></tr>

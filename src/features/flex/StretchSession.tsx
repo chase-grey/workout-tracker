@@ -12,7 +12,7 @@ import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { PhotoStep } from './PhotoStep'
-import { formatDuration, medianTotalSec, remainingSecs } from '../../lib/estimate'
+import { formatDuration, type ExerciseTimeSample } from '../../lib/estimate'
 import {
   buildSessionSteps,
   buildCoreSteps,
@@ -27,7 +27,8 @@ import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement, type StretchFinishSummary } from '../../store/DataContext'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
-import { stretchSplit } from '../../lib/stretchSplit'
+import { priceStretchFlow, remainingTiming, stretchTimingKey, sumTiming } from '../../lib/remainingTiming'
+import { useStepElapsed } from '../../lib/useStepElapsed'
 import { canResumeRest, restScreenSec, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useBackGuard } from '../../lib/useBackGuard'
@@ -45,7 +46,7 @@ import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 import { useScreenTap } from '../../lib/useScreenTap'
-import { nextUnfinishedStep } from '../../lib/setFlow'
+import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -215,7 +216,8 @@ export function StretchSession({
     workouts,
     flexEntries,
     logFlex,
-    durations: allDurations,
+    exerciseAverages,
+    logExerciseTimes,
     finishStretch,
     logCore,
   } = useData()
@@ -228,7 +230,6 @@ export function StretchSession({
   // Legacy active sessions already started left; preserve their step order.
   const [startSide] = useState(saved?.startSide ?? 'left')
   const [officeAbs] = useState(saved?.officeAbs ?? false)
-  const durations = useMemo(() => officeAbs ? [] : allDurations, [officeAbs, allDurations])
   const withCore = officeAbs
   const [current, setCurrent] = useState(saved?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(saved?.done ?? []))
@@ -293,6 +294,8 @@ export function StretchSession({
   const [resumedRestSec] = useState(
     () => Math.max(0, saved?.restSec ?? 0) + staleRestSec(saved?.rest, Date.now()),
   )
+  const timingSamples = useRef<Record<string, ExerciseTimeSample>>(saved?.timingSamples ?? {})
+  const restLearning = useRef(saved?.restLearning ?? { totalSec: 0, prescribedSec: 0, count: 0 })
   const restAccumSec = useRef(resumedRestSec)
   // Initial value only: a resumed rest began before the reload, so credit it from
   // its real start rather than from now.
@@ -300,7 +303,13 @@ export function StretchSession({
 
   /** Move the rest currently on the clock into the session's total. */
   const bankRest = () => {
-    if (restStartRef.current) restAccumSec.current += (Date.now() - restStartRef.current) / 1000
+    if (restStartRef.current) {
+      const seconds = (Date.now() - restStartRef.current) / 1000
+      restAccumSec.current += seconds
+      restLearning.current.totalSec += seconds
+      restLearning.current.prescribedSec += rest?.seconds ?? 0
+      restLearning.current.count += 1
+    }
     restStartRef.current = 0
   }
 
@@ -354,6 +363,8 @@ export function StretchSession({
       // Written on every snapshot: `rest` flipping to null is the tick right after
       // a rest was banked, so the two always go to storage together.
       restSec: restAccumSec.current,
+      timingSamples: timingSamples.current,
+      restLearning: restLearning.current,
       photoGates: [...seenGates],
       fast,
     })
@@ -392,43 +403,27 @@ export function StretchSession({
 
   const completed = useMemo(() => steps.filter((s) => done.has(s.stepKey)).length, [steps, done])
 
-  const timeLeft = useMemo(() => {
-    const fallbackItems = steps
-      .filter((s) => !done.has(s.stepKey))
-      .map((s) => ({
-        remainingSets: 1,
-        // A ninety-second hold is ninety seconds of work, not eighteen reps of it.
-        workSec: s.kind === 'flex' ? stepWorkSec(s) : coreTarget.reps * SEC_PER_REP,
-        restSec: s.restSec,
-      }))
-    return remainingSecs({
-      history: durations,
-      // Scoped to this routine: head to toe runs about twice the side split, so
-      // a median pooled across both would tell you half the truth in either one.
-      sel: { kind: 'stretch', routine },
-      doneSteps: completed,
-      totalSteps: N,
-      fallbackItems,
-    })
-  }, [steps, done, durations, completed, N, coreTarget, routine])
-
-  /**
-   * What the session that just happened was projected to cost, split the way the
-   * recap reports it.
-   *
-   * Priced over the steps actually done rather than the whole routine, and read
-   * here at the end rather than frozen at the start: a routine finished off the
-   * menu at set five was never going to cost what all twenty would, and a recap
-   * comparing against that number would read as time saved instead of work
-   * dropped. The learned median comes off the same history the time-left readout
-   * quotes, scaled the same way, so the recap can't contradict what the screen
-   * was promising all the way through.
-   */
+  const initialActiveSec = onScreen?.kind === 'flex' && !onScreen.holdSec && saved?.step === safeCurrent
+    ? Math.max(0, (saved.rep ?? 1) - 1) * stepWorkSec(onScreen) / onScreen.reps : 0
+  const readActiveSec = useStepElapsed(onScreen?.stepKey ?? '', setLive, initialActiveSec)
+  const [estimateNow, setEstimateNow] = useState(Date.now)
+  useEffect(() => {
+    if (!rest) return
+    const timer = window.setInterval(() => setEstimateNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [rest])
+  const flow = remainingFlow(steps.map((s) => done.has(s.stepKey)), safeCurrent)
+    .filter((i) => !done.has(steps[i].stepKey)).map((i) => steps[i])
+  const priced = priceStretchFlow(flow, coreRepsFor, fast)
+  if (priced[0] && onScreen && (rest || preparing)) priced[0].setupSec = readyOverrideSec ?? settleInSec(onScreen)
+  if (priced[0] && flow[0]?.stepKey === onScreen?.stepKey && started && !preparing && !rest) priced[0].setupSec = 0
+  const remainingRows = remainingTiming(exerciseAverages, priced,
+    flow[0]?.stepKey === onScreen?.stepKey ? readActiveSec() : 0,
+    rest ? Math.max(0, (rest.endsAt - Math.max(estimateNow, Date.now())) / 1000) : 0)
+  const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
   const projectedSplit = (doneSet: Set<string>) => {
-    const doneSteps = steps.filter((s) => doneSet.has(s.stepKey))
-    const learned = medianTotalSec(durations, { kind: 'stretch', routine })
-    const share = N > 0 ? doneSteps.length / N : 0
-    return stretchSplit(doneSteps, coreRepsFor, learned == null ? null : learned * share)
+    const rows = remainingTiming(exerciseAverages, priceStretchFlow(steps.filter((s) => doneSet.has(s.stepKey)), coreRepsFor, fast))
+    return sumTiming(rows)
   }
 
   // Finish the session: file the length, the completed core sets (as workout rows,
@@ -439,6 +434,12 @@ export function StretchSession({
     // The rest screen carries the finish actions, so bank the rest still on the
     // clock rather than logging it as time stretching.
     bankRest()
+    void logExerciseTimes({
+      exercises: Object.entries(timingSamples.current).filter(([key]) => doneSet.has(key)).map(([, sample]) => sample),
+      restTotalSec: restLearning.current.totalSec,
+      restPrescribedSec: restLearning.current.prescribedSec,
+      restCount: restLearning.current.count,
+    })
     const coreSets = steps
       .filter((s): s is CoreSetStep => s.kind === 'core' && doneSet.has(s.stepKey))
       .map((s) => ({ reps: coreRepsFor(s.round), weightLbs: coreWeightFor(s.round) }))
@@ -693,6 +694,12 @@ export function StretchSession({
 
   // Complete the set before offering photos or the separate finish screen.
   const completeSetAndAdvance = () => {
+    const seconds = readActiveSec()
+    // A resumed partial set cannot supply a complete historical observation.
+    if (!done.has(step.stepKey) && seconds >= 2 && seconds <= 600 && !(saved?.step === safeCurrent && (saved.rep ?? 1) > 1)) {
+      const work = step.kind === 'flex' ? stepWorkSec(step) : coreRepsFor(step.round) * SEC_PER_REP
+      timingSamples.current[step.stepKey] = { exercise: stretchTimingKey(step, work), totalActiveSec: seconds, sets: 1 }
+    }
     const nextDone = new Set(done).add(step.stepKey)
     setDone(nextDone)
     // A photo moment holds the flow on its own screen first: the rest clock only
@@ -972,8 +979,9 @@ export function StretchSession({
         <SessionTimingSheet
           startedAt={startedAt}
           readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
-          projected={stretchSplit(steps, coreRepsFor, medianTotalSec(durations, { kind: 'stretch', routine }))}
+          projected={projectedSplit(new Set(steps.map((s) => s.stepKey)))}
           remainingSec={timeLeft}
+          remainingRows={remainingRows}
           onClose={() => setShowTiming(false)}
         />
       )}

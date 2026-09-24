@@ -23,6 +23,26 @@ const { storage } = await import('./storage')
 const { DEFAULT_FLEX_ROUTINE } = await import('../config/flexPlan')
 const { FLEX_ROUTINES } = await import('../config/flexRoutines')
 
+describe('in-progress exercise timing', () => {
+  beforeEach(() => backing.clear())
+  it('retains completed samples across reloads and clears them after logging', () => {
+    const saved = { sessionId: 'workout-1', samples: { 'squat:0': [
+      { exercise: 'workout:squat:reps:8', totalActiveSec: 42, sets: 1 },
+    ] } }
+    storage.saveActiveExerciseTimes(saved)
+    expect(storage.loadActiveExerciseTimes()).toEqual(saved)
+    storage.saveActiveExerciseTimes(null)
+    expect(storage.loadActiveExerciseTimes()).toBeNull()
+  })
+  it('keeps stretch samples with the completed checklist and rest observations', () => {
+    const saved = { step: 1, done: ['hang:0'], timingSamples: { 'hang:0':
+      { exercise: 'stretch:pancake_hang:60', totalActiveSec: 60, sets: 1 } },
+      restLearning: { totalSec: 52, prescribedSec: 55, count: 1 } }
+    storage.saveStretch(saved)
+    expect(storage.loadStretch()).toEqual(saved)
+  })
+})
+
 /** A routine that isn't either shipped default, standing in for a coach edit. */
 const CUSTOM: FlexBlock[] = [
   {
