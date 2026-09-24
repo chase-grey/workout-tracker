@@ -45,6 +45,7 @@ import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 import { useScreenTap } from '../../lib/useScreenTap'
+import { nextUnfinishedStep } from '../../lib/setFlow'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -59,11 +60,9 @@ const MANUAL_REST_SEC = 60
  *   - 'start'   — the cold screen, which runs before the routine has begun: settle
  *                 in and go into the first stretch.
  *   - 'advance' — mid-routine: the set at `index` starts its rest and hands on.
- *   - 'stay'    — the closing stretch set ended itself on its own clock, and the
- *                 finish button is what comes next. A routine shouldn't file
- *                 itself away while you're still in the pose.
+
  */
-type PendingPhotos = { gate: PhotoGate; index: number | null; then: 'start' | 'advance' | 'stay' }
+type PendingPhotos = { gate: PhotoGate; index: number | null; then: 'start' | 'advance' }
 
 /**
  * Which leg, and which of the stretch's shapes: the calf stretch's foot angle, the
@@ -381,7 +380,8 @@ export function StretchSession({
   // holds and a hold's clock starts only then — a set counting down behind a
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
-  const setLive = started && rest == null && photos == null && !paused && !showList && !showTiming && !preparing
+  const readyToFinish = N > 0 && steps.every((step) => done.has(step.stepKey)) && photos == null
+  const setLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && !showTiming && !preparing
 
   // And while it's on, the screen stays lit — a paced routine is one nobody is
   // tapping, and the phone would dim mid-hold. A hold's clock runs unattended
@@ -466,17 +466,15 @@ export function StretchSession({
     onClose()
   }
 
-  const atLast = N === 0 || safeCurrent >= N - 1
-
   // Keep this hook before the empty-routine return so its order is stable across
-  // sessions. It is disabled while an overlay, hold, or terminal set owns input.
+  // sessions. It is disabled while an overlay, hold, or completion screen owns input.
   const screenTap = useScreenTap(() => {
-    if (N === 0 || safeCurrent >= N - 1 || !setLive || holdSec) return
+    if (N === 0 || !setLive || holdSec) return
     completeSetAndAdvance()
-  }, N > 0 && safeCurrent < N - 1 && setLive && !holdSec)
+  }, N > 0 && setLive && !holdSec)
 
   const fadeRef = useSessionFade(
-    photos ? `photo:${photos.gate.id}` : !started ? 'preview' : rest ? 'rest' : preparing ? 'ready' : steps[safeCurrent]?.stepKey ?? 'empty',
+    photos ? `photo:${photos.gate.id}` : readyToFinish ? 'finish' : !started ? 'preview' : rest ? 'rest' : preparing ? 'ready' : steps[safeCurrent]?.stepKey ?? 'empty',
   )
 
   if (N === 0) {
@@ -492,7 +490,7 @@ export function StretchSession({
               routine checklist
             </button>
             <button onClick={() => finishWith(done)} className="min-h-[56px] rounded-2xl bg-accent text-lg font-bold text-black">
-              finish &amp; log session
+              finish
             </button>
           </>
         ) : (
@@ -522,6 +520,20 @@ export function StretchSession({
             }}
           />
         )}
+      </div>
+    )
+  }
+
+  if (readyToFinish) {
+    return (
+      <div ref={fadeRef} className="flex min-h-full flex-1 items-center justify-center px-6">
+        <button
+          type="button"
+          onClick={() => finishWith(done)}
+          className="min-h-[56px] w-full max-w-sm rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+        >
+          finish
+        </button>
       </div>
     )
   }
@@ -642,17 +654,15 @@ export function StretchSession({
 
   // Start the finished set's rest and move on — or wrap up, on the last step.
   const advanceFrom = (index: number, doneSet: Set<string>) => {
-    if (index >= N - 1) {
-      finishWith(doneSet)
-      return
-    }
+    const next = nextUnfinishedStep(steps.map((step) => doneSet.has(step.stepKey)), index)
+    if (next == null) return
     const finished = steps[index]
-    goToStep(index + 1)
+    goToStep(next)
 
     // Crossing from the mobility routine into the core block skips the rest — the
     // last stretch leaves you rested, so go straight to a get-into-position count
     // (or, running hands-free, straight to the set).
-    if (finished.kind === 'flex' && steps[index + 1].kind === 'core') {
+    if (finished.kind === 'flex' && steps[next].kind === 'core') {
       straightToGetReady(CORE_ENTRY_GET_READY_SEC)
       return
     }
@@ -671,7 +681,7 @@ export function StretchSession({
     // A stretch that prescribes no rest at all (the feet and calf holds) and one
     // whose whole rest is settle-in both hand straight to the count rather than
     // flashing a rest screen that's already over.
-    const ready = settleInSec(steps[index + 1], finished)
+    const ready = settleInSec(steps[next], finished)
     const restSec = restScreenSec(finished.restSec, ready)
     if (restSec <= 0) {
       straightToGetReady(ready)
@@ -681,24 +691,17 @@ export function StretchSession({
     setRest({ seconds: restSec, endsAt: Date.now() + restSec * 1000 })
   }
 
-  /**
-   * Mark the set on screen done and move on. `auto` means its own clock ended it
-   * rather than a tap: on the closing set that stops at the photo screen and the
-   * finish button, because a routine shouldn't log itself while you're still in
-   * the pose.
-   */
-  const completeSetAndAdvance = (auto = false) => {
+  // Complete the set before offering photos or the separate finish screen.
+  const completeSetAndAdvance = () => {
     const nextDone = new Set(done).add(step.stepKey)
     setDone(nextDone)
     // A photo moment holds the flow on its own screen first: the rest clock only
     // starts once you're through with the camera.
     const gate = dueGate(gateAfterStep(steps, safeCurrent, routine), flexEntries, today)
-    const closing = auto && atLast
     if (gate && !seenGates.has(gate.id)) {
-      setPhotos({ gate, index: safeCurrent, then: closing ? 'stay' : 'advance' })
+      setPhotos({ gate, index: safeCurrent, then: 'advance' })
       return
     }
-    if (closing) return
     advanceFrom(safeCurrent, nextDone)
   }
 
@@ -714,23 +717,19 @@ export function StretchSession({
         advanceFrom(index, done)
         return
       }
-      if (index >= N - 1) {
-        finishWith(done)
-        return
-      }
-      goToStep(index + 1)
+      const next = nextUnfinishedStep(steps.map((step) => done.has(step.stepKey)), index)
+      if (next == null) return
+      goToStep(next)
     }
-    if (then !== 'stay') {
-      setStarted(false)
-      setPreparing(false)
-      setReadyOverrideSec(POST_PHOTO_GET_READY_SEC)
-    }
+    setStarted(false)
+    setPreparing(false)
+    setReadyOverrideSec(POST_PHOTO_GET_READY_SEC)
   }
 
   // Tapping the screen finishes the set — your hands are busy mid-stretch, so
   // the whole page is the target rather than one button. Controls (the kebab, the
   // core block's own fields) keep their own job, an overlay that owns the screen
-  // swallows the tap, and the last set still needs its explicit finish button.
+  // swallows the tap, and the last set leads to a separate finish screen.
   // A timed hold is exempt: it runs on a clock of its own and closes itself, and a
   // stray tap shouldn't cut ninety seconds of it short.
   // The set ending itself is worth a buzz: mid-stretch you're rarely looking at
@@ -739,7 +738,7 @@ export function StretchSession({
   // own target already.
   const intoRestOnTarget = () => {
     navigator.vibrate?.(200)
-    completeSetAndAdvance(true)
+    completeSetAndAdvance()
   }
 
   // The rest that led into the set on screen: the one the step before it
@@ -787,10 +786,6 @@ export function StretchSession({
       : []),
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'routine checklist', onClick: () => setShowList(true) },
-    {
-      label: 'finish & log session',
-      onClick: () => finishWith(done),
-    },
     { label: 'exit without logging', danger: true, onClick: onClose },
   ]
 
@@ -879,7 +874,7 @@ export function StretchSession({
             // prescribed, and waiting on a tap only means holding it longer. On the
             // closing set it stops at the finish button rather than logging the
             // session off a timer.
-            onTargetEnd={() => completeSetAndAdvance(true)}
+            onTargetEnd={() => completeSetAndAdvance()}
           />
         ) : (
           <RhythmGuide
@@ -942,24 +937,6 @@ export function StretchSession({
               />
             </label>
           </div>
-        </div>
-      )}
-
-      {/* Every other set advances on a tap anywhere; ending the whole routine is
-          worth an explicit button, pinned where a thumb can reach it. With the
-          core block skipped it sits under the closing stretch's guide or hold
-          clock rather than under the core fields. */}
-      {atLast && (
-        <div
-          className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex flex-col gap-2 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur"
-          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
-        >
-          <button
-            onClick={() => completeSetAndAdvance()}
-            className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
-          >
-            finish &amp; log session
-          </button>
         </div>
       )}
 
