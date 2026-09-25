@@ -1,11 +1,40 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_EXERCISE_AVERAGES } from './estimate'
-import { buildFlexSteps, stepWorkSec } from './flexSteps'
+import { buildCoreSteps, buildFlexSteps, stepWorkSec } from './flexSteps'
 import { DEFAULT_FLEX_ROUTINE } from '../config/flexPlan'
 import { remainingFlow } from './setFlow'
 import { priceStretchFlow, remainingTiming, sumTiming, workoutTimingKey } from './remainingTiming'
 
 describe('remaining checklist timing', () => {
+  it('uses prescribed holds, paced reps and stretch rests regardless of history', () => {
+    const paced = buildFlexSteps(DEFAULT_FLEX_ROUTINE).find((s) => s.exKey === 'pancake_hang')!
+    const held = { ...paced, stepKey: 'held', holdSec: 90 }
+    const priced = priceStretchFlow([held, paced], () => 10)
+    const averages = {
+      active: Object.fromEntries(priced.map((s) => [s.exercise, { avgSec: 200, n: 10 }])),
+      restRatio: { ratio: 0.5, n: 10 },
+    }
+    const rows = remainingTiming(averages, priced, 20, 12)
+    expect(rows).toEqual(remainingTiming(EMPTY_EXERCISE_AVERAGES, priced, 20, 12))
+    expect(rows[1].activeSec).toBe(70 + priced[0].setupSec!)
+    expect(rows[1].source).toBe('Prescribed duration')
+    expect(rows[2].restSec).toBe(0)
+  })
+
+  it('still learns untimed core sets and stretches without a prescribed pace', () => {
+    const unpaced = { ...buildFlexSteps(DEFAULT_FLEX_ROUTINE)[0], tempo: '', holdSec: undefined }
+    const priced = priceStretchFlow([unpaced, buildCoreSteps()[0]], () => 10)
+    const averages = {
+      active: Object.fromEntries(priced.map((s) => [s.exercise, { avgSec: 75, n: 3 }])),
+      restRatio: { ratio: 1, n: 0 },
+    }
+    const rows = remainingTiming(averages, priced)
+    rows.forEach((row, i) => {
+      expect(row.activeSec).toBe(75 + priced[i].setupSec!)
+      expect(row.source).toBe('Average of 3 recorded sets')
+    })
+  })
+
   it('prices the last rep of the final pancake hang, with no phantom final rest', () => {
     const steps = buildFlexSteps(DEFAULT_FLEX_ROUTINE)
     const last = steps.at(-1)!

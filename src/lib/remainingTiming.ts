@@ -2,9 +2,10 @@ import { workoutSplit, type ExerciseAverages, type RemainingStep, type WorkoutSp
 import { stepWorkSec, SEC_PER_REP, type SessionStep } from './flexSteps'
 import { settleInSec } from './settleIn'
 import { restScreenSec } from './rest'
+import { parseTempo } from './tempo'
 
 export type TimingRow = WorkoutSplit & { key: string; label: string; source: string }
-export type TimingStep = RemainingStep & { key: string; label: string; setupSec?: number; fallbackExercise?: string; fixedActiveSec?: number }
+export type TimingStep = RemainingStep & { key: string; label: string; setupSec?: number; fallbackExercise?: string; fixedActiveSec?: number; fixedRestSec?: number }
 
 export function sumTiming(rows: WorkoutSplit[]): WorkoutSplit {
   return rows.reduce((sum, row) => ({ activeSec: sum.activeSec + row.activeSec, restSec: sum.restSec + row.restSec, totalSec: sum.totalSec + row.totalSec }), { activeSec: 0, restSec: 0, totalSec: 0 })
@@ -32,6 +33,8 @@ export function priceStretchFlow(flow: SessionStep[], coreRepsFor: (round: numbe
       label: `${step.exName} · set ${step.round + 1}${step.kind === 'flex' && step.side ? ` · ${step.side}` : ''}`,
       exercise: stretchTimingKey(step, work),
       fallbackActiveSec: work,
+      fixedActiveSec: step.kind === 'flex' && (step.holdSec || parseTempo(step.tempo).some((phase) => phase.seconds > 0)) ? work : undefined,
+      fixedRestSec: step.kind === 'flex' ? rest : undefined,
       setupSec: fast && previousRest <= 0 ? 0 : settleInSec(step, prev),
       prescribedRestSec: rest,
     }
@@ -46,10 +49,11 @@ export function remainingTiming(averages: ExerciseAverages, steps: TimingStep[],
     const exercise = averages.active[step.exercise]?.n > 0 ? step.exercise : step.fallbackExercise ?? step.exercise
     const split = workoutSplit(averages, [{ ...step, exercise }])
     if (step.fixedActiveSec != null) split.activeSec = step.fixedActiveSec
+    if (step.fixedRestSec != null) split.restSec = step.fixedRestSec
     const activeSec = Math.max(0, split.activeSec - (index === 0 ? elapsedSec : 0)) + (step.setupSec ?? 0)
     const n = averages.active[exercise]?.n ?? 0
     rows.push({ ...split, activeSec, totalSec: activeSec + split.restSec, key: step.key, label: step.label,
-      source: step.fixedActiveSec != null ? 'Timed hold target' : n > 0 ? `Average of ${n} recorded sets${exercise !== step.exercise ? ' · mixed rep counts' : ''}` : 'Prescribed pace / default estimate' })
+      source: step.fixedActiveSec != null ? 'Prescribed duration' : n > 0 ? `Average of ${n} recorded sets${exercise !== step.exercise ? ' · mixed rep counts' : ''}` : 'Prescribed pace / default estimate' })
   })
   return rows
 }
