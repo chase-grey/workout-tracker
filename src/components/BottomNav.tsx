@@ -38,7 +38,7 @@ export function BottomNav({
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
-          aria-label={t.label}
+          aria-label={alerts.includes(t.id) ? `${t.label}, needs attention` : t.label}
           aria-current={active === t.id ? 'page' : undefined}
           className={`flex min-h-[44px] items-center justify-center ${
             active === t.id ? 'text-accent' : 'text-neutral-500'
@@ -52,7 +52,7 @@ export function BottomNav({
                 buttons in the session header. */}
             <t.Icon className="text-2xl leading-none" aria-hidden />
             {alerts.includes(t.id) && (
-              <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-surface" />
+              <span aria-hidden className="absolute -right-1 -bottom-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-surface" />
             )}
           </span>
         </button>

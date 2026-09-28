@@ -7,7 +7,6 @@ import {
 } from './store/DataContext'
 import { CelebrationProvider, useCelebrate } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
-import { SaveStatus } from './components/SaveStatus'
 import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { StretchFinishOverlay } from './components/StretchFinishOverlay'
@@ -50,7 +49,7 @@ function AppShell() {
   const [resumedTab] = useState(takeResumeTab)
   const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
-  const { saveSession, settings, updateSettings } = useData()
+  const { saveSession, settings, updateSettings, saveError } = useData()
   // Chat needs the dev server's proxy to hold the Epic key, so the coach exists
   // only where that proxy does: a desktop, or a phone that loaded the dev server
   // itself over Epic wifi. The deployed site never has it (see lib/device).
@@ -233,7 +232,6 @@ function AppShell() {
 
   return (
     <div className={`app-shell flex flex-col ${SHELL_WIDTH}`}>
-      <SaveStatus />
       {/* min-h-0: a flex item's automatic minimum is its own content, which would
           let a tall tab push the nav off the bottom of the shell rather than
           scroll inside it. */}
@@ -278,7 +276,7 @@ function AppShell() {
           active={tab}
           onChange={setTab}
           showChat={showChat}
-          alerts={awaiting.length > 0 ? ['settings'] : []}
+          alerts={awaiting.length > 0 || saveError ? ['settings'] : []}
         />
       )}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}

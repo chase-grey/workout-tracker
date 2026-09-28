@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MdKeyboardArrowDown } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
+import { SaveStatus } from '../../components/SaveStatus'
 import {
   issueProgress,
   partitionIssues,
@@ -119,6 +120,7 @@ export function SettingsTab({
   return (
     <div className="flex flex-col gap-6 pb-4">
       <h2 className="text-xl font-bold">settings</h2>
+      <SaveStatus />
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">build</label>
