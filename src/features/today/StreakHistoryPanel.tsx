@@ -114,20 +114,19 @@ export function StreakHistoryPanel({ onSelectWeek }: { onSelectWeek: (week: stri
             ))}
           </Collapse>
         )}
+        {earlierRows.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowEarlier((v) => !v)}
+            aria-expanded={showEarlier}
+            aria-controls={earlierId}
+            aria-label={showEarlier ? 'hide earlier weeks' : 'earlier weeks'}
+            className="mt-1 flex h-[44px] w-full shrink-0 items-center justify-center rounded-lg bg-surface text-sm font-medium leading-none text-neutral-300 active:bg-border"
+          >
+            {showEarlier ? 'hide' : <MdMoreHoriz className="h-6 w-6 shrink-0" aria-hidden />}
+          </button>
+        )}
       </div>
-
-      {earlierRows.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setShowEarlier((v) => !v)}
-          aria-expanded={showEarlier}
-          aria-controls={earlierId}
-          aria-label={showEarlier ? 'hide earlier weeks' : 'earlier weeks'}
-          className="mt-1 flex h-[44px] w-full shrink-0 items-center justify-center rounded-lg bg-surface text-sm font-medium leading-none text-neutral-300 active:bg-border"
-        >
-          {showEarlier ? 'hide' : <MdMoreHoriz className="h-6 w-6 shrink-0" aria-hidden />}
-        </button>
-      )}
     </div>
   )
 }
