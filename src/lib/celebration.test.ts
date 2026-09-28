@@ -141,7 +141,7 @@ describe('weekAchievements', () => {
   it('marks full goal when every target is met exactly', () => {
     expect(
       weekAchievements(
-        { workouts: 2, flex: 3, calDays: 6 },
+        { workouts: 2, flex: 2, calDays: 6 },
         g,
       ),
     ).toEqual({
@@ -172,7 +172,7 @@ describe('weekAchievements', () => {
   })
 
   it('reaches the checkpoint at the half-goal marker', () => {
-    const half = { workouts: 1, flex: 2, calDays: 5 }
+    const half = { workouts: 1, flex: 1, calDays: 5 }
     expect(overallProgress(half, g)).toBeCloseTo(checkpointFraction(g), 6)
     expect(weekAchievements(half, g).checkpoint).toBe(true)
     expect(
@@ -187,8 +187,8 @@ describe('weekAchievements', () => {
 describe('newlyEarned', () => {
   it('returns only achievements that flipped false → true', () => {
     const earned = newlyEarned(
-      { workouts: 1, flex: 2, calDays: 4 },
-      { workouts: 1, flex: 2, calDays: 5 },
+      { workouts: 1, flex: 1, calDays: 4 },
+      { workouts: 1, flex: 1, calDays: 5 },
       DEFAULT_WEEKLY_GOALS,
     )
     expect(earned).toContain('checkpoint')

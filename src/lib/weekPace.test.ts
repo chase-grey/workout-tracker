@@ -85,9 +85,9 @@ describe('weekPace — the schedule marker', () => {
     const flexRequired = (d: number) =>
       weekPace({ workouts: 0, flex: 0, calDays: 0 }, G, at(d))
         .metrics.find((m) => m.key === 'flex')!.required
-    expect(flexRequired(MON + 3)).toBeCloseTo(3 * 63 / 123)
-    expect(flexRequired(MON + 4)).toBeCloseTo(3 * 87 / 123)
-    expect(flexRequired(MON + 6)).toBe(3)
+    expect(flexRequired(MON + 3)).toBeCloseTo(2 * 63 / 123)
+    expect(flexRequired(MON + 4)).toBeCloseTo(2 * 87 / 123)
+    expect(flexRequired(MON + 6)).toBe(2)
   })
 
   it('finishes at the end of the bar at 9pm Sunday, where the marker retires', () => {
@@ -138,17 +138,17 @@ describe('weekPace — the buffer', () => {
   })
 
   it('binds on flex once its own window runs out, days before the week does', () => {
-    // Thursday with no flex done: four days are left in the week, but only two of
+    // Friday with no flex done: three days are left in the week, but only two of
     // them are days flex actually happens on, and both sessions are still owed.
-    const p = weekPace({ workouts: 1, flex: 0, calDays: 3 }, G, at(MON + 3))
+    const p = weekPace({ workouts: 1, flex: 0, calDays: 4 }, G, at(MON + 4))
     expect(p.binding?.key).toBe('flex')
     expect(p.buffer).toBe(0)
     expect(p.binding?.missed).toBe(false)
   })
 
   it('separates falling off the flex plan from losing the goal outright', () => {
-    // Saturday, one session short: past the plan, still reachable this week.
-    const sat = weekPace({ workouts: 2, flex: 1, calDays: 6 }, G, at(MON + 5))
+    // Saturday, two sessions owed: past the plan, still reachable this week.
+    const sat = weekPace({ workouts: 2, flex: 0, calDays: 6 }, G, at(MON + 5))
     expect(sat.buffer).toBe(-1)
     expect(sat.binding?.missed).toBe(false)
 

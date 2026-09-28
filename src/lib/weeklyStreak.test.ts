@@ -1,11 +1,10 @@
-﻿import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   classifyWeek,
   computeWeeklyStreak,
   splitAtCurrentRun,
   weeklyStreakHistory,
   DEFAULT_WEEKLY_GOALS,
-  FLEX_GOAL_3_FROM,
   type WeekResult,
 } from './weeklyStreak'
 import { parseISODate } from './dates'
@@ -37,12 +36,12 @@ const WK3 = '2026-06-29'
 // The week TODAY sits in, still in progress.
 const CUR = '2026-07-06'
 
-// Defaults: full = w>=2, f>=3, cal>=6; half = w>=1, f>=2, cal>=5.
+// Defaults: full = w>=2, f>=2, cal>=6; half = w>=1, f>=1, cal>=5.
 
 describe('classifyWeek', () => {
   it('classifies a full week (exactly at goal, not exceeded)', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 3, calDays: 6 }),
+      classifyWeek({ workouts: 2, flex: 2, calDays: 6 }),
     ).toEqual({ tier: 'full', exceeded: false })
   })
 
@@ -66,14 +65,14 @@ describe('classifyWeek', () => {
 
   it('is under when one dimension misses the half threshold', () => {
     expect(
-      classifyWeek({ workouts: 2, flex: 3, calDays: 4 }),
+      classifyWeek({ workouts: 2, flex: 2, calDays: 4 }),
     ).toEqual({ tier: 'under', exceeded: false })
   })
 
   it.each([
     { workouts: 2, flex: 1, calDays: 7 },
-    { workouts: 2, flex: 2, calDays: 7 },
-    { workouts: 4, flex: 2, calDays: 7 },
+    { workouts: 2, flex: 0, calDays: 7 },
+    { workouts: 4, flex: 1, calDays: 7 },
     { workouts: 0, flex: 4, calDays: 6 },
     { workouts: 3, flex: 3, calDays: 4 },
   ])('uses surplus across goals but never calls a missed goal full: %o', (counts) => {
@@ -81,8 +80,8 @@ describe('classifyWeek', () => {
   })
 
   it.each([
-    { workouts: 2, flex: 0, calDays: 7 },
-    { workouts: 0, flex: 1, calDays: 7 },
+    { workouts: 2, flex: 0, calDays: 6 },
+    { workouts: 0, flex: 0, calDays: 7 },
   ])('requires enough surplus to cover all reduced-goal shortfalls: %o', (counts) => {
     expect(classifyWeek(counts)).toEqual({ tier: 'under', exceeded: false })
   })
@@ -207,7 +206,7 @@ describe('computeWeeklyStreak', () => {
 
   it('ignores a current week that has not gone full yet', () => {
     // Half the week's work in, mid-week: no advance, and crucially no freeze
-    // spent and no reset — the week is still being lived.
+    // spent and no reset � the week is still being lived.
     const result = computeWeeklyStreak({
       workoutDates: [...daysInWeek(WK3, 3), ...daysInWeek(CUR, 1)],
       flexDates: [...daysInWeek(WK3, 2), ...daysInWeek(CUR, 1)],
@@ -248,12 +247,9 @@ describe('computeWeeklyStreak', () => {
   })
 })
 
-describe('weeklyStreakHistory — the stretch goal going to three', () => {
-  // Raising a goal re-judges every week ever logged, so a two-stretch week from
-  // before the change would drop out of `full` and take the run down with it.
-  // These pin that it doesn't — see FLEX_GOAL_3_FROM.
+describe('weeklyStreakHistory � retroactive two-stretch goal', () => {
   const before = '2026-08-17'
-  const after = FLEX_GOAL_3_FROM
+  const after = '2026-08-31'
   const laterToday = parseISODate('2026-09-14')
   const week = (monday: string, flex: number) => ({
     workoutDates: daysInWeek(monday, 2),
@@ -269,10 +265,12 @@ describe('weeklyStreakHistory — the stretch goal going to three', () => {
     expect(wk.tier).toBe('full')
   })
 
-  it('asks a week from the change onward for three', () => {
+  it('reclassifies weeks that previously required three stretches', () => {
     const [wk] = weeklyStreakHistory(week(after, 2))
     expect(wk.week).toBe(after)
-    expect(wk.tier).not.toBe('full')
+    expect(wk.tier).toBe('full')
+    expect(wk.goals).toMatchObject({ flex: 2, halfFlex: 1 })
+    expect(wk.exceeded).toBe(false)
     expect(weeklyStreakHistory(week(after, 3))[0].tier).toBe('full')
   })
 
@@ -286,7 +284,7 @@ describe('weeklyStreakHistory — the stretch goal going to three', () => {
 })
 
 describe('weeklyStreakHistory', () => {
-  it.each([1, 2])('spends one banked freeze for 2 workouts, %i stretches and 7 calorie days', (flex) => {
+  it.each([0, 1])('spends one banked freeze for 2 workouts, %i stretches and 7 calorie days', (flex) => {
     const rows = weeklyStreakHistory({
       workoutDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
       flexDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', flex)],
@@ -307,7 +305,7 @@ describe('weeklyStreakHistory', () => {
   it('resets without a banked freeze even when surplus covers every missed goal', () => {
     const rows = weeklyStreakHistory({
       workoutDates: [...daysInWeek('2026-08-31', 2), ...daysInWeek('2026-09-07', 2)],
-      flexDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
+      flexDates: [...daysInWeek('2026-08-31', 2), ...daysInWeek('2026-09-07', 1)],
       calorieHitDates: [...daysInWeek('2026-08-31', 6), ...daysInWeek('2026-09-07', 7)],
       today: parseISODate('2026-09-15'),
     })
@@ -317,7 +315,7 @@ describe('weeklyStreakHistory', () => {
   it('waits until the week ends to spend a freeze on offset goals', () => {
     const rows = weeklyStreakHistory({
       workoutDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
-      flexDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
+      flexDates: [...daysInWeek('2026-08-31', 2), ...daysInWeek('2026-09-07', 1)],
       calorieHitDates: [...daysInWeek('2026-08-31', 6), ...daysInWeek('2026-09-07', 7)],
       today: parseISODate('2026-09-13'),
     })

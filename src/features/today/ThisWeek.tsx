@@ -11,9 +11,7 @@ import { useData } from '../../store/DataContext'
 import { weeklySummary } from '../../lib/summary'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
-import { requiredByNow, weekPace, type MetricPace } from '../../lib/weekPace'
-import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
-import { toISODate } from '../../lib/dates'
+import { weekPace, type MetricPace } from '../../lib/weekPace'
 import { checkpointFraction, overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
 import { Collapse } from '../../components/Collapse'
@@ -62,7 +60,7 @@ function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | '
 }
 
 export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => void }) {
-  const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings, plan } =
+  const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
     useData()
 
   // The weeks behind the flame drop open right under it rather than living in a
@@ -106,7 +104,6 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   }, [])
   const pace = weekPace(wp, goals, now)
   const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
-  const coreDays = weeklyAbsDays(workouts, plan, toISODate(new Date())).length
 
   return (
     <div className="rounded-2xl bg-surface p-3">
@@ -158,12 +155,6 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
 
       <div className="mt-3 flex flex-col gap-2">
         <MetricBar label="workouts" m={byKey.get('workouts')!} />
-        <MetricBar label="core" m={{
-          done: coreDays,
-          goal: WEEKLY_ABS_GOAL,
-          met: coreDays >= WEEKLY_ABS_GOAL,
-          required: requiredByNow(WEEKLY_ABS_GOAL, now),
-        }} />
         <MetricBar label="flex sessions" m={byKey.get('flex')!} />
         <MetricBar label="calorie days" m={byKey.get('calDays')!} />
       </div>
