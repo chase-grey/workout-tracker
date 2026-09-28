@@ -265,7 +265,8 @@ export const storage = {
    */
   updateQueue: (fn: (q: QueuedWrite[]) => QueuedWrite[]): QueuedWrite[] => {
     const next = fn(normalizeQueue(read<unknown>(KEYS.queue, []), uuid))
-    write(KEYS.queue, next)
+    // An outbox must never claim durability when storage is full or unavailable.
+    localStorage.setItem(KEYS.queue, JSON.stringify(next))
     return next
   },
 

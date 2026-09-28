@@ -48,7 +48,7 @@ async function get<T>(route: string, params: Record<string, string> = {}): Promi
   const url = new URL(base)
   url.searchParams.set('route', route)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  const res = await fetch(url.toString())
+  const res = await fetch(url.toString(), { signal: AbortSignal.timeout(30_000) })
   if (!res.ok) throw new Error(`GET ${route} failed: ${res.status}`)
   return assertOk(`GET ${route}`, (await res.json()) as T)
 }
@@ -62,9 +62,20 @@ async function post<T>(route: string, body: unknown): Promise<T> {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
   })
   if (!res.ok) throw new Error(`POST ${route} failed: ${res.status}`)
-  return assertOk(`POST ${route}`, (await res.json()) as T)
+  const result = assertOk(`POST ${route}`, (await res.json()) as T)
+  if (route !== 'report_issue' && route !== 'answer_issue') {
+    const ack = result as { saved?: number; stale?: boolean } | null
+    const expected = (body as { rows?: unknown[] }).rows?.length
+    if (!(route === 'settings' && ack?.stale === true) &&
+        !(typeof ack?.saved === 'number' && Number.isFinite(ack.saved) &&
+          ack.saved > 0 && (expected === undefined || ack.saved === expected))) {
+      throw new Error(`POST ${route}: backend did not confirm the complete save. Update the backend and retry.`)
+    }
+  }
+  return result
 }
 
 export const api = {

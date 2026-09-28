@@ -44,6 +44,30 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 
 ## API
 
+### Compatibility and recovery
+
+Keep existing routes and fields compatible when deploying either side first.
+New fields must be optional for old clients; new routes must fail explicitly on
+old servers. Never return success for a write that was ignored. Changes that
+require new server behavior should deploy the backend first.
+
+The client retains writes in `wt.queue` until it receives a positive numeric
+`saved` acknowledgment (the full row count for workout batches). Unknown queued
+types survive app rollbacks for a newer version to retry. Requests time out after
+30 seconds; pending writes retry on startup, reconnection, foregrounding, or
+**Retry now**. A visible notice offers a JSON recovery download. Keep browser
+storage intact until the pending notice clears; downloads can be retained for
+manual recovery but are not automatically imported.
+
+Workout retries use `(session_id, exercise, set_number)` as their identity.
+The backend acknowledges rows already stored without appending duplicates.
+Deploy this backend update to enable that protection; older backends can still
+append duplicate rows on retries. Old clients need no new request fields.
+Failed workout saves and saves made during a fetch remain visible locally.
+
+Publishing the frontend through GitHub Pages does not deploy Apps Script; update
+the backend separately using the deployment instructions above.
+
 | Method | Route | Body / params | Returns |
 |---|---|---|---|
 | GET | `?route=workouts&since=YYYY-MM-DD` | — | `WorkoutRow[]` |

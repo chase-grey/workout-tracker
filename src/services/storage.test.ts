@@ -23,6 +23,13 @@ const { storage } = await import('./storage')
 const { DEFAULT_FLEX_ROUTINE } = await import('../config/flexPlan')
 const { FLEX_ROUTINES } = await import('../config/flexRoutines')
 
+it('does not report an outbox write as durable when browser storage is full', () => {
+  const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError') })
+  try {
+    expect(() => storage.updateQueue(() => [])).toThrow('QuotaExceededError')
+  } finally { spy.mockRestore() }
+})
+
 describe('in-progress exercise timing', () => {
   beforeEach(() => backing.clear())
   it('retains completed samples across reloads and clears them after logging', () => {

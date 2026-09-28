@@ -7,6 +7,7 @@ import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
 import { reconcileBodyWeights } from '../lib/bodyWeightSync'
+import { reconcileWorkouts } from '../lib/workoutSync'
 import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
 import { withMatSitups } from '../lib/stretchCore'
 import { DAY_TYPES, STRETCH_CORE } from '../config/plan'
@@ -210,6 +211,7 @@ type DataContextValue = {
   sync: SyncState
   lastSync: string | null
   pendingWrites: number
+  saveError: string | null
   streaks: StreakState
   streakHistory: WeekResult[]
   weekProgress: WeekProgress
@@ -268,6 +270,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
   const [queue, setQueue] = useState<QueuedWrite[]>(() => storage.loadQueue())
   const [sync, setSync] = useState<SyncState>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [localSaveError, setLocalSaveError] = useState<string | null>(null)
   const [lastSync, setLastSync] = useState<string | null>(() => storage.loadLastSync())
 
   const { celebrate } = useCelebrate()
@@ -280,7 +284,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .map((key) => achievementCelebration(key, after, DEFAULT_WEEKLY_GOALS))
   }, [])
 
+  const workoutRevision = useRef(0)
   const persistWorkouts = useCallback((rows: WorkoutRow[]) => {
+    workoutRevision.current += 1
     setWorkouts(rows)
     storage.saveWorkouts(rows)
   }, [])
@@ -317,7 +323,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
    */
   const enqueue = useCallback((payload: WritePayload): QueuedWrite => {
     const w = newWrite(payload, uuid())
-    setQueue(storage.updateQueue((q) => enqueued(q, w)))
+    try {
+      setQueue(storage.updateQueue((q) => enqueued(q, w)))
+      setLocalSaveError(null)
+    } catch {
+      setLocalSaveError('Could not save on this device. Keep this app open and free up browser storage before trying again.')
+      throw new Error('Local backup could not be saved')
+    }
     return w
   }, [])
 
@@ -325,6 +337,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // taken it. A write that fails stays queued and the rest still go.
   const runFlush = useCallback(async () => {
     if (!api.isConfigured()) return
+    let failure: string | null = null
     for (const w of storage.loadQueue()) {
       try {
         if (w.type === 'session') await api.postSession(w.rows)
@@ -337,11 +350,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         else if (w.type === 'exerciseTimes') await api.postExerciseTimes(w.samples)
         else if (w.type === 'plan') await api.postPlan(w.plan)
         else if (w.type === 'settings') await api.postSettings(w.settings)
-      } catch {
+        else throw new Error('This saved entry needs a newer app version. Update the app and retry.')
+        setQueue(storage.updateQueue((q) => dequeued(q, w.id)))
+      } catch (error) {
+        failure = error instanceof Error ? error.message : 'Save failed'
         continue
       }
-      setQueue(storage.updateQueue((q) => dequeued(q, w.id)))
     }
+    setSaveError(failure)
   }, [])
 
   // One flush at a time. A day's calories are sent as a running total, so two
@@ -397,6 +413,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       await flush()
       const weightsAtFetch = weightRevision.current
+      const workoutsAtFetch = workoutRevision.current
+      const pendingWorkouts = storage.loadQueue().flatMap((write) =>
+        write.type === 'session' ? write.rows : [],
+      )
       const pendingWeights = storage.loadQueue().flatMap((write) =>
         write.type === 'bodyweight' ? [write.entry] : [],
       )
@@ -404,7 +424,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // The sheet still holds the stretch block's early sit-ups under the key the
       // training days' one has to itself now, so they're re-keyed as they arrive
       // (see lib/stretchCore.withMatSitups).
-      persistWorkouts(withMatSitups(w))
+      if (!Array.isArray(w)) throw new Error('Invalid workout response')
+      persistWorkouts(withMatSitups(reconcileWorkouts(
+        w, pendingWorkouts, storage.loadWorkouts(), workoutsAtFetch, workoutRevision.current,
+      )))
       // A log (or newer refresh) made while this request was in flight must
       // survive even if its POST has already succeeded and left the outbox.
       // Failed writes present before the fetch also stay visible until retried.
@@ -588,11 +611,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const prev = storage.loadWorkouts()
       const rows = sessionToRows(s)
       const next = [...prev, ...rows]
-      persistWorkouts(next) // optimistic
 
       // The outbox entry is written synchronously; delivery runs in the
       // background so the finish recap can show immediately.
       const pending = enqueue({ type: 'session', rows })
+      persistWorkouts(next) // optimistic, only after the durable write succeeds
       void deliver(pending)
 
       // Headline achievements shown in the finish recap.
@@ -685,21 +708,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (rows.length) persistWorkouts([...storage.loadWorkouts(), ...rows])
       if (bws.length) persistWeights([...storage.loadBodyWeights(), ...bws])
       if (rows.length) {
-        try {
-          await api.postImport(rows)
-        } catch {
-          enqueue({ type: 'session', rows })
-        }
+        enqueue({ type: 'session', rows })
       }
       if (bws.length) {
-        try {
-          await api.postBodyWeightBulk(bws)
-        } catch {
-          for (const entry of bws) enqueue({ type: 'bodyweight', entry })
-        }
+        for (const entry of bws) enqueue({ type: 'bodyweight', entry })
       }
+      await flush()
     },
-    [enqueue, persistWorkouts, persistWeights],
+    [enqueue, flush, persistWorkouts, persistWeights],
   )
 
   const logFlex = useCallback(
@@ -1076,6 +1092,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     sync,
     lastSync,
     pendingWrites: queue.length,
+    saveError: localSaveError ?? saveError,
     streaks,
     streakHistory,
     weekProgress,

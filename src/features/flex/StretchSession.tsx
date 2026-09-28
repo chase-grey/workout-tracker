@@ -463,8 +463,10 @@ export function StretchSession({
             projected: projectedSplit(doneSet),
           }
         : undefined,
-    }).then(onFinish)
-    onClose()
+    }).then((summary) => {
+      onFinish(summary)
+      onClose()
+    }).catch(() => { /* Keep the session available; SaveStatus explains the failure. */ })
   }
 
   // Keep this hook before the empty-routine return so its order is stable across

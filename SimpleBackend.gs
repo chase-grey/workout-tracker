@@ -265,8 +265,22 @@ function getBodyWeight(since) {
 
 function appendWorkoutRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows to save')
+  rows.forEach(function (r) {
+    if (!r || !r.session_id || !r.date || !r.exercise || !r.day_type ||
+        !Number.isFinite(Number(r.set_number)) || Number(r.set_number) < 1 ||
+        !Number.isFinite(Number(r.reps))) throw new Error('Invalid workout row; nothing saved')
+  })
   const sh = sheet('workouts', WORKOUT_HEADERS)
-  const values = rows.map((r) => [
+  // Stable set identity makes retrying a lost response safe, including old clients.
+  const key = (session, exercise, set) => JSON.stringify([String(session), String(exercise), Number(set)])
+  const existing = new Set(sh.getDataRange().getValues().slice(1).map((r) => key(r[0], r[3], r[4])))
+  const fresh = rows.filter((r) => {
+    const id = key(r.session_id, r.exercise, r.set_number)
+    if (existing.has(id)) return false
+    existing.add(id)
+    return true
+  })
+  const values = fresh.map((r) => [
     r.session_id,
     r.date,
     r.day_type,
@@ -278,8 +292,8 @@ function appendWorkoutRows(rows) {
     !!r.is_historical,
     r.variant || '',
   ])
-  sh.getRange(sh.getLastRow() + 1, 1, values.length, WORKOUT_HEADERS.length).setValues(values)
-  return { saved: values.length }
+  if (values.length) sh.getRange(sh.getLastRow() + 1, 1, values.length, WORKOUT_HEADERS.length).setValues(values)
+  return { saved: rows.length }
 }
 
 /**

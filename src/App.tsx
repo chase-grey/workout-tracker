@@ -7,6 +7,7 @@ import {
 } from './store/DataContext'
 import { CelebrationProvider, useCelebrate } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
+import { SaveStatus } from './components/SaveStatus'
 import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { StretchFinishOverlay } from './components/StretchFinishOverlay'
@@ -208,8 +209,10 @@ function AppShell() {
         controls={controls}
         onFinish={(s, duration) => {
           // Show the full-screen recap first, then return to Today on dismiss.
-          void saveSession(s, duration).then((summary) => setFinishSummary(summary))
-          controls.clear()
+          void saveSession(s, duration).then((summary) => {
+            controls.clear()
+            setFinishSummary(summary)
+          }).catch(() => { /* SaveStatus explains the failure; keep the session. */ })
         }}
       />
     )
@@ -230,6 +233,7 @@ function AppShell() {
 
   return (
     <div className={`app-shell flex flex-col ${SHELL_WIDTH}`}>
+      <SaveStatus />
       {/* min-h-0: a flex item's automatic minimum is its own content, which would
           let a tall tab push the nav off the bottom of the shell rather than
           scroll inside it. */}
