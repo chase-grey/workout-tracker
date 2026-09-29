@@ -257,7 +257,7 @@ export function BodyWeightChart({
         <span style={{ color: LINE_SECONDARY }}>body fat (%)</span>
       </div>
       <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={rows} margin={{ top: 8, right: 14, bottom: 0, left: -12 }} {...readout.chart}>
+        <LineChart data={rows} margin={{ top: 8, right: 0, bottom: 0, left: -12 }} {...readout.chart}>
           <CartesianGrid stroke="#262626" vertical={false} />
           <XAxis
             {...timeXAxis}
@@ -267,7 +267,7 @@ export function BodyWeightChart({
             tick={<WeekTick weeks={weekMeta} />}
           />
           <YAxis yAxisId="left" tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
-          <YAxis yAxisId="right" orientation="right" tick={{ ...axisTick, fill: LINE_SECONDARY }} width={44} domain={[0, 'auto']} tickFormatter={(value) => `${value}%`} />
+          <YAxis yAxisId="right" orientation="right" tick={{ ...axisTick, fill: LINE_SECONDARY }} width="auto" domain={[0, 'auto']} tickFormatter={(value) => `${value}%`} />
           <AxisBreak broken={yScale.broken} bg="#171717" />
           <Tooltip
             {...readout.tooltip}
