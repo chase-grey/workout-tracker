@@ -223,17 +223,19 @@ export const PULLUP_GOAL_SETS = 4
 export const PULLUP_GOAL_REPS = [5, 10, 15, 20] as const
 
 /**
- * The fastest weekly gain the pull-up ladder projects against, in reps.
- *
- * A rung is measured on the reps the fourth set still had in it, and that number
- * moves in whole reps on a lift trained twice a week — so two sessions that go
- * 6 then 9 fit +3 reps/week, and a straight line off that puts 4×20 inside two
- * months. Adding a rep to every one of four sets in a week is what a very good
- * week looks like; holding the projected pace there (see predictions.capSlope)
- * keeps the direction those sessions show without promising a ladder that only
- * a hot fortnight could climb.
+ * Conservative starting pace ceiling, in reps per set per week. Half a rep
+ * means at most one additional rep across all four sets every two weeks before
+ * the strength taper slows it further. This is a forecasting assumption, not
+ * a limit on what a workout can achieve.
  */
-export const PULLUP_GAIN_CAP = 1
+export const PULLUP_GAIN_CAP = 0.5
+
+/** Average whole-rep jumps over six weeks instead of extrapolating a hot fortnight. */
+export const PULLUP_TREND_WINDOW: TrendWindow = {
+  windowDays: 42,
+  minPoints: 3,
+  minSpanDays: 10,
+}
 
 /** Stable ids, used as the keys locked projections are stored under. */
 export const GOAL_IDS = {
@@ -653,6 +655,7 @@ export function buildGoals({
     milestone: true,
     decayPerWeek: STRENGTH_GAIN_DECAY,
     capPerWeek: PULLUP_GAIN_CAP,
+    window: PULLUP_TREND_WINDOW,
   }))
 
   // 999 stands in for "no bodyweight logged yet", so a moving target can't be 0

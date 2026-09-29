@@ -184,7 +184,7 @@ describe('the pull-up ladder', () => {
     expect(reachedDate(goals[1])).toBe('2026-02-01')
   })
 
-  it('caps the pace at a rep a week, so a hot pair of sessions is not a ladder', () => {
+  it('caps the pace at half a rep a week, so a hot pair of sessions is not a ladder', () => {
     // 6 → 9 → 12 across a fortnight fits three reps a week; straight off that,
     // 4×20 lands inside a couple of months.
     const hot = [
