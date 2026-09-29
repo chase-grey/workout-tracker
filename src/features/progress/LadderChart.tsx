@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { sharedCurrentPace, currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
-import { LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { goalChartEnd, LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
@@ -58,8 +58,9 @@ function mergeRows(readings: LadderReading[], goals: LadderGoal[]): Row[] {
   // unchanged.
   const from = readings.reduce((min, r) => (r.date < min ? r.date : min), readings[0]?.date ?? '')
   const pace = sharedCurrentPace(goals)
+  const end = goalChartEnd(readings, goals)
   for (const p of pace?.currentPace ?? []) {
-    if (p.date >= from) at(p.date).currentPace = p.value
+    if (p.date >= from && p.date <= end) at(p.date).currentPace = p.value
   }
   goals.forEach((g, i) => {
     if (!g.lock) return

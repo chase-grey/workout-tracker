@@ -48,6 +48,7 @@ import {
 } from '../../lib/goalLock'
 import {
   LINE_CURRENT_PACE,
+  goalChartEnd,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
@@ -117,13 +118,14 @@ function LockChart({
   unit: string
 }) {
   const readout = useChartReadout()
+  const end = goalChartEnd(actual, [{ lock }])
   const rows = useMemo(
-    () => withTime(mergeActualProjected(actual, projectedSeries(lock), currentPace).map((row) => ({
+    () => withTime(mergeActualProjected(actual, projectedSeries(lock), currentPace.filter((p) => p.date <= end)).map((row) => ({
       ...row,
       projected: row.date >= lock.lockedAt ? expectedAt(lock, row.date) : undefined,
       currentPace: currentPaceAt(lock, currentPace, row.date),
     }))),
-    [lock, actual, currentPace],
+    [lock, actual, currentPace, end],
   )
 
   const yScale = useMemo(
@@ -133,16 +135,13 @@ function LockChart({
 
   const etaMs = parseISODate(lock.etaDate).getTime()
   const revisedMs = revisedEta && revisedEta !== lock.etaDate ? parseISODate(revisedEta).getTime() : null
-  // A revised ETA past the locked one falls outside the data's own span, so the
-  // axis has to be widened by hand or the dot would be clipped off the edge. The
-  // extra padding is for the label under the last dot, which is centred on an x
-  // that would otherwise be the right edge itself.
+  // Keep the chart focused on the commitment, with room for its date label.
   const xDomain = useMemo(() => {
     const ts = rows.map((r) => r.t)
     const min = Math.min(...ts)
-    const max = Math.max(...ts, revisedMs ?? -Infinity)
+    const max = Math.max(...ts)
     return [min, max + (max - min) * 0.07] as [number, number]
-  }, [rows, revisedMs])
+  }, [rows])
 
   // The curve runs from the corner the data started in to the target line, so
   // every tag goes in a corner the curve has already left: a rising goal frees
@@ -200,7 +199,7 @@ function LockChart({
           />
           {/* Where the pace being held now would land instead — dark green when
               that's later than the commitment, bright when it beats it. */}
-          {revisedMs != null && (
+          {revisedMs != null && revisedEta! <= end && (
             <ReferenceDot
               x={revisedMs}
               y={lock.target}

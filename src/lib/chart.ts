@@ -7,6 +7,15 @@
  */
 import { parseISODate } from './dates'
 
+/** Frame commitments and logged history without letting a live ETA extend the chart. */
+export function goalChartEnd(
+  readings: { date: string }[],
+  goals: { lock?: { etaDate: string } }[],
+): string {
+  return [...readings.map((r) => r.date), ...goals.flatMap((g) => g.lock ? [g.lock.etaDate] : [])]
+    .reduce((latest, date) => date > latest ? date : latest, '')
+}
+
 /** Add a numeric `t` (local-midnight ms) to each date-keyed row. */
 export function withTime<T extends { date: string }>(rows: T[]): (T & { t: number })[] {
   return rows.map((r) => ({ ...r, t: parseISODate(r.date).getTime() }))

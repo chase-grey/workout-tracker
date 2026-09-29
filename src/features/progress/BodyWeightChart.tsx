@@ -17,6 +17,7 @@ import {
   calorieWeekMark,
   fmtDateLabel,
   fmtTick,
+  goalChartEnd,
   HIT_DAYS_DIM,
   LINE_CURRENT_PACE,
   LINE_GOAL,
@@ -66,8 +67,9 @@ function mergeRows(points: Point[], bodyFatPoints: Point[], goals: BodyWeightGoa
   // undoing the range pill — so each locked line is clipped to where the weigh-ins
   // on screen begin. Its shape is unchanged; it just enters from the left edge.
   const pace = sharedCurrentPace(goals)
+  const end = goalChartEnd([...points, ...bodyFatPoints], goals)
   for (const p of pace?.currentPace ?? []) {
-    if (p.date >= from) at(p.date).currentPace = p.value
+    if (p.date >= from && p.date <= end) at(p.date).currentPace = p.value
   }
   goals.forEach((g, i) => {
     if (!g.lock) return
