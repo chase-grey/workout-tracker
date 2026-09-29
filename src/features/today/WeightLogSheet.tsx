@@ -5,15 +5,18 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
   const { logBodyWeight, logMeasurement } = useData()
   const [value, setValue] = useState('')
   const [bodyFat, setBodyFat] = useState('')
+  const hasWeight = value.trim() !== ''
+  const hasBodyFat = bodyFat.trim() !== ''
   const bf = Number(bodyFat)
-  const bfValid = bodyFat.trim() === '' || (Number.isFinite(bf) && bf > 0 && bf < 100)
+  const bfValid = !hasBodyFat || (Number.isFinite(bf) && bf > 0 && bf < 100)
   const n = Number(value)
-  const valid = value.trim() !== '' && Number.isFinite(n) && n > 0 && bfValid
+  const weightValid = !hasWeight || (Number.isFinite(n) && n > 0)
+  const valid = (hasWeight || hasBodyFat) && weightValid && bfValid
 
   const save = () => {
     if (!valid) return
-    void logBodyWeight(n)
-    if (bodyFat.trim() !== '') void logMeasurement({ bodyFatPct: bf })
+    if (hasWeight) void logBodyWeight(n)
+    if (hasBodyFat) void logMeasurement({ bodyFatPct: bf })
     onClose()
   }
 
@@ -24,7 +27,7 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
       >
-        <h2 className="mb-4 text-lg font-bold">log body weight</h2>
+        <h2 className="mb-4 text-lg font-bold">log body measurement</h2>
         <div className="grid grid-cols-2 gap-3">
           <label className="min-w-0 text-xs text-neutral-400">
             weight (lbs)
@@ -40,7 +43,7 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
             />
           </label>
           <label className="min-w-0 text-xs text-neutral-400">
-            body fat % (optional)
+            body fat %
             <input
               type="number"
               inputMode="decimal"
