@@ -202,7 +202,7 @@ function LockChart({
           {revisedMs != null && revisedEta! <= end && (
             <ReferenceDot
               x={revisedMs}
-              y={lock.target}
+              y={currentPace.at(-1)?.value ?? lock.target}
               r={4}
               fill={behind ? LINE_SECONDARY : LINE_PRIMARY}
               stroke="#0a0a0a"
@@ -679,7 +679,7 @@ function GoalRow({
   const lastReadingDate = goal.points.length ? goal.points[goal.points.length - 1].date : null
   const pace =
     lock && has && !reached && lastReadingDate
-      ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek)
+      ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek, undefined, proj)
       : null
   const ring = grouped ? '' : goalRing(lockable, !!lock && !reached, reached, ready)
 
@@ -709,6 +709,12 @@ function GoalRow({
         )}
       </div>
 
+      {goal.movingTarget && !reached && (proj.targetSlopePerWeek ?? 0) > 0 && (
+        <p className="mt-1 text-xs text-neutral-400">
+          Forecast includes your weight gain: target +{Number(proj.targetSlopePerWeek?.toFixed(2))} lbs/week
+          {proj.etaWeeks != null && ` · about ${Math.round(goal.target + proj.targetSlopePerWeek! * proj.etaWeeks)} lbs at the projected date`}.
+        </p>
+      )}
       {reached ? (
         <p className="mt-1 text-sm text-accent-2">
           <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />

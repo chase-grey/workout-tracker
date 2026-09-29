@@ -20,7 +20,7 @@
  */
 
 import { parseISODate, toISODate } from './dates'
-import { cumulativeGain, weeksToClose, PACE_FLOOR, type Projection } from './predictions'
+import { cumulativeGain, weeksToClose, weeksToMovingTarget, PACE_FLOOR, type Projection } from './predictions'
 
 /** A goal enters lock-in once its projected ETA is this close. */
 export const LOCK_HORIZON_MONTHS = 6
@@ -232,7 +232,7 @@ export function lockProjection(
     goalId,
     lockedAt: toISODate(today),
     startValue: round1(proj.current),
-    target: proj.target,
+    target: round1(proj.target + (proj.targetSlopePerWeek ?? 0) * daysBetween(toISODate(today), proj.etaDate) / 7),
     etaDate: proj.etaDate,
     slopePerWeek: proj.slopePerWeek,
     decayPerWeek: proj.decayPerWeek,
@@ -268,7 +268,9 @@ export function soonestReachable(proj: Projection, today: Date = new Date()): st
   if (cap == null || !Number.isFinite(proj.current)) return null
   const gap = proj.target - proj.current
   if (gap === 0) return null
-  const weeks = weeksToClose(gap, Math.sign(gap) * cap, proj.decayPerWeek, proj.paceFloorFraction)
+  const weeks = proj.targetSlopePerWeek
+    ? weeksToMovingTarget(gap, cap, proj.targetSlopePerWeek, proj.decayPerWeek, proj.paceFloorFraction)
+    : weeksToClose(gap, Math.sign(gap) * cap, proj.decayPerWeek, proj.paceFloorFraction)
   if (weeks == null) return null
   return addDays(toISODate(today), Math.round(weeks * 7))
 }
@@ -344,13 +346,14 @@ export function lockProjectionByDate(
   if (daysBetween(lockedAt, etaDate) <= 0) return null
   const held = clampToRange(etaDate, commitRange(proj, etaDate, today))
   const weeks = daysBetween(lockedAt, held) / 7
+  const target = round1(proj.target + (proj.targetSlopePerWeek ?? 0) * weeks)
   return {
     goalId,
     lockedAt,
     startValue: round1(proj.current),
-    target: proj.target,
+    target,
     etaDate: held,
-    slopePerWeek: round1((proj.target - proj.current) / weeks),
+    slopePerWeek: round1((target - proj.current) / weeks),
     decayPerWeek: proj.decayPerWeek,
     paceFloorFraction: floorFor(proj),
   }
@@ -449,19 +452,21 @@ export type Pace = {
 /** The current-pace curve, anchored and dated exactly like the pace readout. */
 export function currentPaceSeries(
   lock: LockedProjection | undefined,
-  proj: Pick<Projection, 'current' | 'slopePerWeek'>,
+  proj: Pick<Projection, 'current' | 'slopePerWeek'> & Partial<Projection>,
   actualDate: string | undefined,
   today: Date = new Date(),
 ): { date: string; value: number }[] {
   if (!lock || !actualDate || !Number.isFinite(proj.current)) return []
-  const { revisedEta } = paceAgainstLock(lock, proj.current, actualDate, proj.slopePerWeek, today)
+  const moving = proj.targetSlopePerWeek != null
+  const { revisedEta } = paceAgainstLock(lock, proj.current, actualDate, proj.slopePerWeek, today, moving ? proj as Projection : undefined)
   if (!revisedEta || revisedEta <= actualDate) return []
   return projectedSeries({
     ...lock,
-    lockedAt: actualDate,
+    lockedAt: moving ? toISODate(today) : actualDate,
     startValue: proj.current,
     slopePerWeek: proj.slopePerWeek,
     etaDate: revisedEta,
+    ...(moving ? { target: proj.target! + proj.targetSlopePerWeek! * (proj.etaWeeks ?? 0) } : {}),
   })
 }
 
@@ -499,6 +504,7 @@ export function paceAgainstLock(
   actualDate: string,
   recentSlopePerWeek?: number,
   today: Date = new Date(),
+  liveProjection?: Projection,
 ): Pace {
   const expected = expectedAt(lock, actualDate)
   // Sign so that "ahead" is always progress toward the target.
@@ -531,5 +537,6 @@ export function paceAgainstLock(
     }
   }
 
+  if (liveProjection?.targetSlopePerWeek != null) revisedEta = liveProjection.etaDate
   return { aheadBy, expected, actual, status, revisedEta }
 }

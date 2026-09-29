@@ -16,6 +16,8 @@ export type Projection = {
    */
   current: number
   target: number
+  /** Weekly increase in a bodyweight-relative target, in the lift's units. */
+  targetSlopePerWeek?: number
   etaWeeks: number | null // weeks from today to reach target; null if not trending toward it
   etaDate: string | null // ISO YYYY-MM-DD; null if etaWeeks null
   onTrack: boolean // true iff etaWeeks is a positive finite number
@@ -308,6 +310,55 @@ export function weeksToClose(
  * you can actually work toward are untouched.
  */
 export const ETA_HORIZON_WEEKS = 5 * 52
+
+/** First intersection of a tapering lift and a steadily increasing target. */
+export function weeksToMovingTarget(
+  gap: number,
+  slope: number,
+  targetSlope: number,
+  decay = 1,
+  floor = PACE_FLOOR,
+): number | null {
+  if (gap <= 0) return 0
+  if (targetSlope === 0) return weeksToClose(gap, slope, decay, floor)
+  if (slope <= 0) return null
+  if (decay >= 1 || floor >= 1) return slope > targetSlope ? gap / (slope - targetSlope) : null
+  const gain = (w: number) => slope * cumulativeGain(w, decay, floor) - targetSlope * w
+  const bend = weeksToFloor(decay, floor)
+  // Before the floor the relative gain is concave. Its peak can occur before
+  // the bend, so testing only the end would miss a goal reached then overtaken.
+  const derivativeScale = -Math.log(decay) / (1 - decay)
+  const peak = Math.max(0, Math.min(bend, Math.log(targetSlope / (slope * derivativeScale)) / Math.log(decay)))
+  let upper = peak
+  if (gain(upper) < gap) {
+    const netFloor = slope * floor - targetSlope
+    if (netFloor <= 0) return null
+    upper = bend + Math.max(0, (gap - gain(bend)) / netFloor)
+  }
+  let lower = 0
+  for (let i = 0; i < 80; i++) {
+    const mid = (lower + upper) / 2
+    if (gain(mid) >= gap) upper = mid
+    else lower = mid
+  }
+  return upper
+}
+
+/** Keep the measured lift pace while revising its ETA for weight gained meanwhile. */
+export function withMovingTarget(proj: Projection, targetSlope: number, today: Date): Projection {
+  const weeks = Number.isFinite(proj.current)
+    ? weeksToMovingTarget(proj.target - proj.current, proj.slopePerWeek, targetSlope, proj.decayPerWeek, proj.paceFloorFraction)
+    : null
+  const within = weeks != null && weeks <= ETA_HORIZON_WEEKS
+  return {
+    ...proj,
+    targetSlopePerWeek: targetSlope,
+    etaWeeks: within ? weeks : null,
+    etaDate: within ? addDaysISO(today, Math.round(weeks * 7)) : null,
+    onTrack: within,
+    beyondHorizon: weeks != null && !within,
+  }
+}
 
 export type ProjectOptions = {
   /** How much history the pace is read from (see TREND_WINDOW). */

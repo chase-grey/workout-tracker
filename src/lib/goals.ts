@@ -27,7 +27,7 @@ import {
   type FlexEntry,
 } from './flex'
 import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './flexPredict'
-import { project, type Projection, type TrendWindow } from './predictions'
+import { project, withMovingTarget, type Projection, type TrendWindow } from './predictions'
 import { toISODate, weekStartISO } from './dates'
 
 /**
@@ -308,6 +308,7 @@ export type GoalSpec = {
   direction: 'up' | 'down'
   /** True when the target itself moves with bodyweight (bench/squat multiples). */
   movingTarget?: boolean
+  targetSlopePerWeek?: number
   /**
    * A milestone that stays earned: "reached" is judged on the best reading ever
    * taken, not the latest (see {@link isReached}). Set on the flexibility goals —
@@ -507,13 +508,16 @@ export function goalsHitInWeek(goals: GoalSpec[], today: Date = new Date()): Goa
  * Strength and bodyweight goals keep the newest reading: you are not squatting 300
  * because you did once.
  */
-export function projectGoal(goal: GoalSpec, today?: Date): Projection {
-  return project(goal.points, goal.target, today, {
+export function projectGoal(goal: GoalSpec, today: Date = new Date()): Projection {
+  const projection = project(goal.points, goal.target, today, {
     window: goal.window,
     decayPerWeek: goal.decayPerWeek,
     capPerWeek: goal.capPerWeek,
     bestOf: goal.milestone ? (goal.direction === 'up' ? 'max' : 'min') : undefined,
   })
+  return goal.movingTarget
+    ? withMovingTarget(projection, goal.targetSlopePerWeek ?? 0, today)
+    : projection
 }
 
 export type GoalInputs = {
@@ -532,7 +536,7 @@ export type GoalInputs = {
 
 /** Weigh-ins, minus implausible values (stray test rows) that would skew a fit. */
 export function bodyWeightPoints(bodyWeights: BodyWeightEntry[]): Point[] {
-  return bodyWeights.filter((b) => b.weightLbs >= 50).map((b) => ({ date: b.date, value: b.weightLbs }))
+  return bodyWeights.filter((b) => b.weightLbs >= 50).map((b) => ({ date: b.date, value: b.weightLbs })).sort((a, b) => a.date.localeCompare(b.date))
 }
 
 /**
@@ -554,6 +558,10 @@ export function buildGoals({
 }: GoalInputs): GoalSpec[] {
   const bwPoints = bodyWeightPoints(bodyWeights)
   const currentBw = bwPoints.length ? bwPoints[bwPoints.length - 1].value : 0
+  const bwGain = Math.max(0, project(bwPoints, currentBw, undefined, {
+    window: BODYWEIGHT_TREND_WINDOW,
+    capPerWeek: BODYWEIGHT_GAIN_CAP,
+  }).slopePerWeek)
 
   // The estimate series read off working sets only. A max attempt is a measurement
   // rather than an estimate, and it has its own series — left in this one, a missed
@@ -696,6 +704,7 @@ export function buildGoals({
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
+      targetSlopePerWeek: bwGain,
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: BENCH_GAIN_CAP,
     },
@@ -729,6 +738,7 @@ export function buildGoals({
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
+      targetSlopePerWeek: bwGain,
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: SQUAT_GAIN_CAP,
     },
@@ -744,6 +754,7 @@ export function buildGoals({
       target: bwTarget(1.5),
       direction: 'up',
       movingTarget: true,
+      targetSlopePerWeek: bwGain * 1.5,
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: SQUAT_GAIN_CAP,
     },
