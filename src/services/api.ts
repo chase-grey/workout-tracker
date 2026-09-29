@@ -99,7 +99,13 @@ export const api = {
   postCalorie: (entry: CalorieEntry) => post<{ saved: number }>('calories', entry),
   fetchMeasurements: (since?: string) =>
     get<MeasurementEntry[]>('measurements', since ? { since } : {}),
-  postMeasurement: (entry: MeasurementEntry) => post<{ saved: number }>('measurements', entry),
+  postMeasurement: async (entry: MeasurementEntry) => {
+    const result = await post<{ saved: number; bodyFatSupported?: boolean }>('measurements', entry)
+    if (entry.bodyFatPct !== undefined && result.bodyFatSupported !== true) {
+      throw new Error('Update the backend to sync body fat readings, then retry. Your reading is saved on this device.')
+    }
+    return result
+  },
   fetchDurations: (since?: string) => get<SessionDuration[]>('durations', since ? { since } : {}),
   postDuration: (entry: SessionDuration) => post<{ saved: number }>('durations', entry),
   fetchExerciseTimes: () => get<ExerciseAverages>('exercise_times'),

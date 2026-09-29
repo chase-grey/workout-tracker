@@ -567,7 +567,7 @@ export function buildGoals({
   const squatKeys = [LEG_PRESS_KEY, ...SQUAT_ALSO_KEYS]
   const squatPoints = combinedBest1RMSeries(working, squatKeys, SQUAT_SCALE)
   const squatSingles = bestSingleSeries(workouts, squatKeys, SQUAT_SCALE)
-  const bfPoints = bodyFatSeries(measurements, heightIn)
+  const bfPoints = bodyFatSeries(measurements)
   const { target: bfTarget } = personalSixPackTarget(measurements, heightIn)
 
   // The flexibility ladders run on the same series their projections and

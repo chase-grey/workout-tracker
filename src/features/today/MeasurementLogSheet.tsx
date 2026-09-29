@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
-import { navyBodyFat, latestMeasurement, type AbsVisibility } from '../../lib/bodyComp'
+import { latestMeasurement, type AbsVisibility } from '../../lib/bodyComp'
 
 const VISIBILITY_OPTIONS: { value: AbsVisibility; label: string }[] = [
   { value: 'none', label: 'not visible' },
@@ -8,13 +8,8 @@ const VISIBILITY_OPTIONS: { value: AbsVisibility; label: string }[] = [
   { value: 'clear', label: 'clear' },
 ]
 
-/**
- * Log a body measurement (waist + neck, in inches). Neck prefills from the last
- * measurement since it barely changes. Shows the live Navy body-fat estimate
- * when a height was set during first-run setup.
- */
 export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
-  const { measurements, settings, logMeasurement } = useData()
+  const { measurements, logMeasurement } = useData()
   const last = latestMeasurement(measurements)
 
   const [waist, setWaist] = useState('')
@@ -23,13 +18,11 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
 
   const waistN = Number(waist)
   const neckN = Number(neck)
-  const heightIn = settings.heightIn ?? 0
 
   const waistValid = waist.trim() !== '' && Number.isFinite(waistN) && waistN > 0
   const neckValid = neck.trim() !== '' && Number.isFinite(neckN) && neckN > 0
   const valid = waistValid && neckValid
 
-  const bf = valid ? navyBodyFat(waistN, neckN, heightIn) : null
 
   const save = () => {
     if (!valid) return
@@ -77,19 +70,6 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
           {field('waist', waist, setWaist, '32', true)}
           {field('neck', neck, setNeck, '15')}
         </div>
-
-        {heightIn > 0 ? (
-          <p className="mt-4 text-center text-sm text-neutral-400">
-            est. body fat:{' '}
-            <span className="font-bold tabular-nums text-accent-2">
-              {bf != null ? `${bf}%` : '—'}
-            </span>
-          </p>
-        ) : (
-          <p className="mt-4 text-center text-sm text-neutral-500">
-            add your height at setup to estimate body fat %.
-          </p>
-        )}
 
         <div className="mt-4">
           <label className="mb-1 block text-xs tracking-wider text-neutral-500">

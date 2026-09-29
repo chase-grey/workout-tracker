@@ -36,7 +36,7 @@ import { MetricChart } from './MetricChart'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
-import { bodyFatSeries, waistSeries, latestMeasurement, effectiveBodyFat } from '../../lib/bodyComp'
+import { bodyFatSeries, waistSeries, latestMeasurement } from '../../lib/bodyComp'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
 import {
   buildReview,
@@ -226,10 +226,10 @@ export function ProgressTab() {
 
   const heightIn = settings.heightIn ?? 0
   const lastMeasure = latestMeasurement(measurements)
-  const latestBf = lastMeasure ? effectiveBodyFat(lastMeasure, heightIn) : null
+  const latestBf = bodyFatSeries(measurements).at(-1)?.value ?? null
   const bodySeries = useMemo(
-    () => (bodyMetric === 'bf' ? bodyFatSeries(measurements, heightIn) : waistSeries(measurements)),
-    [measurements, heightIn, bodyMetric],
+    () => (bodyMetric === 'bf' ? bodyFatSeries(measurements) : waistSeries(measurements)),
+    [measurements, bodyMetric],
   )
 
   // Weekly rather than daily, complete days only, unlogged days assumed —
@@ -348,19 +348,13 @@ export function ProgressTab() {
         </button>
       </div>
       <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
-      {bodyMetric === 'bf' && heightIn === 0 ? (
-        <div className="flex h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          set my height in settings to estimate body fat % from my measurements.
-        </div>
-      ) : (
-        <MetricChart
-          data={bodySeries}
-          unit={bodyMetric === 'bf' ? '%' : 'in'}
-          label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
-          calories={calorieSurplus}
-          goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
-        />
-      )}
+      <MetricChart
+        data={bodySeries}
+        unit={bodyMetric === 'bf' ? '%' : 'in'}
+        label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
+        calories={calorieSurplus}
+        goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
+      />
 
       <TimeSpent />
 

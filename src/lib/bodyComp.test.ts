@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  navyBodyFat,
   dedupeMeasurementsByDate,
   waistSeries,
   bodyFatSeries,
@@ -11,38 +10,6 @@ import {
   SIX_PACK_BF,
   type MeasurementEntry,
 } from './bodyComp'
-
-describe('navyBodyFat', () => {
-  it('computes a plausible BF% for lean male measurements', () => {
-    // waist 32, neck 15, height 70 → ~13% (near six-pack territory).
-    const bf = navyBodyFat(32, 15, 70)
-    expect(bf).not.toBeNull()
-    expect(bf!).toBeGreaterThan(9)
-    expect(bf!).toBeLessThan(16)
-  })
-
-  it('rises as the waist grows (neck/height fixed)', () => {
-    const lean = navyBodyFat(32, 15, 70)!
-    const soft = navyBodyFat(38, 15, 70)!
-    expect(soft).toBeGreaterThan(lean)
-  })
-
-  it('rounds to one decimal', () => {
-    const bf = navyBodyFat(34, 15.5, 70)!
-    expect(bf).toBe(Math.round(bf * 10) / 10)
-  })
-
-  it('returns null when waist ≤ neck (log undefined)', () => {
-    expect(navyBodyFat(15, 15, 70)).toBeNull()
-    expect(navyBodyFat(14, 15, 70)).toBeNull()
-  })
-
-  it('returns null for missing or non-positive inputs', () => {
-    expect(navyBodyFat(32, 15, 0)).toBeNull()
-    expect(navyBodyFat(NaN, 15, 70)).toBeNull()
-    expect(navyBodyFat(32, -1, 70)).toBeNull()
-  })
-})
 
 describe('dedupeMeasurementsByDate', () => {
   it('keeps the last entry per date and sorts ascending', () => {
@@ -72,24 +39,20 @@ describe('series helpers', () => {
     ])
   })
 
-  it('bodyFatSeries computes a declining trend as waist shrinks', () => {
-    const s = bodyFatSeries(entries, 70)
-    expect(s).toHaveLength(3)
-    expect(s[0].value).toBeGreaterThan(s[2].value)
+  it('does not calculate body fat from tape measurements', () => {
+    expect(bodyFatSeries(entries)).toEqual([])
   })
 
-  it('bodyFatSeries skips points that can not be estimated', () => {
-    const bad: MeasurementEntry[] = [
-      { date: '2026-01-01', waistIn: 14, neckIn: 15 }, // waist < neck → skipped
+  it('plots recorded readings without height, skipping invalid percentages', () => {
+    expect(bodyFatSeries([
+      { date: '2026-03-01', bodyFatPct: 18.2 },
       { date: '2026-02-01', waistIn: 32, neckIn: 15 },
-    ]
-    const s = bodyFatSeries(bad, 70)
-    expect(s).toHaveLength(1)
-    expect(s[0].date).toBe('2026-02-01')
-  })
-
-  it('bodyFatSeries yields nothing without a height', () => {
-    expect(bodyFatSeries(entries, 0)).toEqual([])
+      { date: '2026-01-01', bodyFatPct: 20.5 },
+      { date: '2026-04-01', bodyFatPct: 100 },
+    ])).toEqual([
+      { date: '2026-01-01', value: 20.5 },
+      { date: '2026-03-01', value: 18.2 },
+    ])
   })
 
   it('latestMeasurement returns the newest entry, or null when empty', () => {
@@ -99,19 +62,23 @@ describe('series helpers', () => {
 })
 
 describe('effectiveBodyFat', () => {
-  it('prefers a directly-known bodyFatPct over the tape estimate', () => {
+  it.each([0, -1, 100, 101, NaN, Infinity])('rejects invalid reading %s', (bodyFatPct) => {
+    expect(effectiveBodyFat({ date: '2026-01-01', bodyFatPct })).toBeNull()
+  })
+
+  it('uses a directly recorded bodyFatPct', () => {
     const e: MeasurementEntry = { date: '2025-10-31', bodyFatPct: 11 }
-    expect(effectiveBodyFat(e, 70)).toBe(11)
+    expect(effectiveBodyFat(e)).toBe(11)
   })
 
-  it('falls back to the Navy estimate from waist/neck', () => {
+  it('ignores waist and neck without a direct reading', () => {
     const e: MeasurementEntry = { date: '2026-01-01', waistIn: 32, neckIn: 15 }
-    expect(effectiveBodyFat(e, 70)).toBe(navyBodyFat(32, 15, 70))
+    expect(effectiveBodyFat(e)).toBeNull()
   })
 
-  it('is null when neither a reading nor tape+height is available', () => {
-    expect(effectiveBodyFat({ date: '2026-01-01', waistIn: 32, neckIn: 15 }, 0)).toBeNull()
-    expect(effectiveBodyFat({ date: '2026-01-01' }, 70)).toBeNull()
+  it('is null without a valid reading', () => {
+    expect(effectiveBodyFat({ date: '2026-01-01', waistIn: 32, neckIn: 15 })).toBeNull()
+    expect(effectiveBodyFat({ date: '2026-01-01' })).toBeNull()
   })
 })
 

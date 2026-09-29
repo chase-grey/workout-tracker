@@ -24,3 +24,19 @@ describe('save acknowledgments', () => {
     await expect(api.postSettings({})).resolves.toEqual({ saved: 0, stale: true })
   })
 })
+
+
+describe('body fat acknowledgments', () => {
+  it('keeps the reading pending when an old server ignores the new field', async () => {
+    response({ saved: 1 })
+    await expect(api.postMeasurement({ date: '2026-09-29', waistIn: 32, neckIn: 15, bodyFatPct: 18.2 })).rejects.toThrow('Update the backend')
+  })
+  it('accepts a server that confirms body fat support', async () => {
+    response({ saved: 1, bodyFatSupported: true })
+    await expect(api.postMeasurement({ date: '2026-09-29', bodyFatPct: 18.2 })).resolves.toMatchObject({ saved: 1 })
+  })
+  it('still accepts legacy tape measurement saves', async () => {
+    response({ saved: 1 })
+    await expect(api.postMeasurement({ date: '2026-09-29', waistIn: 32, neckIn: 15 })).resolves.toEqual({ saved: 1 })
+  })
+})

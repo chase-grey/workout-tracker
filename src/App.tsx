@@ -15,7 +15,6 @@ import { TodayTab } from './features/today/TodayTab'
 import { ProgressTab } from './features/progress/ProgressTab'
 import { ChatTab } from './features/chat/ChatTab'
 import { SettingsTab } from './features/settings/SettingsTab'
-import { HeightSetup } from './features/setup/HeightSetup'
 import { ActiveSession } from './features/today/ActiveSession'
 import { useActiveSession } from './features/today/useActiveSession'
 import { StretchSession } from './features/flex/StretchSession'
@@ -135,7 +134,6 @@ function AppShell() {
 
   // First-run: capture height once before showing the app. Existing users who
   // already set a height are never prompted.
-  if (!settings.setupComplete && settings.heightIn == null) return <HeightSetup />
 
   const startStretch = (routine: FlexRoutineKey, officeAbs = false) => {
     if (controls.session) {

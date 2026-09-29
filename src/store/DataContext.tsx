@@ -304,7 +304,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setCalorieEntries(e)
     storage.saveCalories(e)
   }, [])
+  const measurementRevision = useRef(0)
   const persistMeasurements = useCallback((e: MeasurementEntry[]) => {
+    measurementRevision.current += 1
     setMeasurements(e)
     storage.saveMeasurements(e)
   }, [])
@@ -483,11 +485,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     try {
+      const revision = measurementRevision.current
       const m = await api.fetchMeasurements()
-      // Merge rather than replace, for the same reason as flex: a fetched date
-      // wins, but a backend with nothing to say can't blank this device's log.
-      if (Array.isArray(m))
-        persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), ...m]))
+      if (Array.isArray(m) && revision === measurementRevision.current) {
+        const pending = storage.loadQueue().flatMap((w) => w.type === 'measurement' ? [w.entry] : [])
+        persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), ...m, ...pending]))
+      }
     } catch {
       /* ignore */
     }
@@ -846,7 +849,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const logMeasurement = useCallback(
     async (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => {
       const { date, ...rest } = m
-      const entry: MeasurementEntry = { date: date ?? toISODate(new Date()), ...rest }
+      const day = date ?? toISODate(new Date())
+      const previous = storage.loadMeasurements().find((entry) => entry.date === day)
+      const entry: MeasurementEntry = { ...previous, date: day, ...rest }
       persistMeasurements(dedupeMeasurementsByDate([...storage.loadMeasurements(), entry]))
       await deliver(enqueue({ type: 'measurement', entry }))
     },

@@ -101,7 +101,7 @@ const FLEX_HEADERS = [
 ]
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount']
-const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note']
+const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note', 'body_fat_pct', 'abs_visibility']
 // `routine` is which stretch routine a stretch session was, blank for a workout
 // and for a stretch logged before there were two. Appended, and the generic
 // sheet() helper fills a missing header cell in on its own, so no migration.
@@ -667,58 +667,72 @@ function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount) {
 }
 
 function getMeasurements(since) {
-  const sh = sheet('measurements', MEASUREMENT_HEADERS)
-  const rows = sh.getDataRange().getValues()
+  const rows = sheet('measurements', MEASUREMENT_HEADERS).getDataRange().getValues()
   const out = []
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]
     if (!r[0]) continue
     const date = isoDate(r[0])
     if (since && date < since) continue
-    out.push({
-      date: date,
-      waistIn: Number(r[1]),
-      neckIn: Number(r[2]),
-      note: String(r[3] || ''),
-    })
+    const entry = { date: date, note: String(r[3] || '') }
+    if (Number(r[1]) > 0) entry.waistIn = Number(r[1])
+    if (Number(r[2]) > 0) entry.neckIn = Number(r[2])
+    if (Number(r[4]) > 0 && Number(r[4]) < 100) entry.bodyFatPct = Number(r[4])
+    if (['none', 'faint', 'clear'].indexOf(r[5]) !== -1) entry.absVisibility = r[5]
+    out.push(entry)
   }
   return out
 }
 
-// Upsert by date: a new measurement for an existing date overwrites that row.
+// Merge fields by date so scale readings and tape measurements can be logged separately.
 function appendMeasurements(body) {
   const sh = sheet('measurements', MEASUREMENT_HEADERS)
   const list = Array.isArray(body.entries) ? body.entries : [body]
   const rows = sh.getDataRange().getValues()
-
   const rowByDate = {}
   for (let i = 1; i < rows.length; i++) {
     const d = isoDate(rows[i][0])
     if (d && !(d in rowByDate)) rowByDate[d] = i + 1
   }
-
-  let saved = 0
-  list
-    .filter(function (e) {
-      return e && e.date && isFinite(Number(e.waistIn)) && isFinite(Number(e.neckIn))
-    })
-    .forEach(function (e) {
-      const values = [e.date, Number(e.waistIn), Number(e.neckIn), e.note || '']
-      const existingRow = rowByDate[e.date]
-      if (existingRow) {
-        sh.getRange(existingRow, 1, 1, MEASUREMENT_HEADERS.length).setValues([values])
-      } else {
-        sh.appendRow(values)
-        rowByDate[e.date] = sh.getLastRow()
+  // Validate the entire batch before mutating any rows.
+  list.forEach(function (e) {
+    if (!e || !e.date) throw new Error('Measurement date required')
+    let hasValue = false
+    ;['waistIn', 'neckIn', 'bodyFatPct'].forEach(function (key) {
+      if (e[key] === undefined) return
+      const value = Number(e[key])
+      if (!isFinite(value) || value <= 0 || (key === 'bodyFatPct' && value >= 100)) {
+        throw new Error('Invalid measurement: ' + key)
       }
-      saved++
+      hasValue = true
     })
-  // A measurement that fails the waist/neck check would otherwise be reported
-  // as saved and dropped by the client.
-  if (saved === 0 && list.length) {
-    throw new Error('No valid measurement rows among ' + list.length + ' submitted')
-  }
-  return { saved: saved }
+    if (e.absVisibility !== undefined) {
+      if (['none', 'faint', 'clear'].indexOf(e.absVisibility) === -1) throw new Error('Invalid abs visibility')
+      hasValue = true
+    }
+    if (!hasValue) throw new Error('No measurement values supplied')
+  })
+  list.forEach(function (e) {
+    const existingRow = rowByDate[e.date]
+    const previous = existingRow ? rows[existingRow - 1] : []
+    const values = [
+      e.date,
+      e.waistIn !== undefined ? Number(e.waistIn) : previous[1] || '',
+      e.neckIn !== undefined ? Number(e.neckIn) : previous[2] || '',
+      e.note !== undefined ? e.note : previous[3] || '',
+      e.bodyFatPct !== undefined ? Number(e.bodyFatPct) : previous[4] || '',
+      e.absVisibility !== undefined ? e.absVisibility : previous[5] || '',
+    ]
+    if (existingRow) {
+      sh.getRange(existingRow, 1, 1, MEASUREMENT_HEADERS.length).setValues([values])
+      rows[existingRow - 1] = values
+    } else {
+      sh.appendRow(values)
+      rowByDate[e.date] = sh.getLastRow()
+      rows[rowByDate[e.date] - 1] = values
+    }
+  })
+  return { saved: list.length, bodyFatSupported: true }
 }
 
 function getDurations(since) {

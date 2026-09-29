@@ -1,13 +1,13 @@
 import type { Point } from './progress'
 
 /**
- * Body-composition tracking: waist/neck measurements plus a body-fat % estimate,
+ * Body-composition tracking: waist/neck measurements plus a recorded body-fat %,
  * and an empirical record of when abs actually became visible.
  *
  * A visible six-pack is gated by TWO things: low enough body fat AND enough ab
  * muscle thickness. So a fixed "reach 12%" target is wrong per-person — Chase
  * was at ~11% on 2025-10-31 with no visible abs. Instead of guessing, we log ab
- * visibility alongside the body-fat estimate over time and derive a *personal*
+ * visibility alongside the body-fat reading over time and derive a *personal*
  * target from the leanest point actually observed. As ab muscle grows, the BF%
  * needed to see abs rises, and the logged observations capture that.
  */
@@ -16,16 +16,14 @@ import type { Point } from './progress'
 export type AbsVisibility = 'none' | 'faint' | 'clear'
 
 /**
- * One body-measurement snapshot. Waist and neck (inches) drive the Navy estimate;
- * `bodyFatPct` is an optional directly-known reading (e.g. DEXA / smart scale)
- * that overrides the estimate for that day. `absVisibility` is the empirical
- * observation. One entry per date.
+ * One body-measurement snapshot. Body fat is a directly recorded reading
+ * (e.g. smart scale / DEXA), independent of waist and neck. One entry per date.
  */
 export type MeasurementEntry = {
   date: string /* YYYY-MM-DD */
   waistIn?: number
   neckIn?: number
-  /** Directly-known BF% (overrides the Navy estimate when present). */
+  /** Directly recorded BF%. */
   bodyFatPct?: number
   absVisibility?: AbsVisibility
   note?: string
@@ -37,36 +35,9 @@ export const SIX_PACK_BF = 12
 const round1 = (n: number): number => Math.round(n * 10) / 10
 const isPos = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0
 
-/**
- * U.S. Navy body-fat estimate for men, from waist, neck, and height (all inches):
- *   BF% = 86.010·log10(waist − neck) − 70.041·log10(height) + 36.76
- *
- * Returns null when the inputs can't yield a real, positive estimate (e.g. a
- * missing height, or waist ≤ neck, which makes the log undefined).
- */
-export function navyBodyFat(
-  waistIn: number,
-  neckIn: number,
-  heightIn: number,
-): number | null {
-  if (![waistIn, neckIn, heightIn].every(isPos)) return null
-  const girth = waistIn - neckIn
-  if (girth <= 0) return null
-  const bf = 86.01 * Math.log10(girth) - 70.041 * Math.log10(heightIn) + 36.76
-  if (!Number.isFinite(bf) || bf <= 0) return null
-  return round1(bf)
-}
-
-/**
- * The best BF% for an entry: a directly-known reading if present, otherwise the
- * Navy estimate from waist/neck + height. Null if neither is available.
- */
-export function effectiveBodyFat(entry: MeasurementEntry, heightIn: number): number | null {
-  if (isPos(entry.bodyFatPct)) return round1(entry.bodyFatPct)
-  if (isPos(entry.waistIn) && isPos(entry.neckIn)) {
-    return navyBodyFat(entry.waistIn, entry.neckIn, heightIn)
-  }
-  return null
+/** A directly recorded body fat percentage; tape measurements never supply it. */
+export function effectiveBodyFat(entry: MeasurementEntry): number | null {
+  return isPos(entry.bodyFatPct) && entry.bodyFatPct < 100 ? round1(entry.bodyFatPct) : null
 }
 
 /**
@@ -87,13 +58,13 @@ export function waistSeries(entries: MeasurementEntry[]): Point[] {
 }
 
 /**
- * Estimated BF% over time as {date, value}, sorted ascending by date. Entries
- * whose BF% can't be determined (e.g. before a height is set) are skipped.
+ * Recorded BF% over time as {date, value}, sorted ascending by date. Entries
+ * without a direct reading are skipped.
  */
-export function bodyFatSeries(entries: MeasurementEntry[], heightIn: number): Point[] {
+export function bodyFatSeries(entries: MeasurementEntry[]): Point[] {
   const out: Point[] = []
   for (const e of dedupeMeasurementsByDate(entries)) {
-    const bf = effectiveBodyFat(e, heightIn)
+    const bf = effectiveBodyFat(e)
     if (bf != null) out.push({ date: e.date, value: bf })
   }
   return out
@@ -110,12 +81,12 @@ export type VisibilityObservation = { date: string; bodyFat: number; visibility:
 /** Every entry that recorded ab visibility AND has a determinable BF%. */
 export function visibilityObservations(
   entries: MeasurementEntry[],
-  heightIn: number,
+  _heightIn: number,
 ): VisibilityObservation[] {
   const out: VisibilityObservation[] = []
   for (const e of dedupeMeasurementsByDate(entries)) {
     if (!e.absVisibility) continue
-    const bf = effectiveBodyFat(e, heightIn)
+    const bf = effectiveBodyFat(e)
     if (bf == null) continue
     out.push({ date: e.date, bodyFat: bf, visibility: e.absVisibility })
   }

@@ -127,3 +127,13 @@ takes a reply, and `answer_issue` posts the reply and swaps the label back to `a
 the handoff that puts the issue back in front of the fixer. Both refuse any issue not carrying
 `from-app`: the token can write to every issue in the repo, and there's no reason these routes
 should reach one the app didn't file.
+
+### Body fat readings
+
+Deploy the updated `SimpleBackend.gs` to enable scale body fat readings. The
+`measurements` sheet automatically gains `body_fat_pct` and `abs_visibility`
+columns after the existing columns. POST accepts `{date, bodyFatPct}` without
+waist or neck and merges supplied fields with the existing row for that date.
+Percentages must be greater than 0 and less than 100. The response includes
+`bodyFatSupported: true`; clients keep readings pending until that acknowledgment
+arrives, so an older backend cannot silently discard the new field.

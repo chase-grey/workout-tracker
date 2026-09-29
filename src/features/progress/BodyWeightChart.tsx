@@ -22,6 +22,7 @@ import {
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
+  LINE_SECONDARY,
   niceScale,
   timeXAxis,
   WEEK_BAR_HEIGHT,
@@ -52,7 +53,7 @@ export type BodyWeightGoal = {
 /** Weigh-ins and each goal's locked line, one row per date. */
 type Row = { date: string; value?: number; [projKey: string]: number | string | undefined }
 
-function mergeRows(points: Point[], goals: BodyWeightGoal[], from: string): Row[] {
+function mergeRows(points: Point[], bodyFatPoints: Point[], goals: BodyWeightGoal[], from: string): Row[] {
   const m = new Map<string, Row>()
   const at = (date: string): Row => {
     const row = m.get(date) ?? { date }
@@ -60,6 +61,7 @@ function mergeRows(points: Point[], goals: BodyWeightGoal[], from: string): Row[
     return row
   }
   for (const p of points) at(p.date).value = p.value
+  for (const p of bodyFatPoints) at(p.date).bodyFat = p.value
   // A lock taken months ago would drag the visible window back to its own start,
   // undoing the range pill — so each locked line is clipped to where the weigh-ins
   // on screen begin. Its shape is unchanged; it just enters from the left edge.
@@ -178,10 +180,12 @@ function WeekTick({
 export function BodyWeightChart({
   points,
   calorieWeeks,
+  bodyFatPoints,
   goals,
   empty,
 }: {
   points: Point[]
+  bodyFatPoints: Point[]
   /** Days on target per Mon–Sun week, keyed by Monday — see calorieHitsByWeek. */
   calorieWeeks?: Map<string, number>
   goals: BodyWeightGoal[]
@@ -191,8 +195,8 @@ export function BodyWeightChart({
   const readout = useChartReadout()
   const rows = useMemo(() => {
     const from = points.reduce((min, p) => (p.date < min ? p.date : min), points[0]?.date ?? '')
-    return withTime(mergeRows(points, goals, from))
-  }, [points, goals])
+    return withTime(mergeRows(points, bodyFatPoints, goals, from))
+  }, [points, bodyFatPoints, goals])
 
   // The left axis has to frame both targets, not just the weigh-ins, or a goal
   // still well above the data would sit off the top of the chart.
@@ -238,7 +242,7 @@ export function BodyWeightChart({
     [calorieWeeks],
   )
 
-  if (points.length === 0) {
+  if (points.length === 0 && bodyFatPoints.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
         {empty ?? 'no data in this range'}
@@ -248,6 +252,10 @@ export function BodyWeightChart({
 
   return (
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
+      <div className="flex justify-between px-3 pt-1 text-xs">
+        <span style={{ color: LINE_PRIMARY }}>weight (lbs)</span>
+        <span style={{ color: LINE_SECONDARY }}>body fat (%)</span>
+      </div>
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={rows} margin={{ top: 8, right: 14, bottom: 0, left: -12 }} {...readout.chart}>
           <CartesianGrid stroke="#262626" vertical={false} />
@@ -259,6 +267,7 @@ export function BodyWeightChart({
             tick={<WeekTick weeks={weekMeta} />}
           />
           <YAxis yAxisId="left" tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
+          <YAxis yAxisId="right" orientation="right" tick={{ ...axisTick, fill: LINE_SECONDARY }} width={44} domain={[0, 'auto']} tickFormatter={(value) => `${value}%`} />
           <AxisBreak broken={yScale.broken} bg="#171717" />
           <Tooltip
             {...readout.tooltip}
@@ -266,7 +275,7 @@ export function BodyWeightChart({
             contentStyle={tooltipStyle}
             labelStyle={{ color: '#a3a3a3' }}
             labelFormatter={(ms) => labelWithWeek(Number(ms))}
-            formatter={(v, n) => [`${v} lbs`, n]}
+            formatter={(v, n) => [n === 'body fat' ? `${v}%` : `${v} lbs`, n]}
           />
           {/* The targets themselves. Both climb away from the data, so the tags
               hang under their lines, on the side the weigh-ins have already left —
@@ -325,6 +334,7 @@ export function BodyWeightChart({
             dot={{ r: 2 }}
             connectNulls
           />
+          <Line yAxisId="right" type="monotone" dataKey="bodyFat" name="body fat" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 3 }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -154,7 +154,7 @@ export type Settings = {
   photoSnoozeUntil?: string
   /** Self-timer length (seconds) for the camera angle-measurement flow. */
   measureTimerSec?: number
-  /** Height in inches — fixed input for the Navy body-fat estimate. */
+  /** Previously recorded height in inches. */
   heightIn?: number
   /** True once the first-run setup (height prompt) has been completed or skipped. */
   setupComplete?: boolean
