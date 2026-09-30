@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { bulbPath, createBulbs, sandLevels, waistY } from '../lib/bulbs'
 import { CometRest } from './CometRest'
+import { NatureRest } from './NatureRest'
 import { type ExtraVariant } from '../lib/restShapes'
 import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
 import { createSpiral, pointAt, shareAt, spiralPath } from '../lib/spiral'
@@ -1251,6 +1252,12 @@ export function ExtraRestShape({
   fraction: number
 }) {
   switch (variant) {
+    case 'tree':
+    case 'mushroom':
+    case 'roots':
+    case 'flower':
+    case 'dandelion':
+      return <NatureRest variant={variant} fraction={fraction} />
     // Fills rather than drains: a cell charging, full exactly as rest ends.
     case 'recharge':
       return <RechargeCell fraction={fraction} />

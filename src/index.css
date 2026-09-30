@@ -941,3 +941,8 @@ input[type='number'] {
 @media (prefers-reduced-motion: reduce) {
   .rhythm-shape, .rhythm-shape * { transition: none; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .rest-nature * {
+    transition: none !important;
+  }
+}

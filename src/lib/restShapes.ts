@@ -19,10 +19,14 @@ export const EXTRA_BOX_VARIANTS = [
   'icicle',
   'bulbs',
   'blackhole',
+  'tree',
+  'mushroom',
+  'flower',
+  'dandelion',
 ] as const
 
 /** And the one that takes the whole width instead, running off both edges. */
-export const EXTRA_FILL_VARIANTS = ['fuse', 'comet', 'comet-dissolve'] as const
+export const EXTRA_FILL_VARIANTS = ['fuse', 'comet', 'comet-dissolve', 'roots'] as const
 
 export type ExtraVariant =
   | (typeof EXTRA_BOX_VARIANTS)[number]

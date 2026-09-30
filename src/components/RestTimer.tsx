@@ -1173,6 +1173,11 @@ export function RestTimer({
       {/* The perimeter shape frames the screen edge, so it spans the whole overlay
           and passes behind everything without covering any of it. */}
       {variant === 'perimeter' && <PerimeterFrame fraction={remainingFraction} />}
+      {variant === 'roots' && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[25%]">
+          <ExtraRestShape variant="roots" fraction={remainingFraction} />
+        </div>
+      )}
 
       {/* Top region: the session's own toolbar, with the coming set's numbers under
           it. This is the part you're resting to read, so it gets the top of the
@@ -1201,7 +1206,7 @@ export function RestTimer({
           texture and never drives the level. A filling shape and a boxed one both
           take the space under the row above rather than running behind it. */}
       <div className="relative flex w-full flex-1 items-center justify-center">
-        {fills && <FullBleedShape variant={variant} fraction={remainingFraction} />}
+        {fills && variant !== 'roots' && <FullBleedShape variant={variant} fraction={remainingFraction} />}
         {!full && (
           <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
             <RestShape variant={variant} fraction={remainingFraction} />
