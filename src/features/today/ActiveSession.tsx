@@ -926,7 +926,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       : []),
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'workout checklist', onClick: () => setShowList(true) },
-    { label: 'finish workout now', onClick: finish },
+    { label: 'finish and log', onClick: finish },
     {
       label: 'discard workout',
       danger: true,

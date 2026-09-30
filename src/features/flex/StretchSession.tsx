@@ -795,6 +795,7 @@ export function StretchSession({
       : []),
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'routine checklist', onClick: () => setShowList(true) },
+    { label: 'finish and log', onClick: () => finishWith(done) },
     { label: 'exit without logging', danger: true, onClick: onClose },
   ]
 
