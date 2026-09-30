@@ -683,11 +683,12 @@ input[type='number'] {
 }
 .rest-comet-shake { animation: rest-comet-shake 160ms linear infinite; }
 @keyframes rest-comet-fire {
-  0%, 100% { transform: scale(1, 1); opacity: .85; }
-  45% { transform: scale(1.08, .92); opacity: 1; }
-  70% { transform: scale(.96, 1.06); opacity: .9; }
+  0%, 100% { transform: scale(1, 1) skewY(-2deg); opacity: .7; }
+  28% { transform: scale(1.12, .88) skewY(3deg); opacity: .95; }
+  56% { transform: scale(.94, 1.1) skewY(-3deg); opacity: .8; }
+  79% { transform: scale(1.06, .96) skewY(1deg); opacity: 1; }
 }
-.rest-comet-fire { animation: rest-comet-fire 420ms ease-in-out infinite; }
+.rest-comet-fire { transform-origin: 10px 0; animation: rest-comet-fire 900ms ease-in-out infinite; }
 @keyframes rest-comet-cinder {
   from { transform: translate(0, 0); }
   to { transform: translate(-48px, 0); opacity: 0; }
