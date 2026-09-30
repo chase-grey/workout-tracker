@@ -889,6 +889,7 @@ export function StretchSession({
           <RhythmGuide
             key={step.stepKey}
             tempo={step.tempo}
+            forwardBack={step.exKey === 'sciatic_floss'}
             skipFinalRepRest={step.exKey === 'pike_lift'}
             reps={step.reps}
             variant={rhythmVariantFor(flexRoundKey(step), step.tempo)}

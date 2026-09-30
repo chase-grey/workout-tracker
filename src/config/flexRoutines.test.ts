@@ -152,10 +152,10 @@ describe('the head-to-toe routine', () => {
 describe('the head-to-toe tempos, as lib/rhythmMotion reads them', () => {
   const phasesOf = (key: string) => parseTempo(byKey(key).tempo)
 
-  it('gives the nerve floss a breath — it rises and returns', () => {
+  it('paces the nerve floss forward and back for three seconds each', () => {
     const phases = phasesOf('sciatic_floss')
     expect(phases.map((p) => p.seconds)).toEqual([3, 3])
-    expect(motionForPhases(phases)).toBe('breathe')
+    expect(phases.map((p) => p.label)).toEqual(['forward', 'back'])
   })
 
   // Ten seconds of hard press and five of rest, three times through: the rest half

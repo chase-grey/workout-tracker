@@ -38,7 +38,7 @@ export type FlexRoutine = {
  * work. The calves close it out warm, where a long passive hold belongs.
  *
  * The tempo strings are chosen so lib/tempo and lib/rhythmMotion read them
- * correctly with no changes: `up`/`down` gives the floss a breath, `press down`
+ * correctly with no changes: the floss has a dedicated forward/back guide, `press down`
  * then `rest` gives the block crush a descent that drives hard and then lets most
  * of it go without leaving the pose, and `press down` · `rest` · `pull up` · `rest`
  * gives the pike lift a push/pull — two efforts in opposite directions, each with
@@ -76,7 +76,7 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
         sets: '2',
         maxSets: 2,
         reps: 8,
-        tempo: '3s up · 3s down',
+        tempo: '3s forward · 3s back',
         perSide: true,
         // Thirty seconds, not sixty: eight gentle glides leave nothing to recover
         // from, and the rest was costing more than the set did.

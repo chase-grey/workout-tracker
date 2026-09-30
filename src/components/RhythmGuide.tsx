@@ -19,6 +19,7 @@ import {
 } from '../lib/rhythmMotion'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
+import { FlossGuide } from './FlossGuide'
 
 /**
  * An abstract, nature-inspired rhythm animation that paces a stretch's tempo.
@@ -499,8 +500,11 @@ export function RhythmGuide({
   onTargetHit,
   endsOnTarget = false,
   skipFinalRepRest = false,
+  forwardBack = false,
 }: {
   tempo: string
+  /** Directional pacing for sciatic floss, including saved up/down tempos. */
+  forwardBack?: boolean
   reps?: number
   /** A session-owned choice, used when two sides belong to the same set. */
   variant?: RhythmVariant
@@ -659,7 +663,9 @@ export function RhythmGuide({
       <div className={`rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center ${
         glow === 'done' ? 'text-white' : 'text-accent-bright'
       }`}>
-        {motion === 'descent' ? (
+        {forwardBack ? (
+          <FlossGuide phaseIndex={i} progress={progress} seconds={phases[i].seconds} />
+        ) : motion === 'descent' ? (
           <>
             {showPrevRep && (
               <div
