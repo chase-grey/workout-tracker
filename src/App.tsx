@@ -114,6 +114,7 @@ function AppShell() {
     const data = {
       workouts: storage.loadWorkouts(),
       flexDates: storage.loadFlex().map((f) => f.date),
+      flexEntries: storage.loadFlex(),
       calorieEntries: storage.loadCalories(),
       bodyWeights: storage.loadBodyWeights(),
     }

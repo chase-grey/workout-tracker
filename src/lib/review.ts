@@ -13,10 +13,14 @@ import type { CalorieEntry } from './calories'
 import { calorieHitDates, dayTotals } from './calories'
 import { epley1RM } from './epley'
 import { trainingDates } from './session'
+import { exerciseName } from '../config/plan'
+import type { FlexEntry } from './flex'
+import { anglePRs } from './flexCelebration'
 
 export type ReviewData = {
   workouts: WorkoutRow[]
   flexDates: string[]
+  flexEntries?: FlexEntry[]
   calorieEntries: CalorieEntry[]
   bodyWeights: BodyWeightEntry[]
 }
@@ -34,18 +38,21 @@ export type PeriodStats = {
   avgCalories: number
   bestCalorieDay: number
   prs: number
+  stretchingPrs: number
   weightChangeLbs: number | null
 }
 
 /** Which metrics a period leads all others on. */
 export type Superlative = 'workouts' | 'stretches' | 'calorieDays' | 'totalCalories' | 'prs'
 
+export type ReviewRecord = { name: string; value: string; date: string }
+
 export type Review = {
   kind: ReviewKind
   periodKey: string
   title: string
   subtitle: string
-  stats: { label: string; value: string }[]
+  stats: { label: string; value: string; records?: ReviewRecord[] }[]
   highlights: string[]
   story: string
   /** Any all-time best in the period — the overlay celebrates louder when true. */
@@ -102,22 +109,34 @@ function trainingDayCount(workouts: WorkoutRow[], inPeriod: InPeriod): number {
 }
 
 /** Count of exercises whose all-time best est-1RM was achieved inside the period. */
-function prsInPeriod(workouts: WorkoutRow[], inPeriod: InPeriod): number {
-  const best = new Map<string, { est: number; date: string }>()
+function prsInPeriod(workouts: WorkoutRow[], inPeriod: InPeriod): ReviewRecord[] {
+  const best = new Map<string, { est: number; date: string; row: WorkoutRow }>()
   for (const r of workouts) {
     if (r.weight_lbs == null) continue
     const est = epley1RM(r.weight_lbs, r.reps)
     const prior = best.get(r.exercise)
     // Prefer the later date on ties so a plateau counts toward the most recent period.
     if (!prior || est > prior.est || (est === prior.est && r.date > prior.date)) {
-      best.set(r.exercise, { est, date: r.date })
+      best.set(r.exercise, { est, date: r.date, row: r })
     }
   }
-  let count = 0
-  for (const { est, date } of best.values()) {
-    if (est > 0 && inPeriod(date)) count += 1
+  const records: ReviewRecord[] = []
+  for (const { est, date, row } of best.values()) {
+    if (est > 0 && inPeriod(date)) records.push({
+      name: exerciseName(row.exercise).replaceAll('_', ' '),
+      value: `${row.weight_lbs} lbs × ${row.reps} reps · ${Math.round(est * 10) / 10} lbs est. 1rm`,
+      date,
+    })
   }
-  return count
+  return records.sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name))
+}
+
+/** Actual improvements over an earlier reading, using the session PR rules. */
+function stretchingPrsInPeriod(entries: FlexEntry[], inPeriod: InPeriod): ReviewRecord[] {
+  return [...new Set(entries.map((e) => e.date))].filter(inPeriod).sort().reverse()
+    .flatMap((date) => anglePRs(entries, new Date(`${date}T12:00:00`)).map((pr) => ({
+      name: pr.pose, value: `${pr.deg}°`, date,
+    })))
 }
 
 export function periodStats(data: ReviewData, inPeriod: InPeriod): PeriodStats {
@@ -148,7 +167,8 @@ export function periodStats(data: ReviewData, inPeriod: InPeriod): PeriodStats {
     totalCalories,
     avgCalories: loggedDays > 0 ? Math.round(totalCalories / loggedDays) : 0,
     bestCalorieDay,
-    prs: prsInPeriod(data.workouts, inPeriod),
+    prs: prsInPeriod(data.workouts, inPeriod).length,
+    stretchingPrs: stretchingPrsInPeriod(data.flexEntries ?? [], inPeriod).length,
     weightChangeLbs,
   }
 }
@@ -253,11 +273,13 @@ export function buildReview(data: ReviewData, kind: ReviewKind, periodKey: strin
   const stats = periodStats(data, inPeriodFor(kind, periodKey))
   const marks = superlatives(data, kind, periodKey)
 
-  const statTiles: { label: string; value: string }[] = [
+  const inPeriod = inPeriodFor(kind, periodKey)
+  const statTiles: Review['stats'] = [
     { label: 'workouts', value: String(stats.workouts) },
     { label: 'stretches', value: String(stats.stretches) },
     { label: 'on-target days', value: String(stats.calorieDays) },
-    { label: 'lifting prs', value: String(stats.prs) },
+    { label: 'lifting prs', value: String(stats.prs), records: prsInPeriod(data.workouts, inPeriod) },
+    { label: 'stretching prs', value: String(stats.stretchingPrs), records: stretchingPrsInPeriod(data.flexEntries ?? [], inPeriod) },
     { label: 'best day', value: stats.bestCalorieDay > 0 ? `${stats.bestCalorieDay.toLocaleString()} cal` : '—' },
     {
       label: 'weight',

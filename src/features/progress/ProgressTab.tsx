@@ -205,6 +205,7 @@ export function ProgressTab() {
     () => ({
       workouts,
       flexDates: flexEntries.map((f) => f.date),
+      flexEntries,
       calorieEntries,
       bodyWeights,
     }),

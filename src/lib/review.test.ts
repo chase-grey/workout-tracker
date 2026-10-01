@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DayType, WorkoutRow } from '../types'
 import type { CalorieEntry } from './calories'
+import type { FlexEntry } from './flex'
 import {
   buildReview,
   monthKeyOf,
@@ -93,6 +94,41 @@ describe('superlatives', () => {
 })
 
 describe('buildReview', () => {
+  it('includes the winning lifting set and date behind the PR count', () => {
+    const r = buildReview(data({ workouts: [
+      session('2026-05-10', 'push', 100, 5),
+      session('2026-06-10', 'push', 140, 5),
+      session('2026-06-20', 'push', 120, 5),
+    ] }), 'month', '2026-06')
+    const tile = r.stats.find((s) => s.label === 'lifting prs')!
+    expect(tile.value).toBe('1')
+    expect(tile.records).toEqual([{ name: expect.any(String), date: '2026-06-10', value: '140 lbs × 5 reps · 163.3 lbs est. 1rm' }])
+  })
+
+  it('lists stretching improvements, excluding baselines, ties, cold readings and other months', () => {
+    const flex = (date: string, fields: Partial<FlexEntry>): FlexEntry => ({
+      date, splitDeg: null, tailorsLeftDeg: null, tailorsRightDeg: null, ...fields,
+    })
+    const d = data({ flexEntries: [
+      flex('2026-05-01', { splitDeg: 100, warmToeTouchDeg: 90, warmLegLiftLeftDeg: 70, warmLegLiftRightDeg: 70 }),
+      flex('2026-06-01', { splitDeg: 110, warmToeTouchDeg: 80, warmLegLiftLeftDeg: 75, warmLegLiftRightDeg: 76 }),
+      flex('2026-06-02', { splitDeg: 110, warmToeTouchDeg: 95, coldSplitDeg: 130, tailorsLeftDeg: 60 }),
+      flex('2026-07-01', { splitDeg: 120, warmToeTouchDeg: 70 }),
+    ] })
+    const tile = buildReview(d, 'month', '2026-06').stats.find((s) => s.label === 'stretching prs')!
+    expect(tile.value).toBe('4')
+    expect(tile.records).toHaveLength(4)
+    expect(tile.records).toContainEqual({ name: 'toe touch', value: '80°', date: '2026-06-01' })
+    expect(tile.records?.every((r) => r.date === '2026-06-01')).toBe(true)
+    expect(buildReview(d, 'year', '2026').stats.find((s) => s.label === 'stretching prs')?.value).toBe('6')
+  })
+
+  it('provides empty detail lists for both PR tiles without records', () => {
+    const tiles = buildReview(data(), 'month', '2026-06').stats.filter((s) => s.records)
+    expect(tiles).toHaveLength(2)
+    expect(tiles.every((s) => s.value === '0' && s.records?.length === 0)).toBe(true)
+  })
+
   it('produces a titled recap with a story', () => {
     const d = data({
       workouts: [session('2026-06-02'), session('2026-06-05')],
