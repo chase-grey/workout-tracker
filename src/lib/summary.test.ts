@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { BodyWeightEntry, WorkoutRow } from '../types'
-import { weeklySummary } from './summary'
+import { weeklySummary, weeklyWeightGains } from './summary'
 
 // Fixed "today" — Wednesday, 2026-07-08. Its Mon–Sun week is 2026-07-06 .. 2026-07-12.
 const TODAY = new Date(2026, 6, 8)
@@ -20,6 +20,43 @@ function row(partial: Partial<WorkoutRow> & Pick<WorkoutRow, 'session_id' | 'dat
 function bw(date: string, weightLbs: number): BodyWeightEntry {
   return { date, weightLbs }
 }
+
+describe('weeklyWeightGains', () => {
+  it('shows completed gaining weeks newest first, using the final weigh-in and retaining loss baselines', () => {
+    const entries = [
+      bw('2026-06-30', 183.4),
+      bw('2026-06-01', 180),
+      bw('2026-06-08', 185),
+      bw('2026-06-14', 181.2),
+      bw('2026-06-15', 179),
+      bw('2026-06-22', 179),
+      bw('2026-07-06', 190),
+      bw('2026-07-13', 195),
+    ]
+    const gains = weeklyWeightGains(entries, TODAY)
+    expect(gains).toEqual([
+      { week: '2026-06-29', gainLbs: 4.4 },
+      { week: '2026-06-08', gainLbs: 1.2 },
+    ])
+    for (const gain of gains) {
+      expect(weeklySummary([], entries, new Date(`${gain.week}T12:00:00`)).weightTrend).toBe(gain.gainLbs)
+    }
+  })
+
+  it('uses the last available weigh-in across missing weeks and calendar years', () => {
+    expect(weeklyWeightGains([
+      bw('2025-12-21', 180), bw('2026-01-04', 180.6),
+    ], TODAY)).toEqual([{ week: '2025-12-29', gainLbs: 0.6 }])
+  })
+
+  it('has no gains without a baseline or a positive rounded change', () => {
+    expect(weeklyWeightGains([], TODAY)).toEqual([])
+    expect(weeklyWeightGains([bw('2026-06-01', 180)], TODAY)).toEqual([])
+    expect(weeklyWeightGains([
+      bw('2026-06-01', 180), bw('2026-06-08', 179), bw('2026-06-15', 179.01),
+    ], TODAY)).toEqual([])
+  })
+})
 
 describe('weeklySummary', () => {
   it('counts distinct sessions this week, ignoring prior weeks', () => {

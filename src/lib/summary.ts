@@ -22,6 +22,28 @@ export type WeeklySummary = {
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
 
+/** Completed weeks with gains, using the same weigh-in comparison as the summary. */
+export function weeklyWeightGains(bodyWeights: BodyWeightEntry[], today: Date = new Date()) {
+  const currentWeek = weekStartISO(toISODate(today))
+  const latestByWeek = new Map<string, BodyWeightEntry>()
+  for (const entry of bodyWeights) {
+    const week = weekStartISO(entry.date)
+    if (week >= currentWeek) continue
+    const latest = latestByWeek.get(week)
+    if (!latest || entry.date > latest.date) latestByWeek.set(week, entry)
+  }
+  const gains: { week: string; gainLbs: number }[] = []
+  let previous: BodyWeightEntry | undefined
+  for (const [week, entry] of [...latestByWeek].sort(([a], [b]) => a.localeCompare(b))) {
+    if (previous) {
+      const gainLbs = round1(entry.weightLbs - previous.weightLbs)
+      if (gainLbs > 0) gains.push({ week, gainLbs })
+    }
+    previous = entry
+  }
+  return gains.reverse()
+}
+
 /**
  * Summarize the current week's training: distinct workout count, new PRs, and
  * body-weight trend. `today` defaults to now; the week is the Mon–Sun week

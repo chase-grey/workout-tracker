@@ -4,11 +4,13 @@ import {
   MdCelebration,
   MdCheckCircle,
   MdEmojiEvents,
+  MdExpandMore,
   MdLocalFireDepartment,
   MdStar,
 } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { weeklySummary } from '../../lib/summary'
+import { weeklySummary, weeklyWeightGains } from '../../lib/summary'
+import { parseISODate } from '../../lib/dates'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
 import { weekPace, type MetricPace } from '../../lib/weekPace'
@@ -68,8 +70,11 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   // explains itself.
   const [showStreak, setShowStreak] = useState(false)
   const streakId = useId()
+  const [showWeightHistory, setShowWeightHistory] = useState(false)
+  const weightHistoryId = useId()
 
   const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
+  const weightGains = weeklyWeightGains(bodyWeights)
   const calPR = caloriePR(calorieEntries)
   const hasPRs = summary.prs.length > 0 || calPR != null
 
@@ -160,14 +165,48 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
       </div>
 
       {summary.weightTrend !== null && (
-        <p className="mt-2 text-sm text-neutral-400">
+        <div className="mt-2 text-sm text-neutral-400">
+          <button
+            type="button"
+            onClick={() => setShowWeightHistory((v) => !v)}
+            aria-expanded={showWeightHistory}
+            aria-controls={weightHistoryId}
+            className="flex min-h-11 w-full items-center gap-1 text-left active:opacity-70"
+          >
           weight{' '}
           <span className="font-semibold tabular-nums text-accent">
             {summary.weightTrend > 0 ? '+' : ''}
             {summary.weightTrend}
           </span>{' '}
           lbs this week
-        </p>
+            <MdExpandMore
+              aria-hidden
+              className={`ml-auto text-lg transition-transform motion-reduce:transition-none ${showWeightHistory ? 'rotate-180' : ''}`}
+            />
+          </button>
+          <Collapse id={weightHistoryId} open={showWeightHistory}>
+            <div className="mt-1 rounded-xl bg-surface-2 p-3">
+              <p className="font-medium text-neutral-300">previous weeks with weight gains</p>
+              <p className="mt-1 text-xs text-neutral-500">
+                Last weigh-in of each week compared with the last weigh-in before it.
+              </p>
+              {weightGains.length === 0 ? (
+                <p className="mt-3">No previous weeks with weight gains yet.</p>
+              ) : (
+                <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto">
+                  {weightGains.map(({ week, gainLbs }) => (
+                    <li key={week} className="flex items-center justify-between gap-3">
+                      <span>week of {parseISODate(week).toLocaleDateString(undefined, {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}</span>
+                      <span className="shrink-0 font-semibold tabular-nums text-accent">+{gainLbs} lbs</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Collapse>
+        </div>
       )}
 
       {goalsHit.length > 0 && (
