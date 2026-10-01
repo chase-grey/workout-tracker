@@ -62,7 +62,10 @@ function mergeRows(points: Point[], bodyFatPoints: Point[], goals: BodyWeightGoa
     return row
   }
   for (const p of points) at(p.date).value = p.value
-  for (const p of bodyFatPoints) at(p.date).bodyFat = p.value
+  // Earlier body fat readings must not extend the chart before the first weigh-in.
+  for (const p of bodyFatPoints) {
+    if (p.date >= from) at(p.date).bodyFat = p.value
+  }
   // A lock taken months ago would drag the visible window back to its own start,
   // undoing the range pill — so each locked line is clipped to where the weigh-ins
   // on screen begin. Its shape is unchanged; it just enters from the left edge.
