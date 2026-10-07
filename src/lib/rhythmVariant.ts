@@ -1,7 +1,6 @@
 import { motionForPhases, type MotionKind } from './rhythmMotion'
 import { parseTempo } from './tempo'
 import { createRotation, type Rotation } from './variantRotation'
-import { isAnimationHidden } from './hiddenAnimations'
 
 const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
 const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
@@ -15,14 +14,11 @@ export type RhythmVariant =
   | (typeof PUSHPULL_VARIANTS)[number]
 
 // One rotation per family, held across mounted guides: the order stays random,
-// but a shape never follows itself and none sits out for long. Shapes marked bad
-// from the kebab sit out for good (see lib/hiddenAnimations).
-const rhythmHidden = (v: RhythmVariant) => isAnimationHidden('rhythm', v)
-const notHidden = (v: RhythmVariant) => !rhythmHidden(v)
+// but a shape never follows itself and none sits out for long.
 const rotations: Record<MotionKind, Rotation<RhythmVariant>> = {
-  breathe: createRotation(BREATHE_VARIANTS, Math.random, notHidden),
-  descent: createRotation(DESCENT_VARIANTS, Math.random, notHidden),
-  pushpull: createRotation(PUSHPULL_VARIANTS, Math.random, notHidden),
+  breathe: createRotation(BREATHE_VARIANTS),
+  descent: createRotation(DESCENT_VARIANTS),
+  pushpull: createRotation(PUSHPULL_VARIANTS),
 }
 
 export function rhythmVariantForMotion(kind: MotionKind): RhythmVariant {
@@ -34,19 +30,14 @@ export function nextRhythmVariant(tempo: string): RhythmVariant {
   return rhythmVariantForMotion(motionForPhases(parseTempo(tempo)))
 }
 
-/**
- * Keep one draw per session round, including both halves of a per-side round —
- * unless the shape was hidden in between, in which case the second side draws
- * fresh rather than bringing it back.
- */
+/** Keep one draw per session round, including both halves of a per-side round. */
 export function createRhythmVariantSelector(
   draw: (tempo: string) => RhythmVariant = nextRhythmVariant,
-  hidden: (variant: RhythmVariant) => boolean = rhythmHidden,
 ) {
   const selected = new Map<string, RhythmVariant>()
   return (roundKey: string, tempo: string): RhythmVariant => {
     const existing = selected.get(roundKey)
-    if (existing && !hidden(existing)) return existing
+    if (existing) return existing
     const chosen = draw(tempo)
     selected.set(roundKey, chosen)
     return chosen

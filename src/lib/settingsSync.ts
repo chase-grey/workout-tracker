@@ -16,7 +16,6 @@
 
 import type { Settings } from '../services/storage'
 import type { LockedProjections } from './goalLock'
-import { unionHidden } from './hiddenAnimations'
 
 /**
  * Settings that stay on the device they were entered on.
@@ -119,8 +118,7 @@ function mergeLockedGoals(local: Settings, remote: SyncedSettings): LockedProjec
  * existed shouldn't blank it. The cost is that deliberately clearing a field
  * doesn't propagate; none of these fields are cleared as a user action, and
  * blanking real data would be the worse failure. Locked goals merge per goal
- * (see {@link mergeLockedGoals}), hidden animations are unioned (see
- * lib/hiddenAnimations.unionHidden) and the device-local fields are always this
+ * (see {@link mergeLockedGoals}) and the device-local fields are always this
  * device's (see {@link DEVICE_LOCAL_KEYS}).
  */
 export function mergeSettings(local: Settings, remote: SyncedSettings | null): Settings {
@@ -133,7 +131,5 @@ export function mergeSettings(local: Settings, remote: SyncedSettings | null): S
   const merged = { ...older, ...definedOnly(newer) } as Settings
   for (const k of DEVICE_LOCAL_KEYS) merged[k] = local[k]
   merged.lockedGoals = mergeLockedGoals(local, remote)
-  const hidden = unionHidden(local.hiddenAnimations, remote.hiddenAnimations)
-  if (hidden) merged.hiddenAnimations = hidden
   return merged
 }

@@ -13,8 +13,6 @@ import { createVessel, VESSEL_KINDS, type Vessel } from '../lib/vessels'
 import { EXTRA_BOX_VARIANTS, EXTRA_FILL_VARIANTS, isExtraVariant } from '../lib/restShapes'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { createRotation } from '../lib/variantRotation'
-import { isAnimationHidden } from '../lib/hiddenAnimations'
-import { useShownAnimation } from '../lib/useShownAnimation'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
 import { BOXED_GLASS, TALL_GLASS } from '../lib/waterclock'
 import { ExtraRestShape } from './RestShapes'
@@ -78,9 +76,7 @@ const GHOST_CLICK_GRACE_MS = 400
 // Held across mounts (each rest remounts the timer) so the order stays random
 // without repeating the shape you just watched or leaving one unseen for a whole
 // workout — see lib/variantRotation for how the two pull against each other.
-// Shapes marked bad from the kebab sit out (see lib/hiddenAnimations).
-const notHidden = (v: Variant) => !isAnimationHidden('rest', v)
-const rotation = createRotation(VARIANTS, Math.random, notHidden)
+const rotation = createRotation(VARIANTS)
 
 /**
  * The rest animation itself. `fraction` is how much rest is still left (1 at the
@@ -998,7 +994,7 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
 // The boxed shapes on a rotation of their own, for the countdowns that aren't
 // rest: a long hold's clock lives inline in a set screen, where the full-bleed
 // and perimeter variants have no room to read.
-const holdRotation = createRotation(BOX_VARIANTS, Math.random, notHidden)
+const holdRotation = createRotation(BOX_VARIANTS)
 
 /**
  * A rest shape telling a hold's time instead of a rest's (see
@@ -1010,8 +1006,7 @@ const holdRotation = createRotation(BOX_VARIANTS, Math.random, notHidden)
  * One shape picked per mount, like rest's, so a hold varies from set to set.
  */
 export function CountdownShape({ fraction }: { fraction: number }) {
-  const [variant, setVariant] = useState<Variant>(() => holdRotation.next())
-  useShownAnimation('rest', variant, () => setVariant(holdRotation.next()))
+  const [variant] = useState<Variant>(() => holdRotation.next())
   return (
     <div className="countdown-shape relative flex aspect-square w-[min(72vw,34vh,20rem)] items-center justify-center">
       <RestShape variant={variant} fraction={clamp01(fraction)} />
@@ -1095,8 +1090,7 @@ export function RestTimer({
   // this, and rounding here would step it once a second — a staircase the drain
   // transition can't smooth over. The readout rounds for display instead.
   const [remainingMs, setRemainingMs] = useState(() => endRef.current - Date.now())
-  const [variant, setVariant] = useState<Variant>(() => rotation.next())
-  useShownAnimation('rest', variant, () => setVariant(rotation.next()))
+  const [variant] = useState<Variant>(() => rotation.next())
   const buzzed = useRef(false)
   // Whether this rest ends itself. Also what hides the numeric countdown: nothing
   // is waiting on the number, so the shape carries the rest by itself.

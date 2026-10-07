@@ -1,33 +1,11 @@
 import { useState } from 'react'
 import { MdMoreVert } from 'react-icons/md'
-import { withHidden } from '../lib/hiddenAnimations'
-import { useTopAnimation } from '../lib/useShownAnimation'
-import { useData } from '../store/DataContext'
 
 export type MenuItem = { label: string; onClick: () => void; danger?: boolean }
 
 /** A 3-dots overflow menu for rarely-used actions (skip, jump, finish, discard). */
-export function KebabMenu({ items: own }: { items: MenuItem[] }) {
+export function KebabMenu({ items }: { items: MenuItem[] }) {
   const [open, setOpen] = useState(false)
-  const { settings, updateSettings } = useData()
-  // Whatever animation is on screen can be marked bad from here, in either
-  // session, without either one having to wire it in (see lib/useShownAnimation).
-  const shown = useTopAnimation()
-  const items: MenuItem[] = shown
-    ? [
-        {
-          label: 'hide this animation',
-          onClick: () => {
-            updateSettings({
-              ...settings,
-              hiddenAnimations: withHidden(settings.hiddenAnimations, shown.id),
-            })
-            shown.replace()
-          },
-        },
-        ...own,
-      ]
-    : own
 
   return (
     <div className="relative">

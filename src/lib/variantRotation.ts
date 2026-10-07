@@ -41,16 +41,10 @@ export type Rotation<T> = {
 /**
  * A rotation over `items`. `random` is injectable so the tests can drive the
  * weighting with a known sequence rather than sampling it.
- *
- * `available` is asked on every draw, so an item marked bad mid-workout drops out
- * of the very next one (see lib/hiddenAnimations). Hidden items keep their place
- * in the queue rather than leaving it: if every item is hidden the rotation still
- * has to show something, and it falls back to drawing from all of them.
  */
 export function createRotation<T>(
   items: readonly T[],
   random: () => number = Math.random,
-  available: (item: T) => boolean = () => true,
 ): Rotation<T> {
   if (items.length === 0) throw new Error('a rotation needs something to rotate through')
 
@@ -62,11 +56,9 @@ export function createRotation<T>(
 
   return {
     next() {
-      const shown = queue.filter(available)
-      const eligible = shown.length > 0 ? shown : queue
-      const pool = eligible.filter((item) => item !== last)
+      const pool = queue.filter((item) => item !== last)
       // A one-item rotation has nothing to avoid; better to repeat than to fail.
-      const chosen = pool.length > 0 ? weightedPick(pool, random) : eligible[0]
+      const chosen = pool.length > 0 ? weightedPick(pool, random) : queue[0]
       queue.splice(queue.indexOf(chosen), 1)
       queue.push(chosen)
       last = chosen
