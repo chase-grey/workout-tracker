@@ -65,7 +65,7 @@ import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { SessionTimingSheet } from '../../components/SessionTimingSheet'
-import { remainingTiming, workoutTimingKey, sumTiming } from '../../lib/remainingTiming'
+import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
@@ -482,6 +482,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const remainingRows = remainingTiming(exerciseAverages, timingFor(remaining, true), remaining[0]?.stepKey === step.stepKey ? readActiveSec() : 0,
     rest ? Math.max(0, (rest.endsAt - Math.max(estimateNow, Date.now())) / 1000) : 0)
   const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
+  const exerciseTimeLeft = timeLeftByExercise(remainingRows, (key) => steps.find((s) => s.stepKey === key)?.ex.key)
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
   // clock starts the wait over instead of logging a half-typed number.
@@ -926,6 +927,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       : []),
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'workout checklist', onClick: () => setShowList(true) },
+    { label: 'session timing', onClick: () => setShowTiming(true) },
     { label: 'finish and log', onClick: finish },
     {
       label: 'discard workout',
@@ -952,7 +954,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         total={totals.all}
         unit="sets"
         timeLeftLabel={`${formatDuration(timeLeft)} left`}
-        onTimeClick={() => setShowTiming(true)}
+        onTimeClick={() => setShowList(true)}
       />
 
       <header className="flex items-start justify-between gap-2">
@@ -1303,6 +1305,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                         <span className={`block font-medium ${isSkipped ? 'line-through' : ''}`}>{e.name}</span>
                         <span className="text-xs text-neutral-500 tabular-nums">
                           {doneCount(e.key)}/{exerciseLog?.sets.length ?? e.sets} sets
+                          {!isSkipped && (exerciseTimeLeft.get(e.key) ?? 0) > 0 && ` · ${formatDuration(exerciseTimeLeft.get(e.key)!).replace(/^~/, '')}`}
                         </span>
                       </button>
                       {(isSkipped || skippable(e.key)) && (

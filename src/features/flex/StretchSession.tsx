@@ -27,7 +27,7 @@ import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
 import { type FlexMeasurement, type StretchFinishSummary } from '../../store/DataContext'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
-import { priceStretchFlow, remainingTiming, stretchTimingKey, sumTiming } from '../../lib/remainingTiming'
+import { priceStretchFlow, remainingTiming, stretchTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { canResumeRest, restScreenSec, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
@@ -96,6 +96,7 @@ type RoutineChecklistProps = {
   currentKey?: string
   done: Set<string>
   skipped: Set<string>
+  timeLeft: Map<string, number>
   onClose: () => void
   onJump: (stepKey: string) => void
   onToggleDone: (stepKey: string) => void
@@ -108,6 +109,7 @@ function RoutineChecklist({
   currentKey,
   done,
   skipped,
+  timeLeft,
   onClose,
   onJump,
   onToggleDone,
@@ -141,6 +143,9 @@ function RoutineChecklist({
                   <div className={`min-w-0 flex-1 py-2 ${isSkipped ? 'opacity-50' : ''}`}>
                     <span className="block text-[10px] tracking-wide text-neutral-500">{exercise.blockLabel}</span>
                     <span className={`block font-semibold ${isSkipped ? 'line-through' : ''}`}>{exercise.name}</span>
+                    {!isSkipped && (timeLeft.get(exercise.key) ?? 0) > 0 && (
+                      <span className="block text-xs text-neutral-500 tabular-nums">{formatDuration(timeLeft.get(exercise.key)!).replace(/^~/, '')}</span>
+                    )}
                   </div>
                   <button
                     onClick={() => onToggleSkipped(exercise.key, !isSkipped)}
@@ -421,6 +426,7 @@ export function StretchSession({
     flow[0]?.stepKey === onScreen?.stepKey ? readActiveSec() : 0,
     rest ? Math.max(0, (rest.endsAt - Math.max(estimateNow, Date.now())) / 1000) : 0)
   const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
+  const exerciseTimeLeft = timeLeftByExercise(remainingRows, (key) => allSteps.find((s) => s.stepKey === key)?.exKey)
   const projectedSplit = (doneSet: Set<string>) => {
     const rows = remainingTiming(exerciseAverages, priceStretchFlow(steps.filter((s) => doneSet.has(s.stepKey)), coreRepsFor, fast))
     return sumTiming(rows)
@@ -506,6 +512,7 @@ export function StretchSession({
             steps={allSteps}
             done={done}
             skipped={skipped}
+            timeLeft={exerciseTimeLeft}
             onClose={() => setShowList(false)}
             onJump={() => {}}
             onToggleDone={() => {}}
@@ -795,6 +802,7 @@ export function StretchSession({
       : []),
     { label: 'pause routine', onClick: () => setPaused(true) },
     { label: 'routine checklist', onClick: () => setShowList(true) },
+    { label: 'session timing', onClick: () => setShowTiming(true) },
     { label: 'finish and log', onClick: () => finishWith(done) },
     { label: 'exit without logging', danger: true, onClick: onClose },
   ]
@@ -817,7 +825,7 @@ export function StretchSession({
         total={N}
         unit="sets"
         timeLeftLabel={`${formatDuration(timeLeft)} left`}
-        onTimeClick={() => setShowTiming(true)}
+        onTimeClick={() => setShowList(true)}
       />
 
       <header className="flex items-start justify-between gap-2">
@@ -863,9 +871,12 @@ export function StretchSession({
             setReadyOverrideSec(Math.max(POST_PHOTO_GET_READY_SEC, getReadySec))
             setPreparing(true)
           }}
-          className="fixed inset-0 z-80 flex h-full w-full items-center justify-center bg-black px-6 text-center text-3xl font-bold focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-accent"
+          className="fixed inset-0 z-80 flex h-full w-full flex-col items-center justify-center gap-2 bg-black px-6 text-center focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-accent"
         >
-          {stepTitle(step)}
+          {/* Unlike the header, the move leads here: this is the screen you get set
+              up from, and "right leg" alone doesn't say what to set up for. */}
+          <span className="text-3xl font-bold">{step.exName}</span>
+          {stepPosition(step) && <span className="text-lg text-neutral-400">{stepPosition(step)}</span>}
         </button>
       )}
 
@@ -999,6 +1010,7 @@ export function StretchSession({
           currentKey={step.stepKey}
           done={done}
           skipped={skipped}
+          timeLeft={exerciseTimeLeft}
           onClose={() => setShowList(false)}
           onToggleDone={toggleDone}
           onToggleSkipped={setExerciseSkipped}

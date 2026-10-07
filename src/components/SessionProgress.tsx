@@ -42,7 +42,7 @@ export function SessionProgress({
           {timeLeftLabel && (onTimeClick ? (
             <button
               onClick={(event) => { event.stopPropagation(); onTimeClick() }}
-              aria-label={`${timeLeftLabel.replace(/^~/, '')}. View session timing`}
+              aria-label={`${timeLeftLabel.replace(/^~/, '')}. View checklist`}
               aria-haspopup="dialog"
               className="ml-auto min-h-[44px] px-1 underline decoration-neutral-600 underline-offset-4 active:text-accent-2"
             >

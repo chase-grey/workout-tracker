@@ -3,7 +3,7 @@ import { EMPTY_EXERCISE_AVERAGES } from './estimate'
 import { buildCoreSteps, buildFlexSteps, stepWorkSec } from './flexSteps'
 import { DEFAULT_FLEX_ROUTINE } from '../config/flexPlan'
 import { remainingFlow } from './setFlow'
-import { priceStretchFlow, remainingTiming, sumTiming, workoutTimingKey } from './remainingTiming'
+import { priceStretchFlow, remainingTiming, sumTiming, timeLeftByExercise, workoutTimingKey } from './remainingTiming'
 
 describe('remaining checklist timing', () => {
   it('uses prescribed holds, paced reps and stretch rests regardless of history', () => {
@@ -88,5 +88,16 @@ describe('remaining checklist timing', () => {
     const rows = remainingTiming(EMPTY_EXERCISE_AVERAGES, priced, 1000, -1)
     expect(rows[0].activeSec).toBe(0)
     expect(rows[1].activeSec).toBe(65)
+  })
+})
+
+describe('time left by exercise', () => {
+  it('sums each exercise across its sets and leaves the current rest out', () => {
+    const row = (key: string, totalSec: number) => ({ key, label: key, source: '', activeSec: totalSec, restSec: 0, totalSec })
+    const rows = [row('current-rest', 40), row('a:0', 60), row('b:0', 30), row('a:1', 90)]
+    const totals = timeLeftByExercise(rows, (key) => (key === 'current-rest' ? undefined : key.split(':')[0]))
+    expect(totals.get('a')).toBe(150)
+    expect(totals.get('b')).toBe(30)
+    expect(totals.size).toBe(2)
   })
 })

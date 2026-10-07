@@ -57,3 +57,13 @@ export function remainingTiming(averages: ExerciseAverages, steps: TimingStep[],
   })
   return rows
 }
+
+/** Remaining seconds per exercise, for the checklist. The rest already on screen belongs to no exercise. */
+export function timeLeftByExercise(rows: TimingRow[], exerciseOf: (stepKey: string) => string | undefined): Map<string, number> {
+  const totals = new Map<string, number>()
+  rows.forEach((row) => {
+    const exercise = exerciseOf(row.key)
+    if (exercise != null) totals.set(exercise, (totals.get(exercise) ?? 0) + row.totalSec)
+  })
+  return totals
+}
