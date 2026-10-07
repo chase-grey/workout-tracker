@@ -864,7 +864,7 @@ export function StretchSession({
       {!started && photos == null && (
         <button
           type="button"
-          aria-label={`Begin ${stepTitle(step)}`}
+          aria-label={`Begin ${step.exName}`}
           onClick={(event) => {
             event.stopPropagation()
             setStarted(true)
