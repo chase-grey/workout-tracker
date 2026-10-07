@@ -41,6 +41,7 @@ import {
   CORE_ENTRY_GET_READY_SEC,
   POST_PHOTO_GET_READY_SEC,
   settleInSec,
+  settleInWaitsForTap,
 } from '../../lib/settleIn'
 import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
@@ -984,6 +985,7 @@ export function StretchSession({
           // does — the bar, the stretch coming and the session's controls all
           // stay put and stay tappable while you settle into position.
           header={topBar}
+          untilTap={settleInWaitsForTap(step, prevStep)}
           onDone={() => {
             setPreparing(false)
             setReadyOverrideSec(null)

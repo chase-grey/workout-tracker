@@ -11,3 +11,15 @@ export function settleInSec(step: SessionStep, _prev?: SessionStep): number {
   if (step.kind !== 'flex' && step.round !== 0) return 0
   return GET_READY_SEC
 }
+
+/**
+ * Whether the settle-in ahead of this set waits for a tap instead of counting down.
+ *
+ * Only the way into the sciatic floss. Coming off the rolling-feet holds means
+ * putting the ball away, lying down and getting a strap round the foot, and a
+ * five-second count ran out and started the glides partway through that. The
+ * floss's own side switches and rests keep their counts: you're already set up.
+ */
+export function settleInWaitsForTap(step: SessionStep, prev?: SessionStep): boolean {
+  return step.kind === 'flex' && step.exKey === 'sciatic_floss' && prev?.exKey !== step.exKey
+}

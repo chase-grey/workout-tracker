@@ -15,10 +15,14 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
  * lib/shell), so the progress bar, the stretch named, the set coming and the
  * session's controls all stay put and stay reachable while you settle in. The
  * move is named up there, so this doesn't name it again.
+ *
+ * `untilTap` drops the count: the screen holds until you tap it, for a setup
+ * that takes as long as it takes.
  */
 export function GetReady({
   seconds,
   header,
+  untilTap = false,
   onDone,
 }: {
   seconds: number
@@ -29,6 +33,7 @@ export function GetReady({
    * count.
    */
   header: ReactNode
+  untilTap?: boolean
   onDone: () => void
 }) {
   const endRef = useRef(Date.now() + seconds * 1000)
@@ -37,6 +42,7 @@ export function GetReady({
   const [remaining, setRemaining] = useState(seconds)
 
   useEffect(() => {
+    if (untilTap) return
     const tick = () => {
       const r = Math.ceil((endRef.current - Date.now()) / 1000)
       setRemaining(r)
@@ -45,7 +51,7 @@ export function GetReady({
     tick()
     const id = setInterval(tick, 200)
     return () => clearInterval(id)
-  }, [])
+  }, [untilTap])
 
   return (
     <div
@@ -63,7 +69,11 @@ export function GetReady({
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">get ready</p>
         <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
           <div className="absolute h-[62%] w-[62%] rounded-full bg-accent/15 ring-1 ring-accent/30" />
-          <div className="relative font-mono text-8xl font-bold tabular-nums text-white">{Math.max(0, remaining)}</div>
+          {untilTap ? (
+            <div className="relative text-6xl font-bold text-white">go</div>
+          ) : (
+            <div className="relative font-mono text-8xl font-bold tabular-nums text-white">{Math.max(0, remaining)}</div>
+          )}
         </div>
       </div>
     </div>
