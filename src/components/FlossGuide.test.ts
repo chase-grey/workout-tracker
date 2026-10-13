@@ -13,19 +13,19 @@ function setup(reduced = false) {
 const frame = (phaseIndex: number, progress: number) =>
   renderToStaticMarkup(createElement(FlossGuide, { phaseIndex, progress, seconds: 3 }))
 
-/** Where the orb sits — the only element scaled as it travels. */
-const orbLeft = (html: string) => Number(html.match(/left:([\d.]+)%;transform:translate\(-50%, -50%\) scale/)?.[1])
+/** Where the crest sits — the glow that travels with it. */
+const crestLeft = (html: string) => Number(html.match(/blur-2xl" style="left:([\d.]+)%/)?.[1])
 
 describe('sciatic floss direction cues', () => {
   it('travels forward then back without jumping at the turn or rep boundary', () => {
     setup()
     expect(frame(0, 0)).toContain('data-direction="forward"')
-    expect(orbLeft(frame(0, 0))).toBeCloseTo(12)
-    expect(orbLeft(frame(0, 0.5))).toBeCloseTo(50)
-    expect(orbLeft(frame(0, 1))).toBeCloseTo(88)
+    expect(crestLeft(frame(0, 0))).toBeCloseTo(12)
+    expect(crestLeft(frame(0, 0.5))).toBeCloseTo(50)
+    expect(crestLeft(frame(0, 1))).toBeCloseTo(88)
     expect(frame(1, 0)).toContain('data-direction="back"')
-    expect(orbLeft(frame(1, 0))).toBeCloseTo(88)
-    expect(orbLeft(frame(1, 1))).toBeCloseTo(12)
+    expect(crestLeft(frame(1, 0))).toBeCloseTo(88)
+    expect(crestLeft(frame(1, 1))).toBeCloseTo(12)
   })
 
   it('puts no words on screen', () => {
@@ -40,10 +40,10 @@ describe('sciatic floss direction cues', () => {
     expect(frame(0, 0.5)).not.toBe(frame(1, 0.5))
   })
 
-  it('parks at the end it is heading to with reduced motion', () => {
+  it('parks the crest at the end it is heading to with reduced motion', () => {
     setup(true)
-    expect(orbLeft(frame(0, 0.5))).toBeCloseTo(88)
-    expect(orbLeft(frame(1, 0.5))).toBeCloseTo(12)
+    expect(crestLeft(frame(0, 0.5))).toBeCloseTo(88)
+    expect(crestLeft(frame(1, 0.5))).toBeCloseTo(12)
   })
 
   it.each(['3s up · 3s down', '3s forward · 3s back'])(
