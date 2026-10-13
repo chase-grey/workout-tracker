@@ -26,7 +26,7 @@ import { gradeSet, type SetGrade } from '../../lib/setGrade'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder, circuitStations } from '../../lib/circuit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
-import { nextFastMode, rollsThroughRest, turboSetMs, type FastMode } from '../../lib/fastMode'
+import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
 import { canSkip, resumeSkipped, toSkippedRecord, withSkipped } from '../../lib/skipped'
 import {
   bankRest,
@@ -1088,7 +1088,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           // `targetNumbers` is the coming set's target: the numbers to walk back to
           // the bar with, on the rests that should carry them (see lib/rest).
           upNextTarget={upNextTargetLabel(step.setIndex, targetNumbers)}
-          fastMode={fastMode}
+          // Hands-free stands down on the way into an exercise you haven't
+          // started: the rest waits for your tap, with its seconds showing, and
+          // the mode picks up again from that exercise's first set (see
+          // lib/fastMode's startsNewExercise). The set on screen is already the
+          // coming one — the flow moved on as the rest opened.
+          fastMode={
+            startsNewExercise(rest.exKey, planned.key, !!log?.sets.some((s) => s.done)) ? 'off' : fastMode
+          }
           onClose={closeRest}
         />
       )}

@@ -39,6 +39,27 @@ export function rollsThroughRest(mode: FastMode): boolean {
 }
 
 /**
+ * Whether the move from `leaving` onto `coming` is the first time you meet that
+ * exercise — where hands-free stands down until you tap to say you're set up.
+ *
+ * Rolling a rest into the next set of the same lift is safe: the bar is loaded and
+ * you're standing at it. A new exercise means walking somewhere else, changing
+ * plates, lying down, finding a strap — and the clock has no idea how long that
+ * takes. So the way into an exercise waits; its later sets roll as usual.
+ *
+ * Judged by whether any set of `coming` is done yet rather than by its set number,
+ * so a superset or circuit asks once per station — on its first round — and then
+ * flows, and the checklist landing you mid-exercise doesn't ask again.
+ */
+export function startsNewExercise(
+  leaving: string | undefined,
+  coming: string,
+  comingStarted: boolean,
+): boolean {
+  return leaving != null && leaving !== coming && !comingStarted
+}
+
+/**
  * Coerce a persisted value into a mode. Builds before turbo stored a bare
  * boolean, and `true` meant what `on` means now.
  */

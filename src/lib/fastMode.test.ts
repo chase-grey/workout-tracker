@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   nextFastMode,
   rollsThroughRest,
+  startsNewExercise,
   toFastMode,
   turboSetMs,
   TURBO_MAX_SEC,
@@ -37,6 +38,24 @@ describe('rollsThroughRest', () => {
     expect(rollsThroughRest('off')).toBe(false)
     expect(rollsThroughRest('on')).toBe(true)
     expect(rollsThroughRest('turbo')).toBe(true)
+  })
+})
+
+describe('startsNewExercise', () => {
+  it('asks on the way into an exercise not yet started', () => {
+    expect(startsNewExercise('bench', 'row', false)).toBe(true)
+  })
+
+  it('rolls between sets of the same exercise', () => {
+    expect(startsNewExercise('bench', 'bench', true)).toBe(false)
+  })
+
+  it('rolls back into a superset station already worked', () => {
+    expect(startsNewExercise('tailors', 'horse', true)).toBe(false)
+  })
+
+  it('has nothing to ask with nothing before it', () => {
+    expect(startsNewExercise(undefined, 'bench', false)).toBe(false)
   })
 })
 

@@ -10,6 +10,7 @@ import { HoldTimer } from '../../components/HoldTimer'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
+import { startsNewExercise } from '../../lib/fastMode'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { PhotoStep } from './PhotoStep'
 import { formatDuration, type ExerciseTimeSample } from '../../lib/estimate'
@@ -260,8 +261,10 @@ export function StretchSession({
   // rest ends on stays: the rest gave up its seconds for it, so skipping it would
   // only mean arriving at the pose late. So does a side switch's: changing legs
   // takes the same five seconds whoever is driving, and without them the other
-  // side's set starts while you're still turning over. Stretch sets roll into
-  // their rest either way. Kept in the session's snapshot so a reload mid-routine
+  // side's set starts while you're still turning over. And the way into a
+  // stretch not yet started holds that count on "go" until you tap: setting up a
+  // new pose takes as long as it takes. Stretch sets roll into their rest either
+  // way. Kept in the session's snapshot so a reload mid-routine
   // doesn't quietly start waiting for taps again.
   const [fast, setFast] = useState(!!saved?.fast)
   // Fresh routines pause on a preview of the first exercise so the user can get
@@ -559,6 +562,13 @@ export function StretchSession({
 
   const getReadySec = settleInSec(step, prevStep)
 
+  // Whether any set of `target`'s exercise is logged yet, as of `doneSet`.
+  const exerciseStarted = (target: SessionStep, doneSet: Set<string>) =>
+    steps.some((s) => s.exKey === target.exKey && doneSet.has(s.stepKey))
+  // The set on screen is the first of its exercise — where hands-free waits for
+  // your tap before going on (see lib/fastMode's startsNewExercise).
+  const intoNewExercise = startsNewExercise(prevStep?.exKey, step.exKey, exerciseStarted(step, done))
+
   // Route a captured angle into the right field. The shot fixes cold vs warm;
   // which pose it lands in follows the angles the camera actually returned, so
   // switching pose mid-capture still logs the reading somewhere sensible.
@@ -631,7 +641,7 @@ export function StretchSession({
       if (rest) bankRest()
       setRest(null)
       setReadyOverrideSec(null)
-      setPreparing(!!landing && !fast && settleInSec(landing) > 0)
+      setPreparing(!!landing && (!fast || !exerciseStarted(landing, done)) && settleInSec(landing) > 0)
     }
   }
 
@@ -655,9 +665,12 @@ export function StretchSession({
    * refused for a harder reason: `preparing` is what stands the rhythm guide and
    * the screen tap down, so a count that renders nothing would leave the routine
    * with no way forward at all.
+   *
+   * `fresh` is a crossing into an exercise not yet started, which keeps its count
+   * hands-free too — held until you tap (see `intoNewExercise`).
    */
-  const straightToGetReady = (sec: number) => {
-    if (fast || sec <= 0) {
+  const straightToGetReady = (sec: number, fresh = false) => {
+    if ((fast && !fresh) || sec <= 0) {
       setPreparing(false)
       return
     }
@@ -670,13 +683,14 @@ export function StretchSession({
     const next = nextUnfinishedStep(steps.map((step) => doneSet.has(step.stepKey)), index)
     if (next == null) return
     const finished = steps[index]
+    const fresh = startsNewExercise(finished.exKey, steps[next].exKey, exerciseStarted(steps[next], doneSet))
     goToStep(next)
 
     // Crossing from the mobility routine into the core block skips the rest — the
     // last stretch leaves you rested, so go straight to a get-into-position count
-    // (or, running hands-free, straight to the set).
+    // (or, running hands-free, straight to the set — once you've tapped in).
     if (finished.kind === 'flex' && steps[next].kind === 'core') {
-      straightToGetReady(CORE_ENTRY_GET_READY_SEC)
+      straightToGetReady(CORE_ENTRY_GET_READY_SEC, fresh)
       return
     }
     // The other side of the same round: a reposition, not a rest, so it must not
@@ -701,7 +715,7 @@ export function StretchSession({
     const ready = settleInSec(steps[next], finished)
     const restSec = restScreenSec(finished.restSec, ready)
     if (restSec <= 0) {
-      straightToGetReady(ready)
+      straightToGetReady(ready, fresh)
       return
     }
     restStartRef.current = Date.now()
@@ -991,7 +1005,7 @@ export function StretchSession({
           // does — the bar, the stretch coming and the session's controls all
           // stay put and stay tappable while you settle into position.
           header={topBar}
-          untilTap={settleInWaitsForTap(step, prevStep)}
+          untilTap={settleInWaitsForTap(step, prevStep) || (fast && intoNewExercise)}
           onDone={() => {
             setPreparing(false)
             setReadyOverrideSec(null)
