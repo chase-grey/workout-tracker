@@ -8,10 +8,18 @@ export function useChartReadout() {
   const [open, setOpen] = useState(false)
   const touch = useRef<{ x: number; y: number; gesture: Gesture } | null>(null)
 
+  // Hiding the popup alone leaves Recharts' hover selection, and so the active
+  // dot, in place: touch never fires a mouseleave. Leave the chart for it.
+  const close = () => {
+    setOpen(false)
+    card.current?.querySelector('.recharts-wrapper')
+      ?.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: null }))
+  }
+
   useEffect(() => {
     if (!open) return
     const onDown = (e: PointerEvent) => {
-      if (!card.current?.contains(e.target as Node)) setOpen(false)
+      if (!card.current?.contains(e.target as Node)) close()
     }
     document.addEventListener('pointerdown', onDown, true)
     return () => document.removeEventListener('pointerdown', onDown, true)
@@ -54,7 +62,7 @@ export function useChartReadout() {
     const down = touch.current
     if (!down || down.gesture === 'scroll') return
     if (down.gesture === 'tap') down.gesture = gestureFrom(e.clientX - down.x, e.clientY - down.y)
-    if (down.gesture === 'scroll') setOpen(false)
+    if (down.gesture === 'scroll') close()
     else selectTouch(e)
   }
   const onPointerUp = (e: ReactPointerEvent) => {
@@ -63,7 +71,7 @@ export function useChartReadout() {
   }
   const onPointerCancel = () => {
     touch.current = null
-    setOpen(false)
+    close()
   }
   const onSelection = (state: { activeIndex?: string | number | null; isTooltipActive?: boolean }, e: { clientX?: number; clientY?: number; type: string }) => {
     if (touch.current?.gesture === 'scroll') return
