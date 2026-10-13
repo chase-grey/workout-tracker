@@ -709,12 +709,6 @@ function GoalRow({
         )}
       </div>
 
-      {goal.movingTarget && !reached && (proj.targetSlopePerWeek ?? 0) > 0 && (
-        <p className="mt-1 text-xs text-neutral-400">
-          Forecast includes your weight gain: target +{Number(proj.targetSlopePerWeek?.toFixed(2))} lbs/week
-          {proj.etaWeeks != null && ` · about ${Math.round(goal.target + proj.targetSlopePerWeek! * proj.etaWeeks)} lbs at the projected date`}.
-        </p>
-      )}
       {reached ? (
         <p className="mt-1 text-sm text-accent-2">
           <MdCelebration className="inline align-text-bottom mr-1" aria-hidden />
@@ -793,17 +787,16 @@ function GoalRow({
         <p className="mt-1 text-sm text-accent-2">
           on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
         </p>
-      ) : (
+      ) : !has || proj.basis.thin || proj.beyondHorizon ? (
         <p className="mt-1 text-sm text-neutral-500">
           {!has
             ? 'log data to project this.'
             : proj.basis.thin
               ? 'not enough recent data to project.'
-              : proj.beyondHorizon
-                ? 'too far to predict yet.'
-                : 'not trending toward this yet — keep at it.'}
+              : 'too far to predict yet.'}
         </p>
-      )}
+      ) : null}
+      {/* Not trending toward the target says nothing: the corner's "—" is enough. */}
 
       {/* Only when no projection chart is already drawn: a locked goal has its
           LockChart and a lockable one its CommitChart, both of which run the
