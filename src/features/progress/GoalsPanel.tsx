@@ -256,7 +256,7 @@ function LockChart({
 /**
  * A goal's raw series against its target line, shown when the goal isn't close
  * enough to lock a projection yet — so the history is still visible instead of
- * only a "keep at it" line. No projected line, because there isn't a reliable
+ * only a bare "—". No projected line, because there isn't a reliable
  * one to draw.
  */
 function DataChart({
@@ -796,7 +796,6 @@ function GoalRow({
               : 'too far to predict yet.'}
         </p>
       ) : null}
-      {/* Not trending toward the target says nothing: the corner's "—" is enough. */}
 
       {/* Only when no projection chart is already drawn: a locked goal has its
           LockChart and a lockable one its CommitChart, both of which run the
