@@ -5,6 +5,7 @@ import {
   type Pt,
 } from './splitAngle'
 import type { Landmark } from './pose'
+import { currentPalette } from './themeStore'
 
 /**
  * Photo-based angle measurement: the poses that can be measured, how their
@@ -59,10 +60,17 @@ export type HandleSpec = { key: string; label: string }
 /** A line to draw between two handles, with a color role. */
 export type Segment = { from: string; to: string; role: 'a' | 'b' | 'ref' }
 
-/** Colors each segment/handle role is drawn in (shared by editor + saved photo). */
+/**
+ * Colors each segment/handle role is drawn in (shared by editor + saved photo).
+ * Getters, so the arms are drawn in the theme current when they're drawn.
+ */
 export const ROLE_COLOR: Record<Segment['role'], string> = {
-  a: '#22c55e', // accent green — left arm
-  b: '#38bdf8', // sky — right arm
+  get a() {
+    return currentPalette().scale[500] // accent — left arm
+  },
+  get b() {
+    return currentPalette().cold // a cool colour clear of the accent — right arm
+  },
   ref: '#e5e5e5', // neutral — reference line
 }
 

@@ -344,7 +344,7 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
       onMouseDown={(e) => e.preventDefault()}
       aria-pressed={on}
       className={`min-h-[44px] rounded-xl px-2 text-sm font-medium active:opacity-80 ${
-        on ? 'bg-accent text-black' : 'bg-surface text-neutral-300'
+        on ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-300'
       }`}
     >
       {children}
@@ -746,7 +746,7 @@ export function ChatTab({
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => resolveProposal(i, true)}
-                    className="min-h-[44px] flex-1 rounded-xl bg-accent px-3 font-semibold text-black active:opacity-80"
+                    className="min-h-[44px] flex-1 rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
                   >
                     approve
                   </button>
@@ -883,7 +883,7 @@ export function ChatTab({
             onClick={() => void send()}
             disabled={loading || answerLoading || input.trim().length === 0}
             aria-label={answerTarget ? 'reply' : 'send'}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-black active:opacity-80 disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent active:opacity-80 disabled:opacity-40"
           >
             <MdArrowForward className="text-xl" aria-hidden />
           </button>

@@ -55,7 +55,7 @@ export function GetReady({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center overflow-hidden bg-black px-6"
+      className="keep-dark fixed inset-0 z-50 flex flex-col items-center overflow-hidden bg-black px-6"
       onClick={() => doneRef.current()}
     >
       {/* The session's toolbar, in the shell's content box — hence the negative

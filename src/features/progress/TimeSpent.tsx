@@ -14,12 +14,12 @@ import {
 } from 'recharts'
 import { useData } from '../../store/DataContext'
 import { activityTotals, monthlyActivity, secToMin } from '../../lib/activityTime'
-import { LINE_GOAL, LINE_PRIMARY, LINE_SECONDARY, niceScale } from '../../lib/chart'
+import { CHART_SURFACE, CHART_SURFACE_2, LINE_GOAL, LINE_PRIMARY, LINE_SECONDARY, niceScale } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 
-/** The green ladder, brightest bucket first: work, then stretch, then rest. */
-const COLORS = { workout: LINE_PRIMARY, stretch: LINE_SECONDARY, rest: LINE_GOAL } as const
+/** The accent ladder, brightest bucket first: work, then stretch, then rest. Read at render so it follows the theme. */
+const colors = () => ({ workout: LINE_PRIMARY, stretch: LINE_SECONDARY, rest: LINE_GOAL })
 
 const MONTH_ABBR = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
@@ -39,7 +39,7 @@ function fmtHm(sec: number): string {
 }
 
 const axisTick = { fill: '#737373', fontSize: 11 }
-const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
 
 export function TimeSpent() {
   const { durations } = useData()
@@ -53,9 +53,9 @@ export function TimeSpent() {
   const pieData = useMemo(
     () =>
       [
-        { key: 'workout', name: 'working out', sec: totals.workoutSec, fill: COLORS.workout },
-        { key: 'stretch', name: 'stretch + core', sec: totals.stretchSec, fill: COLORS.stretch },
-        { key: 'rest', name: 'resting', sec: totals.restSec, fill: COLORS.rest },
+        { key: 'workout', name: 'working out', sec: totals.workoutSec, fill: colors().workout },
+        { key: 'stretch', name: 'stretch + core', sec: totals.stretchSec, fill: colors().stretch },
+        { key: 'rest', name: 'resting', sec: totals.restSec, fill: colors().rest },
       ].filter((d) => d.sec > 0),
     [totals],
   )
@@ -140,7 +140,7 @@ export function TimeSpent() {
                   margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
                   {...monthlyReadout.chart}
                 >
-                  <CartesianGrid stroke="#262626" vertical={false} />
+                  <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
                   <XAxis dataKey="month" tick={axisTick} />
                   <YAxis
                     tick={axisTick}
@@ -149,17 +149,17 @@ export function TimeSpent() {
                     domain={minutesScale.domain}
                     ticks={minutesScale.ticks}
                   />
-                  <AxisBreak broken={minutesScale.broken} bg="#171717" />
+                  <AxisBreak broken={minutesScale.broken} bg={CHART_SURFACE} />
                   <Tooltip
                     {...monthlyReadout.tooltip}
                     contentStyle={tooltipStyle}
-                    labelStyle={{ color: '#a3a3a3' }}
+                    labelStyle={{ color: 'var(--color-neutral-400)' }}
                     formatter={(v, n) => [`${v} min`, n]}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="workout" name="working out" stroke={COLORS.workout} strokeWidth={2} dot={{ r: 2 }} />
-                  <Line type="monotone" dataKey="stretch" name="stretch + core" stroke={COLORS.stretch} strokeWidth={2} dot={{ r: 2 }} />
-                  <Line type="monotone" dataKey="rest" name="resting" stroke={COLORS.rest} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="workout" name="working out" stroke={colors().workout} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="stretch" name="stretch + core" stroke={colors().stretch} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="rest" name="resting" stroke={colors().rest} strokeWidth={2} dot={{ r: 2 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

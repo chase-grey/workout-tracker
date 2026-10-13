@@ -21,9 +21,11 @@ import {
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
 import { buildGoals, GOAL_IDS } from '../../lib/goals'
 import {
-  fmtDateLabel,
+  CHART_SURFACE,
+  CHART_SURFACE_2,
   LINE_PRIMARY,
   LINE_SECONDARY,
+  fmtDateLabel,
   niceScale,
   timeXAxis,
   withTime,
@@ -74,7 +76,7 @@ function Pills<T extends string | number | null>({
           key={String(o.value)}
           onClick={() => onChange(o.value)}
           className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
-            o.value === value ? 'bg-accent text-black' : 'text-neutral-400'
+            o.value === value ? 'bg-accent text-on-accent' : 'text-neutral-400'
           }`}
         >
           {o.label}
@@ -85,7 +87,7 @@ function Pills<T extends string | number | null>({
 }
 
 const axisTick = { fill: '#737373', fontSize: 11 }
-const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
 
 /**
  * The two presses on one set of rows, split by whether each was first or second.
@@ -160,14 +162,14 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
           margin={{ top: 8, right: 12, bottom: 0, left: -12 }}
           {...readout.chart}
         >
-          <CartesianGrid stroke="#262626" vertical={false} />
+          <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
-          <AxisBreak broken={yScale.broken} bg="#171717" />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE} />
           <Tooltip
             {...readout.tooltip}
             contentStyle={tooltipStyle}
-            labelStyle={{ color: '#a3a3a3' }}
+            labelStyle={{ color: 'var(--color-neutral-400)' }}
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}
             formatter={(v, n) => [`${v} ${unit}`, n]}
           />

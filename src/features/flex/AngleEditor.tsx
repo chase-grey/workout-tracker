@@ -246,7 +246,7 @@ export function AngleEditor({
         <button
           onClick={() => onSave(result, handles)}
           disabled={saving}
-          className="min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80 disabled:opacity-50"
+          className="min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80 disabled:opacity-50"
         >
           save angle
         </button>

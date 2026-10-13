@@ -1071,7 +1071,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {atLast && (
         <button
           {...advancePress}
-          className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+          className="mt-1 flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
         >
           finish workout
         </button>
@@ -1205,7 +1205,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             <p className="mb-3 text-xs text-neutral-500">tap a name to jump; edit any set below.</p>
             <button
               onClick={() => setShowAddExercise(true)}
-              className="mb-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-accent px-3 font-semibold text-black active:opacity-80"
+              className="mb-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
             >
               + add exercise
             </button>
@@ -1359,7 +1359,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               </div>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setShowAddExercise(false)} className="min-h-[48px] flex-1 rounded-xl bg-surface-2 font-semibold active:opacity-70">cancel</button>
-                <button type="submit" disabled={!newExerciseName.trim()} className="min-h-[48px] flex-1 rounded-xl bg-accent font-semibold text-black disabled:opacity-40">add to workout</button>
+                <button type="submit" disabled={!newExerciseName.trim()} className="min-h-[48px] flex-1 rounded-xl bg-accent font-semibold text-on-accent disabled:opacity-40">add to workout</button>
               </div>
             </div>
           </form>

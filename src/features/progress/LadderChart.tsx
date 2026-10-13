@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { sharedCurrentPace, currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
-import { goalChartEnd, LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { CHART_SURFACE, CHART_SURFACE_2, LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, goalChartEnd, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
@@ -148,10 +148,10 @@ export function LadderChart({
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={rows} margin={{ top: 8, right: 14, bottom: 0, left: -12 }} {...readout.chart}>
-          <CartesianGrid stroke="#262626" vertical={false} />
+          <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
-          <AxisBreak broken={yScale.broken} bg="#171717" />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE} />
           <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} lift={lift} />} />
           {/* Named lines only where there's more than one to tell apart: a lift
               ladder plots a single series, and a legend under it would name the
@@ -167,7 +167,7 @@ export function LadderChart({
               y={g.target}
               stroke={LINE_GOAL}
               strokeDasharray="5 4"
-              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg="#171717" size={10} />}
+              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg={CHART_SURFACE} size={10} />}
             />
           ))}
           {/* Committed curves sit with the rest of the goal furniture, in the same

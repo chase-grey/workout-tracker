@@ -28,11 +28,11 @@ type Style = {
 }
 
 const STYLES: Record<SetGrade, Style> = {
-  // accent-2, the app's success green, at an opacity that reads as a soft wash.
-  met: { durationMs: 1200, color: '#22c55e', glow: 0.5, motes: 5, ring: false, vibrate: null },
-  // accent-bright, and pushed well up in opacity: this green goes muddy over
+  // accent-2, the app's success colour, at an opacity that reads as a soft wash.
+  met: { durationMs: 1200, color: 'var(--color-accent-2)', glow: 0.5, motes: 5, ring: false, vibrate: null },
+  // accent-bright, and pushed well up in opacity: a bright accent goes muddy over
   // black if it's used faintly, which would read as *less* than the quiet tier.
-  beat: { durationMs: 1600, color: '#4ade80', glow: 0.85, motes: 11, ring: true, vibrate: 20 },
+  beat: { durationMs: 1600, color: 'var(--color-accent-bright)', glow: 0.85, motes: 11, ring: true, vibrate: 20 },
 }
 
 export function SetCheer({ grade, onDone }: { grade: SetGrade; onDone: () => void }) {

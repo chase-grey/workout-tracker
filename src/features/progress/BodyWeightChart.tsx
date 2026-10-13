@@ -14,19 +14,21 @@ import type { Point } from '../../lib/progress'
 import { sharedCurrentPace, currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
 import { enumerateWeeks, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import {
-  calorieWeekMark,
-  fmtDateLabel,
-  fmtTick,
-  goalChartEnd,
+  CHART_SURFACE,
+  CHART_SURFACE_2,
   HIT_DAYS_DIM,
   LINE_CURRENT_PACE,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
   LINE_SECONDARY,
+  WEEK_BAR_HEIGHT,
+  calorieWeekMark,
+  fmtDateLabel,
+  fmtTick,
+  goalChartEnd,
   niceScale,
   timeXAxis,
-  WEEK_BAR_HEIGHT,
   withTime,
 } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
@@ -34,7 +36,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
-const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -270,7 +272,7 @@ export function BodyWeightChart({
       </div>
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={rows} margin={{ top: 8, right: 0, bottom: 0, left: -12 }} {...readout.chart}>
-          <CartesianGrid stroke="#262626" vertical={false} />
+          <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis
             {...timeXAxis}
             domain={xDomain}
@@ -280,12 +282,12 @@ export function BodyWeightChart({
           />
           <YAxis yAxisId="left" tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
           <YAxis yAxisId="right" orientation="right" tick={{ ...axisTick, fill: LINE_SECONDARY }} width="auto" domain={fatScale.domain} ticks={fatScale.ticks} tickFormatter={(value) => `${value}%`} />
-          <AxisBreak broken={yScale.broken} bg="#171717" />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE} />
           <Tooltip
             {...readout.tooltip}
             itemSorter={(entry) => -Number(entry.value)}
             contentStyle={tooltipStyle}
-            labelStyle={{ color: '#a3a3a3' }}
+            labelStyle={{ color: 'var(--color-neutral-400)' }}
             labelFormatter={(ms) => labelWithWeek(Number(ms))}
             formatter={(v, n) => [n === 'body fat' ? `${v}%` : `${v} lbs`, n]}
           />
@@ -300,7 +302,7 @@ export function BodyWeightChart({
               y={g.target}
               stroke={LINE_GOAL}
               strokeDasharray="5 4"
-              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg="#171717" size={10} />}
+              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg={CHART_SURFACE} size={10} />}
             />
           ))}
           {/* The committed curves sit with the rest of the goal furniture — the

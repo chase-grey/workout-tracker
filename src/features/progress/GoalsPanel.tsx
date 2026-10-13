@@ -47,12 +47,14 @@ import {
   type LockedProjections,
 } from '../../lib/goalLock'
 import {
+  CHART_PAGE,
+  CHART_SURFACE_2,
   LINE_CURRENT_PACE,
-  goalChartEnd,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
   LINE_SECONDARY,
+  goalChartEnd,
   niceScale,
   timeXAxis,
   withTime,
@@ -158,7 +160,7 @@ function LockChart({
     <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card}>
       <ResponsiveContainer width="100%" height={140}>
         <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }} {...readout.chart}>
-          <CartesianGrid stroke="#262626" vertical={false} />
+          <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} domain={xDomain} tick={axisTick} />
           <YAxis
             tick={axisTick}
@@ -168,7 +170,7 @@ function LockChart({
             allowDecimals={false}
             interval={0}
           />
-          <AxisBreak broken={yScale.broken} bg="#262626" />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE_2} />
           <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} lock={lock} />} />
           {/* Where the projection was frozen: history to the left, the commitment
               it's being measured against to the right. */}
@@ -176,7 +178,7 @@ function LockChart({
             x={parseISODate(lock.lockedAt).getTime()}
             stroke={LINE_GOAL}
             strokeDasharray="3 3"
-            label={<ChartTag text="locked" color={LINE_GOAL_LABEL} bg="#262626" side={tagSide} />}
+            label={<ChartTag text="locked" color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} side={tagSide} />}
           />
           {/* The target the line is climbing toward, so the goal reads off the
               chart without doing the mental math from the projected curve's end. */}
@@ -184,7 +186,7 @@ function LockChart({
             y={lock.target}
             stroke={LINE_GOAL}
             strokeDasharray="5 4"
-            label={<ChartTag text={`goal ${lock.target}`} color={LINE_GOAL_LABEL} bg="#262626" side={tagSide} />}
+            label={<ChartTag text={`goal ${lock.target}`} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} side={tagSide} />}
           />
           {/* The commitment: where the locked curve meets the goal. */}
           <ReferenceDot
@@ -192,9 +194,9 @@ function LockChart({
             y={lock.target}
             r={4}
             fill={LINE_GOAL}
-            stroke="#0a0a0a"
+            stroke={CHART_PAGE}
             label={
-              <ChartTag text={fmtDate(lock.etaDate)} color={LINE_GOAL_LABEL} bg="#262626" align="center" side={tagSide} />
+              <ChartTag text={fmtDate(lock.etaDate)} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} align="center" side={tagSide} />
             }
           />
           {/* Where the pace being held now would land instead — dark green when
@@ -205,12 +207,12 @@ function LockChart({
               y={currentPace.at(-1)?.value ?? lock.target}
               r={4}
               fill={behind ? LINE_SECONDARY : LINE_PRIMARY}
-              stroke="#0a0a0a"
+              stroke={CHART_PAGE}
               label={
                 <ChartTag
                   text={fmtDate(revisedEta!)}
                   color={behind ? LINE_SECONDARY : LINE_PRIMARY}
-                  bg="#262626"
+                  bg={CHART_SURFACE_2}
                   align="center"
                   side={tagSide}
                   nudge={revisedNudge}
@@ -281,7 +283,7 @@ function DataChart({
     <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card}>
       <ResponsiveContainer width="100%" height={120}>
         <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }} {...readout.chart}>
-          <CartesianGrid stroke="#262626" vertical={false} />
+          <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis
             tick={axisTick}
@@ -291,13 +293,13 @@ function DataChart({
             allowDecimals={false}
             interval={0}
           />
-          <AxisBreak broken={yScale.broken} bg="#262626" />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE_2} />
           <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} />} />
           <ReferenceLine
             y={target}
             stroke={LINE_GOAL}
             strokeDasharray="5 4"
-            label={<ChartTag text={targetLabel} color={LINE_GOAL_LABEL} bg="#262626" size={10} />}
+            label={<ChartTag text={targetLabel} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} size={10} />}
           />
           <Line
             type="monotone"
@@ -378,7 +380,7 @@ function LockInPrompt({
         <button
           onClick={() => valid && onLock(date)}
           disabled={!valid}
-          className="min-h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-black active:opacity-70 disabled:opacity-40"
+          className="min-h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-on-accent active:opacity-70 disabled:opacity-40"
         >
           <MdLockOutline className="inline align-text-bottom mr-1" aria-hidden />
           commit
@@ -475,7 +477,7 @@ function RecommitPrompt({
             <button
               onClick={() => valid && onLock(date)}
               disabled={!valid}
-              className="min-h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-black active:opacity-70 disabled:opacity-40"
+              className="min-h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-on-accent active:opacity-70 disabled:opacity-40"
             >
               <MdLockOutline className="inline align-text-bottom mr-1" aria-hidden />
               commit
@@ -873,7 +875,7 @@ function SixPackRow({
             aria-checked={status === o.value}
             onClick={() => onChange(o.value)}
             className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
-              status === o.value ? 'bg-accent text-black' : 'text-neutral-400'
+              status === o.value ? 'bg-accent text-on-accent' : 'text-neutral-400'
             }`}
           >
             {o.label}

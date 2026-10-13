@@ -2,6 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { clamp, earthFragments, IMPACT_AT } from '../lib/comet'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { BurningComet } from './BurningComet'
+import { currentPalette } from '../lib/themeStore'
+
+/** A colour drawn against green, carried to the theme's accent (see theme.tint). */
+const tint = (hex: string) => currentPalette().tint(hex)
 
 const STARS = Array.from({ length: 38 }, (_, i) => ({
   x: (i * 37.71) % 100, y: (i * 61.13) % 100, size: 0.12 + (i % 3) * 0.08,
@@ -36,17 +40,17 @@ export function CometRest({ fraction, earth = false }: { fraction: number; earth
     <circle r={radius} fill={`url(#${id}-ocean)`} />
     <path d={`M ${-radius * .8} ${-radius * .35} l ${radius * .3} ${-radius * .4} ${radius * .4} ${radius * .2} ${-radius * .12} ${radius * .4} ${radius * .2} ${radius * .2} ${-radius * .15} ${radius * .55} ${-radius * .23} ${-radius * .35} z M ${radius * .35} ${-radius * .65} l ${radius * .45} ${radius * .4} ${-radius * .2} ${radius * .3} ${-radius * .35} ${-radius * .1} z`}
       fill="currentColor" opacity=".85" />
-    <ellipse cy={-radius * .7} rx={radius * .48} ry={radius * .08} fill="#effff6" opacity=".45" />
+    <ellipse cy={-radius * .7} rx={radius * .48} ry={radius * .08} fill={tint('#effff6')} opacity=".45" />
   </>
 
   return <div ref={host} className="pointer-events-none absolute inset-y-0 -left-6 -right-6 overflow-hidden text-accent-bright" aria-hidden>
     <svg viewBox={`0 0 100 ${height}`} className="absolute inset-0 h-full w-full">
       <defs>
         <radialGradient id={`${id}-ocean`} cx="30%" cy="28%" r="75%">
-          <stop stopColor="#65cbb3" /><stop offset=".55" stopColor="#187462" /><stop offset="1" stopColor="#032a25" />
+          <stop stopColor={tint('#65cbb3')} /><stop offset=".55" stopColor={tint('#187462')} /><stop offset="1" stopColor={tint('#032a25')} />
         </radialGradient>
         <radialGradient id={`${id}-glow`}>
-          <stop stopColor="#effff6" stopOpacity=".85" /><stop offset=".28" stopColor="currentColor" stopOpacity=".45" /><stop offset="1" stopColor="currentColor" stopOpacity="0" />
+          <stop stopColor={tint('#effff6')} stopOpacity=".85" /><stop offset=".28" stopColor="currentColor" stopOpacity=".45" /><stop offset="1" stopColor="currentColor" stopOpacity="0" />
         </radialGradient>
         <linearGradient id={`${id}-tail`}>
           <stop stopColor="currentColor" stopOpacity="0" /><stop offset="1" stopColor="currentColor" stopOpacity=".85" />
@@ -59,7 +63,7 @@ export function CometRest({ fraction, earth = false }: { fraction: number; earth
       <g opacity={.55 * clamp(fraction * 12)}>
         {STARS.map((star, i) => {
           const sx = reduced ? star.x : ((star.x - elapsed * (earth ? 12 : 230)) % 100 + 100) % 100
-          return <path key={i} d={`M ${sx} ${star.y * height / 100} h ${reduced || earth ? .1 : 1.5 + i % 3}`} stroke="#b9e9df" strokeWidth={star.size} strokeLinecap="round" />
+          return <path key={i} d={`M ${sx} ${star.y * height / 100} h ${reduced || earth ? .1 : 1.5 + i % 3}`} stroke={tint('#b9e9df')} strokeWidth={star.size} strokeLinecap="round" />
         })}
       </g>
       {earth && !impacted && <g transform={`translate(50 ${height / 2})`}>
@@ -73,7 +77,7 @@ export function CometRest({ fraction, earth = false }: { fraction: number; earth
           <path d="M -45 -4 Q -19 -7 1 -2 L 3 0 Q -11 7 -45 8 Q -23 1 -45 -4" fill={`url(#${id}-tail)`} opacity=".55" />
           <path d="M -37 0 Q -12 -2 2 0 Q -14 3 -37 0" fill={`url(#${id}-tail)`} />
           <circle r="7" fill={`url(#${id}-glow)`} />
-          <path d="M -3 -1 L -1 -2.5 1.5 -2 3 0 1 2 -2 1.5 Z" fill="#effff6" />
+          <path d="M -3 -1 L -1 -2.5 1.5 -2 3 0 1 2 -2 1.5 Z" fill={tint('#effff6')} />
         </g>
 
       </g>}

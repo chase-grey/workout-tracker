@@ -53,7 +53,7 @@ function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | '
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
         {!m.met && (
           <div
-            className="absolute -top-0.5 h-3 w-0.5 -translate-x-1/2 rounded bg-white/70"
+            className="absolute -top-0.5 h-3 w-0.5 -translate-x-1/2 rounded bg-neutral-50/70"
             style={{ left: `${Math.min(m.required / m.goal, 1) * 100}%` }}
           />
         )}
@@ -157,7 +157,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
         <div className="absolute inset-y-0 right-0 w-0.5 bg-accent-2" />
         {pace.requiredFraction < 1 && (
           <div
-            className="absolute -top-0.5 h-4 w-0.5 -translate-x-1/2 rounded bg-white"
+            className="absolute -top-0.5 h-4 w-0.5 -translate-x-1/2 rounded bg-neutral-50"
             style={{ left: `${pace.requiredFraction * 100}%` }}
             title="steady pace to finish the week"
           />

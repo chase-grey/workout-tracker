@@ -3,9 +3,18 @@ import { Sparkline } from '../../components/Sparkline'
 import { fmtTick } from '../../lib/chart'
 import { parseISODate } from '../../lib/dates'
 import type { AngleTrend } from '../../lib/angleContext'
+import { currentPalette } from '../../lib/themeStore'
 
-/** Cold readings keep the charts' blue; warm ones the accent green. */
-const TEMP_COLOR: Record<AngleTrend['temp'], string> = { cold: '#38bdf8', warm: '#22c55e' }
+/** Cold readings keep the charts' cool colour; warm ones the accent. */
+// Getters, so a reading is coloured in the theme current when it's drawn.
+const TEMP_COLOR: Record<AngleTrend['temp'], string> = {
+  get cold() {
+    return currentPalette().cold
+  },
+  get warm() {
+    return currentPalette().scale[500]
+  },
+}
 
 const short = (iso: string) => fmtTick(parseISODate(iso).getTime())
 
@@ -139,7 +148,7 @@ export function AngleContextCard({
       >
         <button
           onClick={onDismiss}
-          className="min-h-[56px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+          className="min-h-[56px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
         >
           got it
         </button>

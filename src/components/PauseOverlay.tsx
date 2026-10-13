@@ -9,7 +9,7 @@ import { MdPause, MdPlayArrow } from 'react-icons/md'
 export function PauseOverlay({ label = 'paused', onResume }: { label?: string; onResume: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-black/95 px-6"
+      className="keep-dark fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-black/95 px-6"
       onClick={onResume}
     >
       <div className="flex flex-col items-center gap-4">
@@ -21,7 +21,7 @@ export function PauseOverlay({ label = 'paused', onResume }: { label?: string; o
 
       <button
         onClick={onResume}
-        className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent px-10 text-lg font-bold text-black active:opacity-80"
+        className="flex min-h-[56px] items-center justify-center gap-1 rounded-2xl bg-accent px-10 text-lg font-bold text-on-accent active:opacity-80"
       >
         <MdPlayArrow className="text-2xl" aria-hidden /> resume
       </button>

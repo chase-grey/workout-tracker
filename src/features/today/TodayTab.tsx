@@ -106,7 +106,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
                 logProgressPhoto()
                 flashMsg('photo logged')
               }}
-              className="min-h-[40px] flex-1 rounded-xl bg-accent text-sm font-semibold text-black"
+              className="min-h-[40px] flex-1 rounded-xl bg-accent text-sm font-semibold text-on-accent"
             >
               took it
             </button>

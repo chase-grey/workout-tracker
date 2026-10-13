@@ -90,7 +90,7 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
         </div>
         {pace != null && pace > 0 && pace < 1 && (
           <div
-            className="absolute -top-0.5 h-3 w-0.5 -translate-x-1/2 rounded bg-white"
+            className="absolute -top-0.5 h-3 w-0.5 -translate-x-1/2 rounded bg-neutral-50"
             style={{ left: `${pace * 100}%` }}
             title="on-pace target for now"
           />

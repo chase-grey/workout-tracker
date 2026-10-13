@@ -12,15 +12,18 @@ import {
 } from 'recharts'
 import type { Point } from '../../lib/progress'
 import {
-  fmtDateLabel,
+  CHART_SURFACE,
+  CHART_SURFACE_2,
+  CHART_ZERO,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
   LINE_SECONDARY,
   MARK_OFF_SLOT,
+  OFF_SLOT_NAME,
+  fmtDateLabel,
   niceScale,
   offSlotDot,
-  OFF_SLOT_NAME,
   timeXAxis,
   withTime,
 } from '../../lib/chart'
@@ -29,7 +32,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
-const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
 
 /** Legend that follows the axes: the left-axis series sits left, cal surplus right. */
 export function SplitLegend({ payload }: { payload?: { value?: unknown; dataKey?: unknown; color?: string }[] }) {
@@ -125,7 +128,7 @@ export function MetricChart({
           margin={{ top: 8, right: overlay ? 0 : 12, bottom: 0, left: -12 }}
           {...readout.chart}
         >
-          <CartesianGrid stroke="#262626" vertical={false} />
+          <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis
             yAxisId="left"
@@ -134,7 +137,7 @@ export function MetricChart({
             domain={yScale.domain}
             ticks={yScale.ticks}
           />
-          <AxisBreak broken={yScale.broken} bg="#171717" />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE} />
           {overlay && (
             <YAxis
               yAxisId="cal"
@@ -149,7 +152,7 @@ export function MetricChart({
           <Tooltip
             {...readout.tooltip}
             contentStyle={tooltipStyle}
-            labelStyle={{ color: '#a3a3a3' }}
+            labelStyle={{ color: 'var(--color-neutral-400)' }}
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}
             formatter={(v, n) =>
               n === 'cal'
@@ -166,13 +169,13 @@ export function MetricChart({
               y={g.value}
               stroke={LINE_GOAL}
               strokeDasharray="5 4"
-              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg="#171717" size={10} />}
+              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg={CHART_SURFACE} size={10} />}
             />
           ))}
           {overlay && (
             <>
               <Legend content={<SplitLegend />} />
-              <ReferenceLine yAxisId="cal" y={0} stroke="#404040" strokeDasharray="3 3" />
+              <ReferenceLine yAxisId="cal" y={0} stroke={CHART_ZERO} strokeDasharray="3 3" />
               <Line
                 yAxisId="cal"
                 type="monotone"
@@ -208,7 +211,7 @@ export function MetricChart({
               name={OFF_SLOT_NAME}
               stroke={MARK_OFF_SLOT}
               strokeWidth={0}
-              dot={offSlotDot('#171717')}
+              dot={offSlotDot(CHART_SURFACE)}
               activeDot={{ r: 4 }}
             />
           )}

@@ -4,7 +4,7 @@ import { LINE_SECONDARY, fmtDateLabel } from '../../lib/chart'
 import { fmtSet } from '../../lib/exerciseHistory'
 import type { DaySets } from '../../lib/goalSets'
 
-const tooltipStyle = { background: '#171717', border: '1px solid #333', borderRadius: 12 }
+const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
 
 /** One series' entry in the hovered point, as recharts hands it over. */
 type Entry = {

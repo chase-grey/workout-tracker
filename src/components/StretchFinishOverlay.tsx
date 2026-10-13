@@ -3,8 +3,8 @@ import type { StretchFinishSummary } from '../store/DataContext'
 import { FLEX_ROUTINES } from '../config/flexRoutines'
 import { Confetti } from './Confetti'
 import { SessionTimeCard } from './SessionTimeCard'
+import { currentPalette } from '../lib/themeStore'
 
-const GREENS = ['#16a34a', '#22c55e', '#4ade80', '#86efac']
 const GOLDS = ['#fbbf24', '#f59e0b', '#fde68a']
 
 /**
@@ -50,8 +50,8 @@ export function StretchFinishOverlay({
   const gap = (first: boolean) => (first ? 'mt-6' : 'mt-5')
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
-      {hasWins && <Confetti count={72} colors={[...GOLDS, ...GREENS, '#ffffff']} />}
+    <div className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
+      {hasWins && <Confetti count={72} colors={[...GOLDS, ...currentPalette().confetti, '#ffffff']} />}
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <div className="flex flex-col items-center text-center">
@@ -119,7 +119,7 @@ export function StretchFinishOverlay({
 
         <button
           onClick={onClose}
-          className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:bg-accent-2"
+          className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent active:bg-accent-2"
         >
           nice
         </button>

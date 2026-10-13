@@ -67,7 +67,7 @@ export function PhotoStep({
       >
         <button
           onClick={() => onDone(anyTaken)}
-          className="flex min-h-[56px] w-full items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+          className="flex min-h-[56px] w-full items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
         >
           {anyTaken ? 'continue' : 'skip'}
           <MdChevronRight className="text-2xl" aria-hidden />

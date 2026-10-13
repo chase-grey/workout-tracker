@@ -61,7 +61,7 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
         <button
           onClick={save}
           disabled={!valid}
-          className="mt-4 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black disabled:opacity-30"
+          className="mt-4 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent disabled:opacity-30"
         >
           save
         </button>

@@ -1,16 +1,87 @@
 @import 'tailwindcss';
 
-/* Dark mode is the default and only theme for now — gyms have varying light. */
+/* The accent is a ten-step scale that lib/themeStore writes onto <html> as
+   --accent-<shade> from the chosen theme (lib/theme); green is the fallback so
+   the first paint is never colourless. The named tokens below are roles on that
+   scale, not colours. */
 @theme {
   --color-bg: #0a0a0a;
   --color-surface: #171717;
   --color-surface-2: #262626;
   --color-border: #333333;
-  --color-accent: #16a34a; /* dark green — primary CTAs, highlights, streaks */
-  --color-accent-deep: #15803d; /* deep green — progress fills, which shouldn't compete with the CTA */
-  --color-accent-2: #22c55e; /* medium green — success / completed states */
-  --color-accent-bright: #4ade80; /* bright green — rhythm/rest animations that call attention */
-  --color-accent-dark: #14532d; /* dark green — fills that sit under white text, like the user's chat bubbles */
+  --color-accent: var(--accent-600); /* primary CTAs, highlights, streaks */
+  --color-accent-deep: var(--accent-700); /* progress fills, which shouldn't compete with the CTA */
+  --color-accent-2: var(--accent-500); /* success / completed states */
+  --color-accent-bright: var(--accent-400); /* rhythm/rest animations that call attention */
+  --color-accent-dark: var(--accent-900); /* fills that sit under white text, like the user's chat bubbles */
+  --color-on-accent: var(--on-accent); /* text on a solid accent fill */
+}
+
+:root {
+  --accent-50: #f0fdf4;
+  --accent-100: #dcfce7;
+  --accent-200: #bbf7d0;
+  --accent-300: #86efac;
+  --accent-400: #4ade80;
+  --accent-500: #22c55e;
+  --accent-600: #16a34a;
+  --accent-700: #15803d;
+  --accent-800: #166534;
+  --accent-900: #14532d;
+  --on-accent: #000000;
+  color-scheme: dark;
+}
+
+/* Light mode turns the ground over rather than restyling every screen: the
+   neutral scale runs the other way, so text-neutral-300 that sat light on black
+   now sits dark on white, and the accent roles step a shade deeper so a bright
+   green still reads against paper. Black and white themselves stay put — they're
+   the scrims and the full-screen takeovers below. */
+:root[data-mode='light'] {
+  --color-bg: #f5f5f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #e5e5e5;
+  --color-border: #d4d4d4;
+  --color-neutral-50: oklch(14.5% 0 0);
+  --color-neutral-100: oklch(20.5% 0 0);
+  --color-neutral-200: oklch(26.9% 0 0);
+  --color-neutral-300: oklch(37.1% 0 0);
+  --color-neutral-400: oklch(43.9% 0 0);
+  --color-neutral-600: oklch(70.8% 0 0);
+  --color-neutral-700: oklch(87% 0 0);
+  --color-neutral-800: oklch(92.2% 0 0);
+  --color-neutral-900: oklch(97% 0 0);
+  --color-neutral-950: oklch(98.5% 0 0);
+  --color-accent-2: var(--accent-600);
+  --color-accent-bright: var(--accent-500);
+  --color-accent-dark: var(--accent-700);
+  --body-text: #171717;
+}
+
+/* Rest, the get-into-position count, the pause curtain, the recaps and the
+   camera own the whole screen on a black pane in either mode — their animations
+   are drawn as light on dark, and a white flash between every set would be
+   worse than a dark rest in a light app. Inside one, everything is dark again. */
+[data-mode='light'] .keep-dark {
+  --color-bg: #0a0a0a;
+  --color-surface: #171717;
+  --color-surface-2: #262626;
+  --color-border: #333333;
+  --color-neutral-50: oklch(98.5% 0 0);
+  --color-neutral-100: oklch(97% 0 0);
+  --color-neutral-200: oklch(92.2% 0 0);
+  --color-neutral-300: oklch(87% 0 0);
+  --color-neutral-400: oklch(70.8% 0 0);
+  --color-neutral-600: oklch(43.9% 0 0);
+  --color-neutral-700: oklch(37.1% 0 0);
+  --color-neutral-800: oklch(26.9% 0 0);
+  --color-neutral-900: oklch(20.5% 0 0);
+  --color-neutral-950: oklch(14.5% 0 0);
+  --color-accent-2: var(--accent-500);
+  --color-accent-bright: var(--accent-400);
+  --color-accent-dark: var(--accent-900);
+  color: #fafafa;
+  color-scheme: dark;
 }
 
 html,
@@ -105,7 +176,7 @@ html {
 body {
   margin: 0;
   background-color: var(--color-bg);
-  color: #fafafa;
+  color: var(--body-text, #fafafa);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* Prevent pull-to-refresh / rubber-banding getting in the way mid-log. */
   overscroll-behavior-y: contain;

@@ -6,6 +6,8 @@
  * actual elapsed time.
  */
 import { parseISODate } from './dates'
+import { currentPalette, onThemeChange } from './themeStore'
+import type { Palette } from './theme'
 
 /** Frame commitments and logged history without letting a live ETA extend the chart. */
 export function goalChartEnd(
@@ -34,25 +36,29 @@ export function fmtDateLabel(ms: number): string {
 }
 
 /**
- * A three-step green ladder for chart marks: bright green for the series being
- * read, dark green for its companion, and real dark green for goal furniture —
- * target lines, lock marks, ETA dots — which should sit behind the data.
+ * A three-step ladder on the accent for chart marks: bright for the series being
+ * read, darker for its companion, and darkest for goal furniture — target lines,
+ * lock marks, ETA dots — which should sit behind the data. On a light ground the
+ * ladder runs the other way, since "behind" there means paler.
+ *
+ * `let` rather than `const` so they follow the theme: an import is a live
+ * binding, and every chart reads these at render. See {@link applyPalette}.
  */
-export const LINE_PRIMARY = '#22c55e'
-export const LINE_SECONDARY = '#15803d'
-/** Live pace alongside the green committed projection. */
-export const LINE_CURRENT_PACE = '#a3a3a3'
-export const LINE_GOAL = '#14532d'
+export let LINE_PRIMARY = ''
+export let LINE_SECONDARY = ''
+/** Live pace alongside the committed projection. */
+export let LINE_CURRENT_PACE = ''
+export let LINE_GOAL = ''
 /** Goal labels step up the ladder: 9px type at {@link LINE_GOAL} is too dim to read. */
-export const LINE_GOAL_LABEL = LINE_SECONDARY
+export let LINE_GOAL_LABEL = ''
 
 /**
  * Sessions plotted beside a line rather than on it — the day's second press (see
- * progress.offSlotSeries). Grey rather than a fourth green: it isn't another rung
+ * progress.offSlotSeries). Grey rather than a fourth rung: it isn't part
  * of the series ladder, it's a reading the series deliberately doesn't read, and
- * a green ring would invite it to be compared with the line it sits next to.
+ * an accent ring would invite it to be compared with the line it sits next to.
  */
-export const MARK_OFF_SLOT = '#737373'
+export let MARK_OFF_SLOT = ''
 
 /** What those marks are called, in the legend and the tooltip. */
 export const OFF_SLOT_NAME = '2nd press'
@@ -69,16 +75,48 @@ export function offSlotDot(bg: string) {
  * A goal reading that came off the goal's companion lift rather than the one it's
  * named for — an incline day on the bench line, a barbell squat on the squat
  * line (see progress.Point's `from`). Blue so it can't be read as another rung of
- * the green ladder: it's the same series, just a different lift underneath.
+ * the accent ladder: it's the same series, just a different lift underneath (or
+ * another colour clear of the accent, see theme.otherLift).
  */
-export const MARK_OTHER_LIFT = '#38bdf8'
+export let MARK_OTHER_LIFT = ''
 
 /**
- * Cold stretch readings run cool against the warm ones' greens — blue for the
- * left (or only) reading, violet for the right.
+ * Cold stretch readings run cool against the warm ones' accent — blue for the
+ * left (or only) reading, violet for the right, or whichever cool pair stays
+ * clear of the accent (see theme.cold).
  */
-export const LINE_COLD = '#38bdf8'
-export const LINE_COLD_2 = '#a78bfa'
+export let LINE_COLD = ''
+export let LINE_COLD_2 = ''
+
+/**
+ * The ground a chart sits on, for the props Recharts writes straight onto SVG
+ * attributes — grid lines, the axis-break mask, a tag's backing, a hollow dot's
+ * middle — where a CSS variable can't reach.
+ */
+export let CHART_PAGE = ''
+export let CHART_SURFACE = ''
+export let CHART_SURFACE_2 = ''
+export let CHART_ZERO = ''
+
+function applyPalette({ scale, ground, cold, cold2, otherLift, theme }: Palette) {
+  const light = theme.mode === 'light'
+  LINE_PRIMARY = scale[light ? 600 : 500]
+  LINE_SECONDARY = scale[light ? 400 : 700]
+  LINE_GOAL = scale[light ? 200 : 900]
+  // Goal labels step up the ladder: 9px type at LINE_GOAL is too dim to read.
+  LINE_GOAL_LABEL = scale[light ? 500 : 700]
+  LINE_CURRENT_PACE = light ? '#737373' : '#a3a3a3'
+  MARK_OFF_SLOT = ground.tick
+  LINE_COLD = cold
+  LINE_COLD_2 = cold2
+  MARK_OTHER_LIFT = otherLift
+  CHART_PAGE = ground.bg
+  CHART_SURFACE = ground.surface
+  CHART_SURFACE_2 = ground.surface2
+  CHART_ZERO = ground.zero
+}
+applyPalette(currentPalette())
+onThemeChange(() => applyPalette(currentPalette()))
 
 /** Props for a time-scaled X axis over a numeric `t` timestamp key. */
 export const timeXAxis = {

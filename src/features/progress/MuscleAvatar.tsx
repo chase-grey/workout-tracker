@@ -1,4 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
+import { currentPalette } from '../../lib/themeStore'
+import { rgbOf } from '../../lib/theme'
 import { useData } from '../../store/DataContext'
 import { exerciseSeries } from '../../lib/progress'
 import {
@@ -14,26 +16,31 @@ import {
   type MuscleScore,
 } from '../../lib/strengthStandards'
 
-/** Neutral fill for the body base and "no data" muscles. */
-const BODY_BASE = '#26262b'
-const NO_DATA = '#3f3f46'
-const STROKE = '#0a0a0a'
+/** Neutral fill for the body base and "no data" muscles, read at render so they follow the theme. */
+const bodyBase = () => currentPalette().ground.bodyBase
+const noData = () => currentPalette().ground.noData
+const stroke = () => currentPalette().ground.bg
 
 /**
  * Floor on the fill's development score. A muscle sitting at the very bottom of
- * its scale is honestly scored near 0, but the green at 0 is darker than the
+ * its scale is honestly scored near 0, but the accent at 0 is darker than the
  * "no data" grey — which reads backwards, since a trained muscle shouldn't look
  * emptier than an untrained one. The band label stays unfloored.
  */
 const MIN_FILL_DEV = 0.2
 
-/** Development 0..1 → a green on the theme scale (dark green → bright green). */
+/**
+ * Development 0..1 → a colour on the accent scale. On a dark ground it climbs
+ * from the darkest accent to a bright one; on a light ground it runs the other
+ * way, pale to deep, so either way a trained muscle stands further off the page.
+ */
 function devColor(dev: number): string {
-  // Two-stop lerp: #14532d (green-900) → #16a34a (accent) → #4ade80 (green-400).
+  const { scale, theme } = currentPalette()
+  const shades = theme.mode === 'light' ? ([200, 500, 700] as const) : ([900, 600, 400] as const)
   const stops: [number, [number, number, number]][] = [
-    [0, [20, 83, 45]],
-    [0.5, [22, 163, 74]],
-    [1, [74, 222, 128]],
+    [0, rgbOf(scale[shades[0]])],
+    [0.5, rgbOf(scale[shades[1]])],
+    [1, rgbOf(scale[shades[2]])],
   ]
   const d = Math.max(0, Math.min(1, dev))
   let lo = stops[0]
@@ -52,7 +59,7 @@ function devColor(dev: number): string {
 }
 
 function fillFor(score: MuscleScore | undefined): string {
-  if (!score || !score.hasData) return NO_DATA
+  if (!score || !score.hasData) return noData()
   return devColor(Math.max(MIN_FILL_DEV, score.developmentScore))
 }
 
@@ -170,7 +177,7 @@ function Regions({
           key={d}
           d={d}
           fill={fillFor(score)}
-          stroke={STROKE}
+          stroke={stroke()}
           strokeWidth={1}
           strokeLinejoin="round"
           className="motion-safe:transition-[fill] motion-safe:duration-500"
@@ -191,7 +198,7 @@ const HEAD = 'M110 14 C123 14 130 24 129 37 C128 50 121 62 110 62 C99 62 92 50 9
  * Anything in `face` goes on top of the head.
  */
 function Silhouette({ label, face, children }: { label: string; face?: ReactNode; children: ReactNode }) {
-  const bodyFill = { fill: BODY_BASE, stroke: '#3f3f46', strokeWidth: 1.5 } as const
+  const bodyFill = { fill: bodyBase(), stroke: noData(), strokeWidth: 1.5 } as const
   return (
     <figure className="flex items-center justify-center">
       <svg viewBox="0 0 220 470" className="h-auto w-full" role="img" aria-label={`${label} muscle map`}>
@@ -224,7 +231,7 @@ function Silhouette({ label, face, children }: { label: string; face?: ReactNode
  */
 function SixPackLines() {
   return (
-    <g fill="none" stroke={STROKE} strokeWidth={1.6} strokeLinecap="round" opacity={0.8}>
+    <g fill="none" stroke={stroke()} strokeWidth={1.6} strokeLinecap="round" opacity={0.8}>
       <path d="M110 152 Q112 183 110 214" />
       <path d="M94 172 Q110 176 126 172" />
       <path d="M95 194 Q110 198 125 194" />
@@ -239,7 +246,7 @@ function FrontView({ scores, sixPack }: { scores: Record<Muscle, MuscleScore>; s
       label="front"
       /* The only thing telling the two views apart. */
       face={
-        <g fill={NO_DATA}>
+        <g fill={noData()}>
           <ellipse cx="102" cy="34" rx="2.6" ry="3" />
           <ellipse cx="118" cy="34" rx="2.6" ry="3" />
         </g>

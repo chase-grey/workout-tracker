@@ -264,7 +264,7 @@ function AppShell() {
       {minimized && sessionActive && !typingToCoach && (
         <button
           onClick={() => setMinimized(false)}
-          className="flex min-h-[52px] items-center justify-center gap-2 border-t border-border bg-accent text-base font-bold text-black active:opacity-80"
+          className="flex min-h-[52px] items-center justify-center gap-2 border-t border-border bg-accent text-base font-bold text-on-accent active:opacity-80"
         >
           <MdFitnessCenter className="text-xl" aria-hidden />
           {controls.session ? 'back to your workout' : storage.loadStretch()?.officeAbs ? 'back to core' : 'back to your stretch'}

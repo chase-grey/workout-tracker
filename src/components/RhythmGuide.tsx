@@ -661,7 +661,7 @@ export function RhythmGuide({
   return (
     <div className="rhythm-guide flex flex-1 flex-col items-center justify-center py-3">
       <div className={`rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center ${
-        glow === 'done' ? 'text-white' : 'text-accent-bright'
+        glow === 'done' ? 'text-neutral-50' : 'text-accent-bright'
       }`}>
         {forwardBack ? (
           <FlossGuide phaseIndex={i} progress={progress} seconds={phases[i].seconds} />
@@ -712,7 +712,7 @@ export function RhythmGuide({
       {!endsOnTarget && (
         <p
           className={`transition-colors duration-200 motion-reduce:transition-none text-2xl font-bold tabular-nums ${
-            glow === 'done' ? 'text-white' : 'text-neutral-500'
+            glow === 'done' ? 'text-neutral-50' : 'text-neutral-500'
           }`}
         >
           {reps ? `${rep} / ${reps}` : rep}

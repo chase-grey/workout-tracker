@@ -6,6 +6,10 @@ import { type ExtraVariant } from '../lib/restShapes'
 import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
 import { createSpiral, pointAt, shareAt, spiralPath } from '../lib/spiral'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
+import { currentPalette } from '../lib/themeStore'
+
+/** A colour drawn against green, carried to the theme's accent (see theme.tint). */
+const tint = (hex: string) => currentPalette().tint(hex)
 
 /**
  * More time-telling shapes for rest — see components/RestTimer, which owns the
@@ -1222,7 +1226,7 @@ function BlackHole({ fraction }: { fraction: number }) {
                     strokeLinecap="round" opacity="0.32"
                   />
                   <circle cx="1" cy="0" r={piece.size / piece.radius} fill="currentColor" opacity="0.9" />
-                  <circle cx="1" cy="0" r={piece.size * 0.4 / piece.radius} fill="#effff6" />
+                  <circle cx="1" cy="0" r={piece.size * 0.4 / piece.radius} fill={tint('#effff6')} />
                 </g>
               </g>
             </g>

@@ -10,6 +10,7 @@ import {
 import type { IconType } from 'react-icons'
 import type { Celebration, CelebrationIcon, CelebrationTier } from '../lib/celebration'
 import { Confetti } from './Confetti'
+import { currentPalette } from '../lib/themeStore'
 
 const ICONS: Record<CelebrationIcon, IconType> = {
   check: MdCheckCircle,
@@ -20,7 +21,6 @@ const ICONS: Record<CelebrationIcon, IconType> = {
   trophy: MdEmojiEvents,
 }
 
-const GREENS = ['#16a34a', '#22c55e', '#4ade80', '#86efac']
 const GOLDS = ['#fbbf24', '#f59e0b', '#fde68a']
 
 type TierStyle = {
@@ -30,17 +30,18 @@ type TierStyle = {
   vibrate: number | number[] | null
 }
 
-const TIERS: Record<CelebrationTier, TierStyle> = {
-  small: { durationMs: 2200, particles: 16, colors: GREENS, vibrate: null },
-  medium: { durationMs: 2800, particles: 28, colors: [...GREENS, '#f5f5f5'], vibrate: 30 },
-  large: { durationMs: 3400, particles: 46, colors: [...GREENS, '#f5f5f5'], vibrate: [40, 40, 40] },
+// A function so the confetti is read at render, in the current theme's accent.
+const tiers = (accent = currentPalette().confetti): Record<CelebrationTier, TierStyle> => ({
+  small: { durationMs: 2200, particles: 16, colors: accent, vibrate: null },
+  medium: { durationMs: 2800, particles: 28, colors: [...accent, '#f5f5f5'], vibrate: 30 },
+  large: { durationMs: 3400, particles: 46, colors: [...accent, '#f5f5f5'], vibrate: [40, 40, 40] },
   epic: {
     durationMs: 4400,
     particles: 80,
-    colors: [...GOLDS, ...GREENS, '#ffffff'],
+    colors: [...GOLDS, ...accent, '#ffffff'],
     vibrate: [60, 40, 60, 40, 140],
   },
-}
+})
 
 /**
  * Celebration animation whose energy scales with the tier.
@@ -55,7 +56,7 @@ const TIERS: Record<CelebrationTier, TierStyle> = {
  * "nice" button, since pressing it is what drops you back to the app.
  */
 export function CelebrationOverlay({ celebration, onDone }: { celebration: Celebration; onDone: () => void }) {
-  const style = TIERS[celebration.tier]
+  const style = tiers()[celebration.tier]
   const Icon = ICONS[celebration.icon]
   const isAck = celebration.ack === true
   const isSmall = celebration.tier === 'small' && !isAck
@@ -99,7 +100,7 @@ export function CelebrationOverlay({ celebration, onDone }: { celebration: Celeb
         // A non-ack full-screen cheer still dismisses on tap; an ack one waits for
         // the button, so a stray tap can't skip the moment it exists to mark.
         onClick={isAck ? undefined : finish}
-        className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8"
+        className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8"
       >
         {isEpic && (
           <div
@@ -137,7 +138,7 @@ export function CelebrationOverlay({ celebration, onDone }: { celebration: Celeb
           {isAck && (
             <button
               onClick={finish}
-              className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:bg-accent-2"
+              className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent active:bg-accent-2"
             >
               nice
             </button>

@@ -375,7 +375,7 @@ export function PlanEditor() {
               updatePlan(draft)
               setDraft(null)
             }}
-            className="min-h-[44px] flex-1 rounded-xl bg-accent font-semibold text-black active:bg-accent-deep"
+            className="min-h-[44px] flex-1 rounded-xl bg-accent font-semibold text-on-accent active:bg-accent-deep"
           >
             save plan
           </button>

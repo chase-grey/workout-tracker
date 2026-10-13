@@ -504,7 +504,7 @@ export function StretchSession({
             <button onClick={() => setShowList(true)} className="min-h-[44px] rounded-xl bg-surface font-medium">
               routine checklist
             </button>
-            <button onClick={() => finishWith(done)} className="min-h-[56px] rounded-2xl bg-accent text-lg font-bold text-black">
+            <button onClick={() => finishWith(done)} className="min-h-[56px] rounded-2xl bg-accent text-lg font-bold text-on-accent">
               finish
             </button>
           </>
@@ -546,7 +546,7 @@ export function StretchSession({
         <button
           type="button"
           onClick={() => finishWith(done)}
-          className="min-h-[56px] w-full max-w-sm rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+          className="min-h-[56px] w-full max-w-sm rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
         >
           finish
         </button>
@@ -892,7 +892,7 @@ export function StretchSession({
             setReadyOverrideSec(Math.max(POST_PHOTO_GET_READY_SEC, getReadySec))
             setPreparing(true)
           }}
-          className="fixed inset-0 z-80 flex h-full w-full flex-col items-center justify-center gap-2 bg-black px-6 text-center focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-accent"
+          className="keep-dark fixed inset-0 z-80 flex h-full w-full flex-col items-center justify-center gap-2 bg-black px-6 text-center focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-accent"
         >
           {/* Unlike the header, the move leads here: this is the screen you get set
               up from, and "right leg" alone doesn't say what to set up for. */}

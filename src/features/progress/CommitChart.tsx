@@ -31,7 +31,7 @@ import {
   lockProjectionByDate,
   projectedSeries,
 } from '../../lib/goalLock'
-import { LINE_GOAL, LINE_GOAL_LABEL, LINE_PRIMARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { CHART_PAGE, CHART_SURFACE_2, LINE_GOAL, LINE_GOAL_LABEL, LINE_PRIMARY, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { parseISODate, toISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
@@ -248,7 +248,7 @@ export function CommitChart({
           margin={{ top: 6, right: 10, bottom: 0, left: 0 }}
           accessibilityLayer={false}
         >
-          <CartesianGrid stroke="#262626" vertical={false} />
+          <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} domain={xDomain} tick={axisTick} />
           <YAxis
             tick={axisTick}
@@ -258,13 +258,13 @@ export function CommitChart({
             allowDecimals={false}
             interval={0}
           />
-          <AxisBreak broken={yScale.broken} bg="#262626" />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE_2} />
           {/* No tooltip: a pointer on this chart is a drag, not a read. */}
           <ReferenceLine
             y={proj.target}
             stroke={LINE_GOAL}
             strokeDasharray="5 4"
-            label={<ChartTag text={`goal ${proj.target}`} color={LINE_GOAL_LABEL} bg="#262626" side={tagSide} />}
+            label={<ChartTag text={`goal ${proj.target}`} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} side={tagSide} />}
           />
           {/* The machine's date, left behind as the handle moves away from it. */}
           {showReferenceDot && (
@@ -273,9 +273,9 @@ export function CommitChart({
               y={proj.target}
               r={3.5}
               fill={LINE_GOAL}
-              stroke="#0a0a0a"
+              stroke={CHART_PAGE}
               label={
-                <ChartTag text={fmtDate(eta)} color={LINE_GOAL_LABEL} bg="#262626" align="center" side={tagSide} />
+                <ChartTag text={fmtDate(eta)} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} align="center" side={tagSide} />
               }
             />
           )}
@@ -318,14 +318,14 @@ export function CommitChart({
             x={chosenMs}
             y={proj.target}
             r={dragging ? 9 : 7}
-            fill="#0a0a0a"
+            fill={CHART_PAGE}
             stroke={LINE_PRIMARY}
             strokeWidth={2}
             label={
               <ChartTag
                 text={fmtDate(date)}
                 color={LINE_PRIMARY}
-                bg="#262626"
+                bg={CHART_SURFACE_2}
                 size={10}
                 weight={600}
                 align="center"

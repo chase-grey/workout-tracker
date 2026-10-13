@@ -15,10 +15,11 @@ import { LadderChart, type LadderReading, type LadderSeries } from './LadderChar
 /** Which ladder a block is drawing. */
 export type Ladder = 'split' | 'tailors' | 'toeTouch' | 'legLift'
 
-const LADDERS: Record<
+// A function so the colours are read at render: they follow the theme.
+const ladders = (): Record<
   Ladder,
   { title: string; series: LadderSeries[]; empty: string }
-> = {
+> => ({
   split: {
     title: 'side split',
     series: [
@@ -58,7 +59,7 @@ const LADDERS: Record<
     ],
     empty: 'log leg-lift measurements to see progression',
   },
-}
+})
 
 /** One number to spell out beside the ladder's name, and what to call it. */
 type Reading = [value: number | null, label: string]
@@ -128,7 +129,7 @@ export function FlexLadderBlock({
   ring: string
   renderRow: (g: GoalSpec) => React.ReactNode
 }) {
-  const { title, series, empty } = LADDERS[ladder]
+  const { title, series, empty } = ladders()[ladder]
 
   // Cold and warm readings per date. The rungs are measured on the warm series
   // (for the paired poses, the average of their left and right), which is the

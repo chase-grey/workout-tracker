@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { MdAutoAwesome, MdCalendarMonth, MdEmojiEvents, MdExpandMore } from 'react-icons/md'
 import type { Review } from '../lib/review'
 import { Confetti } from './Confetti'
+import { currentPalette } from '../lib/themeStore'
 
-const GREENS = ['#16a34a', '#22c55e', '#4ade80', '#86efac']
 const GOLDS = ['#fbbf24', '#f59e0b', '#fde68a']
 
 /**
@@ -17,8 +17,8 @@ export function ReviewOverlay({ review, onClose }: { review: Review; onClose: ()
   const selected = review.stats.find((s) => s.label === expanded)
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
-      {review.isBest && <Confetti count={56} colors={[...GOLDS, ...GREENS, '#ffffff']} />}
+    <div className="keep-dark fixed inset-0 z-50 flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
+      {review.isBest && <Confetti count={56} colors={[...GOLDS, ...currentPalette().confetti, '#ffffff']} />}
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <div className="flex flex-col items-center text-center">
@@ -91,7 +91,7 @@ export function ReviewOverlay({ review, onClose }: { review: Review; onClose: ()
 
         <button
           onClick={onClose}
-          className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black active:bg-accent-2"
+          className="mt-8 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent active:bg-accent-2"
         >
           keep it going
         </button>

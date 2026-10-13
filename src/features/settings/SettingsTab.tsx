@@ -15,21 +15,63 @@ import { IS_DESKTOP } from '../../lib/device'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { stashResumeTab } from '../../lib/resumeTab'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
+import { ACCENTS, MODES, palette } from '../../lib/theme'
+import { setTheme, useTheme } from '../../lib/themeStore'
 
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
-// The greens run brightest-first down the same order the list is sorted in:
+// The accent shades run brightest-first down the same order the list is sorted in:
 // `working` is a run happening right now, `open` is waiting its turn, and a fix
-// that landed sits in dark green with the rest of history. `stalled` drops out of
+// that landed sits in the dark accent with the rest of history. `stalled` drops out of
 // the ladder into grey — nothing is moving on it. `asks` keeps the solid fill:
 // it's the only one that wants something from you.
 const ISSUE_BADGE: Record<IssueProgress, string> = {
-  asks: 'bg-accent text-black',
+  asks: 'bg-accent text-on-accent',
   working: 'bg-accent-bright/20 text-accent-bright',
   open: 'bg-accent-2/20 text-accent-2',
   stalled: 'bg-neutral-700 text-neutral-300',
   completed: 'bg-accent/20 text-accent',
   closed: 'bg-accent/20 text-accent',
+}
+
+/**
+ * Accent swatches, then the ground. Each swatch is painted in its own accent's
+ * CTA shade, so the row shows what the app will look like rather than naming it.
+ */
+function ThemePicker() {
+  const { theme } = useTheme()
+  return (
+    <section className="flex flex-col gap-2">
+      <label className="text-sm font-medium text-neutral-300">theme</label>
+      <div className="flex gap-3">
+        {ACCENTS.map((a) => (
+          <button
+            key={a}
+            onClick={() => setTheme({ ...theme, accent: a })}
+            aria-label={a}
+            aria-pressed={theme.accent === a}
+            className={`h-11 w-11 rounded-full ring-offset-2 ring-offset-bg ${
+              theme.accent === a ? 'ring-2 ring-neutral-100' : ''
+            }`}
+            style={{ background: palette({ ...theme, accent: a }).scale[600] }}
+          />
+        ))}
+      </div>
+      <div className="flex gap-1 rounded-xl bg-surface p-1">
+        {MODES.map((m) => (
+          <button
+            key={m}
+            onClick={() => setTheme({ ...theme, mode: m })}
+            className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
+              theme.mode === m ? 'bg-accent text-on-accent' : 'text-neutral-400'
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 const ISSUE_ROW = 'flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3'
@@ -121,6 +163,8 @@ export function SettingsTab({
     <div className="flex flex-col gap-6 pb-4">
       <h2 className="text-xl font-bold">settings</h2>
       <SaveStatus />
+
+      <ThemePicker />
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">build</label>

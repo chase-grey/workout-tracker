@@ -81,7 +81,7 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
                 key={o.value}
                 onClick={() => setVisibility((v) => (v === o.value ? null : o.value))}
                 className={`min-h-[40px] flex-1 rounded-lg px-2 text-sm font-medium ${
-                  visibility === o.value ? 'bg-accent text-black' : 'text-neutral-400'
+                  visibility === o.value ? 'bg-accent text-on-accent' : 'text-neutral-400'
                 }`}
               >
                 {o.label}
@@ -96,7 +96,7 @@ export function MeasurementLogSheet({ onClose }: { onClose: () => void }) {
         <button
           onClick={save}
           disabled={!valid}
-          className="mt-4 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-black disabled:opacity-30"
+          className="mt-4 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent disabled:opacity-30"
         >
           save
         </button>

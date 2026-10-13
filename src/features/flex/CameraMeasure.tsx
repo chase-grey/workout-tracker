@@ -18,12 +18,21 @@ import {
 } from '../../lib/measure'
 import { toISODate } from '../../lib/dates'
 import { AngleEditor } from './AngleEditor'
+import { currentPalette } from '../../lib/themeStore'
 
 type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
 type Facing = 'user' | 'environment'
 
-/** Pill fill per reading, matching the cold blue / warm green of the charts. */
-const TEMP_COLOR: Record<MeasureTemp, string> = { cold: '#38bdf8', warm: '#22c55e' }
+/** Pill fill per reading, matching the cold / warm colours of the charts. */
+// Getters, so a reading is coloured in the theme current when it's drawn.
+const TEMP_COLOR: Record<MeasureTemp, string> = {
+  get cold() {
+    return currentPalette().cold
+  },
+  get warm() {
+    return currentPalette().scale[500]
+  },
+}
 
 /** A detection that produced nothing usable, and what left the handles guessed. */
 const DETECT_NOTE = {
@@ -178,7 +187,7 @@ async function renderMeasuredPhoto(
     const c = px(p)
     ctx.beginPath()
     ctx.arc(c.x, c.y, dotR, 0, Math.PI * 2)
-    ctx.fillStyle = '#22c55e'
+    ctx.fillStyle = currentPalette().scale[500]
     ctx.fill()
     ctx.lineWidth = Math.max(1, lineW * 0.5)
     ctx.strokeStyle = '#ffffff'
@@ -573,7 +582,7 @@ export function CameraMeasure({
             </button>
             <button
               onClick={() => finishSave('save')}
-              className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+              className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
             >
               <MdSave aria-hidden /> save
             </button>
@@ -609,7 +618,7 @@ export function CameraMeasure({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black">
+    <div className="keep-dark fixed inset-0 z-50 flex flex-col bg-black">
       <header className="flex items-center justify-between px-4 py-3 text-white">
         <h2 className="text-lg font-bold">measure {MEASURE_LABEL[mode].toLowerCase()}</h2>
         <button onClick={onClose} className="min-h-[44px] px-2 text-sm text-neutral-300">
@@ -663,7 +672,7 @@ export function CameraMeasure({
                   key={m}
                   onClick={() => setMode(m)}
                   className={`min-h-[40px] flex-1 basis-[30%] rounded-xl px-2 text-sm font-semibold ${
-                    mode === m ? 'bg-accent text-black' : 'bg-white/10 text-neutral-200'
+                    mode === m ? 'bg-accent text-on-accent' : 'bg-white/10 text-neutral-200'
                   }`}
                 >
                   {MEASURE_LABEL[m]}
@@ -674,7 +683,7 @@ export function CameraMeasure({
             <div className="flex gap-2">
               <button
                 onClick={startTimer}
-                className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-black active:opacity-80"
+                className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
               >
                 <MdCameraAlt aria-hidden /> start {timerSec}s timer
               </button>
@@ -698,7 +707,7 @@ export function CameraMeasure({
           <div className="flex gap-2">
             <button
               onClick={() => void capture()}
-              className="min-h-[52px] flex-1 rounded-2xl bg-accent text-lg font-bold text-black"
+              className="min-h-[52px] flex-1 rounded-2xl bg-accent text-lg font-bold text-on-accent"
             >
               capture now
             </button>
