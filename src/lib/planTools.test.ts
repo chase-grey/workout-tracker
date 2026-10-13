@@ -132,13 +132,13 @@ describe('applyPlanEdits', () => {
   it('removeExercise records a shipped exercise so the merge stops re-adding it', () => {
     const { plan } = applyPlanEdits(DEFAULT_PLAN, [
       { op: 'removeExercise', day: 'pull', key: 'hamstring_curl' },
-      { op: 'removeExercise', day: 'pull', key: 'calf_raise' },
+      { op: 'removeExercise', day: 'pull', key: 'neck_flexion' },
     ])
-    expect(plan.pull.removed).toEqual(['hamstring_curl', 'calf_raise'])
+    expect(plan.pull.removed).toEqual(['hamstring_curl', 'neck_flexion'])
     // The load it has to survive: without the list, both come straight back.
     const keys = withPlanDefaults(plan, PLAN_REVISION).pull.exercises.map((e) => e.key)
     expect(keys).not.toContain('hamstring_curl')
-    expect(keys).not.toContain('calf_raise')
+    expect(keys).not.toContain('neck_flexion')
   })
 
   it('removeExercise leaves no record for an exercise the user added themselves', () => {
@@ -153,12 +153,12 @@ describe('applyPlanEdits', () => {
 
   it('addExercise takes back the deletion of a shipped exercise', () => {
     const { plan } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'removeExercise', day: 'pull', key: 'calf_raise' },
-      { op: 'addExercise', day: 'pull', exercise: { key: 'calf_raise' } as never },
+      { op: 'removeExercise', day: 'pull', key: 'neck_flexion' },
+      { op: 'addExercise', day: 'pull', exercise: { key: 'neck_flexion' } as never },
     ])
     expect(plan.pull.removed).toBeUndefined()
     expect(withPlanDefaults(plan, PLAN_REVISION).pull.exercises.map((e) => e.key)).toContain(
-      'calf_raise',
+      'neck_flexion',
     )
   })
 

@@ -237,19 +237,17 @@ describe('withPlanDefaults', () => {
     expect(flat?.restSec).toBe(200)
   })
 
-  it('re-adopts the calf raise name a stored day still carries the tempo cue in', () => {
-    const storedPull = {
-      ...DEFAULT_PLAN.pull,
-      exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
-        e.key === 'calf_raise' ? { ...e, name: 'calf raise (paused)' } : e,
-      ),
+  it('drops the retired calf raise from a stored day that still lists it', () => {
+    const calf = { key: 'calf_raise', name: 'calf raise', sets: 3, repMin: 20, repMax: 20, restSec: 60, group: 'legs' }
+    const storedPull = { ...DEFAULT_PLAN.pull, exercises: [...DEFAULT_PLAN.pull.exercises, calf] }
+    for (const revision of [PLAN_REVISION, 0]) {
+      const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, revision)
+      expect(merged.pull.exercises.map((e) => e.key)).not.toContain('calf_raise')
     }
-    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
-    expect(merged.pull.exercises.find((e) => e.key === 'calf_raise')?.name).toBe('calf raise')
   })
 
   describe('a shipped exercise the user deleted', () => {
-    const GONE = ['hamstring_curl', 'calf_raise']
+    const GONE = ['hamstring_curl', 'neck_flexion']
 
     /** A stored pull day with the two movements deleted, as the editor would save it. */
     const storedPull: DayPlan = {
@@ -268,7 +266,7 @@ describe('withPlanDefaults', () => {
     it('stays gone on the next load instead of being spliced back in', () => {
       const keys = load(storedPull, PLAN_REVISION).pull.exercises.map((e) => e.key)
       expect(keys).not.toContain('hamstring_curl')
-      expect(keys).not.toContain('calf_raise')
+      expect(keys).not.toContain('neck_flexion')
     })
 
     it('stays gone through a shipped restructure', () => {
@@ -276,7 +274,7 @@ describe('withPlanDefaults', () => {
       // an answer about that movement, not a stale copy of the programming.
       const keys = load(storedPull, 0).pull.exercises.map((e) => e.key)
       expect(keys).not.toContain('hamstring_curl')
-      expect(keys).not.toContain('calf_raise')
+      expect(keys).not.toContain('neck_flexion')
       // The rest of the restructure still lands.
       expect(keys).toContain('leg_press')
     })
@@ -790,18 +788,18 @@ describe('withRemovedFrom', () => {
   })
 
   it('takes a deletion made on another device', () => {
-    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['calf_raise']) }
+    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['neck_flexion']) }
     const merged = withPlanDefaults(withRemovedFrom(fetched, DEFAULT_PLAN), PLAN_REVISION)
-    expect(merged.pull.exercises.map((e) => e.key)).not.toContain('calf_raise')
+    expect(merged.pull.exercises.map((e) => e.key)).not.toContain('neck_flexion')
   })
 
   it('unions the two rather than letting either side win', () => {
     const local = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['hamstring_curl']) }
-    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['calf_raise']) }
+    const fetched = { ...DEFAULT_PLAN, pull: deleted(DEFAULT_PLAN.pull, ['neck_flexion']) }
     const merged = withPlanDefaults(withRemovedFrom(fetched, local), PLAN_REVISION)
     const keys = merged.pull.exercises.map((e) => e.key)
     expect(keys).not.toContain('hamstring_curl')
-    expect(keys).not.toContain('calf_raise')
+    expect(keys).not.toContain('neck_flexion')
   })
 
   it('leaves a plan alone when neither copy has deleted anything', () => {

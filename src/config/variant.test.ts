@@ -145,22 +145,18 @@ describe('the pull + legs day', () => {
     expect(STRETCH_CORE.sets).toBe(4)
   })
 
-  it('trains calves directly, since pressing never takes them through range', () => {
-    expect(DEFAULT_PLAN.pull.exercises.map((e) => e.key)).toContain('calf_raise')
+  it('no longer carries the calf raise', () => {
+    expect(DEFAULT_PLAN.pull.exercises.map((e) => e.key)).not.toContain('calf_raise')
   })
 
-  it('caps the calf raise at the stack, so it climbs in reps from there', () => {
-    const calf = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'calf_raise')
-    expect(calf?.weightCapLbs).toBe(100)
-    // The reps already owned at the cap are the floor the ladder starts from — a
-    // range topping out below them would ask for a step backwards.
-    expect(calf?.repMin).toBe(20)
-    expect(calf?.repMax).toBe(20)
+  it('keeps the full rest on the sets the goals are read from', () => {
+    const rest = (key: string) => DEFAULT_PLAN.pull.exercises.find((e) => e.key === key)?.restSec
+    expect(rest('leg_press')).toBe(120)
+    expect(rest('weighted_pullups')).toBe(120)
   })
 
-  it('shows the capped movement as an open-ended rep range', () => {
-    const calf = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'calf_raise')!
-    expect(repRangeLabel(calf)).toBe('20+')
+  it('shows a capped movement as an open-ended rep range', () => {
+    expect(repRangeLabel({ repMin: 20, repMax: 20, weightCapLbs: 100 })).toBe('20+')
   })
 
   it('pairs the two neck directions as a circuit', () => {

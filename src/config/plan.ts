@@ -252,7 +252,9 @@ export type Plan = Record<DayType, DayPlan>
  *     week.
  */
 // 13: pull + legs opens with cable crunches as its only ab exercise.
-export const PLAN_REVISION = 13
+// 14: pull + legs cut for time — the calf raise retired, the Copenhagen hold down
+// to 20 seconds with a 90-second round rest, and the isolation work rests shorter.
+export const PLAN_REVISION = 14
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -333,20 +335,21 @@ export const GRADUATION_REPS = 20
  * The Copenhagen plank: a timed hold, one side at a time, with the two sides
  * rotated as a circuit (see the pull + legs day below).
  *
- * A fixed 30 seconds rather than a range — the hold is hard enough at 30 that the
- * thing worth progressing is how well it's held, and the actual time is logged
- * either way, so a set that only made 22 reads as 22 rather than as a failure to
- * reach a target.
+ * A fixed 20 seconds rather than a range — the thing worth progressing is how well
+ * it's held, and the actual time is logged either way, so a set that only made 15
+ * reads as 15 rather than as a failure to reach a target. It was 30 until the day
+ * had to get shorter: the last ten seconds of a hold this hard were most of what
+ * made the long rest after it necessary.
  *
  * The switch is the whole rest between the sides: there's nothing to do between
  * them but turn over onto the other elbow, and resting the left adductor while the
  * right one works is what makes the pair a circuit in the first place. The real
- * rest lands after both sides, and is long because a 30-second adductor hold is
- * closer to a heavy set than to an ab exercise.
+ * rest lands after both sides, and is still the longest of the hip work because an
+ * adductor hold is closer to a heavy set than to an ab exercise.
  */
-export const COPENHAGEN_HOLD_SEC = 30
+export const COPENHAGEN_HOLD_SEC = 20
 export const COPENHAGEN_SWITCH_SEC = 10
-export const COPENHAGEN_ROUND_REST_SEC = 150
+export const COPENHAGEN_ROUND_REST_SEC = 90
 
 /**
  * The sideways leg raise: a hip abduction raise done lying on one side, a side at
@@ -357,13 +360,13 @@ export const COPENHAGEN_ROUND_REST_SEC = 150
  * progression and it has no top (see PlannedExercise.repLadder). A session that
  * holds it on every set is asked for one more next time.
  *
- * Ten seconds to roll over onto the other side, and a minute's rest after the pair
- * — less than the Copenhagen's, since a set of raises is closer to an ab exercise
+ * Ten seconds to roll over onto the other side, and 45 seconds' rest after the
+ * pair — less than the Copenhagen's, since a set of raises is closer to an ab exercise
  * than to the near-maximal hold that one is.
  */
 export const SIDE_RAISE_START_REPS = 15
 export const SIDE_RAISE_SWITCH_SEC = 10
-export const SIDE_RAISE_ROUND_REST_SEC = 60
+export const SIDE_RAISE_ROUND_REST_SEC = 45
 
 export const DEFAULT_PLAN: Plan = {
   push: {
@@ -435,7 +438,7 @@ export const DEFAULT_PLAN: Plan = {
     label: 'pull + legs',
     required: false,
     exercises: [
-      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 45, increment: 5, group: 'abs' },
 
       // The day's heavy leg movement. It's the leg press rather than a barbell
       // squat because there's no rack to squat in — the press is what's actually
@@ -444,19 +447,11 @@ export const DEFAULT_PLAN: Plan = {
       // in bigger jumps than a bar, and 5 lbs on a press this strong is inside
       // the noise of how the pad was set.
       { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
-      { key: 'hamstring_curl', name: 'hamstring curl', sets: 3, repMin: 10, repMax: 15, restSec: 90, increment: 5, group: 'legs' },
-
-      // Pressing never takes the calves through range, so they get the only direct
-      // work they see all week. A hard pause at the bottom is the point — bouncing
-      // the stretch turns the whole set into tendon rebound.
-      //
-      // 100 lbs is the whole stack on this machine, and it's already a comfortable
-      // 3×20, so the cap is where the load stays and the reps are the ladder from
-      // here — one more every session, with no top (see weightCapLbs). 20 is
-      // therefore the floor rather than a range: a target under it means the day
-      // went badly, not that the load needs lightening, which is the one thing the
-      // machine can't offer anyway.
-      { key: 'calf_raise', name: 'calf raise', sets: 3, repMin: 20, repMax: 20, restSec: 60, increment: 5, weightCapLbs: 100, group: 'legs' },
+      // The leg press keeps its two minutes, as the pull-ups below do: those are the
+      // sets the squat and pull-up goals are read from, and a short rest there costs
+      // reps on exactly the numbers being chased. Everything isolated on this day
+      // rests shorter, which is where the time a long day can spare actually was.
+      { key: 'hamstring_curl', name: 'hamstring curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
 
       // A hold rather than a count of reps (see PlannedExercise.timed), trained one
       // side at a time so each adductor is logged and charted on its own — an
@@ -496,16 +491,16 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
       // Both are a dumbbell in each hand, so both step in 10s (see dumbbellPair).
-      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 90, increment: 10, dumbbellPair: true, group: 'biceps' },
-      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 10, dumbbellPair: true, group: 'biceps' },
+      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, increment: 10, dumbbellPair: true, group: 'biceps' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 45, increment: 10, dumbbellPair: true, group: 'biceps' },
 
       // Extension and flexion are antagonists, so they rotate as a circuit and the
       // pair costs about as long as one of them would alone. Two directions is what
       // changes how the neck reads front and back; lateral flexion is the slow
       // third and isn't worth the sets yet. Load stays light and the reps stay
       // high — the neck is the one place where grinding a heavy single is a bad bet.
-      { key: 'neck_extension', name: 'neck extension', sets: 3, repMin: 12, repMax: 20, restSec: 45, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
-      { key: 'neck_flexion', name: 'neck flexion', sets: 3, repMin: 12, repMax: 20, restSec: 45, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
+      { key: 'neck_extension', name: 'neck extension', sets: 3, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
+      { key: 'neck_flexion', name: 'neck flexion', sets: 3, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
     ],
   },
   fullbody: {
@@ -686,9 +681,6 @@ const LEGACY_EXERCISE_NAMES: Record<string, string[]> = {
   // stretch has its own on the mat, the training days' one says which bench it's
   // done on (see MAT_SITUP_KEY).
   weighted_situp: ['weighted sit-up'],
-  // The tempo cue read as a status — "calf raise (paused)" looked like a movement
-  // the app had suspended rather than one to pause at the bottom of.
-  calf_raise: ['calf raise (paused)'],
 }
 
 /**
@@ -774,6 +766,10 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'side_leg_raises',
     'lateral_leg_raise',
     'hip_abduction',
+    // The calf raise. It had reached the whole stack and was climbing in reps with
+    // no top, so every week it took a little longer, for a muscle none of the goals
+    // read. Cut when the day had grown too long to want to finish.
+    'calf_raise',
   ],
   fullbody: ['barbell_squat'],
 }
@@ -1003,6 +999,7 @@ const RETIRED_EXERCISE_NAMES: Record<string, string> = {
   // that says which row the logged sessions were.
   cable_row: 'cable row (neutral grip)',
   iso_chest: 'chest fly / pec deck',
+  calf_raise: 'calf raise',
   // Written closed up, so spacing the key out would read "deadbug".
   [DEAD_BUG_KEY]: 'dead bug',
 }
@@ -1063,6 +1060,9 @@ export function absExerciseKeys(plan: Plan): Set<string> {
   return keys
 }
 
+/** Retired movements that trained the legs, for {@link legExerciseKeys}. */
+const RETIRED_LEG_KEYS = ['barbell_squat', 'leg_adductor', 'leg_abductor', 'calf_raise']
+
 /** Display groups that name lower-body work, for {@link legExerciseKeys}. */
 const LEG_GROUP_RE = /^(legs?|quads?|hamstrings?|glutes?|calf|calves)$/i
 
@@ -1074,12 +1074,14 @@ const LEG_GROUP_RE = /^(legs?|quads?|hamstrings?|glutes?|calf|calves)$/i
  * The defaults' own leg movements are seeded regardless of how the live plan
  * groups them: a squat filed under "compound" is still leg work, and the point of
  * the set is to keep lower-body progress from standing in for what a progress
- * photo actually shows (see lib/photoReminder).
+ * photo actually shows (see lib/photoReminder). So are the leg movements the
+ * defaults have retired, whose logged history goes on being read.
  */
 export function legExerciseKeys(plan: Plan): Set<string> {
-  const keys = new Set<string>(
-    DEFAULT_PLAN.pull.exercises.filter((e) => LEG_GROUP_RE.test(e.group)).map((e) => e.key),
-  )
+  const keys = new Set<string>([
+    ...DEFAULT_PLAN.pull.exercises.filter((e) => LEG_GROUP_RE.test(e.group)).map((e) => e.key),
+    ...RETIRED_LEG_KEYS,
+  ])
   for (const day of Object.values(plan)) {
     for (const e of day.exercises) {
       if (LEG_GROUP_RE.test(e.group)) keys.add(e.key)
