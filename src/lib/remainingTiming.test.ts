@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EMPTY_EXERCISE_AVERAGES } from './estimate'
 import { buildCoreSteps, buildFlexSteps, stepWorkSec } from './flexSteps'
 import { DEFAULT_FLEX_ROUTINE } from '../config/flexPlan'
+import { FLEX_ROUTINES } from '../config/flexRoutines'
 import { remainingFlow } from './setFlow'
 import { priceStretchFlow, remainingTiming, sumTiming, timeLeftByExercise, workoutTimingKey } from './remainingTiming'
 
@@ -79,6 +80,14 @@ describe('remaining checklist timing', () => {
     const steps = buildFlexSteps(DEFAULT_FLEX_ROUTINE).filter((s) => s.exKey === 'pancake_hang').slice(0, 2)
     const rows = remainingTiming(EMPTY_EXERCISE_AVERAGES, priceStretchFlow(steps, () => 10))
     expect(sumTiming(rows)).toEqual({ activeSec: 130, restSec: 55, totalSec: 185 })
+  })
+
+  // Hands-free drops a count that stands alone, but changing legs still takes the
+  // time to change legs — see StretchSession.advanceFrom.
+  it('keeps the side switch count hands-free', () => {
+    const [first, second] = buildFlexSteps(FLEX_ROUTINES.head_to_toe.blocks).filter((s) => s.exKey === 'calf_stretch')
+    expect(first.sideSwitchSec).toBe(5)
+    expect(priceStretchFlow([first, second], () => 10, true)[1].setupSec).toBe(5)
   })
 
   it('clamps overtime and expired rest without subtracting future work', () => {

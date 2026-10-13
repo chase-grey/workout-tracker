@@ -255,10 +255,12 @@ export function StretchSession({
     saved?.rest && canResumeRest(saved.rest.endsAt, Date.now()) ? saved.rest : null,
   )
   // Hands-free: every rest rolls into the next set on its own and the
-  // get-into-position counts that stand alone — a side switch, the crossing into
-  // the core block — are skipped, until the fast-forward toggle is switched back
-  // off. The count a rest ends on stays: the rest gave up its seconds for it, so
-  // skipping it would only mean arriving at the pose late. Stretch sets roll into
+  // get-into-position count that stands alone at the crossing into the core block
+  // is skipped, until the fast-forward toggle is switched back off. The count a
+  // rest ends on stays: the rest gave up its seconds for it, so skipping it would
+  // only mean arriving at the pose late. So does a side switch's: changing legs
+  // takes the same five seconds whoever is driving, and without them the other
+  // side's set starts while you're still turning over. Stretch sets roll into
   // their rest either way. Kept in the session's snapshot so a reload mid-routine
   // doesn't quietly start waiting for taps again.
   const [fast, setFast] = useState(!!saved?.fast)
@@ -680,8 +682,12 @@ export function StretchSession({
     // The other side of the same round: a reposition, not a rest, so it must not
     // be banked into the rest tally — the session's time-left estimate reads that
     // number, and counting every leg swap as rest would drift it badly.
+    //
+    // Counted hands-free too, unlike the crossing into core: there's no rest in
+    // front of it to have got you into position.
     if (finished.kind === 'flex' && finished.sideSwitchSec) {
-      straightToGetReady(GET_READY_SEC)
+      setReadyOverrideSec(GET_READY_SEC)
+      setPreparing(true)
       return
     }
     // The rest ends on the coming set's settle-in, and those seconds come out of
