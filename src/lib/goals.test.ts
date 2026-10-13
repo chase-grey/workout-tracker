@@ -24,7 +24,7 @@ import {
   TOE_TOUCH_GAIN_CAP,
   LEG_LIFT_GAIN_CAP,
 } from './goals'
-import { LEG_PRESS_TO_SQUAT } from './liftRatios'
+import { INCLINE_TO_FLAT, LEG_PRESS_TO_SQUAT } from './liftRatios'
 import { MAX_ATTEMPT_NOTE } from './maxAttempt'
 import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './flexPredict'
 import type { FlexEntry } from './flex'
@@ -882,19 +882,35 @@ describe('the bench goal reads both presses', () => {
     const rows = [
       press('lead', '2026-08-04', 'flat_bench', 155, 8, 'B'),
       press('off', '2026-08-08', 'incline_bench', 135, 8, 'A'),
-      press('off', '2026-08-08', 'flat_bench', 145, 8, 'A'),
+      press('off', '2026-08-08', 'flat_bench', 160, 8, 'A'),
     ]
     const goal = benchGoal(rows)
 
     expect(goal.points.map((p) => p.date)).toEqual(['2026-08-04', '2026-08-08'])
-    // The day's best press, whichever of the two it was: flat 145×8 beats incline
-    // 135×8 even done second.
-    expect(goal.points[1].value).toBeCloseTo(183.7, 1)
+    // The day's best press, whichever of the two it was: flat 160×8 (202.7) beats
+    // incline 135×8 read as flat (196.6) even done second.
+    expect(goal.points[1]).toEqual({ date: '2026-08-08', value: 202.7, from: 'flat_bench' })
   })
 
-  it('takes a reading from an incline-only session', () => {
+  it('reads an incline press as the flat bench it implies', () => {
     const rows = [press('a', '2026-08-08', 'incline_bench', 135, 8, 'A')]
-    expect(benchGoal(rows).points).toEqual([{ date: '2026-08-08', value: 171, from: 'incline_bench' }]) // 135×8
+    const goal = benchGoal(rows)
+    expect(goal.scaleByKey).toEqual({ flat_bench: 1, incline_bench: INCLINE_TO_FLAT })
+    // 135×8 is 171 through Epley, ×1.15 as flat.
+    expect(goal.points).toEqual([{ date: '2026-08-08', value: 196.6, from: 'incline_bench' }])
+  })
+
+  it('lets an incline day outrank a flat set that would have won at face value', () => {
+    const rows = [
+      press('off', '2026-08-08', 'incline_bench', 135, 8, 'A'), // 171 raw, 196.6 as flat
+      press('off', '2026-08-08', 'flat_bench', 145, 8, 'A'), // 183.7
+    ]
+    expect(benchGoal(rows).points).toEqual([{ date: '2026-08-08', value: 196.6, from: 'incline_bench' }])
+  })
+
+  it('settles on an incline single at face value, not converted', () => {
+    const rows = [{ ...press('a', '2026-08-15', 'incline_bench', 160, 1, 'A'), notes: MAX_ATTEMPT_NOTE }]
+    expect(benchGoal(rows).singles).toEqual([{ date: '2026-08-15', value: 160 }])
   })
 
   it('names flat bench as the lift it is cued on, with incline counted alongside', () => {

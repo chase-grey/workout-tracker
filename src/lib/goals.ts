@@ -16,7 +16,7 @@ import {
   averageRepsSeries,
   type Point,
 } from './progress'
-import { LEG_PRESS_TO_SQUAT } from './liftRatios'
+import { INCLINE_TO_FLAT, LEG_PRESS_TO_SQUAT } from './liftRatios'
 import { isMaxAttempt } from './maxAttempt'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import {
@@ -172,14 +172,28 @@ export const LEG_LIFT_GAIN_CAP = 0.5
  * (see pushVariant), and a lead-slot series drops the sessions where flat followed
  * incline — so a push day could be logged in full and still leave the goal sitting
  * on a fortnight-old number. Counting the best set of either press gives every
- * push day a reading, and can only ever give a conservative one: incline is the
- * harder press, so an incline e1RM is a floor on the flat bench it implies.
+ * push day a reading. Incline is the harder press, though, so it enters as the
+ * flat bench it implies rather than at face value (see {@link BENCH_SCALE}).
  *
  * The cue stays on flat bench alone (see goalCue): what it hands back is a weight
  * to load, and the line's weight is a flat-bench weight.
  */
 export const BENCH_KEY = 'flat_bench'
 export const BENCH_ALSO_KEYS = ['incline_bench']
+
+/**
+ * What each of the bench goals' presses is worth in flat-bench pounds. Read at
+ * face value, an incline day always looked like a weak bench day — the same
+ * effort moves less on the steeper angle — so the line sagged on every push day
+ * incline led and only the flat days held it up. See liftRatios.INCLINE_TO_FLAT.
+ *
+ * Only the estimate is converted. The singles that settle the goal stay at face
+ * value: a flat bench is right there to max on, so "benched it" means benched it.
+ */
+export const BENCH_SCALE: Record<string, number> = {
+  [BENCH_KEY]: 1,
+  incline_bench: INCLINE_TO_FLAT,
+}
 
 /**
  * The lift the squat goals are trained and cued on, and the retired lift they're
@@ -570,7 +584,7 @@ export function buildGoals({
   const working = workouts.filter((r) => !isMaxAttempt(r))
 
   const benchKeys = [BENCH_KEY, ...BENCH_ALSO_KEYS]
-  const benchPoints = combinedBest1RMSeries(working, benchKeys)
+  const benchPoints = combinedBest1RMSeries(working, benchKeys, BENCH_SCALE)
   const benchSingles = bestSingleSeries(workouts, benchKeys)
   // The squat goals, in squat pounds, off whichever leg movement was trained —
   // the press converted, a barbell squat at face value (see SQUAT_SCALE).
@@ -701,6 +715,7 @@ export function buildGoals({
       unit: 'lbs',
       exerciseKey: BENCH_KEY,
       alsoCounts: BENCH_ALSO_KEYS,
+      scaleByKey: BENCH_SCALE,
       points: benchPoints,
       singles: benchSingles,
       target: bwTarget(1),
@@ -721,6 +736,7 @@ export function buildGoals({
       unit: 'lbs',
       exerciseKey: BENCH_KEY,
       alsoCounts: BENCH_ALSO_KEYS,
+      scaleByKey: BENCH_SCALE,
       points: benchPoints,
       singles: benchSingles,
       target: 200,

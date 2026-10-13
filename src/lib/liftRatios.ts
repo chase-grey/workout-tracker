@@ -28,3 +28,22 @@
  * `singles` — the target has to be lifted for real to count).
  */
 export const LEG_PRESS_TO_SQUAT = 0.45
+
+/**
+ * The flat bench an incline bench implies: multiply an incline e1RM by this to
+ * read it as a flat one.
+ *
+ * Incline is the harder press — the steeper angle hands more of the work to the
+ * front delts and shortens the leverage the chest gets — so the same effort moves
+ * less weight. The usual figure has an incline max at 80–90% of a flat one, which
+ * puts the conversion between 1.11 and 1.25; 1.15 (incline at about 87% of flat)
+ * is the conservative side of the middle. Counting incline at face value instead
+ * treated every incline day as a weaker bench day than it was, so the goal line
+ * dipped on every variant-A push day and leaned on the flat readings to recover.
+ *
+ * Like the leg-press ratio this is one number for a comparison that varies with
+ * the bench's angle, and it's a single constant so it can be re-tuned. It only
+ * moves the estimate: the bench goals are still settled by a real single, and an
+ * incline single counts at face value there (see goals.BENCH_SCALE).
+ */
+export const INCLINE_TO_FLAT = 1.15
