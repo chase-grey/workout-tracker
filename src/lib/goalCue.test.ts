@@ -42,6 +42,19 @@ describe('goalCueForExercise', () => {
     expect(Math.abs(epley1RM(cue!.weightLbs, cue!.reps) - cue!.lineE1RM)).toBeLessThan(1)
   })
 
+  it('converts the line back into leg-press pounds for a squat goal trained on the press', () => {
+    const locked: LockedProjections = { squat_bodyweight: lock() }
+    const squat = goalCueForExercise(locked, [goal()], 'barbell_squat', 8, TODAY)!
+    const press = goal({ exerciseKey: 'leg_press', scaleByKey: { leg_press: 0.45 } })
+    const cue = goalCueForExercise(locked, [press], 'leg_press', 8, TODAY)!
+    // Same line, same squat pounds called for.
+    expect(cue.lineE1RM).toBe(squat.lineE1RM)
+    // But the sled has to carry the squat ÷ 0.45, rounded up to something loadable.
+    expect(cue.weightLbs % 5).toBe(0)
+    expect(epley1RM(cue.weightLbs, 8) * 0.45).toBeGreaterThanOrEqual(cue.lineE1RM)
+    expect(epley1RM(cue.weightLbs - 5, 8) * 0.45).toBeLessThan(cue.lineE1RM)
+  })
+
   it('reads the standing from the last session against the line on its date', () => {
     const locked: LockedProjections = { squat_bodyweight: lock() }
     const cue = goalCueForExercise(locked, [goal()], 'barbell_squat', 5, TODAY)

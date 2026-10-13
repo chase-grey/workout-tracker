@@ -17,7 +17,10 @@ import { attemptWeight, isReadyToAttempt, type GoalSpec } from './goals'
 export type GoalCue = {
   goalTitle: string
   reps: number
-  /** Weight at `reps` whose Epley e1RM lands on the locked line as of today. */
+  /**
+   * Weight to load on the exercise at `reps` whose Epley e1RM, in the goal's unit,
+   * lands on the locked line as of today.
+   */
   weightLbs: number
   /** The e1RM the line calls for today. */
   lineE1RM: number
@@ -106,9 +109,18 @@ export function goalCueForExercise(
     }
   }
 
+  // The line is drawn in the goal's own unit, which for the squat goals is squat
+  // pounds — so on the leg press it has to be read back through the conversion
+  // before it's a weight to load, the way the attempt is (see attemptWeight).
+  // Skipping that handed the press a squat number to lift: well under half the
+  // sled it takes, so the cue read as met by sets that were nowhere near the line.
+  // A converted weight rounds up to a whole 5 rather than to the half pound: the
+  // ratio is nowhere near that precise, and a sled or a pin isn't set to 316.5.
   const lock = locked[goal.id]!
   const lineE1RM = expectedAt(lock, toISODate(today))
-  const weightLbs = roundHalf(weightForE1RM(lineE1RM, reps))
+  const scale = goal.scaleByKey?.[exerciseKey] ?? 1
+  const load = weightForE1RM(lineE1RM / scale, reps)
+  const weightLbs = scale === 1 ? roundHalf(load) : Math.ceil(load / 5) * 5
 
   const last = goal.points[goal.points.length - 1]
   const toward = Math.sign(lock.target - lock.startValue) || 1
