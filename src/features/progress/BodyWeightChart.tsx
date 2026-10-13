@@ -210,6 +210,13 @@ export function BodyWeightChart({
     [points, goals],
   )
 
+  // Body fat moves a point or two, so pinning its axis at zero flattens the line.
+  // Fit it to the readings actually plotted instead.
+  const fatScale = useMemo(
+    () => niceScale(rows.flatMap((r) => (typeof r.bodyFat === 'number' ? [r.bodyFat] : []))),
+    [rows],
+  )
+
   const xDomain = useMemo(() => {
     const ts = rows.map((r) => r.t)
     return [Math.min(...ts), Math.max(...ts)] as [number, number]
@@ -272,7 +279,7 @@ export function BodyWeightChart({
             tick={<WeekTick weeks={weekMeta} />}
           />
           <YAxis yAxisId="left" tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
-          <YAxis yAxisId="right" orientation="right" tick={{ ...axisTick, fill: LINE_SECONDARY }} width="auto" domain={[0, 'auto']} tickFormatter={(value) => `${value}%`} />
+          <YAxis yAxisId="right" orientation="right" tick={{ ...axisTick, fill: LINE_SECONDARY }} width="auto" domain={fatScale.domain} ticks={fatScale.ticks} tickFormatter={(value) => `${value}%`} />
           <AxisBreak broken={yScale.broken} bg="#171717" />
           <Tooltip
             {...readout.tooltip}
