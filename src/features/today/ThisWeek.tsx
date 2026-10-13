@@ -6,10 +6,11 @@ import {
   MdEmojiEvents,
   MdExpandMore,
   MdLocalFireDepartment,
+  MdMoreHoriz,
   MdStar,
 } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { weeklySummary, weeklyWeightGains } from '../../lib/summary'
+import { weeklySummary, weeklyWeightChanges } from '../../lib/summary'
 import { parseISODate } from '../../lib/dates'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
@@ -61,6 +62,9 @@ function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | '
   )
 }
 
+/** Weeks of weight history listed before the rest fold behind a ⋯. */
+const WEIGHT_WEEKS_SHOWN = 15
+
 export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => void }) {
   const { weekProgress: wp, goals, streaks, streakHistory, workouts, bodyWeights, flexEntries, calorieEntries, measurements, settings } =
     useData()
@@ -72,9 +76,11 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   const streakId = useId()
   const [showWeightHistory, setShowWeightHistory] = useState(false)
   const weightHistoryId = useId()
+  const [showAllWeightWeeks, setShowAllWeightWeeks] = useState(false)
 
   const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
-  const weightGains = weeklyWeightGains(bodyWeights)
+  const weightChanges = weeklyWeightChanges(bodyWeights)
+  const shownWeightChanges = showAllWeightWeeks ? weightChanges : weightChanges.slice(0, WEIGHT_WEEKS_SHOWN)
   const calPR = caloriePR(calorieEntries)
   const hasPRs = summary.prs.length > 0 || calPR != null
 
@@ -186,22 +192,35 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
           </button>
           <Collapse id={weightHistoryId} open={showWeightHistory}>
             <div className="mt-1 rounded-xl bg-surface-2 p-3">
-              <p className="font-medium text-neutral-300">previous weeks with weight gains</p>
-              <p className="mt-1 text-xs text-neutral-500">
-                Last weigh-in of each week compared with the last weigh-in before it.
-              </p>
-              {weightGains.length === 0 ? (
-                <p className="mt-3">No previous weeks with weight gains yet.</p>
+              {weightChanges.length === 0 ? (
+                <p>No previous weeks yet.</p>
               ) : (
-                <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto">
-                  {weightGains.map(({ week, gainLbs }) => (
+                <ul className="max-h-64 space-y-3 overflow-y-auto">
+                  {shownWeightChanges.map(({ week, changeLbs }) => (
                     <li key={week} className="flex items-center justify-between gap-3">
                       <span>week of {parseISODate(week).toLocaleDateString(undefined, {
                         month: 'short', day: 'numeric', year: 'numeric',
                       })}</span>
-                      <span className="shrink-0 font-semibold tabular-nums text-accent">+{gainLbs} lbs</span>
+                      <span
+                        className={`shrink-0 font-semibold tabular-nums ${changeLbs > 0 ? 'text-accent' : 'text-neutral-300'}`}
+                      >
+                        {changeLbs > 0 ? '+' : ''}
+                        {changeLbs} lbs
+                      </span>
                     </li>
                   ))}
+                  {!showAllWeightWeeks && weightChanges.length > WEIGHT_WEEKS_SHOWN && (
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => setShowAllWeightWeeks(true)}
+                        aria-label={`show ${weightChanges.length - WEIGHT_WEEKS_SHOWN} more weeks`}
+                        className="flex min-h-11 w-full items-center justify-center text-2xl text-neutral-400 active:opacity-70"
+                      >
+                        <MdMoreHoriz aria-hidden />
+                      </button>
+                    </li>
+                  )}
                 </ul>
               )}
             </div>

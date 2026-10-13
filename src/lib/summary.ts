@@ -22,26 +22,33 @@ export type WeeklySummary = {
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
 
-/** Completed weeks with gains, using the same weigh-in comparison as the summary. */
-export function weeklyWeightGains(bodyWeights: BodyWeightEntry[], today: Date = new Date()) {
+/**
+ * Every completed week that has weigh-ins, newest first, with the change in its
+ * average weigh-in from the average of the last week before it that had any. A
+ * week with no weigh-ins is skipped rather than shown as zero, and the first
+ * week on record has nothing to compare against, so it doesn't appear.
+ */
+export function weeklyWeightChanges(bodyWeights: BodyWeightEntry[], today: Date = new Date()) {
   const currentWeek = weekStartISO(toISODate(today))
-  const latestByWeek = new Map<string, BodyWeightEntry>()
+  const byWeek = new Map<string, { sum: number; count: number }>()
   for (const entry of bodyWeights) {
     const week = weekStartISO(entry.date)
     if (week >= currentWeek) continue
-    const latest = latestByWeek.get(week)
-    if (!latest || entry.date > latest.date) latestByWeek.set(week, entry)
+    const acc = byWeek.get(week) ?? { sum: 0, count: 0 }
+    acc.sum += entry.weightLbs
+    acc.count += 1
+    byWeek.set(week, acc)
   }
-  const gains: { week: string; gainLbs: number }[] = []
-  let previous: BodyWeightEntry | undefined
-  for (const [week, entry] of [...latestByWeek].sort(([a], [b]) => a.localeCompare(b))) {
-    if (previous) {
-      const gainLbs = round1(entry.weightLbs - previous.weightLbs)
-      if (gainLbs > 0) gains.push({ week, gainLbs })
+  const changes: { week: string; averageLbs: number; changeLbs: number }[] = []
+  let previousAverage: number | undefined
+  for (const [week, { sum, count }] of [...byWeek].sort(([a], [b]) => a.localeCompare(b))) {
+    const average = sum / count
+    if (previousAverage !== undefined) {
+      changes.push({ week, averageLbs: round1(average), changeLbs: round1(average - previousAverage) })
     }
-    previous = entry
+    previousAverage = average
   }
-  return gains.reverse()
+  return changes.reverse()
 }
 
 /**
