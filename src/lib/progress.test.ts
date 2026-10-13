@@ -8,7 +8,7 @@ import {
   exercisesByFrequency,
   offSlotSeries,
   sessionCount,
-  sustainedRepsSeries,
+  averageRepsSeries,
 } from './progress'
 import { ALL_EXERCISES, DEFAULT_PLAN, absExerciseKeys } from '../config/plan'
 import type { WorkoutRow } from '../types'
@@ -51,33 +51,41 @@ describe('exerciseSeries', () => {
   })
 })
 
-describe('sustainedRepsSeries', () => {
+describe('averageRepsSeries', () => {
   const pullup = (session: string, date: string, reps: number[]): WorkoutRow[] =>
     reps.map((n, i) => ({ ...r(session, date, null, n), exercise: 'weighted_pullups', set_number: i + 1 }))
 
-  it('reports the reps every one of the sets cleared, not the best set', () => {
-    const s = sustainedRepsSeries(pullup('a', '2026-01-05', [12, 9, 8, 10]), 'weighted_pullups', 4)
-    expect(s).toEqual([{ date: '2026-01-05', value: 8 }])
+  it('averages the sets rather than reading the weakest one', () => {
+    const s = averageRepsSeries(pullup('a', '2026-01-05', [12, 9, 8, 10]), 'weighted_pullups', 4)
+    expect(s).toEqual([{ date: '2026-01-05', value: 9.8 }])
   })
 
-  it('reads the nth-best set when more than n were logged', () => {
-    // Five sets of 10/9/8/7/6: four of them made 7, so 4×7 is what was held.
-    const s = sustainedRepsSeries(pullup('a', '2026-01-05', [10, 9, 8, 7, 6]), 'weighted_pullups', 4)
-    expect(s[0].value).toBe(7)
+  it('reads 6, 6, 6, 3 above 5, 5, 5, 5', () => {
+    const rows = [...pullup('a', '2026-01-05', [5, 5, 5, 5]), ...pullup('b', '2026-01-12', [6, 6, 6, 3])]
+    expect(averageRepsSeries(rows, 'weighted_pullups', 4)).toEqual([
+      { date: '2026-01-05', value: 5 },
+      { date: '2026-01-12', value: 5.3 },
+    ])
+  })
+
+  it('averages only the best n sets when more than n were logged', () => {
+    // Five sets of 10/9/8/7/6: the 6 is left out, and 10/9/8/7 average 8.5.
+    const s = averageRepsSeries(pullup('a', '2026-01-05', [10, 9, 8, 7, 6]), 'weighted_pullups', 4)
+    expect(s[0].value).toBe(8.5)
   })
 
   it('leaves out a session short of the set count rather than scoring it zero', () => {
     const rows = [...pullup('a', '2026-01-05', [10, 10, 10]), ...pullup('b', '2026-01-12', [9, 9, 9, 9])]
-    expect(sustainedRepsSeries(rows, 'weighted_pullups', 4)).toEqual([{ date: '2026-01-12', value: 9 }])
+    expect(averageRepsSeries(rows, 'weighted_pullups', 4)).toEqual([{ date: '2026-01-12', value: 9 }])
   })
 
   it('sorts oldest → newest and ignores other exercises', () => {
     const rows = [
       ...pullup('b', '2026-02-01', [8, 8, 8, 8]),
-      ...pullup('a', '2026-01-01', [5, 6, 7, 8]),
+      ...pullup('a', '2026-01-01', [5, 5, 5, 5]),
       r('c', '2026-03-01', 100, 20),
     ]
-    expect(sustainedRepsSeries(rows, 'weighted_pullups', 4)).toEqual([
+    expect(averageRepsSeries(rows, 'weighted_pullups', 4)).toEqual([
       { date: '2026-01-01', value: 5 },
       { date: '2026-02-01', value: 8 },
     ])

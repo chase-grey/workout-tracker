@@ -13,7 +13,7 @@ import type { BodyWeightEntry, WorkoutRow } from '../types'
 import {
   bestSingleSeries,
   combinedBest1RMSeries,
-  sustainedRepsSeries,
+  averageRepsSeries,
   type Point,
 } from './progress'
 import { LEG_PRESS_TO_SQUAT } from './liftRatios'
@@ -642,15 +642,17 @@ export function buildGoals({
   }))
 
   // The pull-up ladder. Each rung is four sets at a rep count, measured on the
-  // reps the fourth set of a session still had in it — so a rung is cleared only
-  // when every one of the four sets made the number, which is what "4 sets of
-  // 10" means. Milestones, like the flexibility rungs: a day that hit 4×10
-  // doesn't stop having happened because the next session came in tired.
+  // average of a session's four best sets — so a rung is cleared by the reps it
+  // asks for in total, and one set that ran out early costs only its own missing
+  // reps rather than the whole session. The price: 12, 12, 12, 4 clears 4×10
+  // without a fourth set of ten. Milestones, like the flexibility rungs: a day
+  // that hit 4×10 doesn't stop having happened because the next session came in
+  // tired.
   //
   // Any pull-up set counts, added weight or not. A rung done with a belt on is
   // the harder version of the same thing, and refusing it would mean the ladder
   // stalled on the days the plan calls for weight.
-  const pullupPoints = sustainedRepsSeries(workouts, PULLUP_KEY, PULLUP_GOAL_SETS)
+  const pullupPoints = averageRepsSeries(workouts, PULLUP_KEY, PULLUP_GOAL_SETS)
   const pullupGoals: GoalSpec[] = PULLUP_GOAL_REPS.map((reps): GoalSpec => ({
     id: `pullups_${PULLUP_GOAL_SETS}x${reps}`,
     title: `${PULLUP_GOAL_SETS}×${reps} pull-ups`,

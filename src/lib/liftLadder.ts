@@ -4,7 +4,7 @@
  *
  * A ladder is several rungs measured on one series: the two squat targets read
  * the same estimated 1RM, the two bench targets the same combined-press estimate,
- * and the four pull-up rungs the same sustained-reps line. Those are drawn as one
+ * and the four pull-up rungs the same average-reps line. Those are drawn as one
  * block with one chart (see LiftLadderBlock), the way the stretch ladders and the
  * bodyweight pair already are. A lift left out of this map keeps a row and a chart
  * of its own — which is what bench did while bodyweight was the only thing it was
@@ -12,9 +12,9 @@
  *
  * The wording lives here rather than in the block because it's lift-specific
  * knowledge with rules worth stating and checking: a pull-up rung is measured on
- * the reps every one of four sets still had in it (see
- * progress.sustainedRepsSeries), so its numbers read as "4×8" rather than a bare
- * 8 — which is how the rungs themselves are titled. A squat reading is a formula's
+ * the average reps of four sets (see progress.averageRepsSeries), so its numbers
+ * read as "4×8" rather than a bare 8 — which is how the rungs themselves are
+ * titled. A squat reading is a formula's
  * answer rather than a weight that was on the bar, so it says so.
  *
  * Pure module — no React/DOM.
@@ -56,7 +56,7 @@ export const LIFT_LADDERS: Record<string, LiftLadder> = {
   },
   [PULLUP_KEY]: {
     title: 'pull-ups',
-    seriesName: 'every set',
+    seriesName: 'avg per set',
     headline: (v) => `${PULLUP_GOAL_SETS}×${v}`,
     goalLabel: (t) => `goal ${PULLUP_GOAL_SETS}×${t}`,
     empty: 'log pull-ups to project these goals',

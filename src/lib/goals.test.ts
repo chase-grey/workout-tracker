@@ -161,10 +161,10 @@ describe('the pull-up ladder', () => {
     ])
   })
 
-  it('measures a rung on the reps every one of the four sets made', () => {
-    // Twelve on the first set doesn't make it a 4×12 day — the fourth set had 7.
+  it('measures a rung on the average of the four sets', () => {
+    // 12, 10, 9, 7 is 38 reps — 9.5 a set, short of 4×10 but well past 4×5.
     const goals = ladder(pullups('2026-02-01', [12, 10, 9, 7]))
-    expect(goals[0].points).toEqual([{ date: '2026-02-01', value: 7 }])
+    expect(goals[0].points).toEqual([{ date: '2026-02-01', value: 9.5 }])
     expect(isReached(goals[0])).toBe(true) // 4×5
     expect(isReached(goals[1])).toBe(false) // 4×10
   })

@@ -127,10 +127,14 @@ export function offSlotSeries(rows: WorkoutRow[], exerciseKey: string, metric: M
 }
 
 /**
- * One point per session for "reps held across `sets` sets": the reps of that
- * session's `sets`-th best set, which is the number every one of those sets
- * cleared. It's what a "4 sets of 10" standard actually asks for — not one hard
- * set and three easy ones, but ten reps four times over.
+ * One point per session for "reps per set across `sets` sets": the average of
+ * that session's `sets` best sets, to a tenth of a rep. A "4 sets of 10" standard
+ * is forty reps in four sets, and the average is what credits all of them.
+ *
+ * Reading the weakest set instead scored one collapsed set as the whole session:
+ * 6, 6, 6, 3 plotted as 3, below the 5, 5, 5, 5 it beat by three reps. Averaged,
+ * it reads 5.3. Only the best `sets` sets count when more were logged, so a
+ * back-off set tacked on the end can't drag the reading down either.
  *
  * Sessions that logged fewer than `sets` sets are left out rather than scored
  * zero. A three-set day doesn't say the four-set standard was missed, it says it
@@ -138,7 +142,7 @@ export function offSlotSeries(rows: WorkoutRow[], exerciseKey: string, metric: M
  * the fitted pace down with it. The same reason `topreps` exists: a rep figure
  * shouldn't move because the day prescribed three sets instead of four.
  */
-export function sustainedRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets: number): Point[] {
+export function averageRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets: number): Point[] {
   const bySession = new Map<string, { date: string; reps: number[] }>()
   for (const r of rows) {
     if (r.exercise !== exerciseKey) continue
@@ -149,7 +153,11 @@ export function sustainedRepsSeries(rows: WorkoutRow[], exerciseKey: string, set
   }
   return [...bySession.values()]
     .filter((g) => g.reps.length >= sets)
-    .map((g) => ({ date: g.date, value: [...g.reps].sort((a, b) => b - a)[sets - 1] }))
+    .map((g) => {
+      const best = [...g.reps].sort((a, b) => b - a).slice(0, sets)
+      const avg = best.reduce((sum, n) => sum + n, 0) / sets
+      return { date: g.date, value: Math.round(avg * 10) / 10 }
+    })
     .sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
