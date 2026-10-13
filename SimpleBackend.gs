@@ -27,6 +27,9 @@
  *                 legacy "__rest__" row holds pooled rest seconds — still written
  *                 for older clients, no longer served)
  *   config:       key, value  (one JSON blob per key: "plan", "settings")
+ *   save_errors:  at, build, route, write_id, message, pending, payload  (a
+ *                 phone's own report of a write it couldn't deliver; see
+ *                 appendSaveError)
  *
  * Routes:
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
@@ -35,6 +38,9 @@
  *   GET  ?route=durations[&since=YYYY-MM-DD]
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
  *   GET  ?route=settings         -> the account's settings blob, or null (see getSettings)
+ *   GET  ?route=save_errors[&limit=N] -> failed-save reports, newest first (see getSaveErrors)
+ *   POST ?route=save_error    body: { build, route, writeId, message, pending, payload }
+ *                 (a write the outbox couldn't deliver, reported by the device; see appendSaveError)
  *   POST ?route=settings      body: { settings: {…} }  (whole; declines a stale copy)
  *   GET  ?route=issues&secret=…  -> [{ number, title, url, state, area, createdAt, closedAt }]
  *                 (the app-filed GitHub issues + their open/closed state; see listIssues)
@@ -107,6 +113,7 @@ const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note', 'body_fat_pc
 // sheet() helper fills a missing header cell in on its own, so no migration.
 const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec', 'routine']
 const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
+const SAVE_ERROR_HEADERS = ['at', 'build', 'route', 'write_id', 'message', 'pending', 'payload']
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -138,6 +145,8 @@ function doGet(e) {
         return json(getPlan())
       case 'settings':
         return json(getSettings())
+      case 'save_errors':
+        return json(getSaveErrors(e.parameter.limit))
       case 'issues':
         return json(listIssues(e.parameter.secret))
       case 'issue_thread':
@@ -198,6 +207,10 @@ function doPost(e) {
         return json(withLock(function () { return savePlan(body.plan) }))
       case 'settings':
         return json(withLock(function () { return saveSettings(body.settings) }))
+      case 'save_error':
+        // Not under withLock: "Backend busy" is one of the failures this exists
+        // to report, and queueing on the same lock would lose exactly that one.
+        return json(appendSaveError(body))
       case 'report_issue':
         // Not under withLock: GitHub is the store of record, not a sheet, and two
         // reports racing just make two issues — no row to clobber.
@@ -967,6 +980,71 @@ function saveSettings(settings) {
   }
   sh.appendRow(['settings', value])
   return { saved: 1 }
+}
+
+/* ---------------------------------------------------------- failed saves */
+
+// A sheet cell holds at most 50,000 characters. A cut payload still names the
+// write and most of its rows, which is most of the use.
+const SAVE_ERROR_PAYLOAD_MAX = 45000
+// Old reports are only history. Trimmed in a batch so a phone retrying on every
+// refresh can't grow the tab without bound.
+const SAVE_ERROR_KEEP = 300
+
+/**
+ * Record a write a phone's outbox couldn't deliver.
+ *
+ * Every other route's failure only ever reaches the device that hit it, where
+ * the banner says no more than "couldn't save". This writes it somewhere it can
+ * be read back off the phone — the error, the build that hit it, and the queued
+ * write itself — so the cause can be found and the data replayed without anyone
+ * copying an error off a screen.
+ */
+function appendSaveError(report) {
+  if (!report || typeof report !== 'object' || !report.message) {
+    throw new Error('No save error provided')
+  }
+  const sh = sheet('save_errors', SAVE_ERROR_HEADERS)
+  let payload = report.payload === undefined ? '' : JSON.stringify(report.payload)
+  if (payload.length > SAVE_ERROR_PAYLOAD_MAX) payload = payload.slice(0, SAVE_ERROR_PAYLOAD_MAX)
+  sh.appendRow([
+    new Date().toISOString(),
+    String(report.build || ''),
+    String(report.route || ''),
+    String(report.writeId || ''),
+    String(report.message).slice(0, 2000),
+    Number(report.pending) || 0,
+    payload,
+  ])
+  const extra = sh.getLastRow() - 1 - SAVE_ERROR_KEEP
+  if (extra >= 50) sh.deleteRows(2, extra)
+  return { saved: 1 }
+}
+
+function getSaveErrors(limit) {
+  const sh = sheet('save_errors', SAVE_ERROR_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const n = Math.max(1, Math.min(Number(limit) || 50, SAVE_ERROR_KEEP))
+  const out = []
+  for (let i = rows.length - 1; i >= 1 && out.length < n; i--) {
+    const r = rows[i]
+    let payload = null
+    try {
+      payload = r[6] === '' ? null : JSON.parse(r[6])
+    } catch (e) {
+      payload = String(r[6]) // cut at the cell limit; still worth reading
+    }
+    out.push({
+      at: r[0] instanceof Date ? r[0].toISOString() : String(r[0]),
+      build: String(r[1]),
+      route: String(r[2]),
+      writeId: String(r[3]),
+      message: String(r[4]),
+      pending: Number(r[5]) || 0,
+      payload: payload,
+    })
+  }
+  return out
 }
 
 /* -------------------------------------------------------------- shared token */

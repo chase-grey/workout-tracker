@@ -52,6 +52,21 @@ tests yet, which is why the divergence above had nothing to fail against. Logic
 worth trusting belongs in `src/lib` with a test beside it rather than inline in a
 1000-line session component.
 
+## When the phone says it couldn't save
+
+Don't ask for the error text. Run `npm run save-errors` first. Every write the
+phone's outbox fails to deliver is reported, with its error, the build, and the
+queued write itself, to the backend's `save_errors` tab
+(`services/saveErrors.ts` → `SimpleBackend.gs appendSaveError`), and the
+script reads it back. `-- --json` gives the whole payloads, enough to replay a
+stuck write. The script also says when the backend doesn't answer at all, the
+one failure a phone can't report. It exits 3 if the deployed backend predates
+the route; that means `SimpleBackend.gs` needs redeploying (see BACKEND.md).
+
+Then rule out a stale build: "I don't see X" on the phone usually means the
+Pages deploy didn't land (`gh run list`), or a later commit from another
+session reverted it (`git log -- <file>`).
+
 ## UI copy
 
 No explanatory subtext, hint captions, or "how to use this" sentences under

@@ -7,6 +7,7 @@ import type { ExerciseAverages, SessionDuration, SessionTimeSamples } from '../l
 import type { SyncedSettings } from '../lib/settingsSync'
 import type { NotesEdit } from '../lib/discomfort'
 import type { IssueThread, TrackedIssue } from './issues'
+import type { SaveErrorReport } from '../lib/saveErrorReport'
 import { storage } from './storage'
 import { DEFAULT_API_URL } from '../config/backend'
 
@@ -123,4 +124,5 @@ export const api = {
     get<IssueThread>('issue_thread', { secret, number: String(number) }),
   answerIssue: (body: { secret: string; number: number; answer: string }) =>
     post<{ answered: number }>('answer_issue', body),
+  reportSaveError: (report: SaveErrorReport) => post<{ saved: number }>('save_error', report),
 }

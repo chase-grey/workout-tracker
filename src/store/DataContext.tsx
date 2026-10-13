@@ -6,6 +6,7 @@ import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
 import { api } from '../services/api'
+import { reportSaveFailures } from '../services/saveErrors'
 import { reconcileBodyWeights } from '../lib/bodyWeightSync'
 import { reconcileWorkouts } from '../lib/workoutSync'
 import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
@@ -340,6 +341,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const runFlush = useCallback(async () => {
     if (!api.isConfigured()) return
     let failure: string | null = null
+    const failures: { write: QueuedWrite; message: string }[] = []
     for (const w of storage.loadQueue()) {
       try {
         if (w.type === 'session') await api.postSession(w.rows)
@@ -356,10 +358,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setQueue(storage.updateQueue((q) => dequeued(q, w.id)))
       } catch (error) {
         failure = error instanceof Error ? error.message : 'Save failed'
+        failures.push({ write: w, message: failure })
         continue
       }
     }
     setSaveError(failure)
+    void reportSaveFailures(failures, storage.loadQueue().length)
   }, [])
 
   // One flush at a time. A day's calories are sent as a running total, so two

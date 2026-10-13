@@ -137,3 +137,19 @@ waist or neck and merges supplied fields with the existing row for that date.
 Percentages must be greater than 0 and less than 100. The response includes
 `bodyFatSupported: true`; clients keep readings pending until that acknowledgment
 arrives, so an older backend cannot silently discard the new field.
+
+### Failed-save reports
+
+When the outbox fails to deliver a write, the app posts `save_error` with the
+error, its build, the queue depth and the queued write itself. It sends at most
+one report per write and error every six hours (`src/lib/saveErrorReport.ts`).
+Rows land in a `save_errors` tab, trimmed to the newest 300.
+`GET ?route=save_errors&limit=N` reads them back newest first, and
+`npm run save-errors` prints them. The route takes no lock, because a busy lock
+is one of the failures it reports. Like the other read routes it is
+unauthenticated; the payloads are workout data the `workouts` route already
+serves. An older backend answers `Unknown route`, which the app ignores.
+
+To ship a backend change without changing the `/exec` URL every device uses,
+paste `SimpleBackend.gs` into the Apps Script editor, then **Deploy → Manage
+deployments → (pencil) → Version: New version → Deploy**.
