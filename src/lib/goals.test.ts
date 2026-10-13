@@ -894,7 +894,7 @@ describe('the bench goal reads both presses', () => {
 
   it('takes a reading from an incline-only session', () => {
     const rows = [press('a', '2026-08-08', 'incline_bench', 135, 8, 'A')]
-    expect(benchGoal(rows).points).toEqual([{ date: '2026-08-08', value: 171 }]) // 135×8
+    expect(benchGoal(rows).points).toEqual([{ date: '2026-08-08', value: 171, from: 'incline_bench' }]) // 135×8
   })
 
   it('names flat bench as the lift it is cued on, with incline counted alongside', () => {
@@ -944,12 +944,12 @@ describe('the squat goals, trained on a leg press', () => {
   it('converts a leg press into the squat it implies', () => {
     const goal = squatGoal(READY)
     expect(goal.scaleByKey).toEqual({ leg_press: LEG_PRESS_TO_SQUAT, barbell_squat: 1 })
-    expect(goal.points).toEqual([{ date: '2026-08-08', value: 172.8 }])
+    expect(goal.points).toEqual([{ date: '2026-08-08', value: 172.8, from: 'leg_press' }])
   })
 
   it('still counts a barbell squat at face value', () => {
     const goal = squatGoal([leg('2026-08-08', 'barbell_squat', 225, 5)])
-    expect(goal.points).toEqual([{ date: '2026-08-08', value: 262.5 }]) // 225×5, unconverted
+    expect(goal.points).toEqual([{ date: '2026-08-08', value: 262.5, from: 'barbell_squat' }]) // 225×5, unconverted
   })
 
   it('takes the better of the two when a session held both', () => {
@@ -957,7 +957,7 @@ describe('the squat goals, trained on a leg press', () => {
       leg('2026-08-08', 'leg_press', 320, 6), // 172.8 converted
       { ...leg('2026-08-08', 'barbell_squat', 185, 5), session_id: '2026-08-08:leg_press:6' },
     ]
-    expect(squatGoal(rows).points).toEqual([{ date: '2026-08-08', value: 215.8 }]) // the squat
+    expect(squatGoal(rows).points).toEqual([{ date: '2026-08-08', value: 215.8, from: 'barbell_squat' }]) // the squat
   })
 
   it('does not hand the goal over on the estimate alone', () => {
@@ -986,7 +986,7 @@ describe('the squat goals, trained on a leg press', () => {
     expect(isReached(goal)).toBe(false)
     // The miss doesn't read as the lift getting weaker: the estimate series is
     // working sets only, so it still says the attempt is on.
-    expect(goal.points).toEqual([{ date: '2026-08-08', value: 172.8 }])
+    expect(goal.points).toEqual([{ date: '2026-08-08', value: 172.8, from: 'leg_press' }])
     expect(isReadyToAttempt(goal)).toBe(true)
   })
 

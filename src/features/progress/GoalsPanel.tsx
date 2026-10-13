@@ -355,7 +355,14 @@ function LockInPrompt({
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
         in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
       </p>
-      <CommitChart goalId={goal.id} proj={proj} points={goal.points} date={date} onChange={setDate} />
+      <CommitChart
+        goalId={goal.id}
+        proj={proj}
+        points={goal.points}
+        date={date}
+        onChange={setDate}
+        lift={goal.exerciseKey}
+      />
       <div className="mt-3 flex items-center gap-2">
         <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
           hit it by
@@ -451,6 +458,7 @@ function RecommitPrompt({
             date={date}
             onChange={setDate}
             estimate={estimate!}
+            lift={goal.exerciseKey}
           />
           <div className="mt-3 flex items-center gap-2">
             <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">

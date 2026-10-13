@@ -231,7 +231,7 @@ describe('combinedBest1RMSeries reads a movement trained as two variations', () 
   it('reads a session that trained only the other press', () => {
     const inclineOnly = [press('a1', '2026-08-04', 'incline_bench', 135, 8, 'A')]
     expect(combinedBest1RMSeries(inclineOnly, PRESSES)).toEqual([
-      { date: '2026-08-04', value: 171 }, // 135×8 through Epley
+      { date: '2026-08-04', value: 171, from: 'incline_bench' }, // 135×8 through Epley
     ])
   })
 
@@ -261,7 +261,7 @@ describe('combinedBest1RMSeries reads a movement trained as two variations', () 
       { ...r('a', '2026-08-04', 185, 5), exercise: 'barbell_squat' }, // 215.8, unconverted
     ]
     const scaled = combinedBest1RMSeries(rows, ['leg_press', 'barbell_squat'], { leg_press: 0.45 })
-    expect(scaled).toEqual([{ date: '2026-08-04', value: 215.8 }])
+    expect(scaled).toEqual([{ date: '2026-08-04', value: 215.8, from: 'barbell_squat' }])
   })
 })
 

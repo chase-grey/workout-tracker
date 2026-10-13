@@ -66,6 +66,14 @@ export function offSlotDot(bg: string) {
 }
 
 /**
+ * A goal reading that came off the goal's companion lift rather than the one it's
+ * named for — an incline day on the bench line, a barbell squat on the squat
+ * line (see progress.Point's `from`). Blue so it can't be read as another rung of
+ * the green ladder: it's the same series, just a different lift underneath.
+ */
+export const MARK_OTHER_LIFT = '#38bdf8'
+
+/**
  * Cold stretch readings run cool against the warm ones' greens — blue for the
  * left (or only) reading, violet for the right.
  */

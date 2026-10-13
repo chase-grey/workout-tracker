@@ -35,6 +35,7 @@ import { LINE_GOAL, LINE_GOAL_LABEL, LINE_PRIMARY, niceScale, timeXAxis, withTim
 import { parseISODate, toISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
+import { LiftKey, liftDot } from './liftMarks'
 
 const MS_PER_DAY = 86_400_000
 const axisTick = { fill: '#737373', fontSize: 10 }
@@ -64,14 +65,14 @@ function mergeRows(
   actual: Point[],
   reference: Point[],
   candidate: Point[],
-): { date: string; actual?: number; reference?: number; candidate?: number }[] {
-  const m = new Map<string, { date: string; actual?: number; reference?: number; candidate?: number }>()
+): { date: string; actual?: number; from?: string; reference?: number; candidate?: number }[] {
+  const m = new Map<string, { date: string; actual?: number; from?: string; reference?: number; candidate?: number }>()
   const at = (date: string) => {
     const row = m.get(date) ?? { date }
     m.set(date, row)
     return row
   }
-  for (const p of actual) at(p.date).actual = p.value
+  for (const p of actual) Object.assign(at(p.date), { actual: p.value, from: p.from })
   for (const p of reference) at(p.date).reference = p.value
   for (const p of candidate) at(p.date).candidate = p.value
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
@@ -94,6 +95,7 @@ export function CommitChart({
   onChange,
   estimate,
   now,
+  lift,
 }: {
   goalId: string
   proj: Projection
@@ -112,6 +114,8 @@ export function CommitChart({
   estimate?: string
   /** Overridable clock, for tests. */
   now?: Date
+  /** The lift the goal is named for, so readings off another are marked apart (see liftMarks). */
+  lift?: string | null
 }) {
   const wrap = useRef<HTMLDivElement>(null)
   const dragFrom = useRef<number | null>(null)
@@ -142,6 +146,7 @@ export function CommitChart({
     () => withTime(mergeRows(points, reference, candidate)),
     [points, reference, candidate],
   )
+  const dot = useMemo(() => (lift ? liftDot(lift) : { r: 2 }), [lift])
 
   const { current, target } = proj
   const yScale = useMemo(
@@ -302,7 +307,7 @@ export function CommitChart({
             name="actual"
             stroke={LINE_PRIMARY}
             strokeWidth={2}
-            dot={{ r: 2 }}
+            dot={dot}
             isAnimationActive={false}
             connectNulls
           />
@@ -331,6 +336,7 @@ export function CommitChart({
           <ReferenceDot x={chosenMs} y={proj.target} r={3} fill={LINE_PRIMARY} />
         </LineChart>
       </ResponsiveContainer>
+      {lift && <LiftKey points={points} mainLift={lift} />}
     </div>
   )
 }

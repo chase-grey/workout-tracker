@@ -10,7 +10,16 @@ import { leadVariantForKey, otherVariant } from './pushVariant'
  * prescribes three sets instead of four (see strengthStandards.LADDER_MULTIPLES).
  */
 export type Metric = '1rm' | 'weight' | 'volume' | 'reps' | 'topreps'
-export type Point = { date: string; value: number }
+export type Point = {
+  date: string
+  value: number
+  /**
+   * The lift the reading came off, on a series that reads more than one (see
+   * {@link combinedBest1RMSeries}) — so a chart can say which press a bench
+   * point was. Absent wherever the series has only one lift to be from.
+   */
+  from?: string
+}
 
 /**
  * Which A/B slot of a variant day a series reads.
@@ -173,9 +182,8 @@ export function averageRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets:
  * contain the day's fresh press — whichever of them led — so every session lands
  * on the line, and none of them lands there on a fatigued reading alone.
  *
- * A day the harder variation wins is still a real reading rather than a discount:
- * incline is the harder press, so an incline e1RM is a floor on the flat bench it
- * implies.
+ * Each point carries the lift its best set was on (`from`), so a chart drawing
+ * the combined line can still show which variation each day's reading came off.
  *
  * Sessions with no weight recorded at all are left out rather than scored zero — a
  * blank isn't a collapse, and a zero on a strength line reads as one.
@@ -183,7 +191,9 @@ export function averageRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets:
  * `scale` lets the keys read in a common unit when they don't share one: the squat
  * goals are measured in squat pounds and trained on the leg press, so the press's
  * readings enter the series multiplied by what they imply about a squat (see
- * liftRatios.LEG_PRESS_TO_SQUAT). A key the map doesn't mention counts as itself.
+ * liftRatios.LEG_PRESS_TO_SQUAT), and the bench goals read an incline press as
+ * the flat bench it implies (liftRatios.INCLINE_TO_FLAT). A key the map doesn't
+ * mention counts as itself.
  */
 export function combinedBest1RMSeries(
   rows: WorkoutRow[],
@@ -191,16 +201,20 @@ export function combinedBest1RMSeries(
   scale: Record<string, number> = {},
 ): Point[] {
   const wanted = new Set(keys)
-  const bySession = new Map<string, { date: string; best: number }>()
+  const bySession = new Map<string, { date: string; best: number; from: string }>()
   for (const r of rows) {
     if (!wanted.has(r.exercise) || r.weight_lbs == null) continue
     const key = r.session_id || r.date
-    const g = bySession.get(key) ?? { date: r.date, best: 0 }
-    g.best = Math.max(g.best, epley1RM(r.weight_lbs, r.reps) * (scale[r.exercise] ?? 1))
+    const g = bySession.get(key) ?? { date: r.date, best: 0, from: r.exercise }
+    const value = epley1RM(r.weight_lbs, r.reps) * (scale[r.exercise] ?? 1)
+    if (value > g.best) {
+      g.best = value
+      g.from = r.exercise
+    }
     bySession.set(key, g)
   }
   return [...bySession.values()]
-    .map((g) => ({ date: g.date, value: Math.round(g.best * 10) / 10 }))
+    .map((g) => ({ date: g.date, value: Math.round(g.best * 10) / 10, from: g.from }))
     .sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 

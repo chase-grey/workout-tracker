@@ -45,7 +45,7 @@ export function LiftLadderBlock({
   const unit = rungs[0]?.unit ?? ''
 
   const readings = useMemo<LadderReading[]>(
-    () => (points ?? []).map((p) => ({ date: p.date, value: p.value })),
+    () => (points ?? []).map((p) => ({ date: p.date, value: p.value, from: p.from ?? null })),
     [points],
   )
 
@@ -81,7 +81,15 @@ export function LiftLadderBlock({
         {title}
         {latest ? ` · ${latest}` : ''}
       </h4>
-      <LadderChart readings={readings} series={series} goals={goalLines} unit={unit} sets={sets} empty={empty} />
+      <LadderChart
+        readings={readings}
+        series={series}
+        goals={goalLines}
+        unit={unit}
+        sets={sets}
+        empty={empty}
+        lift={lift}
+      />
       {/* Only the rungs still being climbed. A cleared one has left for the
           reached band at the top of the panel, where it sits by the date it was
           cleared rather than buried under the rungs still open. */}

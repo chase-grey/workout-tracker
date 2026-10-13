@@ -26,8 +26,9 @@ function num(v: number | string | undefined): string {
  * the lines plot for it (see goalSets for why the sets are the interesting half).
  *
  * The lifts are named only when a day trained more than one of them, which is the
- * bench goal's two presses — anywhere else the goal's own title already says what
- * the sets are sets of.
+ * bench goal's two presses, or when the one it trained isn't the goal's own `lift`
+ * — an incline-only day on the bench line. Anywhere else the goal's own title
+ * already says what the sets are sets of.
  */
 export function GoalTooltip({
   active,
@@ -36,6 +37,7 @@ export function GoalTooltip({
   sets,
   unit,
   lock,
+  lift,
 }: {
   active?: boolean
   payload?: Entry[]
@@ -45,6 +47,8 @@ export function GoalTooltip({
   sets?: Record<string, DaySets[]>
   unit: string
   lock?: LockedProjection
+  /** The lift the goal is named for, when its line can read others too. */
+  lift?: string | null
 }) {
   if (!active || !payload?.length) return null
   let plotted = payload.filter((p) => p.value != null)
@@ -67,7 +71,7 @@ export function GoalTooltip({
       <p className="text-neutral-400 tabular-nums">{fmtDateLabel(Number(label))}</p>
       {day.map((d) => (
         <p key={d.exercise} className="mt-0.5 text-neutral-200 tabular-nums">
-          {day.length > 1 && <span className="text-neutral-500">{exerciseName(d.exercise)} </span>}
+          {(day.length > 1 || (lift != null && d.exercise !== lift)) && <span className="text-neutral-500">{exerciseName(d.exercise)} </span>}
           {d.sets.map((s) => fmtSet(s)).join(' · ')}
         </p>
       ))}

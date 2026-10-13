@@ -17,6 +17,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import type { DaySets } from '../../lib/goalSets'
 import { GoalTooltip } from './GoalTooltip'
+import { LiftKey, liftDot } from './liftMarks'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 
@@ -98,6 +99,7 @@ export function LadderChart({
   unit,
   sets,
   empty,
+  lift,
 }: {
   readings: LadderReading[]
   series: LadderSeries[]
@@ -112,8 +114,15 @@ export function LadderChart({
   sets?: Record<string, DaySets[]>
   /** Placeholder text when there's nothing to plot. */
   empty: string
+  /**
+   * The lift a lift ladder is named for. Its readings carry the lift each came
+   * off (`from`), and a reading off any other — an incline day on the bench —
+   * is marked apart from it (see liftMarks).
+   */
+  lift?: string
 }) {
   const readout = useChartReadout()
+  const dot = useMemo(() => (lift ? liftDot(lift) : { r: 2 }), [lift])
   const rows = useMemo(() => withTime(mergeRows(readings, goals)), [readings, goals])
 
   // The axis has to frame the targets as well as the readings, or a goal above
@@ -143,7 +152,7 @@ export function LadderChart({
           <XAxis {...timeXAxis} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
           <AxisBreak broken={yScale.broken} bg="#171717" />
-          <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} />} />
+          <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} lift={lift} />} />
           {/* Named lines only where there's more than one to tell apart: a lift
               ladder plots a single series, and a legend under it would name the
               only line on the chart. */}
@@ -202,12 +211,13 @@ export function LadderChart({
               stroke={s.color}
               strokeWidth={2}
               strokeDasharray={s.dashed ? '4 3' : undefined}
-              dot={{ r: 2 }}
+              dot={dot}
               connectNulls
             />
           ))}
         </LineChart>
       </ResponsiveContainer>
+      {lift && <LiftKey points={readings} mainLift={lift} />}
     </div>
   )
 }
