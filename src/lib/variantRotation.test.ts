@@ -145,3 +145,24 @@ describe('createRotation', () => {
     expect(right.next()).toBe(first)
   })
 })
+
+describe('createRotation with hidden items', () => {
+  it('never draws a hidden item while another is available', () => {
+    const hidden = new Set(['b', 'c'])
+    const r = createRotation(['a', 'b', 'c', 'd'], Math.random, (x) => !hidden.has(x))
+    for (let i = 0; i < 200; i++) expect(hidden.has(r.next())).toBe(false)
+  })
+
+  it('drops an item hidden mid-run from the very next draw', () => {
+    const hidden = new Set<string>()
+    const r = createRotation(['a', 'b', 'c'], Math.random, (x) => !hidden.has(x))
+    hidden.add(r.next())
+    const banned = [...hidden][0]
+    for (let i = 0; i < 100; i++) expect(r.next()).not.toBe(banned)
+  })
+
+  it('still shows something when everything is hidden', () => {
+    const r = createRotation(['a', 'b'], Math.random, () => false)
+    expect(['a', 'b']).toContain(r.next())
+  })
+})

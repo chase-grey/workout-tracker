@@ -19,6 +19,7 @@ import {
 } from '../lib/rhythmMotion'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
+import { useShownAnimation } from '../lib/useShownAnimation'
 import { FlossGuide } from './FlossGuide'
 
 /**
@@ -536,7 +537,11 @@ export function RhythmGuide({
   const efforts = useMemo(() => phaseEfforts(phases), [phases])
   const closes = useMemo(() => cycleCloses(phases), [phases])
   const motion = useMemo(() => motionForPhases(phases), [phases])
-  const [variant] = useState<Variant>(() => chosenVariant ?? rhythmVariantForMotion(motion))
+  const [variant, setVariant] = useState<Variant>(() => chosenVariant ?? rhythmVariantForMotion(motion))
+  // The floss guide draws its own figure, not one of the rotated shapes.
+  useShownAnimation('rhythm', forwardBack ? null : variant, () =>
+    setVariant(rhythmVariantForMotion(motion)),
+  )
   const [idx, setIdx] = useState(0)
   const [rep, setRep] = useState(startRep)
   // The rep count also lives in a ref so the animation loop increments from the
