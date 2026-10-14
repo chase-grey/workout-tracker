@@ -74,9 +74,9 @@ export function offSlotDot(bg: string) {
 /**
  * A goal reading that came off the goal's companion lift rather than the one it's
  * named for — an incline day on the bench line, a barbell squat on the squat
- * line (see progress.Point's `from`). Blue so it can't be read as another rung of
- * the accent ladder: it's the same series, just a different lift underneath (or
- * another colour clear of the accent, see theme.otherLift).
+ * line (see progress.Point's `from`). The accent, stepped away from the ground:
+ * lighter on black, darker on paper, so it reads as the same series in a
+ * different weight rather than a second colour fighting the line.
  */
 export let MARK_OTHER_LIFT = ''
 
@@ -98,7 +98,7 @@ export let CHART_SURFACE = ''
 export let CHART_SURFACE_2 = ''
 export let CHART_ZERO = ''
 
-function applyPalette({ scale, ground, cold, cold2, otherLift, theme }: Palette) {
+function applyPalette({ scale, ground, cold, cold2, theme }: Palette) {
   const light = theme.mode === 'light'
   LINE_PRIMARY = scale[light ? 600 : 500]
   LINE_SECONDARY = scale[light ? 400 : 700]
@@ -109,7 +109,7 @@ function applyPalette({ scale, ground, cold, cold2, otherLift, theme }: Palette)
   MARK_OFF_SLOT = ground.tick
   LINE_COLD = cold
   LINE_COLD_2 = cold2
-  MARK_OTHER_LIFT = otherLift
+  MARK_OTHER_LIFT = scale[light ? 800 : 300]
   CHART_PAGE = ground.bg
   CHART_SURFACE = ground.surface
   CHART_SURFACE_2 = ground.surface2

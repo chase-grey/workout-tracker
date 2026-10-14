@@ -38,12 +38,11 @@ interface AccentDef {
   onAccent: string
   /**
    * Readings that must not be mistaken for another rung of the accent ladder —
-   * cold stretch lines, the companion lift's marks. Blue and violet by default;
-   * a blue or purple accent gets other cool colours so the contrast survives.
+   * the cold stretch lines. Blue and violet by default; a blue or purple accent
+   * gets other cool colours so the contrast survives.
    */
   cold: string
   cold2: string
-  otherLift: string
 }
 
 const SKY = '#38bdf8'
@@ -59,7 +58,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
     onAccent: '#000000',
     cold: SKY,
     cold2: VIOLET,
-    otherLift: SKY,
   },
   purple: {
     scale: {
@@ -69,7 +67,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
     onAccent: '#ffffff',
     cold: SKY,
     cold2: TEAL,
-    otherLift: SKY,
   },
   blue: {
     scale: {
@@ -79,7 +76,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
     onAccent: '#ffffff',
     cold: TEAL,
     cold2: VIOLET,
-    otherLift: '#e879f9',
   },
   rose: {
     scale: {
@@ -89,7 +85,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
     onAccent: '#ffffff',
     cold: SKY,
     cold2: VIOLET,
-    otherLift: SKY,
   },
 }
 
@@ -131,7 +126,6 @@ export interface Palette {
   onAccent: string
   cold: string
   cold2: string
-  otherLift: string
   ground: Ground
   /** Confetti and sparks: the accent's bright end, deepest first. */
   confetti: string[]
@@ -148,7 +142,6 @@ export function palette(theme: Theme): Palette {
     onAccent: def.onAccent,
     cold: def.cold,
     cold2: def.cold2,
-    otherLift: def.otherLift,
     ground: GROUNDS[theme.mode],
     confetti: ([600, 500, 400, 300] as const).map((s) => def.scale[s]),
     tint:

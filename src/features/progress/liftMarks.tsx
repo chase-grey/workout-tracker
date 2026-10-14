@@ -14,8 +14,8 @@ type DotProps = { cx?: number; cy?: number; index?: number; payload?: { from?: s
 
 /**
  * A `dot` renderer for a goal's actual line: the goal's own lift in the line's
- * green, a reading off the companion lift in blue and a touch larger so it reads
- * at a glance.
+ * accent, a reading off the companion lift in a lighter (or, on paper, darker)
+ * shade of it and a touch larger so it reads at a glance.
  */
 export function liftDot(mainLift: string | null) {
   return function LiftDot({ cx, cy, index, payload }: DotProps) {

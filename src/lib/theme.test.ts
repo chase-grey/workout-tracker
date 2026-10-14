@@ -39,7 +39,7 @@ describe('palette', () => {
   it('keeps the cool readings clear of a cool accent', () => {
     for (const accent of ['purple', 'blue'] as const) {
       const p = palette({ accent, mode: 'dark' })
-      expect([p.cold, p.cold2, p.otherLift]).not.toContain(p.scale[400])
+      expect([p.cold, p.cold2]).not.toContain(p.scale[400])
       expect(p.cold).not.toBe(p.cold2)
     }
     expect(palette({ accent: 'blue', mode: 'dark' }).cold).not.toBe('#38bdf8')
