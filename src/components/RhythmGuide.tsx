@@ -606,12 +606,12 @@ export function RhythmGuide({
     }
   }, [idx, phases, running, reps, skipFinalRepRest])
 
-  const glow = repGlow(rep, reps, endsOnTarget)
+  const i = idx % phases.length
+  const glow = repGlow(rep, reps, endsOnTarget, skipFinalRepRest && i >= workPhaseCount(phases))
   const tone = useTone(glow)
 
   if (phases.length === 0) return null
 
-  const i = idx % phases.length
   const prev = (i - 1 + depths.length) % depths.length
   // Interpolate from the previous phase's depth to this phase's depth so the motion
   // flows continuously — and, because the previous phase of the first one is the

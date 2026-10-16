@@ -203,6 +203,14 @@ describe('repGlow', () => {
     expect(repGlow(9, 5, true)).toBe('done')
   })
 
+  it('starts a rest early when the closing rep drops its own', () => {
+    expect(repGlow(4, 5, true, true)).toBe('done')
+    expect(repGlow(4, 5, true, false)).toBe('base')
+    expect(repGlow(3, 5, true, true)).toBe('base')
+    expect(repGlow(4, 5, false, true)).toBe('base')
+    expect(repGlow(0, 1, true, true)).toBe('base')
+  })
+
   it('never lifts a rep with no target to close on', () => {
     expect(repGlow(3, undefined, true)).toBe('base')
     expect(repGlow(3, 0, true)).toBe('base')

@@ -190,10 +190,22 @@ export type RepGlow = 'base' | 'done'
  * that says "done" has to land on that rep rather than after it. Tapping through
  * your own sets it lands after the target instead, on the reps you go on to hold
  * while deciding to stop.
+ *
+ * `inLeadInRest` is a set whose closing rep drops its trailing rest (the pike
+ * work), caught in the trailing rest of a rep. There the white starts a rest
+ * early, on the one ahead of the closing rep's push: that rest is the closing
+ * rep's only rest, so it belongs with it, and the set reads white from the last
+ * breather through the last effort.
  */
-export function repGlow(rep: number, reps: number | undefined, endsItself: boolean): RepGlow {
+export function repGlow(
+  rep: number,
+  reps: number | undefined,
+  endsItself: boolean,
+  inLeadInRest = false,
+): RepGlow {
   if (hitRepTarget(rep, reps)) return 'done'
   if (endsItself && reps != null && reps > 0 && rep === reps) return 'done'
+  if (endsItself && inLeadInRest && reps != null && reps > 1 && rep === reps - 1) return 'done'
   return 'base'
 }
 
