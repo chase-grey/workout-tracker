@@ -800,19 +800,25 @@ export function StretchSession({
   }
 
   // The warm tailor's photo pauses between sets: taking or skipping it resumes
-  // the normal rest. Other photo exits preview the coming exercise first.
+  // the normal rest. Other photo exits preview the coming exercise first. Photos
+  // that close out the routine log it outright — the save/skip press already was
+  // the deliberate one, so no finish button follows it.
   const closePhotos = (_tookAny: boolean) => {
     if (!photos) return
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
     const { then, index } = photos
     setPhotos(null)
     if (then === 'advance' && index != null) {
+      const next = nextUnfinishedStep(steps.map((step) => done.has(step.stepKey)), index)
+      if (next == null) {
+        advanceFrom(index, done)
+        finishWith(done)
+        return
+      }
       if (photos.gate.id === 'warm-tailors') {
         advanceFrom(index, done)
         return
       }
-      const next = nextUnfinishedStep(steps.map((step) => done.has(step.stepKey)), index)
-      if (next == null) return
       goToStep(next)
     }
     setStarted(false)
