@@ -13,6 +13,14 @@ describe('set clock', () => {
     expect(spentByExercise(clock, 200_000, exerciseOf).get('bench')).toBe(200)
   })
 
+  it('splits a round logged on one screen, and the rest after it, between its stations', () => {
+    let clock = startSetClock('s', 0)
+    clock = restAfter(clock, ['pushdown:0', 'raise:0']) // the round took 60s
+    clock = endRest(clock, 180_000) // then 2 min rest
+    expect(clock.spentSec).toEqual({ 'pushdown:0': 90, 'raise:0': 90 })
+    expect(spentByExercise(restAfter(clock, ['pushdown:1', 'raise:1']), 240_000, exerciseOf).get('raise')).toBe(120)
+  })
+
   it('counts a rest still on screen toward the set that opened it', () => {
     const clock = restAfter(startSetClock('s', 0), 'row:0')
     expect(spentByExercise(clock, 90_000, exerciseOf).get('row')).toBe(90)

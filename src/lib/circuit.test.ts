@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSetOrder, circuitStations } from './circuit'
+import { buildSetOrder, circuitStations, roundSteps } from './circuit'
 
 describe('buildSetOrder', () => {
   it('runs a non-circuit day one exercise at a time', () => {
@@ -92,5 +92,54 @@ describe('circuitStations', () => {
 
   it('gives nothing for an index off the end of the day', () => {
     expect(circuitStations(arms, 9)).toEqual([])
+  })
+})
+
+describe('roundSteps', () => {
+  // A press, then a four-station circuit done a round at a time, three rounds.
+  const day = [
+    {},
+    { circuit: 'arms', roundScreen: true },
+    { circuit: 'arms', roundScreen: true },
+    { circuit: 'arms', roundScreen: true },
+    { circuit: 'arms', roundScreen: true },
+  ]
+  const slots = buildSetOrder(day, [2, 3, 3, 3, 3])
+  const none = slots.map(() => false)
+  const at = (exIndex: number, setIndex: number) =>
+    slots.findIndex((s) => s.exIndex === exIndex && s.setIndex === setIndex)
+
+  it('puts every station of the round on one screen', () => {
+    const round = roundSteps(day, slots, none, at(1, 1))
+    expect(round.map((i) => slots[i])).toEqual([
+      { exIndex: 1, setIndex: 1 },
+      { exIndex: 2, setIndex: 1 },
+      { exIndex: 3, setIndex: 1 },
+      { exIndex: 4, setIndex: 1 },
+    ])
+  })
+
+  it('gathers the round from whichever station you land on', () => {
+    expect(roundSteps(day, slots, none, at(3, 2))).toEqual(roundSteps(day, slots, none, at(1, 2)))
+  })
+
+  it('leaves out stations of the round already logged, but never the one on screen', () => {
+    const done = none.slice()
+    done[at(2, 0)] = true
+    done[at(1, 0)] = true
+    const round = roundSteps(day, slots, done, at(1, 0))
+    expect(round.map((i) => slots[i].exIndex)).toEqual([1, 3, 4])
+  })
+
+  it('is just the set on screen outside a round-screen circuit', () => {
+    expect(roundSteps(day, slots, none, at(0, 1))).toEqual([at(0, 1)])
+    const plain = [{ circuit: 'neck' }, { circuit: 'neck' }]
+    expect(roundSteps(plain, buildSetOrder(plain, [3, 3]), [], 2)).toEqual([2])
+  })
+
+  it('runs a station with an extra set as a round of one', () => {
+    const uneven = buildSetOrder(day, [2, 4, 3, 3, 3])
+    const last = uneven.findIndex((s) => s.exIndex === 1 && s.setIndex === 3)
+    expect(roundSteps(day, uneven, [], last)).toEqual([last])
   })
 })

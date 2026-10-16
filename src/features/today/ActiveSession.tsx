@@ -24,7 +24,7 @@ import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { gradeSet, type SetGrade } from '../../lib/setGrade'
 import { progressionVariant } from '../../lib/pushVariant'
-import { buildSetOrder, circuitStations } from '../../lib/circuit'
+import { buildSetOrder, circuitStations, roundSteps } from '../../lib/circuit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
 import { canSkip, resumeSkipped, toSkippedRecord, withSkipped } from '../../lib/skipped'
@@ -116,22 +116,29 @@ type SetStep = {
  * which step follows it.
  */
 function priceFlow(flow: SetStep[]): RemainingStep[] {
-  return flow.map((s, i, arr) => {
-    const next = arr[i + 1]
-    const sameCircuit = !!next && !!s.ex.circuit && next.ex.circuit === s.ex.circuit
-    return {
-      exercise: s.ex.key,
-      fallbackActiveSec: WORK_PER_SET_SEC,
-      prescribedRestSec: restBeforeNextSet({
-        currentRestSec: s.ex.restSec,
-        sameExercise: !!next && next.ex.key === s.ex.key,
-        nextRestSec: next ? next.ex.restSec : null,
-        sameCircuit,
-        newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
-        circuitRestSec: s.ex.circuitRestSec,
-        circuitRoundRestSec: s.ex.circuitRoundRestSec,
-      }),
-    }
+  return flow.map((s, i, arr) => ({
+    exercise: s.ex.key,
+    fallbackActiveSec: WORK_PER_SET_SEC,
+    prescribedRestSec: restBetweenSteps(s, arr[i + 1]),
+  }))
+}
+
+/**
+ * The rest between one step and the step the flow goes to after it (see
+ * lib/rest.restBeforeNextSet). Coming back around to a circuit station starts a
+ * fresh round — the set number goes up — rather than continuing the current one.
+ */
+function restBetweenSteps(s: SetStep, next: SetStep | null | undefined): number {
+  const sameCircuit = !!next && !!s.ex.circuit && next.ex.circuit === s.ex.circuit
+  return restBeforeNextSet({
+    currentRestSec: s.ex.restSec,
+    sameExercise: !!next && next.ex.key === s.ex.key,
+    nextRestSec: next ? next.ex.restSec : null,
+    sameCircuit,
+    newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
+    circuitRestSec: s.ex.circuitRestSec,
+    circuitRoundRestSec: s.ex.circuitRoundRestSec,
+    roundScreen: s.ex.roundScreen,
   })
 }
 
@@ -167,7 +174,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const [newExerciseReps, setNewExerciseReps] = useState('10')
   const [newExerciseWeight, setNewExerciseWeight] = useState('')
   const [paused, setPaused] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  // The exercise whose history sheet is open: the one on screen, or on a round
+  // screen whichever station's trend button was pressed.
+  const [historyKey, setHistoryKey] = useState<string | null>(null)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
   // A first set that's a hold waits on a tap to begin (see `awaitingStart`).
   const [started, setStarted] = useState(false)
@@ -289,10 +298,28 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [steps, session],
   )
+  // The sets on screen: this one, or for a circuit run a round at a time every
+  // station's set of the round, entered together and logged with one tap (see
+  // lib/circuit.roundSteps).
+  const round = useMemo(
+    () => roundSteps(inPlay, steps, stepDone, safeCurrent),
+    [inPlay, steps, stepDone, safeCurrent],
+  )
+  const roundMode = !!step.ex.roundScreen && !!step.ex.circuit
+  const roundOnScreen = round.map((i) => steps[i])
+  // The set the rest is timed from: the round's last station, which is the one
+  // that wraps the circuit.
+  const lastOnScreen = roundOnScreen[roundOnScreen.length - 1] ?? step
+
   // Where "next" goes from here — the nearest set still owed, skipping the ones
-  // already logged, rather than the step one along. Null once this is the last one
-  // left, which is what makes the button say finish.
-  const upcoming = useMemo(() => nextUnfinishedStep(stepDone, safeCurrent), [stepDone, safeCurrent])
+  // already logged and the rest of the round being logged with this one, rather
+  // than the step one along. Null once this is the last one left, which is what
+  // makes the button say finish.
+  const upcoming = useMemo(() => {
+    const done = stepDone.slice()
+    for (const i of round) done[i] = true
+    return nextUnfinishedStep(done, safeCurrent)
+  }, [stepDone, safeCurrent, round])
   const nextStep = upcoming == null ? null : steps[upcoming]
   const atLast = nextStep == null
 
@@ -346,7 +373,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // left alone, nor under an open sheet: a sheet sits above the pause curtain, and
   // reading one isn't being away.
   useIdleTimeout(
-    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest,
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest,
     IDLE_PAUSE_MS,
     () => {
       // Drop this set's active-time slice rather than carry it into the pause: it
@@ -408,11 +435,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // you're not already ahead of it — hitting a lower number isn't the ask — with
   // the exception of a goal waiting on a single, which is surfaced precisely
   // because the readings are already there (see goalCue's `ready`).
+  const goals = useMemo(
+    () => buildGoals({ workouts, bodyWeights, measurements, heightIn: settings.heightIn ?? 0 }),
+    [workouts, bodyWeights, measurements, settings.heightIn],
+  )
   const goalCue = useMemo(() => {
-    const goals = buildGoals({ workouts, bodyWeights, measurements, heightIn: settings.heightIn ?? 0 })
     const reps = target?.reps ?? planned.repMin
     return goalCueForExercise(settings.lockedGoals ?? {}, goals, planned.key, reps)
-  }, [workouts, bodyWeights, measurements, settings.heightIn, settings.lockedGoals, target?.reps, planned.key, planned.repMin])
+  }, [goals, settings.lockedGoals, target?.reps, planned.key, planned.repMin])
 
   const totals = useMemo(() => {
     let done = 0
@@ -445,7 +475,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }
 
   const readActiveSec = useStepElapsed(step.stepKey, !opening && !set?.done &&
-    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest)
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest)
   const [estimateNow, setEstimateNow] = useState(Date.now)
   useEffect(() => {
     if (!rest) return
@@ -473,8 +503,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
   // clock starts the wait over instead of logging a half-typed number.
-  const editSet = (patch: Partial<SetLog>) => {
-    controls.updateSet(planned.key, step.setIndex, patch)
+  const editSet = (patch: Partial<SetLog>, at: SetStep = step) => {
+    controls.updateSet(at.ex.key, at.setIndex, patch)
     setEdits((n) => n + 1)
   }
 
@@ -487,15 +517,24 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Attribute the time spent on the current set screen to its exercise, so the
   // per-exercise averages learn how long each move really takes. Rejects out-of-
   // range slices (app left open, instant mis-tap) so they can't skew the average.
-  const recordActiveForCurrent = (exerciseKey: string) => {
+  //
+  // A round screen is one stretch of time for every station on it, so each is
+  // charged an even share — the stations are priced a set at a time, and the
+  // share is what a set of each cost.
+  const recordActiveForCurrent = () => {
     if (!activeStartRef.current) return
     const sec = readActiveSec()
     activeStartRef.current = 0
     if (sec < MIN_SET_ACTIVE_SEC || sec > MAX_SET_ACTIVE_SEC) return
-    if (opening || set?.done || fastMode === 'turbo' || step.stepKey === resumedPartialKey) return
-    // Keep the broad average for old consumers, and learn matching rep counts separately.
-    activeSamples.current[step.stepKey] = [exerciseKey, workoutTimingKey(exerciseKey, set?.reps ?? planned.repMin)]
-      .map((exercise) => ({ exercise, totalActiveSec: sec, sets: 1 }))
+    if (opening || fastMode === 'turbo') return
+    const share = sec / roundOnScreen.length
+    for (const s of roundOnScreen) {
+      const logged = logFor(s.ex.key)?.sets[s.setIndex]
+      if (logged?.done || s.stepKey === resumedPartialKey) continue
+      // Keep the broad average for old consumers, and learn matching rep counts separately.
+      activeSamples.current[s.stepKey] = [s.ex.key, workoutTimingKey(s.ex.key, logged?.reps ?? s.ex.repMin)]
+        .map((exercise) => ({ exercise, totalActiveSec: share, sets: 1 }))
+    }
     storage.saveActiveExerciseTimes({ sessionId: session.sessionId, samples: activeSamples.current })
   }
 
@@ -530,7 +569,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       })
     }
     // Fold this session's per-exercise active times + rests into the estimator.
-    const performed = new Set(steps.filter((s, i) => stepDone[i] || s.stepKey === step.stepKey).map((s) => s.stepKey))
+    const performed = new Set(steps.filter((_, i) => stepDone[i] || round.includes(i)).map((s) => s.stepKey))
     const exercises = Object.entries(activeSamples.current).filter(([key]) => performed.has(key)).flatMap(([, samples]) => samples)
     void logExerciseTimes({
       exercises,
@@ -645,24 +684,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
    * two stations and a full rest on the wrap into the next round, and a header
    * reading either of those for the other would be naming a break you don't get.
    *
+   * On a round screen it's timed from the round's last station, which is the one
+   * that wraps the circuit.
+   *
    * On the last set of all there's no transition to price, so it falls back to the
    * exercise's own rest — the number "back to rest" reopens.
    */
-  const restShownSec = useMemo(() => {
-    if (!nextStep) return planned.restSec
-    const sameCircuit = !!planned.circuit && nextStep.ex.circuit === planned.circuit
-    return restBeforeNextSet({
-      currentRestSec: planned.restSec,
-      sameExercise: nextStep.ex.key === planned.key,
-      nextRestSec: nextStep.ex.restSec,
-      sameCircuit,
-      // Coming back around to a station starts a fresh round (the set number goes up)
-      // rather than continuing the current one.
-      newCircuitRound: sameCircuit && nextStep.setIndex > step.setIndex,
-      circuitRestSec: planned.circuitRestSec,
-      circuitRoundRestSec: planned.circuitRoundRestSec,
-    })
-  }, [planned, nextStep, step.setIndex])
+  const restShownSec = useMemo(
+    () => (nextStep ? restBetweenSteps(lastOnScreen, nextStep) : lastOnScreen.ex.restSec),
+    [lastOnScreen, nextStep],
+  )
 
   // Mark the current set done and either rest into the next set or finish.
   //
@@ -671,10 +702,18 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // the same field the reps do. Written with the set rather than before it, so the
   // cheer and the carry-forward below read what's being logged instead of the
   // prefilled prescription it replaced.
+  //
+  // A round screen logs every station on it at once, the same way.
   const completeSetAndAdvance = (finalReps?: number) => {
-    const reps = finalReps ?? set?.reps ?? 0
-    recordActiveForCurrent(planned.key)
-    controls.updateSet(planned.key, step.setIndex, { done: true, ...(finalReps != null && { reps: finalReps }) })
+    recordActiveForCurrent()
+    const logged = roundOnScreen.map((s) => {
+      const l = logFor(s.ex.key)?.sets[s.setIndex]
+      // Only the set on screen can have been measured — a round is never timed.
+      const measured = s === step ? finalReps : undefined
+      const reps = measured ?? l?.reps ?? 0
+      controls.updateSet(s.ex.key, s.setIndex, { done: true, ...(measured != null && { reps: measured }) })
+      return { s, l, reps }
+    })
     if (!nextStep || upcoming == null) {
       // No cheer on the last set: finishing hands the screen straight to the
       // recap, which has its own (louder) celebration to give.
@@ -682,8 +721,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       return
     }
     // Cheer what the numbers on screen actually were — the flourish plays over the
-    // rest that's about to open, so nothing waits on it (see SetCheer).
-    const grade = gradeSet(set?.weightLbs ?? null, reps, target)
+    // rest that's about to open, so nothing waits on it (see SetCheer). A round is
+    // cheered as a whole: only when every station of it met its target, and as a
+    // beat when any of them went past.
+    const grades = logged.map(({ s, l, reps }) => gradeSet(l?.weightLbs ?? null, reps, targets.get(s.ex.key)))
+    const grade = grades.every((g) => g != null) ? (grades.includes('beat') ? 'beat' : grades[0]) : null
     if (grade) {
       cheerId.current += 1
       setCheer({ id: cheerId.current, grade })
@@ -693,47 +735,54 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // than the target (see carryLoggedSet). Every one of them, not only the next
     // screen: a circuit station's own next set is two stations away, and the
     // checklist can jump you to any of them.
-    if (set) controls.carrySet(planned.key, { weightLbs: set.weightLbs ?? null, reps })
+    for (const { s, l, reps } of logged) {
+      if (l) controls.carrySet(s.ex.key, { weightLbs: l.weightLbs ?? null, reps })
+    }
     // The rest the header has been naming all along (see restShownSec) — one
     // computation for both, so the break you get is the one you were shown.
     const restSec = restShownSec
+    // What the set clock charges this screen's time to: the set, or every set of
+    // the round, which share it.
+    const clockKeys = roundOnScreen.length > 1 ? roundOnScreen.map((s) => s.stepKey) : step.stepKey
     setCurrent(upcoming)
     if (restSec <= 0) {
       // A station set to no rest goes straight on to the next move: a zero-second
       // timer would open already in overtime, and it isn't a rest to be counted.
       activeStartRef.current = Date.now()
-      commitSetClock(closeSet(setClock.current, step.stepKey, Date.now()))
+      commitSetClock(closeSet(setClock.current, clockKeys, Date.now()))
       return
     }
     restStartRef.current = Date.now()
-    commitSetClock(restAfter(setClock.current, step.stepKey))
+    commitSetClock(restAfter(setClock.current, clockKeys))
     // Banked as the rest opens, not when it closes: a reload mid-rest recovers the
     // seconds from the saved `endsAt`, but not that the interval ever happened.
     commitTally(openRest(tally.current, restSec))
     setRest({
       seconds: restSec,
       endsAt: Date.now() + restSec * 1000,
-      exKey: planned.key,
-      isLastSetOfExercise: step.setIndex === step.setCount - 1,
+      exKey: lastOnScreen.ex.key,
+      isLastSetOfExercise: lastOnScreen.setIndex === lastOnScreen.setCount - 1,
     })
   }
 
   // Add a set to whichever exercise is in play. During an exercise's *final* rest
   // the new set is what the rest should lead into, so jump to it and drop out of
   // rest; anywhere else it just extends the exercise further down the flow.
+  //
+  // A circuit run a round at a time grows by a round — a set at every station —
+  // since a set added to one station alone would be a round of one.
   const addSet = () => {
-    if (rest) {
-      controls.addSet(rest.exKey)
-      if (rest.isLastSetOfExercise) {
-        // By key, not by index: the rest was leading somewhere else entirely once
-        // sets can be done out of order, so where the new set lands in the reshaped
-        // step list isn't the index `current` happens to sit at.
-        setPendingStepKey(`${rest.exKey}:${logFor(rest.exKey)?.sets.length ?? 0}`)
-        closeRest()
-      }
-      return
+    const key = rest ? rest.exKey : planned.key
+    const at = inPlay.findIndex((e) => e.key === key)
+    const keys = inPlay[at]?.roundScreen ? circuitStations(inPlay, at).map((i) => inPlay[i].key) : [key]
+    for (const k of keys) controls.addSet(k)
+    if (rest?.isLastSetOfExercise) {
+      // By key, not by index: the rest was leading somewhere else entirely once
+      // sets can be done out of order, so where the new set lands in the reshaped
+      // step list isn't the index `current` happens to sit at.
+      setPendingStepKey(`${keys[0]}:${logFor(keys[0])?.sets.length ?? 0}`)
+      closeRest()
     }
-    controls.addSet(planned.key)
   }
 
   const addAdHocExercise = () => {
@@ -782,13 +831,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // both the turbo wait and a self-ending hold need to be true before they can
   // close a set on their own.
   const setScreenLive =
-    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest
-  const turboMs = turboSetMs(exerciseAverages, planned.key)
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest
+  // A round screen waits for every station on it, back to back.
+  const turboMs = roundOnScreen.reduce((sum, s) => sum + turboSetMs(exerciseAverages, s.ex.key), 0)
   const turboArmed =
     fastMode === 'turbo' &&
     !opening &&
     !atLast &&
-    (set?.reps ?? 0) > 0 &&
+    roundOnScreen.every((s) => (logFor(s.ex.key)?.sets[s.setIndex]?.reps ?? 0) > 0) &&
     !holdRunning &&
     setScreenLive
   useEffect(() => {
@@ -875,6 +925,69 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         : `${target.weightLbs} × ${target.reps}`
     : null
 
+  // How many rounds the circuit runs: its longest station, since a station that
+  // has run out of sets just drops out of the last rounds (see lib/circuit).
+  const roundCount = Math.max(0, ...stations.map((e) => logFor(e.key)?.sets.length ?? e.sets))
+
+  // What each station of a round screen is going for: its target, whether that's a
+  // step up from last time, and the goal riding on it — the same three cues the
+  // set screen gives a single set.
+  const roundCues = useMemo(
+    () =>
+      roundOnScreen.map((s) => {
+        const t = targets.get(s.ex.key)
+        const reps = t?.reps ?? s.ex.repMin
+        return {
+          hint: targetLabel(t, s.ex.timed),
+          challenging: !!t && isChallenge(workouts, s.ex.key, t, s.ex.repMin, progressionVariant(s.ex.key, session.variant)),
+          goal: goalCueForExercise(settings.lockedGoals ?? {}, goals, s.ex.key, reps),
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [round, steps, targets, workouts, goals, settings.lockedGoals, session.variant],
+  )
+
+  // The weight × reps entry for one set: the set on screen, or one station of a
+  // round, which sits four to a screen and so takes a shorter field.
+  const setFields = (at: SetStep, logged: SetLog, compact = false) => {
+    const field = `${compact ? 'min-h-[52px] text-2xl' : 'min-h-[64px] text-3xl'} w-full rounded-xl bg-surface-2 px-2 text-center font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent`
+    return (
+      <div className="flex items-end justify-center gap-3">
+        {/* A move that's never loaded (hanging raises) gets no weight field
+            at all rather than an empty "added lbs" box. */}
+        {!at.ex.repsOnly && (
+          <>
+            <label className="flex flex-1 flex-col items-center gap-1">
+              <span className="text-xs tracking-wide text-neutral-500">
+                {at.ex.bodyweight ? 'added lbs' : 'weight'}
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder={at.ex.bodyweight ? 'bw' : 'lbs'}
+                value={logged.weightLbs ?? ''}
+                onChange={(e) => editSet({ weightLbs: toWeight(e.target.value) }, at)}
+                className={field}
+              />
+            </label>
+            <span className={`${compact ? 'pb-4' : 'pb-5'} text-2xl text-neutral-600`}>×</span>
+          </>
+        )}
+        <label className="flex flex-1 flex-col items-center gap-1">
+          <span className="text-xs tracking-wide text-neutral-500">reps</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            placeholder="reps"
+            value={logged.reps || ''}
+            onChange={(e) => editSet({ reps: Number(e.target.value) || 0 }, at)}
+            className={field}
+          />
+        </label>
+      </div>
+    )
+  }
+
   // Shared by the header and the rest screen, so the same actions stay reachable
   // while resting instead of forcing you to end rest to get at them.
   const menuItems: MenuItem[] = [
@@ -886,9 +999,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // Only inside a circuit: everywhere else the rest after a set is simply the
     // exercise's own, and there's nothing per-station to choose between.
     ...(stations.length > 0
-      ? [{ label: 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
+      ? [{ label: roundMode ? 'rest between rounds' : 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
-    { label: 'add a set', onClick: addSet },
+    { label: roundMode ? 'add a round' : 'add a set', onClick: addSet },
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'finish and log', onClick: finish },
     {
@@ -924,28 +1037,40 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             the name takes the same band: its first line lands on their centreline
             instead of riding above it, and a name long enough to wrap still starts
             level with them. */}
-        <h2 className="min-w-0 py-2 text-xl font-bold">{planned.name}</h2>
+        <h2 className="min-w-0 py-2 text-xl font-bold">{roundMode ? planned.group : planned.name}</h2>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
-          {/* Puts the set in the context of the whole history for the lift. */}
-          <button
-            onClick={() => setShowHistory(true)}
-            aria-label={`recent sessions for ${planned.name}`}
-            className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
-          >
-            <MdShowChart className="text-2xl" aria-hidden />
-          </button>
+          {/* Puts the set in the context of the whole history for the lift. A round
+              screen has one of these per station instead. */}
+          {!roundMode && (
+            <button
+              onClick={() => setHistoryKey(planned.key)}
+              aria-label={`recent sessions for ${planned.name}`}
+              className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
+            >
+              <MdShowChart className="text-2xl" aria-hidden />
+            </button>
+          )}
           <FastForwardToggle mode={fastMode} onPress={stepFast} />
           <KebabMenu items={menuItems} />
         </div>
       </header>
 
-      <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
-        {planned.group} · set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
-        {repRangeLabel(planned)} {planned.timed ? 'sec' : 'reps'} · rest {restLabel(restShownSec)}
-      </p>
+      {roundMode ? (
+        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
+          round <span className="tabular-nums">{step.setIndex + 1}/{roundCount}</span> · rest{' '}
+          {restLabel(restShownSec)}
+        </p>
+      ) : (
+        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
+          {planned.group} · set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
+          {repRangeLabel(planned)} {planned.timed ? 'sec' : 'reps'} · rest {restLabel(restShownSec)}
+        </p>
+      )}
     </div>
   )
+
+  const historyEx = historyKey == null ? undefined : exercises.find((e) => e.key === historyKey)
 
   const fadeRef = useSessionFade(
     rest ? 'rest' : `${step.stepKey}:${awaitingStart ? 'preview' : 'work'}`,
@@ -958,7 +1083,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     <div ref={fadeRef} className="flex min-h-full flex-col gap-3 pb-6" {...screenTap}>
       {topBar}
 
-      {set && (
+      {!roundMode && set && (
         <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
           {/* What to go for on this set. */}
           {challenging && targetNumbers ? (
@@ -1041,40 +1166,59 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               </label>
             </div>
           ) : (
-            <div className="flex items-end justify-center gap-3">
-              {/* A move that's never loaded (hanging raises) gets no weight field
-                  at all rather than an empty "added lbs" box. */}
-              {!planned.repsOnly && (
-                <>
-                  <label className="flex flex-1 flex-col items-center gap-1">
-                    <span className="text-xs tracking-wide text-neutral-500">
-                      {planned.bodyweight ? 'added lbs' : 'weight'}
-                    </span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      placeholder={planned.bodyweight ? 'bw' : 'lbs'}
-                      value={set.weightLbs ?? ''}
-                      onChange={(e) => editSet({ weightLbs: toWeight(e.target.value) })}
-                      className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-                    />
-                  </label>
-                  <span className="pb-5 text-2xl text-neutral-600">×</span>
-                </>
-              )}
-              <label className="flex flex-1 flex-col items-center gap-1">
-                <span className="text-xs tracking-wide text-neutral-500">reps</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  placeholder="reps"
-                  value={set.reps || ''}
-                  onChange={(e) => editSet({ reps: Number(e.target.value) || 0 })}
-                  className="min-h-[64px] w-full rounded-xl bg-surface-2 px-2 text-center text-3xl font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </label>
-            </div>
+            setFields(step, set)
           )}
+        </div>
+      )}
+
+      {/* A round of the circuit: every station's set on one screen, entered as you
+          go and logged together by the one tap that ends the round. */}
+      {roundMode && (
+        <div className="flex flex-col gap-3">
+          {roundOnScreen.map((s, i) => {
+            const logged = logFor(s.ex.key)?.sets[s.setIndex]
+            if (!logged) return null
+            const { hint: cue, challenging: stepUp, goal } = roundCues[i] ?? {}
+            return (
+              <div key={s.stepKey} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 pb-4 pt-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="min-w-0 truncate font-semibold">{s.ex.name}</h3>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {cue && (
+                      <span
+                        className={`flex items-center gap-1 text-xs font-medium ${
+                          stepUp ? 'rounded-lg bg-accent/15 px-2 py-1 font-bold text-accent' : 'text-accent'
+                        }`}
+                      >
+                        {stepUp ? <MdBolt aria-hidden /> : <MdTrackChanges aria-hidden />}
+                        {cue}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setHistoryKey(s.ex.key)}
+                      aria-label={`recent sessions for ${s.ex.name}`}
+                      className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
+                    >
+                      <MdShowChart className="text-2xl" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+                {goal && (goal.ready || goal.standing !== 'ahead') && (
+                  <p
+                    className={`flex items-center gap-1.5 text-xs font-medium ${
+                      goal.ready ? 'text-accent-bright' : 'text-accent-2'
+                    }`}
+                  >
+                    <MdFlag aria-hidden />
+                    {goal.goalTitle}
+                    {goal.ready ? ' — ready: ' : ': '}
+                    {goal.weightLbs} × {goal.reps}
+                  </p>
+                )}
+                {setFields(s, logged, true)}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -1121,20 +1265,20 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
       {paused && <PauseOverlay label="workout paused" onResume={() => setPaused(false)} />}
 
-      {showHistory && (
+      {historyEx && (
         <ExerciseHistorySheet
-          exerciseKey={planned.key}
-          name={planned.name}
-          target={target}
-          slot={slot ?? undefined}
+          exerciseKey={historyEx.key}
+          name={historyEx.name}
+          target={targets.get(historyEx.key)}
+          slot={progressionVariant(historyEx.key, session.variant) ?? undefined}
           // Only a genuinely unloadable move charts as reps: weighted pull-ups are
           // flagged `bodyweight` but do take added weight, so they keep the
           // weight-based metrics.
-          repsOnly={!!planned.repsOnly}
+          repsOnly={!!historyEx.repsOnly}
           // A hold logs its seconds in the reps field, so its sets read as seconds
           // rather than as a count of something (see PlannedExercise.timed).
-          unit={planned.timed ? 'sec' : 'rep'}
-          onClose={() => setShowHistory(false)}
+          unit={historyEx.timed ? 'sec' : 'rep'}
+          onClose={() => setHistoryKey(null)}
         />
       )}
 
@@ -1149,11 +1293,13 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-3 text-lg font-bold">rest between these moves</h3>
+            <h3 className="mb-3 text-lg font-bold">{roundMode ? 'rest between rounds' : 'rest between these moves'}</h3>
             <div className="flex flex-col gap-1">
               {/* One row per station, so a circuit that rests after only one of
                   them is set in one place instead of a move at a time. */}
-              {stations.map((e) => (
+              {/* Not on a round screen, whose stations go back to back with no rest
+                  between them to set. */}
+              {!roundMode && stations.map((e) => (
                 <label key={e.key} className="flex items-center gap-3 rounded-xl px-2 py-1">
                   <span className="min-w-0 flex-1 truncate font-medium">after {e.name}</span>
                   <select
@@ -1175,7 +1321,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                   rather than to any one station of it. Only where a round rest is
                   actually part of how the circuit is programmed — elsewhere the wrap
                   is sized to the coming exercise and there's nothing here to set. */}
-              {stations.some((e) => e.circuitRoundRestSec != null) && (
+              {(roundMode || stations.some((e) => e.circuitRoundRestSec != null)) && (
                 <label className="flex items-center gap-3 rounded-xl px-2 py-1">
                   <span className="min-w-0 flex-1 truncate font-medium">after the round</span>
                   <select

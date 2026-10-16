@@ -648,24 +648,24 @@ describe('the arm circuit as it ships', () => {
           sameCircuit: true,
           newCircuitRound: next.setIndex > step.setIndex,
           circuitRestSec: from.circuitRestSec,
+          circuitRoundRestSec: from.circuitRoundRestSec,
+          roundScreen: from.roundScreen,
         }),
+        newRound: next.setIndex > step.setIndex,
       }
     })
   })()
 
-  it('breaks after a lateral raise and nowhere else', () => {
-    for (const { from, sec } of hops) {
-      if (from.startsWith('lateral_raise')) expect(sec).toBeGreaterThan(0)
-      else expect(sec).toBe(0)
-    }
+  it('is run a round at a time', () => {
+    expect(stations).toHaveLength(4)
+    expect(stations.every((e) => e.roundScreen)).toBe(true)
   })
 
-  it('rests the same after either arm, station change or new round', () => {
-    const raises = hops.filter((h) => h.from.startsWith('lateral_raise'))
-    // Both arms and both kinds of hop, or the assertion above proves little.
-    expect(new Set(raises.map((h) => h.from)).size).toBe(2)
-    expect(raises.length).toBeGreaterThan(2)
-    expect(new Set(raises.map((h) => h.sec))).toEqual(new Set([60]))
+  it('rests after the round and nowhere inside it', () => {
+    const wraps = hops.filter((h) => h.newRound)
+    // Both rounds that have one after them, or the assertion proves little.
+    expect(wraps).toHaveLength(2)
+    for (const { newRound, sec } of hops) expect(sec).toBe(newRound ? 120 : 0)
   })
 })
 

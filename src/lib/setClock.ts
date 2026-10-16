@@ -14,28 +14,36 @@ export type SetClock = {
   sessionId: string
   /** When the span now running began (epoch ms). */
   markAt: number
-  /** The set whose rest is on screen, still running up its span. */
-  restingKey: string | null
+  /**
+   * The set whose rest is on screen, still running up its span — or the sets of
+   * a round logged together, which share it (see {@link SetKeys}).
+   */
+  restingKey: SetKeys | null
   spentSec: Record<string, number>
 }
+
+/**
+ * One set, or the sets of a circuit round logged on one screen. A round is one
+ * stretch of time for all of its stations, so a span charged to it is split
+ * evenly between them, the way their active time is.
+ */
+export type SetKeys = string | string[]
 
 export function startSetClock(sessionId: string, atMs: number): SetClock {
   return { sessionId, markAt: atMs, restingKey: null, spentSec: {} }
 }
 
 /** Charge the span up to now to `key` and start the next one. */
-export function closeSet(clock: SetClock, key: string, now: number): SetClock {
-  const sec = Math.max(0, (now - clock.markAt) / 1000)
-  return {
-    ...clock,
-    markAt: Math.max(clock.markAt, now),
-    restingKey: null,
-    spentSec: { ...clock.spentSec, [key]: (clock.spentSec[key] ?? 0) + sec },
-  }
+export function closeSet(clock: SetClock, key: SetKeys, now: number): SetClock {
+  const keys = typeof key === 'string' ? [key] : key
+  const sec = Math.max(0, (now - clock.markAt) / 1000) / Math.max(1, keys.length)
+  const spentSec = { ...clock.spentSec }
+  for (const k of keys) spentSec[k] = (spentSec[k] ?? 0) + sec
+  return { ...clock, markAt: Math.max(clock.markAt, now), restingKey: null, spentSec }
 }
 
 /** A set was logged and its rest opened: the span stays open until the rest ends. */
-export function restAfter(clock: SetClock, key: string): SetClock {
+export function restAfter(clock: SetClock, key: SetKeys): SetClock {
   return { ...clock, restingKey: key }
 }
 

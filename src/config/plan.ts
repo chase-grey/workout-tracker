@@ -82,6 +82,15 @@ export type PlannedExercise = {
    */
   circuitRoundRestSec?: number
   /**
+   * Run the circuit a whole ROUND at a time: every station's set for the round is
+   * entered on one screen and logged with one tap, and the only rest is the one
+   * after the round ({@link circuitRoundRestSec}). The stations go back to back
+   * with nothing between them, so `circuitRestSec` has nothing left to time.
+   * Set it on every station of the circuit. Untimed stations only — a hold
+   * needs its own screen for its clock.
+   */
+  roundScreen?: boolean
+  /**
    * A HOLD rather than a count of reps: what gets logged for each set is the
    * seconds held, so `repMin`/`repMax` are a seconds range and the set screen
    * offers a hold timer in place of the reps box (see components/HoldTimer). Equal
@@ -254,7 +263,9 @@ export type Plan = Record<DayType, DayPlan>
 // 13: pull + legs opens with cable crunches as its only ab exercise.
 // 14: pull + legs cut for time — the calf raise retired, the Copenhagen hold down
 // to 20 seconds with a 90-second round rest, and the isolation work rests shorter.
-export const PLAN_REVISION = 14
+// 15: push + core's arm circuit runs a round at a time on one screen, with two
+// minutes after each round and no rest between its stations.
+export const PLAN_REVISION = 15
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -422,15 +433,16 @@ export const DEFAULT_PLAN: Plan = {
       // seeing. They're one dumbbell between them, hence the shared load, and the
       // leading arm alternates each session (see lib/pushSide).
       //
-      // The break sits after each raise and nowhere else: coming off a tricep
-      // station the next move is a delt, which is rested and ready, so the block
-      // rolls straight on (`circuitRestSec: 0`) instead of standing around. The
-      // raise is the only station worth a real rest after — you go from it to the
-      // other arm or back to the pushdown, and both want the shoulder settled.
-      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 0, sharedLoad: 'triceps' },
-      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 60, sharedLoad: 'lateral' },
-      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 0, sharedLoad: 'triceps' },
-      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRestSec: 60, sharedLoad: 'lateral' },
+      // The whole round goes on one screen (`roundScreen`): all four done back to
+      // back, logged with one tap, and then the one rest of the block. Alternating
+      // delt and tricep is what lets the four run without a break between them, so
+      // the rest the round used to spread over its two raises is taken in one go
+      // after it — the same two minutes, without the walk back to the phone
+      // between every move.
+      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
     ],
   },
   pull: {
@@ -820,12 +832,13 @@ function mergeDayExercises(
   // or a step the user actually chose reads as neither and is left alone.
   //
   // The structural fields (circuit, sharedLoad, dumbbellPair, side, byVariant,
-  // repsOnly, weightCapLbs, repLadder, timed) are program design rather than user
-  // preference, and the plan editor doesn't expose them, so they always come from
-  // the defaults — otherwise a stored day would never pick up the arm circuit, the
-  // shared tricep load, which arm a raise trains, the push A/B split, the calf
-  // machine's ceiling, that a movement climbs in reps because it can't be loaded,
-  // or that a plank is held for seconds rather than counted in reps.
+  // repsOnly, weightCapLbs, repLadder, timed, roundScreen) are program design
+  // rather than user preference, and the plan editor doesn't expose them, so they
+  // always come from the defaults — otherwise a stored day would never pick up
+  // the arm circuit, the shared tricep load, which arm a raise trains, the push A/B
+  // split, the calf machine's ceiling, that a movement climbs in reps because it
+  // can't be loaded, that a plank is held for seconds rather than counted in reps,
+  // or that a circuit is done a round at a time.
   //
   // The round rest is the exception among the circuit fields: like `circuitRestSec`
   // it's editable from the session menu, so a stored value is the user's own and is
@@ -855,6 +868,7 @@ function mergeDayExercises(
       weightCapLbs: def.weightCapLbs,
       repLadder: def.repLadder,
       timed: def.timed,
+      roundScreen: def.roundScreen,
     }
   })
   defaults.forEach((def, i) => {

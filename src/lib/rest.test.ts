@@ -163,6 +163,23 @@ describe('restBeforeNextSet', () => {
     ).toBe(10)
   })
 
+  it('has no rest between the stations of a round done on one screen', () => {
+    // The arm circuit: four moves back to back, then the round rest.
+    const hop = (newCircuitRound: boolean) =>
+      restBeforeNextSet({
+        currentRestSec: 60,
+        sameExercise: false,
+        nextRestSec: 60,
+        sameCircuit: true,
+        newCircuitRound,
+        circuitRestSec: 60,
+        circuitRoundRestSec: 120,
+        roundScreen: true,
+      })
+    expect(hop(false)).toBe(0)
+    expect(hop(true)).toBe(120)
+  })
+
   it('ignores a round rest when the next set leaves the circuit', () => {
     // Leaving for another exercise is a transition however the circuit rests inside
     // itself, so it's sized to what's coming up.

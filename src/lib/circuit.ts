@@ -45,6 +45,36 @@ export function circuitStations(exercises: { circuit?: string }[], index: number
   return out
 }
 
+/**
+ * The sets on screen together with the one at `from`, as indexes into `slots`.
+ *
+ * A circuit flagged `roundScreen` is performed a whole round at a time: every
+ * station's set for this round is entered on one screen and logged with one tap,
+ * and the only rest is the one after the round. So the round is every set of the
+ * same circuit at the same set index that's still owed — plus `from` itself,
+ * which is on screen whether or not it's logged. In slot order, which is station
+ * order.
+ *
+ * Anything else is a set at a time: just `[from]`.
+ */
+export function roundSteps(
+  exercises: { circuit?: string; roundScreen?: boolean }[],
+  slots: SetSlot[],
+  done: boolean[],
+  from: number,
+): number[] {
+  const at = slots[from]
+  if (!at) return []
+  const ex = exercises[at.exIndex]
+  if (!ex?.circuit || !ex.roundScreen) return [from]
+  const stations = new Set(circuitStations(exercises, at.exIndex))
+  const out: number[] = []
+  slots.forEach((s, i) => {
+    if (stations.has(s.exIndex) && s.setIndex === at.setIndex && (i === from || !done[i])) out.push(i)
+  })
+  return out
+}
+
 export function buildSetOrder(exercises: { circuit?: string }[], setCounts: number[]): SetSlot[] {
   const out: SetSlot[] = []
   let i = 0

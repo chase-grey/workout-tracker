@@ -210,6 +210,8 @@ export function circuitRestLabel(sec: number | null): string {
  *   `circuitRestSec`: that value, station change or new round alike. It's how a
  *   circuit rests only where it needs to — `0` rolls straight on to the next
  *   move, so a rest can sit after one station and nowhere else.
+ * - Moving to the next STATION of a circuit run a round at a time: `0` — the
+ *   stations go back to back on one screen.
  * - Moving to the next STATION of a circuit otherwise: {@link CIRCUIT_STATION_REST_SEC}.
  * - Starting a new ROUND of a circuit, when the station carries a
  *   `circuitRoundRestSec`: that value, which outranks its `circuitRestSec` —
@@ -243,6 +245,13 @@ export function restBeforeNextSet(params: {
    * rounds; absent leaves the round boundary to `circuitRestSec` as before.
    */
   circuitRoundRestSec?: number | null
+  /**
+   * The circuit is run a round at a time on one screen (`PlannedExercise.
+   * roundScreen`), so a station change inside a round isn't a rest at all — the
+   * stations are done back to back and logged together. The wrap into the next
+   * round is timed as usual.
+   */
+  roundScreen?: boolean
 }): number {
   const {
     currentRestSec,
@@ -252,10 +261,12 @@ export function restBeforeNextSet(params: {
     newCircuitRound,
     circuitRestSec,
     circuitRoundRestSec,
+    roundScreen,
   } = params
   if (sameExercise) return currentRestSec
   if (nextRestSec == null) return 0
   if (sameCircuit) {
+    if (roundScreen && !newCircuitRound) return 0
     if (newCircuitRound && circuitRoundRestSec != null) return circuitRoundRestSec
     if (circuitRestSec != null) return circuitRestSec
     if (!newCircuitRound) return CIRCUIT_STATION_REST_SEC
