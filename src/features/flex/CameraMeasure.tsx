@@ -22,9 +22,17 @@ import { AngleEditor } from './AngleEditor'
 import { AngleTrends } from './AngleContextCard'
 import type { AngleTrend } from '../../lib/angleContext'
 import { currentPalette } from '../../lib/themeStore'
+import {
+  canvasToBlob,
+  grabFrame,
+  openFrame,
+  useCameraStream,
+  type BurstFrame,
+  type Facing,
+  type LiveFrame,
+} from './camera'
 
 type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
-type Facing = 'user' | 'environment'
 
 /** Pill fill per reading, matching the cold / warm colours of the charts. */
 // Getters, so a reading is coloured in the theme current when it's drawn.
@@ -98,10 +106,6 @@ async function savePhoto(blob: Blob, name: string): Promise<void> {
     return
   }
   downloadPhoto(blob, name)
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
-  return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9))
 }
 
 /**
@@ -290,12 +294,14 @@ async function renderMeasuredPhoto(
  * reading is logged either way, and nothing is kept here.
  *
  * The pose is fixed by the caller: the routine knows which shot this is, so
- * there's nothing to pick.
+ * there's nothing to pick. A `frame` already taken (a burst, see `BurstCapture`)
+ * skips the camera and opens straight on detection; retaking it is a fresh shot.
  */
 export function CameraMeasure({
   mode,
   temp,
   title,
+  frame,
   contextFor,
   onDone,
   onSkip,
@@ -306,6 +312,7 @@ export function CameraMeasure({
    *  is a cold or warm reading. */
   temp?: MeasureTemp
   title: string
+  frame?: BurstFrame
   /** The reading against its history, shown with the measured photo. Called
    *  before `onDone`, so it reads a history the reading isn't part of yet. */
   contextFor?: (result: MeasureResult) => AngleTrend[]
@@ -314,7 +321,7 @@ export function CameraMeasure({
   /** Offered only while more than this one shot is left to skip. */
   onSkipAll?: () => void
 }) {
-  const [phase, setPhase] = useState<Phase>('setup')
+  const [phase, setPhase] = useState<Phase>(frame ? 'detecting' : 'setup')
   const [facing, setFacing] = useState<Facing>('user')
   const timerSec = 20
   const [remaining, setRemaining] = useState(timerSec)
@@ -344,21 +351,10 @@ export function CameraMeasure({
   } | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
   const blobRef = useRef<Blob | null>(null)
   const capturedRef = useRef(false)
   /** The captured frame, kept so a failed detection can be retried on it. */
   const sourceRef = useRef<HTMLCanvasElement | null>(null)
-
-  /**
-   * Bumped on every stop, so a `getUserMedia` that resolves after we've moved on
-   * knows its stream is stale and switches it off itself. Without this, closing
-   * the screen while the permission prompt or camera warm-up is still pending
-   * leaves the camera live with nothing left holding a reference to stop it —
-   * and Android keeps a notification up under the app's name (`short_name`, so
-   * "Lift") for exactly as long as a page holds the camera.
-   */
-  const streamGenRef = useRef(0)
 
   // The preview URL outlives the render that made it, so it's released when the
   // prompt is answered or the screen closes with it still up.
@@ -368,34 +364,7 @@ export function CameraMeasure({
     return () => URL.revokeObjectURL(url)
   }, [pending])
 
-  const stopStream = useCallback(() => {
-    streamGenRef.current++
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    streamRef.current = null
-  }, [])
-
-  const startStream = useCallback(async () => {
-    stopStream()
-    const gen = streamGenRef.current
-    setError(null)
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing },
-        audio: false,
-      })
-      if (gen !== streamGenRef.current) {
-        stream.getTracks().forEach((t) => t.stop())
-        return
-      }
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play().catch(() => {})
-      }
-    } catch {
-      setError('camera unavailable')
-    }
-  }, [facing, stopStream])
+  const { startStream, stopStream } = useCameraStream(videoRef, facing, setError)
 
   // Load the detector while you frame the shot, not after the shutter.
   useEffect(preloadPose, [])
@@ -450,34 +419,46 @@ export function CameraMeasure({
     setRedetecting(false)
   }, [redetecting, runDetection])
 
+  /** Detect on a captured frame and open it in the editor. */
+  const measureFrame = useCallback(
+    async (f: LiveFrame) => {
+      blobRef.current = f.blob
+      sourceRef.current = f.canvas
+      mirroredRef.current = f.mirrored
+      // Detection downloads its model on first use, which is slow enough to need
+      // a state of its own rather than a frozen preview.
+      setPhase('detecting')
+      const { handles, note } = await runDetection(f.canvas)
+      setShot({ url: f.url, aspect: f.canvas.width / f.canvas.height, handles, note })
+      setPhase('editing')
+    },
+    [runDetection],
+  )
+
+  // A frame handed in is measured once, on mount.
+  const frameTaken = useRef(false)
+  useEffect(() => {
+    if (!frame || frameTaken.current) return
+    frameTaken.current = true
+    openFrame(frame.blob, frame.mirrored)
+      .then(measureFrame)
+      .catch(() => {
+        setError("couldn't read that photo")
+        setPhase('setup')
+      })
+  }, [frame, measureFrame])
+
   const capture = useCallback(async () => {
     if (capturedRef.current) return
     const video = videoRef.current
     if (!video || !video.videoWidth) return
     capturedRef.current = true
     navigator.vibrate?.(200)
-
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-    blobRef.current = await canvasToBlob(canvas)
-    const url = canvas.toDataURL('image/jpeg', 0.9)
-    sourceRef.current = canvas
-    // The front camera hands back a mirror image, so the detector's sides are
-    // reversed; the editor can flip this back if a device disagrees.
-    mirroredRef.current = facing === 'user'
+    const f = await grabFrame(video, facing)
+    if (!f) return
     stopStream()
-    // Detection downloads its model on first use, which is slow enough to need
-    // a state of its own rather than a frozen preview.
-    setPhase('detecting')
-    const { handles, note } = await runDetection(canvas)
-    setShot({ url, aspect: canvas.width / canvas.height, handles, note })
-    setPhase('editing')
-  }, [facing, runDetection, stopStream])
+    await measureFrame(f)
+  }, [facing, measureFrame, stopStream])
 
   // Wall-clock countdown (survives background throttling) → auto-capture at 0.
   useEffect(() => {
@@ -508,32 +489,11 @@ export function CameraMeasure({
     const file = e.target.files?.[0]
     if (!file) return
     stopStream()
-    blobRef.current = file
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.src = url
     try {
-      await img.decode()
-      const canvas = document.createElement('canvas')
-      canvas.width = img.naturalWidth
-      canvas.height = img.naturalHeight
-      canvas.getContext('2d')?.drawImage(img, 0, 0)
-      sourceRef.current = canvas
-      mirroredRef.current = false
-      setPhase('detecting')
-      const { handles, note } = await runDetection(canvas)
-      setShot({
-        url: canvas.toDataURL('image/jpeg', 0.9),
-        aspect: canvas.width / canvas.height,
-        handles,
-        note,
-      })
-      setPhase('editing')
+      await measureFrame(await openFrame(file, false))
     } catch {
       setError("couldn't read that photo")
       setPhase('setup')
-    } finally {
-      URL.revokeObjectURL(url)
     }
   }
 

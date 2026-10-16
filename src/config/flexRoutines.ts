@@ -20,6 +20,8 @@ export type FlexRoutine = {
   coldShots: PhotoKind[]
   /** Shots offered on the warm screen after the last stretch set. */
   warmShots: PhotoKind[]
+  /** Its shots are taken back to back off one timer, and measured after. */
+  burstShots?: boolean
 }
 
 /**
@@ -157,6 +159,9 @@ export const FLEX_ROUTINES: Record<FlexRoutineKey, FlexRoutine> = {
     // share one screen at the end of the routine.
     coldShots: ['cold-toe-touch', 'cold-leg-lift-left', 'cold-leg-lift-right'],
     warmShots: ['warm-toe-touch', 'warm-leg-lift-left', 'warm-leg-lift-right'],
+    // The three are poses on one mat, so they're shot from one propped phone
+    // without getting up between them.
+    burstShots: true,
   },
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildSessionSteps } from './flexSteps'
-import { coldGate, gateAfterStep } from './photoSteps'
+import { burstLeadSec, coldGate, gateAfterStep } from './photoSteps'
 import type { FlexBlock } from '../config/flexPlan'
 
 const ex = (key: string, maxSets: number): FlexBlock['exercises'][number] => ({
@@ -29,6 +29,7 @@ describe('coldGate', () => {
       id: 'cold-h2t',
       title: 'cold photos',
       shots: ['cold-toe-touch', 'cold-leg-lift-left', 'cold-leg-lift-right'],
+      burst: true,
     })
   })
 })
@@ -109,6 +110,7 @@ describe('gateAfterStep — head to toe', () => {
       id: 'warm-h2t',
       title: 'warm photos',
       shots: ['warm-toe-touch', 'warm-leg-lift-left', 'warm-leg-lift-right'],
+      burst: true,
     })
   })
 
@@ -155,5 +157,15 @@ describe('gateAfterStep — the routine it defaults to', () => {
 
   it('reads as the side split when no routine is named', () => {
     expect(gateAfterStep(steps, 0)).toEqual(gateAfterStep(steps, 0, 'side_split'))
+  })
+})
+
+describe('burstLeadSec', () => {
+  it('gives twenty seconds to get down for the first shot, ten for each after', () => {
+    expect([0, 1, 2].map(burstLeadSec)).toEqual([20, 10, 10])
+  })
+
+  it("doesn't burst the side split, whose two poses aren't one mat apart", () => {
+    expect(coldGate('side_split').burst).toBeUndefined()
   })
 })

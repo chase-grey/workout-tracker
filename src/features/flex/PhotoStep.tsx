@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { CameraMeasure } from './CameraMeasure'
+import { BurstCapture } from './BurstCapture'
+import type { BurstFrame } from './camera'
 import { useData } from '../../store/DataContext'
 import { PHOTO_SHOT, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
 import type { MeasureResult } from '../../lib/measure'
@@ -13,6 +15,9 @@ import { toISODate } from '../../lib/dates'
  * every shot is optional, so skipping moves on to the next. `onDone` is told
  * whether any shot was actually taken, so the routine can allow for the time it
  * takes to put the phone down and get back into position.
+ *
+ * A burst gate takes every photo first, back to back off one timer, and then
+ * measures each of the shots it got in the same order.
  */
 export function PhotoStep({
   gate,
@@ -24,12 +29,36 @@ export function PhotoStep({
   onDone: (tookAny: boolean) => void
 }) {
   const { flexEntries } = useData()
+  // The shots to measure, each with its frame if a burst already took it. A
+  // burst's are unknown until it's done.
+  const [queue, setQueue] = useState<{ kind: PhotoKind; frame?: BurstFrame }[] | null>(() =>
+    gate.burst ? null : gate.shots.map((kind) => ({ kind })),
+  )
   const [at, setAt] = useState(0)
   const [tookAny, setTookAny] = useState(false)
-  const kind = gate.shots[at]
+
+  if (!queue) {
+    return (
+      <div className="fixed inset-0 z-70">
+        <BurstCapture
+          shots={gate.shots}
+          onDone={(frames) => {
+            const taken = gate.shots.flatMap((kind, i) => {
+              const frame = frames[i]
+              return frame ? [{ kind, frame }] : []
+            })
+            if (taken.length === 0) onDone(false)
+            else setQueue(taken)
+          }}
+        />
+      </div>
+    )
+  }
+
+  const { kind, frame } = queue[at]
   const shot = PHOTO_SHOT[kind]
   const temp = shot.cold ? 'cold' : 'warm'
-  const left = gate.shots.length - at
+  const left = queue.length - at
 
   const next = (took: boolean) => {
     const any = tookAny || took
@@ -49,6 +78,7 @@ export function PhotoStep({
         mode={shot.mode}
         temp={temp}
         title={shot.label}
+        frame={frame}
         // Read the history before the capture is logged, so the reading is
         // compared against the sessions before it rather than itself.
         contextFor={(result) => angleTrends(flexEntries, result, temp, toISODate(new Date()))}

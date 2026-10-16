@@ -26,8 +26,25 @@ export type PhotoKind =
   | 'warm-leg-lift-left'
   | 'warm-leg-lift-right'
 
-/** A photo screen: the shots it offers, all of them optional. */
-export type PhotoGate = { id: PhotoGateId; title: string; shots: PhotoKind[] }
+/**
+ * A photo screen: the shots it offers, all of them optional. A `burst` gate
+ * takes every shot off one tap, back to back (see `burstLeadSec`), and only then
+ * goes through them one at a time to measure.
+ */
+export type PhotoGate = { id: PhotoGateId; title: string; shots: PhotoKind[]; burst?: boolean }
+
+/** Seconds to get into the first pose of a burst, from the phone. */
+export const BURST_FIRST_SEC = 20
+/** Seconds to move from one pose to the next, already on the mat. */
+export const BURST_NEXT_SEC = 10
+
+/**
+ * The self-timer for the `n`th shot of an uninterrupted burst run: time to put
+ * the phone down for the first, time to change poses for the rest.
+ */
+export const burstLeadSec = (n: number): number => (n === 0 ? BURST_FIRST_SEC : BURST_NEXT_SEC)
+
+const burst = (routine: FlexRoutineKey) => (FLEX_ROUTINES[routine].burstShots ? { burst: true } : {})
 
 /**
  * Identifies a gate for "already shown" tracking across a resumed session.
@@ -72,6 +89,7 @@ export function coldGate(routine: FlexRoutineKey): PhotoGate {
     id: routine === 'head_to_toe' ? 'cold-h2t' : 'cold',
     title: 'cold photos',
     shots: FLEX_ROUTINES[routine].coldShots,
+    ...burst(routine),
   }
 }
 
@@ -107,7 +125,12 @@ export function gateAfterStep(
 
   if (routine === 'head_to_toe') {
     if (!atLastFlex) return null
-    return { id: 'warm-h2t', title: 'warm photos', shots: FLEX_ROUTINES.head_to_toe.warmShots }
+    return {
+      id: 'warm-h2t',
+      title: 'warm photos',
+      shots: FLEX_ROUTINES.head_to_toe.warmShots,
+      ...burst(routine),
+    }
   }
 
   const atLastTailors =
