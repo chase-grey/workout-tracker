@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MdKeyboardArrowDown, MdKeyboardArrowUp } from 'react-icons/md'
 import { parseTempo, workPhaseCount, type TempoPhase } from '../lib/tempo'
-import { rhythmWavePath, rhythmWavePoint } from '../lib/rhythmWave'
+import { rhythmWaveGlowStart, rhythmWavePath, rhythmWavePoint } from '../lib/rhythmWave'
 import {
   attack,
   cycleCloses,
@@ -340,6 +340,7 @@ function PushPullShape({
   phases,
   phaseIndex,
   progress,
+  glowStart,
 }: {
   variant: Variant
   drive: number
@@ -349,28 +350,53 @@ function PushPullShape({
   phases: TempoPhase[]
   phaseIndex: number
   progress: number
+  /** Where the wave turns white (see `rhythmWaveGlowStart`), or null. */
+  glowStart: number | null
 }) {
   const wavePath = useMemo(() => rhythmWavePath(phases), [phases])
+  const clipId = useId().replace(/[^a-zA-Z0-9]/g, '')
   // How lit each end is: fully while you drive into it, filling while a rest primes
   // it. `side` is +1 for the bottom (pressing down) and −1 for the top.
   const endLit = (side: number) => Math.max(clamp01(drive * side), primeDir === side ? prime : 0)
   switch (variant) {
     case 'wave': {
       const [dotX, dotY] = rhythmWavePoint(phases, phaseIndex, progress)
+      // The stretch of wave that finishes the set comes in already white, at the
+      // brightness the whole wave takes on once the dot reaches it.
+      const split = glowStart != null && glowStart > dotX ? glowStart : null
+      const stroke = {
+        d: wavePath,
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 3,
+        vectorEffect: 'non-scaling-stroke',
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      } as const
       return (
         <div className="absolute inset-y-[10%] left-1/2 w-screen -translate-x-1/2 overflow-hidden">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible text-current" aria-hidden>
-            <path
-              d={wavePath}
-              transform={`translate(${50 - dotX} 0)`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              vectorEffect="non-scaling-stroke"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={tone.dimmest}
-            />
+            <g transform={`translate(${50 - dotX} 0)`}>
+              {split == null ? (
+                <path {...stroke} opacity={tone.dimmest} />
+              ) : (
+                <>
+                  <clipPath id={`${clipId}a`}>
+                    <rect x={-1000} y={-1000} width={1000 + split} height={3000} />
+                  </clipPath>
+                  <clipPath id={`${clipId}b`}>
+                    <rect x={split} y={-1000} width={3000} height={3000} />
+                  </clipPath>
+                  <path {...stroke} clipPath={`url(#${clipId}a)`} opacity={tone.dimmest} />
+                  <path
+                    {...stroke}
+                    clipPath={`url(#${clipId}b)`}
+                    className="text-neutral-50"
+                    opacity={TONES.done.dimmest}
+                  />
+                </>
+              )}
+            </g>
           </svg>
           <div
             className="absolute left-1/2 h-[11%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
@@ -705,6 +731,7 @@ export function RhythmGuide({
               phases={phases}
               phaseIndex={i}
               progress={progress}
+              glowStart={rhythmWaveGlowStart(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
             />
           </div>
         ) : (

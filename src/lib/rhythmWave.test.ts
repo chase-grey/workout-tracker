@@ -1,6 +1,7 @@
 ﻿import { describe, expect, it } from 'vitest'
 import { parseTempo } from './tempo'
-import { rhythmWavePath, rhythmWavePoint } from './rhythmWave'
+import { rhythmWaveGlowStart, rhythmWavePath, rhythmWavePoint } from './rhythmWave'
+import { repGlow } from './rhythmMotion'
 
 describe('push/pull waveform', () => {
   const phases = parseTempo('5s press down ; 5s rest ; 5s pull up ; 5s rest')
@@ -47,3 +48,34 @@ describe('push/pull waveform', () => {
   })
 })
 
+describe('where the wave turns white', () => {
+  const phases = parseTempo('5s press down ; 5s rest ; 5s pull up ; 5s rest')
+
+  it('starts at the rest before the closing rep when that rep drops its own', () => {
+    expect(rhythmWaveGlowStart(phases, 1, 5, true, true)).toBe(375)
+    expect(rhythmWaveGlowStart(phases, 4, 5, true, true)).toBe(75)
+    expect(rhythmWaveGlowStart(phases, 5, 5, true, true)).toBe(-25)
+  })
+
+  it('starts at the closing rep, or past the target for a tapped set', () => {
+    expect(rhythmWaveGlowStart(phases, 3, 5, true, false)).toBe(200)
+    expect(rhythmWaveGlowStart(phases, 3, 5, false, false)).toBe(300)
+    expect(rhythmWaveGlowStart(phases, 1, 1, true, true)).toBe(0)
+    expect(rhythmWaveGlowStart(phases, 3, undefined, true, true)).toBeNull()
+  })
+
+  it('is reached by the dot exactly when the guide turns white', () => {
+    for (const [endsItself, skip] of [[true, true], [true, false], [false, false]] as const) {
+      for (let rep = 1; rep <= 6; rep++) {
+        for (let idx = 0; idx < phases.length; idx++) {
+          for (const progress of [0, 0.5]) {
+            const [x] = rhythmWavePoint(phases, idx, progress)
+            const start = rhythmWaveGlowStart(phases, rep, 5, endsItself, skip)!
+            const lit = repGlow(rep, 5, endsItself, skip && idx >= 3) === 'done'
+            expect(x >= start).toBe(lit)
+          }
+        }
+      }
+    }
+  })
+})

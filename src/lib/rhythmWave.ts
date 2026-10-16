@@ -1,5 +1,5 @@
 import { ATTACK_SECONDS, cycleProgress, phaseDrives } from './rhythmMotion'
-import type { TempoPhase } from './tempo'
+import { workPhaseCount, type TempoPhase } from './tempo'
 
 const height = (drive: number) => 50 + drive * 28
 
@@ -39,4 +39,28 @@ export function rhythmWavePoint(
   const t = Math.max(0, Math.min(1, progress * phases[idx].seconds / transitionSeconds(phases[idx])))
   const eased = t * t * (3 - 2 * t)
   return [cycleProgress(phases, idx, progress) * 100, from + (to - from) * eased]
+}
+
+/**
+ * Where along the wave the guide turns white, in the same units as
+ * `rhythmWavePoint` (100 per rep, 0 at the start of the rep in progress), so the
+ * stretch of wave that will finish the set can be drawn white before the dot
+ * reaches it. Mirrors `repGlow`: a set that ends itself turns white as its closing
+ * rep starts, or a rest earlier when that rep drops its trailing rest; a set you
+ * tap to end turns white once the target is behind you. Null with no target.
+ */
+export function rhythmWaveGlowStart(
+  phases: TempoPhase[],
+  rep: number,
+  reps: number | undefined,
+  endsItself: boolean,
+  skipFinalRepRest: boolean,
+): number | null {
+  if (phases.length === 0 || reps == null || reps <= 0) return null
+  if (!endsItself) return (reps + 1 - rep) * 100
+  if (skipFinalRepRest && reps > 1) {
+    const work = workPhaseCount(phases)
+    if (work < phases.length) return (reps - 1 - rep + cycleProgress(phases, work, 0)) * 100
+  }
+  return (reps - rep) * 100
 }
