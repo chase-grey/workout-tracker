@@ -4,7 +4,6 @@ import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from '
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
-import { SessionTimingSheet } from '../../components/SessionTimingSheet'
 import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
@@ -275,7 +274,6 @@ export function StretchSession({
   // and not when the session is already running itself forward.
   const [preparing, setPreparing] = useState(rest == null && !fast && started)
   const [showList, setShowList] = useState(false)
-  const [showTiming, setShowTiming] = useState(false)
   // A one-off, longer get-into-position count that replaces the upcoming set's
   // own — set when a photo screen hands the routine straight to a stretch, and
   // when a side switch replaces the settle-in with a reposition.
@@ -402,7 +400,7 @@ export function StretchSession({
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
   const readyToFinish = N > 0 && steps.every((step) => done.has(step.stepKey)) && photos == null
-  const setLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && !showTiming && !preparing
+  const setLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && !preparing
 
   // And while it's on, the screen stays lit — a paced routine is one nobody is
   // tapping, and the phone would dim mid-hold. A hold's clock runs unattended
@@ -821,7 +819,6 @@ export function StretchSession({
         ]
       : []),
     { label: 'pause routine', onClick: () => setPaused(true) },
-    { label: 'session timing', onClick: () => setShowTiming(true) },
     { label: 'finish and log', onClick: () => finishWith(done) },
     { label: 'exit without logging', danger: true, onClick: onClose },
   ]
@@ -1008,16 +1005,6 @@ export function StretchSession({
             setPreparing(false)
             setReadyOverrideSec(null)
           }}
-        />
-      )}
-      {showTiming && (
-        <SessionTimingSheet
-          startedAt={startedAt}
-          readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
-          projected={projectedSplit(new Set(steps.map((s) => s.stepKey)))}
-          remainingSec={timeLeft}
-          remainingRows={remainingRows}
-          onClose={() => setShowTiming(false)}
         />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}

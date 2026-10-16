@@ -62,7 +62,6 @@ import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
 import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
-import { SessionTimingSheet } from '../../components/SessionTimingSheet'
 import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
@@ -160,7 +159,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // appears in the flow once the log it's counted from has updated (see addSet).
   const [pendingStepKey, setPendingStepKey] = useState<string | null>(null)
   const [showList, setShowList] = useState(false)
-  const [showTiming, setShowTiming] = useState(false)
   const [showAddExercise, setShowAddExercise] = useState(false)
   const [newExerciseName, setNewExerciseName] = useState('')
   const [newExerciseSets, setNewExerciseSets] = useState('1')
@@ -343,7 +341,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // left alone, nor under an open sheet: a sheet sits above the pause curtain, and
   // reading one isn't being away.
   useIdleTimeout(
-    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest && !showTiming,
+    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest,
     IDLE_PAUSE_MS,
     () => {
       // Drop this set's active-time slice rather than carry it into the pause: it
@@ -442,7 +440,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }
 
   const readActiveSec = useStepElapsed(step.stepKey, !opening && !set?.done &&
-    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest && !showTiming)
+    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest)
   const [estimateNow, setEstimateNow] = useState(Date.now)
   useEffect(() => {
     if (!rest) return
@@ -766,7 +764,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // both the turbo wait and a self-ending hold need to be true before they can
   // close a set on their own.
   const setScreenLive =
-    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest && !showTiming
+    rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest
   const turboMs = turboSetMs(exerciseAverages, planned.key)
   const turboArmed =
     fastMode === 'turbo' &&
@@ -874,7 +872,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       : []),
     { label: 'add a set', onClick: addSet },
     { label: 'pause workout', onClick: () => setPaused(true) },
-    { label: 'session timing', onClick: () => setShowTiming(true) },
     { label: 'finish and log', onClick: finish },
     {
       label: 'discard workout',
@@ -1104,16 +1101,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           (z-60), which own the moment when one of them is up. */}
       {cheer && <SetCheer key={cheer.id} grade={cheer.grade} onDone={() => setCheer(null)} />}
 
-      {showTiming && (
-        <SessionTimingSheet
-          startedAt={session.startedAt}
-          readRestSec={(now) => tally.current.takenSec + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
-          projected={sumTiming(remainingTiming(exerciseAverages, timingFor(steps)))}
-          remainingSec={timeLeft}
-          remainingRows={remainingRows}
-          onClose={() => setShowTiming(false)}
-        />
-      )}
       {paused && <PauseOverlay label="workout paused" onResume={() => setPaused(false)} />}
 
       {showHistory && (
