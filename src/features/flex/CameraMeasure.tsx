@@ -6,7 +6,6 @@ import {
   SEGMENTS,
   ROLE_COLOR,
   MEASURE_LABEL,
-  MEASURE_MODES,
   angleMarks,
   defaultHandles,
   summarizeResult,
@@ -18,6 +17,8 @@ import {
 } from '../../lib/measure'
 import { toISODate } from '../../lib/dates'
 import { AngleEditor } from './AngleEditor'
+import { AngleTrends } from './AngleContextCard'
+import type { AngleTrend } from '../../lib/angleContext'
 import { currentPalette } from '../../lib/themeStore'
 
 type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
@@ -36,9 +37,9 @@ const TEMP_COLOR: Record<MeasureTemp, string> = {
 
 /** A detection that produced nothing usable, and what left the handles guessed. */
 const DETECT_NOTE = {
-  model: "couldn't load the pose model — these dots are a rough guess.",
-  'no-pose': "couldn't find a body in this photo — these dots are a rough guess.",
-  partial: "couldn't make out your body clearly — these dots are a rough guess.",
+  model: "pose model didn't load",
+  'no-pose': 'no body found',
+  partial: 'body unclear',
 } as const
 
 /**
@@ -280,25 +281,37 @@ async function renderMeasuredPhoto(
 }
 
 /**
- * Full-screen camera flow: live preview, a self-timer (20s) so you can
- * get into position, then an auto-capture that runs pose detection and opens the
- * draggable AngleEditor. On save it shows the measured photo and asks whether to
- * keep it — the reading is logged either way, and nothing is kept here.
+ * Full-screen camera flow for one shot: live preview, a self-timer (20s) so you
+ * can get into position, then an auto-capture that runs pose detection and opens
+ * the draggable AngleEditor. On save it shows the measured photo beside what the
+ * reading means against its history, and asks whether to keep the photo — the
+ * reading is logged either way, and nothing is kept here.
+ *
+ * The pose is fixed by the caller: the routine knows which shot this is, so
+ * there's nothing to pick.
  */
 export function CameraMeasure({
-  mode: initialMode,
+  mode,
   temp,
+  title,
+  contextFor,
   onDone,
-  onClose,
+  onSkip,
+  onSkipAll,
 }: {
   mode: MeasureMode
   /** Tags the saved photo — a corner pill and a filename token — when the shot
    *  is a cold or warm reading. */
   temp?: MeasureTemp
+  title: string
+  /** The reading against its history, shown with the measured photo. Called
+   *  before `onDone`, so it reads a history the reading isn't part of yet. */
+  contextFor?: (result: MeasureResult) => AngleTrend[]
   onDone: (result: MeasureResult) => void
-  onClose: () => void
+  onSkip: () => void
+  /** Offered only while more than this one shot is left to skip. */
+  onSkipAll?: () => void
 }) {
-  const [mode, setMode] = useState<MeasureMode>(initialMode)
   const [phase, setPhase] = useState<Phase>('setup')
   const [facing, setFacing] = useState<Facing>('user')
   const timerSec = 20
@@ -325,6 +338,7 @@ export function CameraMeasure({
     name: string
     url: string
     result: MeasureResult
+    trends: AngleTrend[]
   } | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -377,7 +391,7 @@ export function CameraMeasure({
         await videoRef.current.play().catch(() => {})
       }
     } catch {
-      setError("couldn't open the camera. grant camera access, or choose a photo instead.")
+      setError('camera unavailable')
     }
   }, [facing, stopStream])
 
@@ -508,7 +522,7 @@ export function CameraMeasure({
       })
       setPhase('editing')
     } catch {
-      setError("couldn't read that image.")
+      setError("couldn't read that photo")
       setPhase('setup')
     } finally {
       URL.revokeObjectURL(url)
@@ -519,6 +533,7 @@ export function CameraMeasure({
     const name = `stretch-${toISODate(new Date())}-${mode}${temp ? `-${temp}` : ''}.jpg`
     const raw = blobRef.current
     const src = shot?.url
+    const trends = contextFor?.(result) ?? []
     setComposing(true)
     void (async () => {
       // The photo carries the angle lines + measurements burned in; fall back to
@@ -531,7 +546,7 @@ export function CameraMeasure({
       setComposing(false)
       // Ask before writing anything to the phone. With no photo to offer — a
       // capture that produced no blob at all — the reading still stands.
-      if (out) setPending({ blob: out, name, url: URL.createObjectURL(out), result })
+      if (out) setPending({ blob: out, name, url: URL.createObjectURL(out), result, trends })
       else onDone(result)
     })()
   }
@@ -561,13 +576,14 @@ export function CameraMeasure({
       !needsShareSheetToSave() && canSharePhoto(pending.blob, pending.name)
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-bg px-4 pt-8">
-        <h2 className="text-xl font-bold">save this photo?</h2>
-        <div className="flex flex-1 items-center justify-center overflow-hidden py-4">
+        <h2 className="text-xl font-bold">{title}</h2>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-4">
           <img
             src={pending.url}
             alt="measured stretch"
-            className="max-h-full w-auto rounded-2xl object-contain"
+            className="mx-auto max-h-[45vh] w-auto rounded-2xl object-contain"
           />
+          <AngleTrends trends={pending.trends} />
         </div>
         <div
           className="flex flex-col gap-2"
@@ -584,7 +600,7 @@ export function CameraMeasure({
               onClick={() => finishSave('save')}
               className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
             >
-              <MdSave aria-hidden /> save
+              <MdSave aria-hidden /> save photo
             </button>
           </div>
           {canShare && (
@@ -619,22 +635,28 @@ export function CameraMeasure({
 
   return (
     <div className="keep-dark fixed inset-0 z-50 flex flex-col bg-black">
-      <header className="flex items-center justify-between px-4 py-3 text-white">
-        <h2 className="text-lg font-bold">measure {MEASURE_LABEL[mode].toLowerCase()}</h2>
-        <button onClick={onClose} className="min-h-[44px] px-2 text-sm text-neutral-300">
-          close
-        </button>
+      <header className="flex items-center justify-between gap-2 px-4 py-3 text-white">
+        <h2 className="text-lg font-bold">{title}</h2>
+        <div className="flex shrink-0 gap-1">
+          {onSkipAll && (
+            <button onClick={onSkipAll} className="min-h-[44px] px-2 text-sm text-neutral-400">
+              skip all
+            </button>
+          )}
+          <button onClick={onSkip} className="min-h-[44px] px-2 text-sm font-semibold text-neutral-200">
+            skip
+          </button>
+        </div>
       </header>
 
       <div className="relative flex-1 overflow-hidden bg-black">
         <video ref={videoRef} playsInline muted className="h-full w-full object-contain" />
 
         {phase === 'countdown' && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="font-mono text-9xl font-bold tabular-nums text-white drop-shadow-lg">
               {remaining}
             </span>
-            <span className="text-sm tracking-widest text-white/80">get into position</span>
           </div>
         )}
 
@@ -652,55 +674,32 @@ export function CameraMeasure({
       </div>
 
       <div
-        className="space-y-3 bg-black px-4 pt-3 text-white"
+        className="bg-black px-4 pt-3 text-white"
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
         {phase === 'setup' && (
-          <>
-            {mode === 'toe_touch' && (
-              <p className="text-sm text-neutral-300">
-                Place the camera side-on at hip height. Keep your whole body in frame,
-                including your head and feet, with your shoulder, hip and ankle visible.
-                The angle is measured from your shoulder through your hip to your ankle.
-              </p>
-            )}
-            {/* What we're measuring. Wrapping rather than one row: there are
-                five poses now, and five labels across a phone are unreadable. */}
-            <div className="flex flex-wrap gap-2">
-              {MEASURE_MODES.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  className={`min-h-[40px] flex-1 basis-[30%] rounded-xl px-2 text-sm font-semibold ${
-                    mode === m ? 'bg-accent text-on-accent' : 'bg-white/10 text-neutral-200'
-                  }`}
-                >
-                  {MEASURE_LABEL[m]}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={startTimer}
-                className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
-              >
-                <MdCameraAlt aria-hidden /> start {timerSec}s timer
-              </button>
-              <button
-                onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))}
-                aria-label="flip camera"
-                className="flex min-h-[52px] w-14 items-center justify-center rounded-2xl bg-white/10"
-              >
-                <MdCameraswitch className="text-2xl" aria-hidden />
-              </button>
-            </div>
-
-            <label className="flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/5 text-sm text-neutral-300">
-              <MdPhotoLibrary aria-hidden /> choose an existing photo
+          <div className="flex gap-2">
+            <button
+              onClick={startTimer}
+              className="flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
+            >
+              <MdCameraAlt aria-hidden /> start {timerSec}s timer
+            </button>
+            <button
+              onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))}
+              aria-label="flip camera"
+              className="flex min-h-[56px] w-14 items-center justify-center rounded-2xl bg-white/10"
+            >
+              <MdCameraswitch className="text-2xl" aria-hidden />
+            </button>
+            <label
+              aria-label="choose a photo"
+              className="flex min-h-[56px] w-14 cursor-pointer items-center justify-center rounded-2xl bg-white/10"
+            >
+              <MdPhotoLibrary className="text-2xl" aria-hidden />
               <input type="file" accept="image/*" onChange={onPickFile} className="hidden" />
             </label>
-          </>
+          </div>
         )}
 
         {phase === 'countdown' && (

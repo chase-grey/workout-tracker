@@ -121,38 +121,15 @@ function TrendRow({ t }: { t: AngleTrend }) {
 /**
  * What a just-measured angle means: the move since the last session, the
  * standing best, today's cold → warm gain, and the gap to the next goal. Shown
- * once per shot, over the photo screen, so the reading lands as progress instead
- * of as a number in a list.
+ * under the measured photo, so the reading lands as progress instead of as a
+ * number in a list.
  */
-export function AngleContextCard({
-  trends,
-  onDismiss,
-}: {
-  trends: AngleTrend[]
-  onDismiss: () => void
-}) {
+export function AngleTrends({ trends }: { trends: AngleTrend[] }) {
   return (
-    // Above the photo screen (z-70), which is itself above rest + the measure sheet.
-    <div className="fixed inset-0 z-80 flex flex-col bg-bg px-4 pt-8">
-      <h2 className="text-xl font-bold">measured</h2>
-
-      <div className="mt-4 flex flex-col gap-3 overflow-y-auto">
-        {trends.map((t) => (
-          <TrendRow key={t.metric} t={t} />
-        ))}
-      </div>
-
-      <div
-        className="mt-auto pt-4"
-        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
-      >
-        <button
-          onClick={onDismiss}
-          className="min-h-[56px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
-        >
-          got it
-        </button>
-      </div>
+    <div className="flex flex-col gap-3">
+      {trends.map((t) => (
+        <TrendRow key={t.metric} t={t} />
+      ))}
     </div>
   )
 }

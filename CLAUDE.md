@@ -19,8 +19,8 @@ the stretch routine (`src/features/flex/StretchSession.tsx`) — obey one rule:
   opening seconds (`lib/holdTap`), for a hold already done before it came up. A lift hold is not
   exempt — it logs overtime, so it waits on you.
 - **Only a terminal, data-committing action gets a button.** `finish workout`,
-  `finish & log session`, the recap's dismissal, a photo screen's
-  `continue`/`skip`. Ending and logging a session is not something a stray tap
+  `finish & log session`, the recap's dismissal, a photo's
+  `save photo`/`don't save`/`skip`. Ending and logging a session is not something a stray tap
   should do.
 - **An overlay that owns the screen swallows the tap.** Rest, the
   get-into-position count, the pause curtain, sheets. Each session gates its tap

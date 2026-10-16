@@ -111,7 +111,7 @@ export function AngleEditor({
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
         <h2 className="text-lg font-bold">adjust {MEASURE_LABEL[mode].toLowerCase()} lines</h2>
         <button onClick={onCancel} className="min-h-[44px] px-2 text-sm text-neutral-400">
-          cancel
+          retake
         </button>
       </header>
 
