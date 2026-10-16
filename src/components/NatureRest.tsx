@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react'
+import { useMemo, type CSSProperties } from 'react'
+import { growRoots, rootStrokes } from '../lib/roots'
 
 type NatureVariant = 'tree' | 'mushroom' | 'roots' | 'flower' | 'dandelion'
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
@@ -8,6 +9,8 @@ const smooth: CSSProperties = { transition: 'transform 260ms linear, opacity 260
 /** Growth and seed flight follow elapsed rest, including after a background resume. */
 export function NatureRest({ variant, fraction }: { variant: NatureVariant; fraction: number }) {
   const p = 1 - clamp(fraction)
+  // A fresh system each rest; grown once, then only revealed and thickened.
+  const roots = useMemo(() => (variant === 'roots' ? growRoots() : []), [variant])
   const growingPath = (d: string, progress: number, width: number) => (
     <path d={d} fill="none" stroke="currentColor" strokeWidth={width} strokeLinecap="round"
       pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - progress}
@@ -58,16 +61,12 @@ export function NatureRest({ variant, fraction }: { variant: NatureVariant; frac
         </g>
       </>}
       {variant === 'roots' && <>
+        {rootStrokes(roots, p).map(stroke => (
+          <path key={stroke.key} d={stroke.d} fill="none" stroke="currentColor" strokeWidth={stroke.width}
+            strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
+            style={{ transition: 'stroke-width 260ms linear' }} />
+        ))}
         <ellipse cx="50" cy="3" rx="3.5" ry="2" fill="currentColor" />
-        {growingPath('M50 4 C43 24 57 42 49 62 S48 84 50 101', p, 1.1)}
-        {[-1, 1].map(side => [0, 1, 2, 3, 4].map(i => {
-          const y = 10 + i * 15
-          const x = 50 + side * (30 - i * 3)
-          return <g key={`${side}-${i}`} opacity="0.8">
-            {growingPath(`M50 ${y} C${50 + side * 7} ${y + 9} ${x} ${y + 10} ${x + side * 5} ${Math.min(101, y + 38)}`, stage(p, y / 100), 0.65)}
-            {growingPath(`M${50 + side * 15} ${y + 17} Q${x + side * 8} ${y + 21} ${x + side * 11} ${y + 31}`, stage(p, (y + 20) / 100), 0.3)}
-          </g>
-        }))}
       </>}
       {variant === 'flower' && <>
         {growingPath('M50 90 Q40 69 50 34', stage(p, 0, 0.65), 1.8)}
