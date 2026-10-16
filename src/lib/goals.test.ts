@@ -895,9 +895,22 @@ describe('the bench goal reads both presses', () => {
   it('reads an incline press as the flat bench it implies', () => {
     const rows = [press('a', '2026-08-08', 'incline_bench', 135, 8, 'A')]
     const goal = benchGoal(rows)
+    // Too little history to measure the gap, so the textbook ratio stands in.
     expect(goal.scaleByKey).toEqual({ flat_bench: 1, incline_bench: INCLINE_TO_FLAT })
     // 135×8 is 171 through Epley, ×1.15 as flat.
     expect(goal.points).toEqual([{ date: '2026-08-08', value: 196.6, from: 'incline_bench' }])
+  })
+
+  it('converts incline at the ratio measured off fresh sessions, not the textbook one', () => {
+    // Flat 100×12 (140) on the B days, incline 100×10 (133.3) on the A days.
+    const rows = [1, 2].flatMap((n) => [
+      press(`b${n}`, `2026-10-0${n}`, 'flat_bench', 100, 12, 'B'),
+      press(`a${n}`, `2026-10-1${n}`, 'incline_bench', 100, 10, 'A'),
+    ])
+    const goal = benchGoal(rows)
+    expect(goal.scaleByKey).toEqual({ flat_bench: 1, incline_bench: 1.05 })
+    // Both kinds of day land on the one level rather than incline standing proud.
+    expect(new Set(goal.points.map((p) => p.value))).toEqual(new Set([140]))
   })
 
   it('scores a press on the average of its sets', () => {

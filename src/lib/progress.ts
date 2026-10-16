@@ -192,7 +192,7 @@ export function averageRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets:
  * goals are measured in squat pounds and trained on the leg press, so the press's
  * readings enter the series multiplied by what they imply about a squat (see
  * liftRatios.LEG_PRESS_TO_SQUAT), and the bench goals read an incline press as
- * the flat bench it implies (liftRatios.INCLINE_TO_FLAT). A key the map doesn't
+ * the flat bench it implies (liftRatios.inclineToFlat). A key the map doesn't
  * mention counts as itself.
  */
 export function combinedBest1RMSeries(
