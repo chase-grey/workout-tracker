@@ -169,7 +169,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const [paused, setPaused] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
-  // The first set of a workout waits on a tap to begin (see `awaitingStart`).
+  // A first set that's a hold waits on a tap to begin (see `awaitingStart`).
   const [started, setStarted] = useState(false)
   // Whether a timed hold's clock is running (see HoldTimer). While it is, the
   // clock is what says when the set is over, so turbo's own wait stands down.
@@ -425,20 +425,23 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, skipped, session])
 
-  // A moment to get set up before anything is on the clock: the very first set of a
-  // workout waits for a tap, so walking over and loading the bar isn't charged to
-  // that exercise's active-time average. The target is already on screen while you
-  // wait, which is the point — you can see what to load before starting. The tap
-  // that starts it is a tap anywhere, like every other tap in the flow (see
-  // onScreenTap): it takes one to begin and the next one logs the set.
-  const awaitingStart = !started && safeCurrent === 0 && totals.done === 0
+  // The opening set of a workout, before anything is logged. Walking over and
+  // loading the bar happen on this screen, so its seconds aren't a set's seconds:
+  // the active-time average doesn't learn from it (see recordActiveForCurrent) and
+  // turbo doesn't log it out from under you while you're still loading.
+  const opening = !started && safeCurrent === 0 && totals.done === 0
+  // Only a hold waits for a tap to begin, because only a hold has a clock on screen
+  // that would otherwise run while you get down on the mat. A set of reps has
+  // nothing to start — a start tap there changed nothing you could see, so it read
+  // as a tap that didn't take — and its first tap logs it, like every other set's.
+  const awaitingStart = opening && !!planned.timed
 
   const start = () => {
     activeStartRef.current = Date.now()
     setStarted(true)
   }
 
-  const readActiveSec = useStepElapsed(step.stepKey, !awaitingStart && !set?.done &&
+  const readActiveSec = useStepElapsed(step.stepKey, !opening && !set?.done &&
     rest == null && !paused && !showList && !showAddExercise && !showHistory && !showCircuitRest && !showTiming)
   const [estimateNow, setEstimateNow] = useState(Date.now)
   useEffect(() => {
@@ -481,7 +484,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     const sec = readActiveSec()
     activeStartRef.current = 0
     if (sec < MIN_SET_ACTIVE_SEC || sec > MAX_SET_ACTIVE_SEC) return
-    if (set?.done || fastMode === 'turbo' || step.stepKey === resumedPartialKey) return
+    if (opening || set?.done || fastMode === 'turbo' || step.stepKey === resumedPartialKey) return
     // Keep the broad average for old consumers, and learn matching rep counts separately.
     activeSamples.current[step.stepKey] = [exerciseKey, workoutTimingKey(exerciseKey, set?.reps ?? planned.repMin)]
       .map((exercise) => ({ exercise, totalActiveSec: sec, sets: 1 }))
@@ -747,7 +750,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // time-left estimate is priced from — not one flat number across every lift.
   //
   // Held off in the places where accepting the numbers wouldn't be right: the
-  // opening start press (still yours, so loading the bar isn't on the clock), a
+  // opening set (still yours, since you may still be loading the bar), a
   // set with no reps in it yet (there'd be nothing to log), and the last set of
   // all, which finishes the workout — that stays a deliberate press. Rest and any
   // overlay disarm it too: rest already advances itself, and reading the checklist
@@ -767,7 +770,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const turboMs = turboSetMs(exerciseAverages, planned.key)
   const turboArmed =
     fastMode === 'turbo' &&
-    !awaitingStart &&
+    !opening &&
     !atLast &&
     (set?.reps ?? 0) > 0 &&
     !holdRunning &&
@@ -810,9 +813,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // set behind it, and the last set of all still waits on its explicit finish
   // button — ending the workout is not something to trigger with a stray tap.
   //
-  // Before the first set is under way the tap starts the workout instead, which is
-  // all the old start press ever did (see `awaitingStart`): loading the bar stays
-  // off that exercise's active-time average, without asking for a press to say so.
+  // A hold that opens the workout is the exception: there the first tap starts its
+  // clock instead (see `awaitingStart`), so the plank isn't timed from the moment
+  // the screen came up.
   const screenTap = useScreenTap(() => {
     if (atLast || !setScreenLive) return
     if (awaitingStart) {
@@ -861,7 +864,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const menuItems: MenuItem[] = [
     // Off the rest screen only — there's nothing to go back to while it's up, and
     // nothing to rest before if the workout hasn't started.
-    ...(rest == null && !awaitingStart && restShownSec > 0
+    ...(rest == null && !opening && restShownSec > 0
       ? [{ label: 'back to rest', onClick: () => reopenRest(restShownSec) }]
       : []),
     // Only inside a circuit: everywhere else the rest after a set is simply the
