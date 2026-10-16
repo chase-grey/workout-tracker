@@ -74,13 +74,49 @@ describe('detectPose', () => {
     expect(deleted).toEqual(['pose-detector'])
   })
 
-  it('gives up with a model failure once the retry fails too', async () => {
+  // A phone that can't build the full model with good bytes in hand gets the
+  // lite one rather than guessed dots.
+  it('falls back to the lite model when the full one fails twice', async () => {
+    createMock
+      .mockRejectedValueOnce(new Error('Out of memory'))
+      .mockRejectedValueOnce(new Error('Out of memory'))
+      .mockResolvedValueOnce(landmarkerFor([point]))
+    const { detectPose } = await loadPose()
+
+    expect(await detectPose(frame)).toEqual({ ok: true, landmarks: [point] })
+    const models = createMock.mock.calls.map(([, opts]) => opts.baseOptions.modelAssetPath)
+    expect(models[2]).toMatch(/pose_landmarker_lite\.task$/)
+  })
+
+  it('gives up with a model failure once the lite model fails too', async () => {
     createMock.mockRejectedValue(new Error('magic word mismatch'))
     const { detectPose } = await loadPose()
 
     const res = await detectPose(frame)
     expect(res).toMatchObject({ ok: false, reason: 'model' })
-    expect(createMock).toHaveBeenCalledTimes(2)
+    expect(createMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('tries again on the next measurement after a load that failed', async () => {
+    createMock
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce(landmarkerFor([point]))
+    const { detectPose } = await loadPose()
+
+    expect(await detectPose(frame)).toMatchObject({ ok: false, reason: 'model' })
+    expect(await detectPose(frame)).toEqual({ ok: true, landmarks: [point] })
+  })
+
+  // The preload and the shutter can both ask before the first build is done.
+  it('shares one load between overlapping callers', async () => {
+    createMock.mockResolvedValue(landmarkerFor([point]))
+    const { detectPose, preloadPose } = await loadPose()
+
+    preloadPose()
+    await Promise.all([detectPose(frame), detectPose(frame)])
+    expect(createMock).toHaveBeenCalledTimes(1)
   })
 
   it('still retries where there is no Cache Storage to clear', async () => {

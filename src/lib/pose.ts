@@ -13,8 +13,10 @@ import type { Pt } from './splitAngle'
 
 const WASM_URL = `${import.meta.env.BASE_URL}mediapipe`
 // "full" rather than "lite": we run this on one still photo, so landmark
-// accuracy is worth far more than inference speed.
+// accuracy is worth far more than inference speed. "lite" is the fallback for a
+// phone that can't build "full" — a rougher fit beats guessed dots.
 const MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`
+const LITE_MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_lite.task`
 
 /** A landmark plus MediaPipe's confidence that the point is really in frame. */
 export type Landmark = Pt & { visibility?: number }
@@ -52,7 +54,8 @@ type VisionModule = {
   PoseLandmarker: { createFromOptions: (fileset: Fileset, opts: unknown) => Promise<Landmarker> }
 }
 
-let cached: Landmarker | null = null
+/** The one load in flight or done, shared so overlapping callers never race two builds. */
+let loading: Promise<Landmarker> | null = null
 
 /** Matches the runtimeCaching cacheName in vite.config.ts. */
 const ASSET_CACHE = 'pose-detector'
@@ -82,7 +85,7 @@ async function step<T>(stage: PoseStage, run: () => Promise<T>): Promise<T> {
   }
 }
 
-async function build(): Promise<Landmarker> {
+async function build(modelUrl = MODEL_URL): Promise<Landmarker> {
   const vision = await step(
     'runtime',
     async () => (await import('@mediapipe/tasks-vision')) as unknown as VisionModule,
@@ -90,7 +93,7 @@ async function build(): Promise<Landmarker> {
   const fileset = await step('fileset', () => vision.FilesetResolver.forVisionTasks(WASM_URL))
   return step('model', () =>
     vision.PoseLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL_URL },
+      baseOptions: { modelAssetPath: modelUrl },
       runningMode: 'IMAGE',
       numPoses: 1,
     }),
@@ -137,36 +140,64 @@ function clearError(): void {
 }
 
 /**
- * Build the detector, and give a bad cached copy one chance to heal.
+ * Build the detector, give a bad cached copy one chance to heal, then settle
+ * for the lite model.
  *
  * The service worker holds the runtime and model cache-first, which is what
  * lets measuring work offline — but it also makes the first download the only
  * one. Dropping the cache before a second attempt turns a bad stored copy back
- * into a plain retry over the network, at the cost of one repeat download. A
- * first attempt that failed is recorded either way, so a load that only works
- * on the retry still says so in Settings.
+ * into a plain retry over the network, at the cost of one repeat download.
+ *
+ * A full model that fails with good bytes in hand is a phone that can't build
+ * it, most likely for memory, and no retry changes that; the lite model is a
+ * third the size. A load that needed any of this is still recorded, so
+ * Settings says so.
  */
-async function getLandmarker(): Promise<Landmarker> {
-  if (cached) return cached
+async function load(): Promise<Landmarker> {
+  let failure: unknown
   try {
-    cached = await build()
-  } catch (first) {
-    try {
-      await caches.delete(ASSET_CACHE)
-    } catch {
-      // No Cache Storage to clear; the retry just repeats over the network.
-    }
-    try {
-      cached = await build()
-    } catch (second) {
-      recordError(second, 2)
-      throw second
-    }
-    recordError(first, 1)
-    return cached
+    const landmarker = await build()
+    clearError()
+    return landmarker
+  } catch (err) {
+    failure = err
   }
-  clearError()
-  return cached
+  try {
+    await caches.delete(ASSET_CACHE)
+  } catch {
+    // No Cache Storage to clear; the retry just repeats over the network.
+  }
+  for (const [attempt, url] of [MODEL_URL, LITE_MODEL_URL].entries()) {
+    try {
+      const landmarker = await build(url)
+      recordError(failure, attempt + 1)
+      return landmarker
+    } catch (err) {
+      failure = err
+    }
+  }
+  recordError(failure, 3)
+  throw failure
+}
+
+/** The detector, loaded once; a failed load is forgotten so the next call tries again. */
+function getLandmarker(): Promise<Landmarker> {
+  loading ??= load().catch((err: unknown) => {
+    loading = null
+    throw err
+  })
+  return loading
+}
+
+/**
+ * Start loading the detector before it's needed — while the camera is still
+ * framing, so the download and build are done by the time the shutter fires,
+ * before a full-resolution capture is competing with it for memory.
+ */
+export function preloadPose(): void {
+  getLandmarker().catch(() => {
+    // Reported when a measurement actually asks for it.
+  })
 }
 
 /**
@@ -264,7 +295,8 @@ export async function probePose(): Promise<PoseProbe> {
 
   const held = await cachedFiles()
   try {
-    cached = await build()
+    const landmarker = await build()
+    loading = Promise.resolve(landmarker)
     clearError()
     return { assets, cached: held, build: { ok: true } }
   } catch (err) {
@@ -279,7 +311,7 @@ export async function probePose(): Promise<PoseProbe> {
 
 /** Drop the cached runtime and model so the next measurement downloads again. */
 export async function clearPoseCache(): Promise<void> {
-  cached = null
+  loading = null
   clearError()
   try {
     await caches.delete(ASSET_CACHE)

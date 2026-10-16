@@ -36,8 +36,12 @@ const BUILD_TIME = new Date().toISOString()
  * offline. See src/lib/pose.ts for the consuming side.
  */
 const MEDIAPIPE_DIR = 'mediapipe'
-const POSE_MODEL_FILE = 'pose_landmarker_full.task'
-const POSE_MODEL_URL = `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/${POSE_MODEL_FILE}`
+// "full" is what a measurement uses; "lite" is the fallback for a phone that
+// can't build "full" (see getLandmarker in src/lib/pose.ts).
+const POSE_MODELS = ['full', 'lite'].map((v) => ({
+  file: `pose_landmarker_${v}.task`,
+  url: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${v}/float16/1/pose_landmarker_${v}.task`,
+}))
 // Only the variants FilesetResolver actually asks for: it picks the nosimd pair
 // when the browser lacks wasm SIMD, and the plain pair otherwise.
 const WASM_FILES = [
@@ -51,17 +55,16 @@ const wasmSourceDir = path.join(
   path.dirname(createRequire(import.meta.url).resolve('@mediapipe/tasks-vision')),
   'wasm',
 )
-// Downloaded once and kept out of git; CI re-fetches it on a cold cache.
-const modelCachePath = path.join('node_modules', '.cache', MEDIAPIPE_DIR, POSE_MODEL_FILE)
-
-async function cachedModel(): Promise<string> {
-  if (!existsSync(modelCachePath)) {
-    const res = await fetch(POSE_MODEL_URL)
-    if (!res.ok) throw new Error(`pose model download failed: ${res.status} ${POSE_MODEL_URL}`)
-    await mkdir(path.dirname(modelCachePath), { recursive: true })
-    await writeFile(modelCachePath, Buffer.from(await res.arrayBuffer()))
+// Downloaded once and kept out of git; CI re-fetches them on a cold cache.
+async function cachedModel(model: { file: string; url: string }): Promise<string> {
+  const cachePath = path.join('node_modules', '.cache', MEDIAPIPE_DIR, model.file)
+  if (!existsSync(cachePath)) {
+    const res = await fetch(model.url)
+    if (!res.ok) throw new Error(`pose model download failed: ${res.status} ${model.url}`)
+    await mkdir(path.dirname(cachePath), { recursive: true })
+    await writeFile(cachePath, Buffer.from(await res.arrayBuffer()))
   }
-  return modelCachePath
+  return cachePath
 }
 
 /** Serve the pose runtime + model from our own origin, in dev and in the build. */
@@ -72,16 +75,12 @@ function mediapipeAssets(): PluginOption {
     configureServer(server) {
       server.middlewares.use(served, (req, res, next) => {
         const name = path.basename((req.url || '').split('?')[0])
-        const file =
-          name === POSE_MODEL_FILE
-            ? null
-            : WASM_FILES.includes(name)
-              ? path.join(wasmSourceDir, name)
-              : undefined
-        if (file === undefined) return next()
+        const model = POSE_MODELS.find((m) => m.file === name)
+        const file = WASM_FILES.includes(name) ? path.join(wasmSourceDir, name) : undefined
+        if (!model && !file) return next()
         void (async () => {
           try {
-            const source = file ?? (await cachedModel())
+            const source = model ? await cachedModel(model) : file!
             res.setHeader(
               'content-type',
               source.endsWith('.wasm')
@@ -104,7 +103,9 @@ function mediapipeAssets(): PluginOption {
       for (const name of WASM_FILES) {
         await copyFile(path.join(wasmSourceDir, name), path.join(outDir, name))
       }
-      await copyFile(await cachedModel(), path.join(outDir, POSE_MODEL_FILE))
+      for (const model of POSE_MODELS) {
+        await copyFile(await cachedModel(model), path.join(outDir, model.file))
+      }
     },
   }
 }
@@ -349,7 +350,7 @@ export default defineConfig(({ mode }) => {
               handler: 'CacheFirst',
               options: {
                 cacheName: 'pose-detector',
-                expiration: { maxEntries: WASM_FILES.length + 1 },
+                expiration: { maxEntries: WASM_FILES.length + POSE_MODELS.length },
                 // A full 200 only. These are same-origin, so an opaque (status
                 // 0) response means something answered that we can't read —
                 // storing it would pin an unusable runtime in the cache, and

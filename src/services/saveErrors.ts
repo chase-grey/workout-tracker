@@ -51,3 +51,34 @@ export async function reportSaveFailures(
     }
   }
 }
+
+/**
+ * Tell the backend the pose detector wouldn't load, on the same save_errors tab
+ * — the phone has no console, and the stored error in Settings is only seen by
+ * someone who goes looking. Throttled like a stuck write: once per distinct
+ * error per window.
+ */
+export async function reportPoseFailure(detail: unknown): Promise<void> {
+  if (!api.isConfigured()) return
+  const err = detail as { message?: string } | null
+  const report: SaveErrorReport = {
+    build: APP_COMMIT,
+    route: 'pose_model',
+    writeId: 'pose_model',
+    message: err?.message ?? 'pose model failed to load',
+    pending: 0,
+    payload: { error: detail, userAgent: navigator.userAgent },
+  }
+  const { due, log } = dueReports([report], loadLog(), Date.now())
+  if (due.length === 0) return
+  try {
+    localStorage.setItem(LOG_KEY, JSON.stringify(log))
+  } catch {
+    /* send it anyway */
+  }
+  try {
+    await api.reportSaveError(report)
+  } catch {
+    /* an older backend without the route, or none reachable */
+  }
+}

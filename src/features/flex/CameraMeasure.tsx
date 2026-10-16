@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MdCameraAlt, MdCameraswitch, MdIosShare, MdPhotoLibrary, MdSave } from 'react-icons/md'
 import { detectMeasurementPose } from '../../lib/measurePose'
+import { lastPoseError, preloadPose } from '../../lib/pose'
+import { reportPoseFailure } from '../../services/saveErrors'
 import {
   HANDLES,
   SEGMENTS,
@@ -395,6 +397,9 @@ export function CameraMeasure({
     }
   }, [facing, stopStream])
 
+  // Load the detector while you frame the shot, not after the shutter.
+  useEffect(preloadPose, [])
+
   // Keep the live stream running while framing/counting down.
   useEffect(() => {
     if (phase === 'setup' || phase === 'countdown') void startStream()
@@ -426,7 +431,10 @@ export function CameraMeasure({
   const runDetection = useCallback(
     async (canvas: HTMLCanvasElement): Promise<{ handles: Handles; note: string | null }> => {
       const res = await detectMeasurementPose(canvas, mode, mirroredRef.current)
-      if (!res.ok) return { handles: defaultHandles(mode), note: DETECT_NOTE[res.reason] }
+      if (!res.ok) {
+        if (res.reason === 'model') void reportPoseFailure(lastPoseError())
+        return { handles: defaultHandles(mode), note: DETECT_NOTE[res.reason] }
+      }
       return { handles: res.handles, note: null }
     },
     [mode],
