@@ -940,7 +940,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   )
 
   return (
-    <div ref={fadeRef} className="flex flex-col gap-3 pb-6" {...screenTap}>
+    // min-h-full: the tap target is this element, so it has to reach the bottom of
+    // the screen rather than stop where the set card does (the stretch routine's
+    // root fills the screen the same way).
+    <div ref={fadeRef} className="flex min-h-full flex-col gap-3 pb-6" {...screenTap}>
       {topBar}
 
       {set && (
