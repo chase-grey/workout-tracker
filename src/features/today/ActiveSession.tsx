@@ -873,11 +873,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       ? [{ label: 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
     { label: 'add a set', onClick: addSet },
-    // Not for the last exercise left in play: a workout with nothing in it has no
-    // set to show (see lib/skipped).
-    ...(skippable(planned.key)
-      ? [{ label: `skip ${planned.name}`, onClick: () => setExerciseSkipped(planned.key, true) }]
-      : []),
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'session timing', onClick: () => setShowTiming(true) },
     { label: 'finish and log', onClick: finish },
@@ -1206,7 +1201,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-3 text-lg font-bold">workout checklist</h3>
+            <h3 className="mb-1 text-lg font-bold">workout checklist</h3>
+            <p className="mb-3 text-xs text-neutral-500">tap a name to jump; edit any set below.</p>
             <button
               onClick={() => setShowAddExercise(true)}
               className="mb-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
