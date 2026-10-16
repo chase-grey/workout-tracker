@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSessionFade } from '../../lib/useSessionFade'
 import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
+import { ChecklistClock } from '../../components/ChecklistClock'
+import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock } from '../../lib/setClock'
 import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
@@ -98,6 +100,11 @@ type RoutineChecklistProps = {
   done: Set<string>
   skipped: Set<string>
   timeLeft: Map<string, number>
+  /** The session clock at the top: so far and left, working and resting. */
+  clock: ReactNode
+  /** What each finished exercise took, rest included, against its projection. */
+  took: Map<string, number>
+  projected: Map<string, number>
   onClose: () => void
   onJump: (stepKey: string) => void
   onToggleDone: (stepKey: string) => void
@@ -111,6 +118,9 @@ function RoutineChecklist({
   done,
   skipped,
   timeLeft,
+  clock,
+  took,
+  projected,
   onClose,
   onJump,
   onToggleDone,
@@ -134,9 +144,11 @@ function RoutineChecklist({
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
         <h3 className="mb-3 text-lg font-bold">routine checklist</h3>
+        {clock}
         <div className="flex flex-col gap-3">
           {exercises.map((exercise) => {
             const isSkipped = skipped.has(exercise.key)
+            const finished = !isSkipped && exercise.steps.every((step) => done.has(step.stepKey))
             return (
               <section key={exercise.key} className="rounded-xl bg-surface-2/40 px-2 py-1">
                 <div className="flex items-center gap-2">
@@ -145,6 +157,11 @@ function RoutineChecklist({
                     <span className={`block font-semibold ${isSkipped ? 'line-through' : ''}`}>{exercise.name}</span>
                     {!isSkipped && (timeLeft.get(exercise.key) ?? 0) > 0 && (
                       <span className="block text-xs text-neutral-500 tabular-nums">{formatDuration(timeLeft.get(exercise.key)!).replace(/^~/, '')}</span>
+                    )}
+                    {finished && (took.get(exercise.key) ?? 0) > 0 && (
+                      <span className="block text-xs text-neutral-500 tabular-nums">
+                        took {clockText(took.get(exercise.key)!)} · est {clockText(projected.get(exercise.key) ?? 0)}
+                      </span>
                     )}
                   </div>
                   <button
@@ -308,6 +325,9 @@ export function StretchSession({
   // Initial value only: a resumed rest began before the reload, so credit it from
   // its real start rather than from now.
   const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)
+  // What each set has actually cost on the wall clock, its rest included — the
+  // checklist's "took" beside each finished exercise. Saved with the snapshot.
+  const setClock = useRef<SetClock>(resumeSetClock(saved?.setClock ?? null, startedAt ?? '', startedAt, Date.now()))
 
   /** Move the rest currently on the clock into the session's total. */
   const bankRest = () => {
@@ -373,6 +393,7 @@ export function StretchSession({
       restSec: restAccumSec.current,
       timingSamples: timingSamples.current,
       restLearning: restLearning.current,
+      setClock: setClock.current,
       photoGates: [...seenGates],
       fast,
     })
@@ -430,6 +451,22 @@ export function StretchSession({
     rest ? Math.max(0, (rest.endsAt - Math.max(estimateNow, Date.now())) / 1000) : 0)
   const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
   const exerciseTimeLeft = timeLeftByExercise(remainingRows, (key) => allSteps.find((s) => s.stepKey === key)?.exKey)
+  const exerciseOf = (key: string) => allSteps.find((s) => s.stepKey === key)?.exKey
+  const checklistTiming = {
+    clock: (
+      <ChecklistClock
+        startedAt={startedAt}
+        readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
+        left={sumTiming(remainingRows)}
+      />
+    ),
+    // Read only while the checklist is up; the rest screen's tick keeps a running
+    // rest live.
+    took: showList ? spentByExercise(setClock.current, Date.now(), exerciseOf) : new Map<string, number>(),
+    projected: showList
+      ? timeLeftByExercise(remainingTiming(exerciseAverages, priceStretchFlow(steps, coreRepsFor, fast)), exerciseOf)
+      : new Map<string, number>(),
+  }
   const projectedSplit = (doneSet: Set<string>) => {
     const rows = remainingTiming(exerciseAverages, priceStretchFlow(steps.filter((s) => doneSet.has(s.stepKey)), coreRepsFor, fast))
     return sumTiming(rows)
@@ -516,6 +553,7 @@ export function StretchSession({
             done={done}
             skipped={skipped}
             timeLeft={exerciseTimeLeft}
+            {...checklistTiming}
             onClose={() => setShowList(false)}
             onJump={() => {}}
             onToggleDone={() => {}}
@@ -650,6 +688,7 @@ export function StretchSession({
   // no settle-in at all — one inside the core block — which goes straight on.
   const closeRest = () => {
     bankRest()
+    setClock.current = endRest(setClock.current, Date.now())
     setRest(null)
     setPreparing(getReadySec > 0)
   }
@@ -678,8 +717,14 @@ export function StretchSession({
   // Start the finished set's rest and move on — or wrap up, on the last step.
   const advanceFrom = (index: number, doneSet: Set<string>) => {
     const next = nextUnfinishedStep(steps.map((step) => doneSet.has(step.stepKey)), index)
-    if (next == null) return
     const finished = steps[index]
+    // A set's time runs on through the rest after it; anything else ends it here
+    // (see lib/setClock).
+    const endSetClock = () => { setClock.current = closeSet(setClock.current, finished.stepKey, Date.now()) }
+    if (next == null) {
+      endSetClock()
+      return
+    }
     const fresh = startsNewExercise(finished.exKey, steps[next].exKey, exerciseStarted(steps[next], doneSet))
     goToStep(next)
 
@@ -687,6 +732,7 @@ export function StretchSession({
     // last stretch leaves you rested, so go straight to a get-into-position count
     // (or, running hands-free, straight to the set — once you've tapped in).
     if (finished.kind === 'flex' && steps[next].kind === 'core') {
+      endSetClock()
       straightToGetReady(CORE_ENTRY_GET_READY_SEC, fresh)
       return
     }
@@ -697,6 +743,7 @@ export function StretchSession({
     // Counted hands-free too, unlike the crossing into core: there's no rest in
     // front of it to have got you into position.
     if (finished.kind === 'flex' && finished.sideSwitchSec) {
+      endSetClock()
       setReadyOverrideSec(GET_READY_SEC)
       setPreparing(true)
       return
@@ -712,10 +759,12 @@ export function StretchSession({
     const ready = settleInSec(steps[next], finished)
     const restSec = restScreenSec(finished.restSec, ready)
     if (restSec <= 0) {
+      endSetClock()
       straightToGetReady(ready, fresh)
       return
     }
     restStartRef.current = Date.now()
+    setClock.current = restAfter(setClock.current, finished.stepKey)
     setRest({ seconds: restSec, endsAt: Date.now() + restSec * 1000 })
   }
 
@@ -1018,6 +1067,7 @@ export function StretchSession({
           done={done}
           skipped={skipped}
           timeLeft={exerciseTimeLeft}
+          {...checklistTiming}
           onClose={() => setShowList(false)}
           onToggleDone={toggleDone}
           onToggleSkipped={setExerciseSkipped}
@@ -1031,6 +1081,7 @@ export function StretchSession({
             goToStep(i)
             if (rest) {
               bankRest()
+              setClock.current = endRest(setClock.current, Date.now())
               setRest(null)
             }
             setReadyOverrideSec(ready > 0 ? ready : null)

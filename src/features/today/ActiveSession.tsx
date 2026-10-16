@@ -62,6 +62,8 @@ import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
 import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
+import { ChecklistClock } from '../../components/ChecklistClock'
+import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock } from '../../lib/setClock'
 import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
@@ -213,6 +215,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     return stale > 0 ? { ...resumed, takenSec: resumed.takenSec + stale } : resumed
   })
   const tally = useRef(savedTally)
+  // What each set has actually cost on the wall clock, its rest included — the
+  // checklist's "took" beside each finished exercise. Mirrored like the tally.
+  const setClock = useRef<SetClock>(resumeSetClock(storage.loadSetClock(), session.sessionId, session.startedAt, Date.now()))
   // When the rest on screen opened — for a resumed one that's before the reload,
   // so it's credited from its real start.
   const restStartRef = useRef(rest ? rest.endsAt - rest.seconds * 1000 : 0)
@@ -459,7 +464,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const remainingRows = remainingTiming(exerciseAverages, timingFor(remaining), remaining[0]?.stepKey === step.stepKey ? readActiveSec() : 0,
     rest ? Math.max(0, (rest.endsAt - Math.max(estimateNow, Date.now())) / 1000) : 0)
   const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
-  const exerciseTimeLeft = timeLeftByExercise(remainingRows, (key) => steps.find((s) => s.stepKey === key)?.ex.key)
+  const exerciseOf = (key: string) => steps.find((s) => s.stepKey === key)?.ex.key
+  const exerciseTimeLeft = timeLeftByExercise(remainingRows, exerciseOf)
+  // A finished exercise's time against what the whole flow priced it at. Read only
+  // while the checklist is up; the rest screen's tick keeps a running rest live.
+  const exerciseProjected = showList ? timeLeftByExercise(remainingTiming(exerciseAverages, timingFor(steps)), exerciseOf) : null
+  const exerciseSpent = showList ? spentByExercise(setClock.current, Date.now(), exerciseOf) : null
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
   // clock starts the wait over instead of logging a half-typed number.
@@ -493,6 +503,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const commitTally = (next: RestTally) => {
     tally.current = next
     storage.saveRestTally(next)
+  }
+
+  const commitSetClock = (next: SetClock) => {
+    setClock.current = next
+    storage.saveSetClock(next)
   }
 
   const finish = () => {
@@ -545,6 +560,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // clock.
   const closeRest = () => {
     commitTally(bankRest(tally.current, restStartRef.current, Date.now()))
+    commitSetClock(endRest(setClock.current, Date.now()))
     restStartRef.current = 0
     activeStartRef.current = Date.now()
     setRest(null)
@@ -686,9 +702,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       // A station set to no rest goes straight on to the next move: a zero-second
       // timer would open already in overtime, and it isn't a rest to be counted.
       activeStartRef.current = Date.now()
+      commitSetClock(closeSet(setClock.current, step.stepKey, Date.now()))
       return
     }
     restStartRef.current = Date.now()
+    commitSetClock(restAfter(setClock.current, step.stepKey))
     // Banked as the rest opens, not when it closes: a reload mid-rest recovers the
     // seconds from the saved `endsAt`, but not that the interval ever happened.
     commitTally(openRest(tally.current, restSec))
@@ -1189,6 +1207,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
             <h3 className="mb-3 text-lg font-bold">workout checklist</h3>
+            <ChecklistClock
+              startedAt={session.startedAt}
+              readRestSec={(now) => tally.current.takenSec + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
+              left={sumTiming(remainingRows)}
+            />
             <button
               onClick={() => setShowAddExercise(true)}
               className="mb-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
@@ -1230,6 +1253,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                         <span className="text-xs text-neutral-500 tabular-nums">
                           {doneCount(e.key)}/{exerciseLog?.sets.length ?? e.sets} sets
                           {!isSkipped && (exerciseTimeLeft.get(e.key) ?? 0) > 0 && ` · ${formatDuration(exerciseTimeLeft.get(e.key)!).replace(/^~/, '')}`}
+                          {complete && (exerciseSpent?.get(e.key) ?? 0) > 0 &&
+                            ` · took ${clockText(exerciseSpent!.get(e.key)!)} · est ${clockText(exerciseProjected?.get(e.key) ?? 0)}`}
                         </span>
                       </button>
                       {(isSkipped || skippable(e.key)) && (

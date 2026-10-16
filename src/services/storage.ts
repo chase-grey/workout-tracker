@@ -11,6 +11,7 @@ import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
 import { withMatSitups } from '../lib/stretchCore'
 import type { RestTally } from '../lib/rest'
+import type { SetClock } from '../lib/setClock'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
 import { toFastMode, type FastMode } from '../lib/fastMode'
 import type { SkippedExercises } from '../lib/skipped'
@@ -48,6 +49,7 @@ const KEYS = {
   activeRest: 'wt.activeRest',
   activeRestTally: 'wt.activeRestTally',
   activeExerciseTimes: 'wt.activeExerciseTimes',
+  activeSetClock: 'wt.activeSetClock',
   activeFastForward: 'wt.activeFastForward',
   activeSkipped: 'wt.activeSkipped',
   stretch: 'wt.stretch',
@@ -74,6 +76,8 @@ export type ActiveExerciseTimes = {
 export type StretchState = {
   timingSamples?: Record<string, import('../lib/estimate').ExerciseTimeSample>
   restLearning?: { totalSec: number; prescribedSec: number; count: number }
+  /** What each set has actually taken, its rest included (see lib/setClock). */
+  setClock?: SetClock
   /** A standalone office ab session, sharing the guided set flow. */
   officeAbs?: boolean
   startSide?: 'left' | 'right'
@@ -347,6 +351,10 @@ export const storage = {
     value ? write(KEYS.activeExerciseTimes, value) : localStorage.removeItem(KEYS.activeExerciseTimes),
   saveRestTally: (t: RestTally | null) =>
     t ? write(KEYS.activeRestTally, t) : localStorage.removeItem(KEYS.activeRestTally),
+  /** What each set of the workout in progress actually took (see lib/setClock). */
+  loadSetClock: (): SetClock | null => read<SetClock | null>(KEYS.activeSetClock, null),
+  saveSetClock: (c: SetClock | null) =>
+    c ? write(KEYS.activeSetClock, c) : localStorage.removeItem(KEYS.activeSetClock),
 
   /**
    * How hands-free the workout in progress is running (see lib/fastMode).
