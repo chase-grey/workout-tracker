@@ -28,6 +28,21 @@ describe('sciatic floss direction cues', () => {
     expect(crestLeft(frame(1, 1))).toBeCloseTo(12)
   })
 
+  it('turns and loops without a bead jumping', () => {
+    setup()
+    const beads = (html: string) => html.split('rounded-full bg-current"').slice(1)
+    const seam = (a: string, b: string) => {
+      const [x, y] = [beads(a), beads(b)]
+      expect(x).toHaveLength(13)
+      x.forEach((bead, k) => {
+        const nums = (s: string) => (s.match(/[\d.]+/g) ?? []).map(Number)
+        nums(bead).forEach((n, j) => expect(n).toBeCloseTo(nums(y[k])[j], 2))
+      })
+    }
+    seam(frame(0, 0.9999), frame(1, 0.0001))
+    seam(frame(1, 0.9999), frame(0, 0.0001))
+  })
+
   it('puts no words on screen', () => {
     setup()
     for (const html of [frame(0, 0.3), frame(1, 0.7)]) {

@@ -17,6 +17,7 @@ const WAKE_GAIN = 24
 const FRONT = 6
 
 const easeInOutSine = (t: number) => 0.5 - Math.cos(Math.PI * t) / 2
+const front = (d: number) => Math.exp(-((d / FRONT) ** 2))
 
 /**
  * A strand of beads with a swell running through it, the way a nerve glides
@@ -27,6 +28,12 @@ const easeInOutSine = (t: number) => 0.5 - Math.cos(Math.PI * t) / 2
  * and gathers in at each turn, where the swell stands nearly upright for a beat
  * before leaning the other way — a reversal you can see coming. Each phase is
  * sine-eased, so the end of one is where the next begins.
+ *
+ * At the turn the wake has gathered all the way into the shape of the front, so
+ * the swell is symmetric for the instant its heading flips and the two sides can
+ * trade places without a bead jumping. The speed is sine-squared rather than
+ * sine so it reaches that instant flat, and the lean comes back in as smoothly as
+ * it went out — the same seam at the end of a rep, which is what lets it loop.
  */
 export function FlossGuide({ phaseIndex, progress }: {
   phaseIndex: number
@@ -39,7 +46,7 @@ export function FlossGuide({ phaseIndex, progress }: {
   const position = forward ? travel : 1 - travel
   // The speed of the glide: nothing at the turns, most in the middle. Reduced
   // motion holds a middling wake so the parked swell still leans one way.
-  const speed = reduced ? 0.6 : Math.sin(Math.PI * progress)
+  const speed = reduced ? 0.6 : Math.sin(Math.PI * progress) ** 2
   const crest = RUN_START + position * RUN_SPAN
   const wake = WAKE_MIN + speed * WAKE_GAIN
   const heading = forward ? 1 : -1
@@ -59,8 +66,8 @@ export function FlossGuide({ phaseIndex, progress }: {
         // Distance along the way of travel: positive is ahead of the crest.
         const ahead = (x - crest) * heading
         const lit = ahead >= 0
-          ? Math.exp(-((ahead / FRONT) ** 2))
-          : Math.exp(ahead / wake)
+          ? front(ahead)
+          : front(ahead) + (Math.exp(ahead / wake) - front(ahead)) * speed
         return (
           <div
             key={k}
