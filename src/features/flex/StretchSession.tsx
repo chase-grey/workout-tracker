@@ -90,9 +90,15 @@ const setOfLabel = (s: SessionStep) => `set ${s.round + 1} of ${s.maxSets}`
  */
 const stepTitle = (s: SessionStep) => stepPosition(s) || s.exName
 
-/** The line under the title: the move, where the title gave its place away, and the set. */
+/**
+ * The line under the title: the move, where the title gave its place away, the
+ * set, and the core block's rep range. A flex set is paced by the guide and
+ * brightens when it's done, so it has no count to state; core reps are typed in,
+ * and their target does need saying.
+ */
 function stepDetail(s: SessionStep): string {
-  return [stepPosition(s) ? s.exName : '', setOfLabel(s)].filter(Boolean).join(' · ')
+  return [stepPosition(s) ? s.exName : '', setOfLabel(s), s.kind === 'core' && `${repRangeLabel(s)} reps`]
+    .filter(Boolean).join(' · ')
 }
 
 type RoutineChecklistProps = {
@@ -900,12 +906,12 @@ export function StretchSession({
       />
 
       <header className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-xl font-bold">{stepTitle(step)}</h2>
-          {/* The move the position belongs to, and which set of it — which leg and
-              which of the calf stretch's three shapes are up in the title, where
-              they can't be missed mid-stretch. */}
-          <p className="text-sm text-neutral-500">{stepDetail(step)}</p>
+        <div className="min-w-0 py-1">
+          <h2 className="text-3xl font-bold leading-9">{stepTitle(step)}</h2>
+          {/* The move the position belongs to, which set of it, and for the core
+              block the rep range — which leg and which of the calf stretch's three
+              shapes are up in the title, where they can't be missed mid-stretch. */}
+          <p className="mt-1 text-lg font-medium text-neutral-400">{stepDetail(step)}</p>
         </div>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
@@ -916,15 +922,6 @@ export function StretchSession({
           <KebabMenu items={menuItems} />
         </div>
       </header>
-
-      {/* A flex set is paced by the guide and brightens when it's done, so there's
-          no count to state; the core block's reps are typed in, and its target
-          range does need saying. */}
-      {step.kind === 'core' && (
-        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
-          {repRangeLabel(step)} reps
-        </p>
-      )}
     </div>
   )
 

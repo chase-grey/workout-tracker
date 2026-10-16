@@ -1037,7 +1037,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             the name takes the same band: its first line lands on their centreline
             instead of riding above it, and a name long enough to wrap still starts
             level with them. */}
-        <h2 className="min-w-0 py-2 text-xl font-bold">{roundMode ? planned.group : planned.name}</h2>
+        <h2 className="min-w-0 py-1 text-3xl font-bold leading-9">{roundMode ? planned.group : planned.name}</h2>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
           {/* Puts the set in the context of the whole history for the lift. A round
@@ -1056,14 +1056,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         </div>
       </header>
 
+      {/* The muscle group is left off a single lift: the name already says it. */}
       {roundMode ? (
-        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
+        <p className="-mt-2 text-lg font-medium text-neutral-400">
           round <span className="tabular-nums">{step.setIndex + 1}/{roundCount}</span> · rest{' '}
           {restLabel(restShownSec)}
         </p>
       ) : (
-        <p className="px-1 text-xs font-semibold tracking-wider text-neutral-500">
-          {planned.group} · set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
+        <p className="-mt-2 text-lg font-medium text-neutral-400">
+          set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
           {repRangeLabel(planned)} {planned.timed ? 'sec' : 'reps'} · rest {restLabel(restShownSec)}
         </p>
       )}

@@ -33,7 +33,7 @@ export function SessionProgress({
         <div className="h-full rounded-full bg-accent-deep transition-all" style={{ width: `${fraction * 100}%` }} />
       </div>
       {captioned && (
-        <div className="mt-1.5 flex items-baseline justify-between gap-3 text-xs font-medium text-neutral-400">
+        <div className="mt-2 flex items-center justify-between gap-3 text-base font-medium text-neutral-400">
           {unit && (
             <span className="tabular-nums">
               {left} {unit} left
@@ -44,11 +44,11 @@ export function SessionProgress({
               onClick={(event) => { event.stopPropagation(); onTimeClick() }}
               aria-label={`${timeLeftLabel.replace(/^~/, '')}. View checklist`}
               aria-haspopup="dialog"
-              className="ml-auto min-h-[44px] px-1 underline decoration-neutral-600 underline-offset-4 active:text-accent-2"
+              className="ml-auto min-h-[44px] rounded-xl bg-surface-2 px-4 font-semibold tabular-nums text-neutral-200 active:text-accent-2"
             >
               {timeLeftLabel.replace(/^~/, '')}
             </button>
-          ) : <span className="ml-auto">{timeLeftLabel.replace(/^~/, '')}</span>)}
+          ) : <span className="ml-auto tabular-nums">{timeLeftLabel.replace(/^~/, '')}</span>)}
         </div>
       )}
     </div>
