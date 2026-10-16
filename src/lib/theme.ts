@@ -114,7 +114,7 @@ const GROUNDS: Record<Mode, Ground> = {
   },
   light: {
     bg: '#f5f5f5', surface: '#ffffff', surface2: '#e5e5e5', border: '#d4d4d4',
-    tick: '#737373', label: '#525252', zero: '#a3a3a3', text: '#171717',
+    tick: '#525252', label: '#262626', zero: '#a3a3a3', text: '#0a0a0a',
     bodyBase: '#e4e4e7', noData: '#d4d4d8',
   },
 }

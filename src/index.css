@@ -34,28 +34,34 @@
 
 /* Light mode turns the ground over rather than restyling every screen: the
    neutral scale runs the other way, so text-neutral-300 that sat light on black
-   now sits dark on white, and the accent roles step a shade deeper so a bright
-   green still reads against paper. Black and white themselves stay put — they're
-   the scrims and the full-screen takeovers below. */
+   now sits dark on white. It runs a step darker than a straight mirror, and the
+   accent roles go two shades deeper, because the shades that glow on black wash
+   out on paper — green-500 on white is barely there. A solid accent fill that
+   deep wants white text over it, whatever the accent. Black and white themselves
+   stay put — they're the scrims and the full-screen takeovers below. */
 :root[data-mode='light'] {
   --color-bg: #f5f5f5;
   --color-surface: #ffffff;
   --color-surface-2: #e5e5e5;
   --color-border: #d4d4d4;
-  --color-neutral-50: oklch(14.5% 0 0);
-  --color-neutral-100: oklch(20.5% 0 0);
-  --color-neutral-200: oklch(26.9% 0 0);
-  --color-neutral-300: oklch(37.1% 0 0);
-  --color-neutral-400: oklch(43.9% 0 0);
-  --color-neutral-600: oklch(70.8% 0 0);
-  --color-neutral-700: oklch(87% 0 0);
-  --color-neutral-800: oklch(92.2% 0 0);
-  --color-neutral-900: oklch(97% 0 0);
+  --color-neutral-50: oklch(10% 0 0);
+  --color-neutral-100: oklch(14.5% 0 0);
+  --color-neutral-200: oklch(20.5% 0 0);
+  --color-neutral-300: oklch(26.9% 0 0);
+  --color-neutral-400: oklch(37.1% 0 0);
+  --color-neutral-500: oklch(43.9% 0 0);
+  --color-neutral-600: oklch(62% 0 0);
+  --color-neutral-700: oklch(80% 0 0);
+  --color-neutral-800: oklch(90% 0 0);
+  --color-neutral-900: oklch(96% 0 0);
   --color-neutral-950: oklch(98.5% 0 0);
-  --color-accent-2: var(--accent-600);
-  --color-accent-bright: var(--accent-500);
-  --color-accent-dark: var(--accent-700);
-  --body-text: #171717;
+  --color-accent: var(--accent-700);
+  --color-accent-deep: var(--accent-800);
+  --color-accent-2: var(--accent-700);
+  --color-accent-bright: var(--accent-600);
+  --color-accent-dark: var(--accent-800);
+  --color-on-accent: #ffffff;
+  --body-text: #0a0a0a;
 }
 
 /* Rest, the get-into-position count, the pause curtain, the recaps and the
@@ -72,14 +78,18 @@
   --color-neutral-200: oklch(92.2% 0 0);
   --color-neutral-300: oklch(87% 0 0);
   --color-neutral-400: oklch(70.8% 0 0);
+  --color-neutral-500: oklch(55.6% 0 0);
   --color-neutral-600: oklch(43.9% 0 0);
   --color-neutral-700: oklch(37.1% 0 0);
   --color-neutral-800: oklch(26.9% 0 0);
   --color-neutral-900: oklch(20.5% 0 0);
   --color-neutral-950: oklch(14.5% 0 0);
+  --color-accent: var(--accent-600);
+  --color-accent-deep: var(--accent-700);
   --color-accent-2: var(--accent-500);
   --color-accent-bright: var(--accent-400);
   --color-accent-dark: var(--accent-900);
+  --color-on-accent: var(--on-accent);
   color: #fafafa;
   color-scheme: dark;
 }
