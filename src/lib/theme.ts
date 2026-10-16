@@ -61,8 +61,8 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
   },
   purple: {
     scale: {
-      50: '#faf5ff', 100: '#f3e8ff', 200: '#e9d5ff', 300: '#d8b4fe', 400: '#c084fc',
-      500: '#a855f7', 600: '#9333ea', 700: '#7e22ce', 800: '#6b21a8', 900: '#581c87',
+      50: '#f7f5fa', 100: '#eeeaf3', 200: '#ddd6e7', 300: '#c4b9d4', 400: '#a798bd',
+      500: '#8b7aa6', 600: '#74648e', 700: '#5f5275', 800: '#4c425e', 900: '#3b344a',
     },
     onAccent: '#ffffff',
     cold: SKY,
