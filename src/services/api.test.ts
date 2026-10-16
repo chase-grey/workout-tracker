@@ -23,6 +23,16 @@ describe('save acknowledgments', () => {
     response({ saved: 0, stale: true })
     await expect(api.postSettings({})).resolves.toEqual({ saved: 0, stale: true })
   })
+  it('accepts a rest-only exercise-times save that counted no exercises', async () => {
+    response({ saved: 0 })
+    const samples = { exercises: [], restTotalSec: 90, restPrescribedSec: 90, restCount: 1 }
+    await expect(api.postExerciseTimes(samples)).resolves.toEqual({ saved: 0 })
+  })
+  it('still retains an exercise-times save with exercises that confirmed none', async () => {
+    response({ saved: 0 })
+    const samples = { exercises: [{ exercise: 'squat', totalActiveSec: 40, sets: 1 }], restTotalSec: 0, restPrescribedSec: 0, restCount: 0 }
+    await expect(api.postExerciseTimes(samples)).rejects.toThrow()
+  })
 })
 
 

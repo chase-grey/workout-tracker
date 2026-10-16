@@ -70,7 +70,12 @@ async function post<T>(route: string, body: unknown): Promise<T> {
   if (route !== 'report_issue' && route !== 'answer_issue') {
     const ack = result as { saved?: number; stale?: boolean } | null
     const expected = (body as { rows?: unknown[] }).rows?.length
-    if (!(route === 'settings' && ack?.stale === true) &&
+    // A rest-only exercise_times post (no lift timings, just the rests) is
+    // counted by its exercises, so a backend that folded the rests answers
+    // `saved: 0`. It throws when nothing folds, so a clean 0 here is a save.
+    const restOnly = route === 'exercise_times' &&
+      (body as { exercises?: unknown[] }).exercises?.length === 0 && ack?.saved === 0
+    if (!restOnly && !(route === 'settings' && ack?.stale === true) &&
         !(typeof ack?.saved === 'number' && Number.isFinite(ack.saved) &&
           ack.saved > 0 && (expected === undefined || ack.saved === expected))) {
       throw new Error(`POST ${route}: backend did not confirm the complete save. Update the backend and retry.`)

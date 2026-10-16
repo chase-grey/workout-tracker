@@ -861,13 +861,11 @@ function foldExerciseTimes(body) {
     return true
   }
 
-  let saved = 0
   let folded = 0
   for (let i = 0; i < list.length; i++) {
     const e = list[i]
     if (!e || !e.exercise || !(Number(e.sets) > 0)) continue
     if (upsert(String(e.exercise), Number(e.totalActiveSec), Number(e.sets))) folded++
-    saved++
   }
   const restCount = Number(body.restCount)
   const restPrescribed = Number(body.restPrescribedSec)
@@ -887,7 +885,9 @@ function foldExerciseTimes(body) {
   if (folded === 0 && (list.length || restCount > 0)) {
     throw new Error('No exercise time samples folded')
   }
-  return { saved: saved }
+  // Counted by rows folded, rests included: a rest-only session folds no
+  // exercise and would otherwise answer `saved: 0`, which a client reads as lost.
+  return { saved: folded }
 }
 
 function getPlan() {
