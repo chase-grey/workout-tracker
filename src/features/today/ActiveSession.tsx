@@ -1206,8 +1206,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 className="mb-1 text-lg font-bold">workout checklist</h3>
-            <p className="mb-3 text-xs text-neutral-500">tap a name to jump; edit any set below.</p>
+            <h3 className="mb-3 text-lg font-bold">workout checklist</h3>
             <button
               onClick={() => setShowAddExercise(true)}
               className="mb-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"

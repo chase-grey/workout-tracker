@@ -134,8 +134,7 @@ function RoutineChecklist({
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
-        <h3 className="mb-1 text-lg font-bold">routine checklist</h3>
-        <p className="mb-3 text-xs text-neutral-500">tap a set to jump; tap the circle to mark it done.</p>
+        <h3 className="mb-3 text-lg font-bold">routine checklist</h3>
         <div className="flex flex-col gap-3">
           {exercises.map((exercise) => {
             const isSkipped = skipped.has(exercise.key)
