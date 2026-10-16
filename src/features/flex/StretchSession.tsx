@@ -49,6 +49,7 @@ import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 import { useScreenTap } from '../../lib/useScreenTap'
+import { holdTakesTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 
 /**
@@ -516,11 +517,13 @@ export function StretchSession({
   }
 
   // Keep this hook before the empty-routine return so its order is stable across
-  // sessions. It is disabled while an overlay, hold, or completion screen owns input.
+  // sessions. It is disabled while an overlay or completion screen owns input, and
+  // through a hold once its opening seconds are past (see lib/holdTap).
+  const tapEndsSet = () => setLive && (!holdSec || holdTakesTap(readActiveSec()))
   const screenTap = useScreenTap(() => {
-    if (N === 0 || !setLive || holdSec) return
+    if (N === 0 || !tapEndsSet()) return
     completeSetAndAdvance()
-  }, N > 0 && setLive && !holdSec)
+  }, N > 0 && tapEndsSet())
 
   const fadeRef = useSessionFade(
     photos ? `photo:${photos.gate.id}` : readyToFinish ? 'finish' : !started ? 'preview' : rest ? 'rest' : preparing ? 'ready' : steps[safeCurrent]?.stepKey ?? 'empty',
@@ -771,8 +774,10 @@ export function StretchSession({
   // Complete the set before offering photos or the separate finish screen.
   const completeSetAndAdvance = () => {
     const seconds = readActiveSec()
-    // A resumed partial set cannot supply a complete historical observation.
-    if (!done.has(step.stepKey) && seconds >= 2 && seconds <= 600 && !(saved?.step === safeCurrent && (saved.rep ?? 1) > 1)) {
+    // A resumed partial set cannot supply a complete historical observation, and
+    // nor can a hold tapped away as it began — it was done before the clock ran.
+    const tappedPastHold = step.kind === 'flex' && !!step.holdSec && holdTakesTap(seconds)
+    if (!done.has(step.stepKey) && !tappedPastHold && seconds >= 2 && seconds <= 600 && !(saved?.step === safeCurrent && (saved.rep ?? 1) > 1)) {
       const work = step.kind === 'flex' ? stepWorkSec(step) : coreRepsFor(step.round) * SEC_PER_REP
       timingSamples.current[step.stepKey] = { exercise: stretchTimingKey(step, work), totalActiveSec: seconds, sets: 1 }
     }
@@ -813,8 +818,9 @@ export function StretchSession({
   // the whole page is the target rather than one button. Controls (the kebab, the
   // core block's own fields) keep their own job, an overlay that owns the screen
   // swallows the tap, and the last set leads to a separate finish screen.
-  // A timed hold is exempt: it runs on a clock of its own and closes itself, and a
-  // stray tap shouldn't cut ninety seconds of it short.
+  // A timed hold is exempt once it's under way: it runs on a clock of its own and
+  // closes itself, and a stray tap shouldn't cut ninety seconds of it short. Its
+  // opening seconds still take one, for a hold already done before it came up.
   // The set ending itself is worth a buzz: mid-stretch you're rarely looking at
   // the screen, so rest starting would otherwise be silent (the rest timer buzzes
   // when it runs out for the same reason). Not for a hold, which buzzes at its

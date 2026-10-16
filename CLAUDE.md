@@ -15,7 +15,8 @@ the stretch routine (`src/features/flex/StretchSession.tsx`) — obey one rule:
 - **A set that runs on a clock ends itself.** A prescribed hold or a paced set
   rolls into its own rest on target (`HoldTimer.onTargetEnd`,
   `RhythmGuide.onTargetHit`); a stretch hold is additionally exempt from the
-  screen tap so a stray one can't cut ninety seconds short. A lift hold is not
+  screen tap so a stray one can't cut ninety seconds short — except in its
+  opening seconds (`lib/holdTap`), for a hold already done before it came up. A lift hold is not
   exempt — it logs overtime, so it waits on you.
 - **Only a terminal, data-committing action gets a button.** `finish workout`,
   `finish & log session`, the recap's dismissal, a photo screen's
