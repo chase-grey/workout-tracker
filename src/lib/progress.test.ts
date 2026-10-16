@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   availableExercises,
   bestSingleSeries,
+  combinedAverage1RMSeries,
   combinedBest1RMSeries,
   combinedRepsSeries,
   exerciseSeries,
@@ -262,6 +263,44 @@ describe('combinedBest1RMSeries reads a movement trained as two variations', () 
     ]
     const scaled = combinedBest1RMSeries(rows, ['leg_press', 'barbell_squat'], { leg_press: 0.45 })
     expect(scaled).toEqual([{ date: '2026-08-04', value: 215.8, from: 'barbell_squat' }])
+  })
+})
+
+describe('combinedAverage1RMSeries scores a press on all its sets', () => {
+  const press = (session: string, date: string, exercise: string, weight: number, reps: number) => ({
+    ...r(session, date, weight, reps),
+    exercise,
+  })
+  const PRESSES = ['flat_bench', 'incline_bench']
+
+  it('reads four twelves above a day that peaked once at thirteen', () => {
+    const rows = [
+      ...[11, 11, 12, 13].map((n) => press('a', '2026-10-04', 'flat_bench', 100, n)),
+      ...[12, 12, 12, 12].map((n) => press('b', '2026-10-15', 'flat_bench', 100, n)),
+    ]
+    // Best set calls the 4th the stronger day; the average calls the 15th.
+    const best = combinedBest1RMSeries(rows, PRESSES).map((p) => p.value)
+    expect(best[0]).toBeGreaterThan(best[1])
+    expect(combinedAverage1RMSeries(rows, PRESSES)).toEqual([
+      { date: '2026-10-04', value: 139.2, from: 'flat_bench' },
+      { date: '2026-10-15', value: 140, from: 'flat_bench' },
+    ])
+  })
+
+  it('averages within a press, never across the two, and takes the better press', () => {
+    const rows = [
+      press('a', '2026-10-04', 'flat_bench', 100, 12), // 140
+      press('a', '2026-10-04', 'incline_bench', 80, 10), // 106.7, done tired
+    ]
+    expect(combinedAverage1RMSeries(rows, PRESSES)).toEqual([
+      { date: '2026-10-04', value: 140, from: 'flat_bench' },
+    ])
+  })
+
+  it('applies the scale to the averaged press', () => {
+    const rows = [press('a', '2026-10-11', 'incline_bench', 100, 10)] // 133.3
+    const s = combinedAverage1RMSeries(rows, PRESSES, { incline_bench: 1.06 })
+    expect(s).toEqual([{ date: '2026-10-11', value: 141.3, from: 'incline_bench' }])
   })
 })
 

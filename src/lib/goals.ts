@@ -12,6 +12,7 @@
 import type { BodyWeightEntry, WorkoutRow } from '../types'
 import {
   bestSingleSeries,
+  combinedAverage1RMSeries,
   combinedBest1RMSeries,
   averageRepsSeries,
   type Point,
@@ -171,7 +172,7 @@ export const LEG_LIFT_GAIN_CAP = 0.5
  * reading it only on the days it goes first: the plan alternates which press leads
  * (see pushVariant), and a lead-slot series drops the sessions where flat followed
  * incline — so a push day could be logged in full and still leave the goal sitting
- * on a fortnight-old number. Counting the best set of either press gives every
+ * on a fortnight-old number. Counting the better of the two presses gives every
  * push day a reading. Incline is the harder press, though, so it enters as the
  * flat bench it implies rather than at face value (see {@link BENCH_SCALE}).
  *
@@ -584,7 +585,9 @@ export function buildGoals({
   const working = workouts.filter((r) => !isMaxAttempt(r))
 
   const benchKeys = [BENCH_KEY, ...BENCH_ALSO_KEYS]
-  const benchPoints = combinedBest1RMSeries(working, benchKeys, BENCH_SCALE)
+  // Scored on each press's average set rather than its best one, so a day that was
+  // better all the way through reads as better (see combinedAverage1RMSeries).
+  const benchPoints = combinedAverage1RMSeries(working, benchKeys, BENCH_SCALE)
   const benchSingles = bestSingleSeries(workouts, benchKeys)
   // The squat goals, in squat pounds, off whichever leg movement was trained —
   // the press converted, a barbell squat at face value (see SQUAT_SCALE).

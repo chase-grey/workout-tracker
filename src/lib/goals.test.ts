@@ -900,6 +900,14 @@ describe('the bench goal reads both presses', () => {
     expect(goal.points).toEqual([{ date: '2026-08-08', value: 196.6, from: 'incline_bench' }])
   })
 
+  it('scores a press on the average of its sets', () => {
+    const rows = [
+      ...[11, 11, 12, 13].map((n) => press('a', '2026-10-04', 'flat_bench', 100, n, 'B')),
+      ...[12, 12, 12, 12].map((n) => press('b', '2026-10-15', 'flat_bench', 100, n, 'B')),
+    ]
+    expect(benchGoal(rows).points.map((p) => p.value)).toEqual([139.2, 140])
+  })
+
   it('lets an incline day outrank a flat set that would have won at face value', () => {
     const rows = [
       press('off', '2026-08-08', 'incline_bench', 135, 8, 'A'), // 171 raw, 196.6 as flat

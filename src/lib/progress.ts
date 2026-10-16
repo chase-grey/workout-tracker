@@ -200,22 +200,62 @@ export function combinedBest1RMSeries(
   keys: Iterable<string>,
   scale: Record<string, number> = {},
 ): Point[] {
+  return combined1RMSeries(rows, keys, scale, (e1rms) => Math.max(...e1rms))
+}
+
+/**
+ * {@link combinedBest1RMSeries}, but each press is scored on the average estimated
+ * 1RM of all its sets that day rather than on its best one.
+ *
+ * A best-set line can't see a day that was better across the board: 100×12 four
+ * times reads below an earlier 100×11, 100×11, 100×12, 100×13, because the 13 was
+ * one set and the twelves are only twelves. Averaged, the four twelves are the
+ * stronger day, which is what they were. It also stops one lucky set from
+ * carrying a session the other sets don't back up.
+ *
+ * The day still reads off whichever press scored higher, so the press done second
+ * and tired doesn't drag the reading down — the average is taken within a press,
+ * never across the two.
+ */
+export function combinedAverage1RMSeries(
+  rows: WorkoutRow[],
+  keys: Iterable<string>,
+  scale: Record<string, number> = {},
+): Point[] {
+  return combined1RMSeries(rows, keys, scale, (e1rms) => e1rms.reduce((a, b) => a + b, 0) / e1rms.length)
+}
+
+function combined1RMSeries(
+  rows: WorkoutRow[],
+  keys: Iterable<string>,
+  scale: Record<string, number>,
+  score: (e1rms: number[]) => number,
+): Point[] {
   const wanted = new Set(keys)
-  const bySession = new Map<string, { date: string; best: number; from: string }>()
+  const bySession = new Map<string, { date: string; byKey: Map<string, number[]> }>()
   for (const r of rows) {
     if (!wanted.has(r.exercise) || r.weight_lbs == null) continue
     const key = r.session_id || r.date
-    const g = bySession.get(key) ?? { date: r.date, best: 0, from: r.exercise }
-    const value = epley1RM(r.weight_lbs, r.reps) * (scale[r.exercise] ?? 1)
-    if (value > g.best) {
-      g.best = value
-      g.from = r.exercise
-    }
+    const g = bySession.get(key) ?? { date: r.date, byKey: new Map() }
+    const sets = g.byKey.get(r.exercise) ?? []
+    sets.push(epley1RM(r.weight_lbs, r.reps))
+    g.byKey.set(r.exercise, sets)
     bySession.set(key, g)
   }
-  return [...bySession.values()]
-    .map((g) => ({ date: g.date, value: Math.round(g.best * 10) / 10, from: g.from }))
-    .sort((a, b) => (a.date < b.date ? -1 : 1))
+  const points: Point[] = []
+  for (const g of bySession.values()) {
+    let best = 0
+    let from = g.byKey.keys().next().value!
+    for (const [exercise, e1rms] of g.byKey) {
+      const value = score(e1rms) * (scale[exercise] ?? 1)
+      if (value > best) {
+        best = value
+        from = exercise
+      }
+    }
+    points.push({ date: g.date, value: Math.round(best * 10) / 10, from })
+  }
+  return points.sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
 /**
