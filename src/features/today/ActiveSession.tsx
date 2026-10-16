@@ -879,7 +879,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       ? [{ label: `skip ${planned.name}`, onClick: () => setExerciseSkipped(planned.key, true) }]
       : []),
     { label: 'pause workout', onClick: () => setPaused(true) },
-    { label: 'workout checklist', onClick: () => setShowList(true) },
     { label: 'session timing', onClick: () => setShowTiming(true) },
     { label: 'finish and log', onClick: finish },
     {
