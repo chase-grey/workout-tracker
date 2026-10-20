@@ -49,13 +49,7 @@ export function PoseCheck() {
     <section className="flex flex-col gap-2">
       <label className="text-sm font-medium text-neutral-300">pose model</label>
       {storedLine && <p className="text-xs break-words text-neutral-500">{storedLine}</p>}
-      {probe && (
-        <div className="flex flex-col gap-0.5 font-mono text-xs break-words text-neutral-400">
-          {formatProbe(probe).map((line) => (
-            <span key={line}>{line}</span>
-          ))}
-        </div>
-      )}
+      {probe && <p className="text-xs break-words text-neutral-400">{formatProbe(probe)}</p>}
       <button onClick={() => void run()} disabled={running} className={`${button} disabled:text-neutral-500`}>
         {running ? 'checking…' : 'check pose model'}
       </button>

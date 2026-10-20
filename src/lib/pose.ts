@@ -42,7 +42,7 @@ export type PoseResult =
 export type PoseStage = 'runtime' | 'fileset' | 'model'
 
 /** What the last failed load was, kept for the check in Settings. */
-export type PoseLoadError = { at: string; stage: PoseStage; message: string; attempts: number }
+export type PoseLoadError = { at: string; stage: PoseStage; message: string }
 
 // Minimal shapes we need from the lazily-imported module (avoids coupling the
 // build to its full type surface).
@@ -105,13 +105,12 @@ async function build(modelUrl = MODEL_URL): Promise<Landmarker> {
  * editor only ever said "couldn't load the pose model" — true, unhelpful, and
  * the reason this failure survived two rounds of being guessed at.
  */
-function recordError(err: unknown, attempts: number): void {
+function recordError(err: unknown): void {
   try {
     const entry: PoseLoadError = {
       at: new Date().toISOString(),
       stage: stageOf(err),
       message: messageOf(err),
-      attempts,
     }
     localStorage.setItem(ERROR_KEY, JSON.stringify(entry))
   } catch {
@@ -150,8 +149,8 @@ function clearError(): void {
  *
  * A full model that fails with good bytes in hand is a phone that can't build
  * it, most likely for memory, and no retry changes that; the lite model is a
- * third the size. A load that needed any of this is still recorded, so
- * Settings says so.
+ * third the size. Only a load that gives up is recorded: one that recovers
+ * worked, and Settings saying it failed would be the wrong answer.
  */
 async function load(): Promise<Landmarker> {
   let failure: unknown
@@ -167,16 +166,16 @@ async function load(): Promise<Landmarker> {
   } catch {
     // No Cache Storage to clear; the retry just repeats over the network.
   }
-  for (const [attempt, url] of [MODEL_URL, LITE_MODEL_URL].entries()) {
+  for (const url of [MODEL_URL, LITE_MODEL_URL]) {
     try {
       const landmarker = await build(url)
-      recordError(failure, attempt + 1)
+      clearError()
       return landmarker
     } catch (err) {
       failure = err
     }
   }
-  recordError(failure, 3)
+  recordError(failure)
   throw failure
 }
 
@@ -235,8 +234,6 @@ export type AssetProbe = {
 
 export type PoseProbe = {
   assets: AssetProbe[]
-  /** Filenames the service worker is holding for the detector. */
-  cached: string[]
   build: { ok: boolean; stage?: PoseStage; message?: string }
 }
 
@@ -256,15 +253,6 @@ async function probeAsset(url: string): Promise<AssetProbe> {
     }
   } catch (err) {
     return { name, status: null, bytes: 0, declared: null, ok: false, note: messageOf(err) }
-  }
-}
-
-async function cachedFiles(): Promise<string[]> {
-  try {
-    const keys = await (await caches.open(ASSET_CACHE)).keys()
-    return keys.map((r) => r.url.split('/').pop() ?? r.url)
-  } catch {
-    return []
   }
 }
 
@@ -293,19 +281,14 @@ export async function probePose(): Promise<PoseProbe> {
   }
   for (const url of urls) assets.push(await probeAsset(url))
 
-  const held = await cachedFiles()
   try {
     const landmarker = await build()
     loading = Promise.resolve(landmarker)
     clearError()
-    return { assets, cached: held, build: { ok: true } }
+    return { assets, build: { ok: true } }
   } catch (err) {
-    recordError(err, 1)
-    return {
-      assets,
-      cached: held,
-      build: { ok: false, stage: stageOf(err), message: messageOf(err) },
-    }
+    recordError(err)
+    return { assets, build: { ok: false, stage: stageOf(err), message: messageOf(err) } }
   }
 }
 

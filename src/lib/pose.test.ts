@@ -88,6 +88,25 @@ describe('detectPose', () => {
     expect(models[2]).toMatch(/pose_landmarker_lite\.task$/)
   })
 
+  // A load that recovered worked; Settings shouldn't go on saying it failed.
+  it('leaves no stored failure when a retry recovers', async () => {
+    createMock
+      .mockRejectedValueOnce(new Error('Out of memory'))
+      .mockRejectedValueOnce(new Error('Out of memory'))
+      .mockResolvedValueOnce(landmarkerFor([point]))
+    const stored = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => stored.get(k) ?? null,
+      setItem: (k: string, v: string) => stored.set(k, v),
+      removeItem: (k: string) => stored.delete(k),
+    })
+    stored.set('poseLoadError', JSON.stringify({ at: 'x', stage: 'runtime', message: 'old' }))
+    const { detectPose, lastPoseError } = await loadPose()
+
+    await detectPose(frame)
+    expect(lastPoseError()).toBeNull()
+  })
+
   it('gives up with a model failure once the lite model fails too', async () => {
     createMock.mockRejectedValue(new Error('magic word mismatch'))
     const { detectPose } = await loadPose()

@@ -13,7 +13,6 @@ const asset = (over: Partial<AssetProbe> = {}): AssetProbe => ({
 
 const probe = (over: Partial<PoseProbe> = {}): PoseProbe => ({
   assets: [asset()],
-  cached: [],
   build: { ok: true },
   ...over,
 })
@@ -27,41 +26,35 @@ describe('fmtBytes', () => {
 })
 
 describe('formatProbe', () => {
-  it('reports a healthy file by name, status, and size', () => {
-    expect(formatProbe(probe())[0]).toBe('pose_landmarker_full.task · 200 · 9.0 MB')
+  it('says working when every file came back and the detector built', () => {
+    expect(formatProbe(probe())).toBe('working')
   })
 
   // The whole point of reading the body rather than trusting the status: a
   // download that arrived short answers 200 and is unusable.
   it('calls out a body shorter than the response promised', () => {
-    const lines = formatProbe(probe({ assets: [asset({ bytes: 4194304 })] }))
-    expect(lines[0]).toBe('pose_landmarker_full.task · 200 · short: 4.0 MB of 9.0 MB')
+    expect(formatProbe(probe({ assets: [asset({ bytes: 4194304, ok: false })] }))).toBe(
+      'pose_landmarker_full.task only partly downloaded (4.0 MB of 9.0 MB)',
+    )
   })
 
   it('reports a missing file by its status', () => {
-    const lines = formatProbe(probe({ assets: [asset({ status: 404, bytes: 9, ok: false })] }))
-    expect(lines[0]).toBe('pose_landmarker_full.task · 404 · 9 B')
+    expect(formatProbe(probe({ assets: [asset({ status: 404, bytes: 9, ok: false })] }))).toBe(
+      "pose_landmarker_full.task didn't download (404)",
+    )
   })
 
   it('reports a fetch that never answered, with why', () => {
-    const lines = formatProbe(
-      probe({
-        assets: [asset({ status: null, bytes: 0, declared: null, ok: false, note: 'Load failed' })],
-      }),
-    )
-    expect(lines[0]).toBe('pose_landmarker_full.task · no response · Load failed')
+    const p = probe({
+      assets: [asset({ status: null, bytes: 0, declared: null, ok: false, note: 'Load failed' })],
+    })
+    expect(formatProbe(p)).toBe("pose_landmarker_full.task didn't download (Load failed)")
   })
 
-  it('names what the service worker is holding, or that it holds nothing', () => {
-    expect(formatProbe(probe({ cached: ['a.wasm', 'b.task'] }))[1]).toBe('cached: a.wasm, b.task')
-    expect(formatProbe(probe())[1]).toBe('cached: nothing')
-  })
-
-  it('ends on whether the detector built, and where it stopped if not', () => {
-    expect(formatProbe(probe()).at(-1)).toBe('detector: built')
+  it('names the error when the files are fine but the detector would not build', () => {
     expect(
-      formatProbe(probe({ build: { ok: false, stage: 'model', message: 'Aborted(OOM)' } })).at(-1),
-    ).toBe('detector: failed at model — Aborted(OOM)')
+      formatProbe(probe({ build: { ok: false, stage: 'model', message: 'Aborted(OOM)' } })),
+    ).toBe("didn't start: Aborted(OOM)")
   })
 })
 
@@ -70,21 +63,12 @@ describe('formatLastError', () => {
     expect(formatLastError(null)).toBeNull()
   })
 
-  it('dates the failure and names the step', () => {
-    expect(
-      formatLastError({
-        at: '2026-08-26T18:22:31.000Z',
-        stage: 'runtime',
-        message: 'Failed to fetch dynamically imported module',
-        attempts: 1,
-      }),
-    ).toBe('2026-08-26 18:22 · failed at runtime — Failed to fetch dynamically imported module')
-  })
-
-  // A load that failed twice failed the retry too, which rules the cache out.
-  it('marks a failure that survived the retry', () => {
-    expect(
-      formatLastError({ at: '2026-08-26T18:22:31.000Z', stage: 'model', message: 'x', attempts: 2 }),
-    ).toBe('2026-08-26 18:22 · failed at model after 2 tries — x')
+  it('dates the failure and gives the error', () => {
+    const line = formatLastError({
+      at: '2026-08-26T18:22:31.000Z',
+      stage: 'runtime',
+      message: 'Failed to fetch dynamically imported module',
+    })
+    expect(line).toMatch(/^didn't load .+: Failed to fetch dynamically imported module$/)
   })
 })
