@@ -21,7 +21,6 @@ import {
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
-  LINE_SECONDARY,
   WEEK_BAR_HEIGHT,
   calorieWeekMark,
   fmtDateLabel,
@@ -56,7 +55,7 @@ export type BodyWeightGoal = {
 /** Weigh-ins and each goal's locked line, one row per date. */
 type Row = { date: string; value?: number; [projKey: string]: number | string | undefined }
 
-function mergeRows(points: Point[], bodyFatPoints: Point[], goals: BodyWeightGoal[], from: string): Row[] {
+function mergeRows(points: Point[], goals: BodyWeightGoal[], from: string): Row[] {
   const m = new Map<string, Row>()
   const at = (date: string): Row => {
     const row = m.get(date) ?? { date }
@@ -64,15 +63,11 @@ function mergeRows(points: Point[], bodyFatPoints: Point[], goals: BodyWeightGoa
     return row
   }
   for (const p of points) at(p.date).value = p.value
-  // Earlier body fat readings must not extend the chart before the first weigh-in.
-  for (const p of bodyFatPoints) {
-    if (p.date >= from) at(p.date).bodyFat = p.value
-  }
   // A lock taken months ago would drag the visible window back to its own start,
   // undoing the range pill — so each locked line is clipped to where the weigh-ins
   // on screen begin. Its shape is unchanged; it just enters from the left edge.
   const pace = sharedCurrentPace(goals)
-  const end = goalChartEnd([...points, ...bodyFatPoints], goals)
+  const end = goalChartEnd(points, goals)
   for (const p of pace?.currentPace ?? []) {
     if (p.date >= from && p.date <= end) at(p.date).currentPace = p.value
   }
@@ -187,12 +182,10 @@ function WeekTick({
 export function BodyWeightChart({
   points,
   calorieWeeks,
-  bodyFatPoints,
   goals,
   empty,
 }: {
   points: Point[]
-  bodyFatPoints: Point[]
   /** Days on target per Mon–Sun week, keyed by Monday — see calorieHitsByWeek. */
   calorieWeeks?: Map<string, number>
   goals: BodyWeightGoal[]
@@ -202,21 +195,14 @@ export function BodyWeightChart({
   const readout = useChartReadout()
   const rows = useMemo(() => {
     const from = points.reduce((min, p) => (p.date < min ? p.date : min), points[0]?.date ?? '')
-    return withTime(mergeRows(points, bodyFatPoints, goals, from))
-  }, [points, bodyFatPoints, goals])
+    return withTime(mergeRows(points, goals, from))
+  }, [points, goals])
 
   // The left axis has to frame both targets, not just the weigh-ins, or a goal
   // still well above the data would sit off the top of the chart.
   const yScale = useMemo(
     () => niceScale([...points.map((p) => p.value), ...goals.map((g) => g.target)]),
     [points, goals],
-  )
-
-  // Body fat moves a point or two, so pinning its axis at zero flattens the line.
-  // Fit it to the readings actually plotted instead.
-  const fatScale = useMemo(
-    () => niceScale(rows.flatMap((r) => (typeof r.bodyFat === 'number' ? [r.bodyFat] : []))),
-    [rows],
   )
 
   const xDomain = useMemo(() => {
@@ -256,7 +242,7 @@ export function BodyWeightChart({
     [calorieWeeks],
   )
 
-  if (points.length === 0 && bodyFatPoints.length === 0) {
+  if (points.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
         {empty ?? 'no data in this range'}
@@ -266,12 +252,11 @@ export function BodyWeightChart({
 
   return (
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
-      <div className="flex justify-between px-3 pt-1 text-xs">
+      <div className="px-3 pt-1 text-xs">
         <span style={{ color: LINE_PRIMARY }}>weight (lbs)</span>
-        <span style={{ color: LINE_SECONDARY }}>body fat (%)</span>
       </div>
       <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={rows} margin={{ top: 8, right: 0, bottom: 0, left: -12 }} {...readout.chart}>
+        <LineChart data={rows} margin={{ top: 8, right: 14, bottom: 0, left: -12 }} {...readout.chart}>
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis
             {...timeXAxis}
@@ -281,7 +266,6 @@ export function BodyWeightChart({
             tick={<WeekTick weeks={weekMeta} />}
           />
           <YAxis yAxisId="left" tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
-          <YAxis yAxisId="right" orientation="right" tick={{ ...axisTick, fill: LINE_SECONDARY }} width="auto" domain={fatScale.domain} ticks={fatScale.ticks} tickFormatter={(value) => `${value}%`} />
           <AxisBreak broken={yScale.broken} bg={CHART_SURFACE} />
           <Tooltip
             {...readout.tooltip}
@@ -289,7 +273,7 @@ export function BodyWeightChart({
             contentStyle={tooltipStyle}
             labelStyle={{ color: 'var(--color-neutral-400)' }}
             labelFormatter={(ms) => labelWithWeek(Number(ms))}
-            formatter={(v, n) => [n === 'body fat' ? `${v}%` : `${v} lbs`, n]}
+            formatter={(v, n) => [`${v} lbs`, n]}
           />
           {/* The targets themselves. Both climb away from the data, so the tags
               hang under their lines, on the side the weigh-ins have already left —
@@ -348,7 +332,6 @@ export function BodyWeightChart({
             dot={{ r: 2 }}
             connectNulls
           />
-          <Line yAxisId="right" type="monotone" dataKey="bodyFat" name="body fat" stroke={LINE_SECONDARY} strokeWidth={2} dot={{ r: 3 }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>

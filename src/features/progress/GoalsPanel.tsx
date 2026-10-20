@@ -63,7 +63,6 @@ import { daysBetween, parseISODate } from '../../lib/dates'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
-import { bodyFatSeries } from '../../lib/bodyComp'
 import { BodyWeightChart } from './BodyWeightChart'
 import { CommitChart } from './CommitChart'
 import { FlexLadderBlock, type Ladder } from './FlexLadderBlock'
@@ -966,7 +965,6 @@ export function GoalsPanel() {
   // The weigh-ins the two bodyweight goals are projected from — shown alongside
   // them, since the goals are only as good as the log behind them.
   const weightPoints = useMemo(() => bodyWeightPoints(bodyWeights), [bodyWeights])
-  const bodyFatPoints = useMemo(() => bodyFatSeries(measurements), [measurements])
   const latestWeight = weightPoints.length ? weightPoints[weightPoints.length - 1].value : null
 
   // The eating behind the curve, one number per week: how many days hit the
@@ -1075,7 +1073,6 @@ export function GoalsPanel() {
       </h4>
       <BodyWeightChart
         points={weightPoints}
-        bodyFatPoints={bodyFatPoints}
         calorieWeeks={calorieWeeks}
         goals={weightGoalLines}
         empty="log my weight to project these goals"
