@@ -14,10 +14,10 @@ the stretch routine (`src/features/flex/StretchSession.tsx`) — obey one rule:
   element (`onScreenTap`) and ignore taps that land on `button, input, label, a`.
 - **A set that runs on a clock ends itself.** A prescribed hold or a paced set
   rolls into its own rest on target (`HoldTimer.onTargetEnd`,
-  `RhythmGuide.onTargetHit`); a stretch hold is additionally exempt from the
-  screen tap so a stray one can't cut ninety seconds short — except in its
-  opening seconds (`lib/holdTap`), for a hold already done before it came up. A lift hold is not
-  exempt — it logs overtime, so it waits on you.
+  `RhythmGuide.onTargetHit`); a stretch hold additionally takes a double tap
+  (`lib/holdTap`) so a stray one can't cut ninety seconds short — the first
+  only marks the screen. A lift hold takes the single tap — it logs overtime,
+  so it waits on you.
 - **Only a terminal, data-committing action gets a button.** `finish workout`,
   `finish & log session`, the recap's dismissal, a photo's
   `save photo`/`don't save`/`skip`. Ending and logging a session is not something a stray tap

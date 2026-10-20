@@ -1027,3 +1027,37 @@ input[type='number'] {
     transition: none !important;
   }
 }
+
+/* The first tap on a stretch hold: a soft ring of the accent where it landed,
+   fading over the window a second tap still ends the hold in (lib/holdTap). */
+@keyframes hold-tap-mark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+.hold-tap-mark {
+  position: fixed;
+  width: 72px;
+  height: 72px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: hold-tap-mark 1.5s ease-out forwards;
+}
+/* Still marked, just not animated: it comes off when the window closes. */
+@media (prefers-reduced-motion: reduce) {
+  .hold-tap-mark {
+    animation: none;
+  }
+}

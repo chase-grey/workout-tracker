@@ -49,7 +49,7 @@ import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 import { useScreenTap } from '../../lib/useScreenTap'
-import { holdTakesTap } from '../../lib/holdTap'
+import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 
 /**
@@ -522,14 +522,31 @@ export function StretchSession({
     }).catch(() => { /* Keep the session available; SaveStatus explains the failure. */ })
   }
 
+  // A hold's first tap only marks where it landed; a second inside the window ends
+  // the hold (see lib/holdTap). The mark comes off when the window closes.
+  const [tapMark, setTapMark] = useState<{ x: number; y: number; at: number } | null>(null)
+  useEffect(() => {
+    if (!tapMark) return
+    const timer = window.setTimeout(() => setTapMark(null), HOLD_SECOND_TAP_MS)
+    return () => window.clearTimeout(timer)
+  }, [tapMark])
+
   // Keep this hook before the empty-routine return so its order is stable across
-  // sessions. It is disabled while an overlay or completion screen owns input, and
-  // through a hold once its opening seconds are past (see lib/holdTap).
-  const tapEndsSet = () => setLive && (!holdSec || holdTakesTap(readActiveSec()))
-  const screenTap = useScreenTap(() => {
-    if (N === 0 || !tapEndsSet()) return
+  // sessions. It is disabled while an overlay or completion screen owns input.
+  const screenTap = useScreenTap((at) => {
+    if (N === 0 || !setLive) return
+    if (holdSec) {
+      const now = Date.now()
+      if (!isSecondTap(tapMark?.at ?? null, now)) {
+        setTapMark({ ...at, at: now })
+        return
+      }
+      setTapMark(null)
+      completeSetAndAdvance(false)
+      return
+    }
     completeSetAndAdvance()
-  }, N > 0 && tapEndsSet())
+  }, N > 0 && setLive)
 
   const fadeRef = useSessionFade(
     photos ? `photo:${photos.gate.id}` : readyToFinish ? 'finish' : !started ? 'preview' : rest ? 'rest' : preparing ? 'ready' : steps[safeCurrent]?.stepKey ?? 'empty',
@@ -778,12 +795,12 @@ export function StretchSession({
   }
 
   // Complete the set before offering photos or the separate finish screen.
-  const completeSetAndAdvance = () => {
+  // `sample` is off for a hold tapped short of its clock: what it ran isn't the
+  // hold, so it says nothing about how long the stretch takes.
+  const completeSetAndAdvance = (sample = true) => {
     const seconds = readActiveSec()
-    // A resumed partial set cannot supply a complete historical observation, and
-    // nor can a hold tapped away as it began — it was done before the clock ran.
-    const tappedPastHold = step.kind === 'flex' && !!step.holdSec && holdTakesTap(seconds)
-    if (!done.has(step.stepKey) && !tappedPastHold && seconds >= 2 && seconds <= 600 && !(saved?.step === safeCurrent && (saved.rep ?? 1) > 1)) {
+    // A resumed partial set cannot supply a complete historical observation.
+    if (sample && !done.has(step.stepKey) && seconds >= 2 && seconds <= 600 && !(saved?.step === safeCurrent && (saved.rep ?? 1) > 1)) {
       const work = step.kind === 'flex' ? stepWorkSec(step) : coreRepsFor(step.round) * SEC_PER_REP
       timingSamples.current[step.stepKey] = { exercise: stretchTimingKey(step, work), totalActiveSec: seconds, sets: 1 }
     }
@@ -830,9 +847,8 @@ export function StretchSession({
   // the whole page is the target rather than one button. Controls (the kebab, the
   // core block's own fields) keep their own job, an overlay that owns the screen
   // swallows the tap, and the last set leads to a separate finish screen.
-  // A timed hold is exempt once it's under way: it runs on a clock of its own and
-  // closes itself, and a stray tap shouldn't cut ninety seconds of it short. Its
-  // opening seconds still take one, for a hold already done before it came up.
+  // A timed hold takes two taps: it runs on a clock of its own and closes itself,
+  // and a single stray tap shouldn't cut ninety seconds of it short.
   // The set ending itself is worth a buzz: mid-stretch you're rarely looking at
   // the screen, so rest starting would otherwise be silent (the rest timer buzzes
   // when it runs out for the same reason). Not for a hold, which buzzes at its
@@ -1064,6 +1080,9 @@ export function StretchSession({
             setReadyOverrideSec(null)
           }}
         />
+      )}
+      {tapMark && setLive && !!holdSec && (
+        <span key={tapMark.at} aria-hidden className="hold-tap-mark" style={{ left: tapMark.x, top: tapMark.y }} />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
       {photos && <PhotoStep gate={photos.gate} onCapture={logMeasurement} onDone={closePhotos} />}

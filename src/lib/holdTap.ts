@@ -1,15 +1,14 @@
 /**
- * How long a stretch hold still takes the screen tap after its clock starts.
+ * How long after the first tap on a stretch hold the second one still ends it.
  *
- * A hold is otherwise exempt from the tap: it closes itself on target, and a
- * stray one shouldn't cut ninety seconds short. But the moment it comes on screen
- * is when you know you've already done it — rolled your feet out while waiting on
- * the count — and a tap then is the deliberate one. Past these seconds you're in
- * the pose, and the exemption holds.
+ * A hold closes itself on target, and a single stray tap shouldn't cut ninety
+ * seconds of it short. But a hold you've already done — feet rolled out while
+ * the get-ready count ran — needs a way past it. Two taps is that way: the first
+ * only marks the screen, and a second inside this window means it.
  */
-export const HOLD_TAP_GRACE_SEC = 10
+export const HOLD_SECOND_TAP_MS = 1500
 
-/** Whether a hold that has run `elapsedSec` still ends on a tap. */
-export function holdTakesTap(elapsedSec: number): boolean {
-  return elapsedSec < HOLD_TAP_GRACE_SEC
+/** Whether a tap at `now` is the second of a pair begun by one at `armedAt`. */
+export function isSecondTap(armedAt: number | null, now: number): boolean {
+  return armedAt != null && now - armedAt <= HOLD_SECOND_TAP_MS
 }

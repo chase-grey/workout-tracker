@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { HOLD_TAP_GRACE_SEC, holdTakesTap } from './holdTap'
+import { HOLD_SECOND_TAP_MS, isSecondTap } from './holdTap'
 
-describe('holdTakesTap', () => {
-  it('takes a tap as the hold comes on screen', () => {
-    expect(holdTakesTap(0)).toBe(true)
-    expect(holdTakesTap(HOLD_TAP_GRACE_SEC - 0.5)).toBe(true)
+describe('isSecondTap', () => {
+  it('needs a first tap to pair with', () => {
+    expect(isSecondTap(null, 1000)).toBe(false)
   })
 
-  it('ignores one once the hold is under way', () => {
-    expect(holdTakesTap(HOLD_TAP_GRACE_SEC)).toBe(false)
-    expect(holdTakesTap(60)).toBe(false)
+  it('ends the hold on a second tap inside the window', () => {
+    expect(isSecondTap(1000, 1000 + HOLD_SECOND_TAP_MS - 1)).toBe(true)
+    expect(isSecondTap(1000, 1000 + HOLD_SECOND_TAP_MS)).toBe(true)
+  })
+
+  it('treats a tap after the window as a fresh first one', () => {
+    expect(isSecondTap(1000, 1000 + HOLD_SECOND_TAP_MS + 1)).toBe(false)
   })
 })
