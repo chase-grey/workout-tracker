@@ -77,6 +77,14 @@ function AppShell() {
   // looking for one. Settings reads the same shared list.
   const { issues, failed: issuesFailed } = useTrackedIssues(settings.chatToken.trim().length > 0)
   const awaiting = issuesAwaitingAnswer(issues)
+  // Opening Settings acknowledges a save failure: its card says the rest, so the
+  // dot stops nagging while saves keep failing. A save that goes through clears
+  // the error, and the next failure earns the dot again.
+  const [saveErrorSeen, setSaveErrorSeen] = useState(false)
+  useEffect(() => {
+    if (!saveError) setSaveErrorSeen(false)
+    else if (tab === 'settings') setSaveErrorSeen(true)
+  }, [saveError, tab])
   // The issue whose question the coach tab is currently taking an answer for.
   const [answering, setAnswering] = useState<number | null>(null)
   const keyboardOpen = useKeyboardOpen()
@@ -275,7 +283,7 @@ function AppShell() {
           active={tab}
           onChange={setTab}
           showChat={showChat}
-          alerts={awaiting.length > 0 || saveError ? ['settings'] : []}
+          alerts={awaiting.length > 0 || (saveError && !saveErrorSeen) ? ['settings'] : []}
         />
       )}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
