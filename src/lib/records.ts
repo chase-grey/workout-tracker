@@ -18,7 +18,7 @@
 
 import type { DayType, WorkoutRow } from '../types'
 import type { Celebration } from './celebration'
-import { CALORIE_GOAL, calorieHitDates, dayTotals, type CalorieEntry } from './calories'
+import { calorieHitDates, dayTotals, type CalorieEntry } from './calories'
 import { parseISODate, toISODate, weekStartISO } from './dates'
 import { trainingSessions } from './session'
 import { DAY_TYPES } from '../config/plan'
@@ -102,7 +102,7 @@ function caloriesByWeek(entries: CalorieEntry[]): Map<string, number> {
 // ---------------------------------------------------------------------------
 
 /** Longest run of consecutive calendar days that hit the calorie goal. */
-export function longestCalorieStreak(entries: CalorieEntry[], goal: number = CALORIE_GOAL): number {
+export function longestCalorieStreak(entries: CalorieEntry[], goal?: number): number {
   const hits = calorieHitDates(entries, goal) // sorted ascending, distinct
   let best = 0
   let run = 0
@@ -120,7 +120,7 @@ export function longestCalorieStreak(entries: CalorieEntry[], goal: number = CAL
 export function currentCalorieStreak(
   entries: CalorieEntry[],
   today: Date = new Date(),
-  goal: number = CALORIE_GOAL,
+  goal?: number,
 ): number {
   const hits = new Set(calorieHitDates(entries, goal))
   const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate())

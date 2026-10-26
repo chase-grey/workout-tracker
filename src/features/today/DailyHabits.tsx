@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import { MdCheck } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { CALORIE_GOAL, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
+import { calorieGoalOn, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
 import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
 const QUICK_ADDS = [100, 500]
-const BACKFILL = CALORIE_GOAL
 
 type Props = {
   /** A Monday selected from streak history; null keeps following the current week. */
@@ -46,7 +45,8 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
   }, [weekStart, historical, today])
 
   const selTotal = totalForDate(calorieEntries, selDate)
-  const pct = Math.min(selTotal / CALORIE_GOAL, 1) * 100
+  const selGoal = calorieGoalOn(selDate)
+  const pct = Math.min(selTotal / selGoal, 1) * 100
   const { label: selLabel } = foodLogStatus(calorieEntries, selDate, now)
   const pace = selDate === today ? caloriePaceFraction(now) : null
 
@@ -75,11 +75,11 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
           )}
           <p className="text-sm tabular-nums text-neutral-400">
             <span
-              className={`text-lg font-bold ${selTotal >= CALORIE_GOAL ? 'text-accent-2' : 'text-neutral-100'}`}
+              className={`text-lg font-bold ${selTotal >= selGoal ? 'text-accent-2' : 'text-neutral-100'}`}
             >
               {selTotal}
             </span>{' '}
-            / {CALORIE_GOAL}
+            / {selGoal}
           </p>
         </div>
       </div>
@@ -99,7 +99,7 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
 
       <div className="mt-2 flex gap-1">
         {week.map((date, i) => {
-          const hit = totalForDate(calorieEntries, date) >= CALORIE_GOAL
+          const hit = totalForDate(calorieEntries, date) >= calorieGoalOn(date)
           return (
             <button
               key={date}
@@ -133,10 +133,10 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
         ))}
         {selDate < today && (
           <button
-            onClick={() => addCalories(BACKFILL)}
+            onClick={() => addCalories(selGoal)}
             className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
           >
-            +{BACKFILL}
+            +{selGoal}
           </button>
         )}
         <button

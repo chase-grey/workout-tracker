@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   CALORIE_GOAL,
+  CALORIE_GOALS,
+  calorieGoalOn,
   caloriePaceFraction,
   calorieSurplusSeries,
   dayTotals,
@@ -548,8 +550,27 @@ describe('caloriePR', () => {
     expect(caloriePR(entries, TODAY)).toEqual({ date: THIS_WEEK, calories: 4000 })
   })
 
-  it('uses CALORIE_GOAL as the default threshold', () => {
-    const entries: CalorieEntry[] = [{ date: THIS_WEEK, calories: CALORIE_GOAL }]
-    expect(caloriePR(entries, TODAY)).toEqual({ date: THIS_WEEK, calories: CALORIE_GOAL })
+  it("uses the day's target as the default threshold", () => {
+    const goal = calorieGoalOn(THIS_WEEK)
+    expect(caloriePR([{ date: THIS_WEEK, calories: goal - 1 }], TODAY)).toBeNull()
+    expect(caloriePR([{ date: THIS_WEEK, calories: goal }], TODAY)).toEqual({ date: THIS_WEEK, calories: goal })
+  })
+})
+
+describe('calorieGoalOn', () => {
+  it('holds each day to the target in force that day', () => {
+    expect(calorieGoalOn('2026-10-25')).toBe(4000)
+    expect(calorieGoalOn('2026-10-26')).toBe(4500)
+    expect(CALORIE_GOAL).toBe(CALORIE_GOALS[CALORIE_GOALS.length - 1].goal)
+  })
+
+  it('leaves days hit under the old target hit', () => {
+    const entries: CalorieEntry[] = [
+      { date: '2026-10-25', calories: 4000 },
+      { date: '2026-10-26', calories: 4000 },
+      { date: '2026-10-27', calories: 4500 },
+    ]
+    expect(calorieHitDates(entries)).toEqual(['2026-10-25', '2026-10-27'])
+    expect(calorieHitDates(entries, 4000)).toEqual(['2026-10-25', '2026-10-26', '2026-10-27'])
   })
 })

@@ -11,16 +11,33 @@ export type WeeklyGoalConfig = {
   halfCalDays: number
 }
 
-export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig = {
-  workouts: 2,
-  flex: 2,
-  calDays: 6,
-  halfWorkouts: 1,
-  halfFlex: 1,
-  halfCalDays: 5,
-}
+/**
+ * The weekly goals, and the Monday each set took effect, oldest first. A week
+ * is judged against the set in force that Monday, so raising a goal holds the
+ * weeks ahead to it without re-scoring — and resetting — the run already built.
+ */
+export const WEEKLY_GOAL_HISTORY: readonly { from: string; goals: WeeklyGoalConfig }[] = [
+  {
+    from: '0000-01-01',
+    goals: { workouts: 2, flex: 2, calDays: 6, halfWorkouts: 1, halfFlex: 1, halfCalDays: 5 },
+  },
+  {
+    // Every day of the week on calories, now that the target is a real surplus.
+    from: '2026-10-26',
+    goals: { workouts: 2, flex: 2, calDays: 7, halfWorkouts: 1, halfFlex: 1, halfCalDays: 6 },
+  },
+]
 
-// These goals apply retroactively to every logged week.
+/** This week's goals — the newest set in {@link WEEKLY_GOAL_HISTORY}. */
+export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig =
+  WEEKLY_GOAL_HISTORY[WEEKLY_GOAL_HISTORY.length - 1].goals
+
+/** The goals in force for the week starting on Monday `week`. */
+export function weeklyGoalsFor(week: string): WeeklyGoalConfig {
+  let goals = WEEKLY_GOAL_HISTORY[0].goals
+  for (const g of WEEKLY_GOAL_HISTORY) if (g.from <= week) goals = g.goals
+  return goals
+}
 
 export type WeekTier = 'full' | 'half' | 'under'
 
@@ -130,7 +147,7 @@ export type StreakInput = {
  * Today tab.
  */
 export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
-  const config = input.config ?? DEFAULT_WEEKLY_GOALS
+  const goalsFor = (week: string) => input.config ?? weeklyGoalsFor(week)
   const today = input.today ?? new Date()
 
   const workoutByWeek = bucketByWeek(input.workoutDates)
@@ -157,7 +174,7 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   // than waiting for Monday. Short of full it stays out: a week still being
   // lived can't spend a freeze or end the run.
   const currentIsFull =
-    classifyWeek(countsFor(currentWeekStart), config).tier === 'full'
+    classifyWeek(countsFor(currentWeekStart), goalsFor(currentWeekStart)).tier === 'full'
 
   const weeks = enumerateWeeks(earliestWeek, currentWeekStart).filter(
     (w) => w < currentWeekStart || currentIsFull,
@@ -169,7 +186,7 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
 
   for (const week of weeks) {
     const counts = countsFor(week)
-    const goals = config
+    const goals = goalsFor(week)
     const { tier, exceeded } = classifyWeek(counts, goals)
 
     let outcome: WeekOutcome

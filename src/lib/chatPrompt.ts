@@ -2,6 +2,8 @@ import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types
 import { PLAN, DAY_TYPES, exerciseName, repRangeLabel } from '../config/plan'
 import { toISODate, parseISODate } from './dates'
 import { parseDiscomfort } from './discomfort'
+import { CALORIE_GOAL } from './calories'
+import { DEFAULT_WEEKLY_GOALS } from './weeklyStreak'
 
 /** Format one set as "weightxreps" (e.g. "135x8"), or "BWxreps" when weight is blank. */
 function formatSet(row: WorkoutRow): string {
@@ -229,7 +231,7 @@ export function buildSystemPrompt(input: {
     renderBodyWeights(recentWeights),
     ``,
     `## Streaks`,
-    `Weekly-goal streak (weeks hitting 2 workouts + 2 flex sessions + calories 6/7): ${streaks.streak}`,
+    `Weekly-goal streak (weeks hitting 2 workouts + 2 flex sessions + calories ${DEFAULT_WEEKLY_GOALS.calDays}/7 at ${CALORIE_GOAL}): ${streaks.streak}`,
     `Streak freezes available: ${streaks.freezes}`,
   ].join('\n')
 }

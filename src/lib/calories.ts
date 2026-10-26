@@ -20,7 +20,27 @@ export type CalorieEntry = {
   lastAmount?: number
 }
 
-export const CALORIE_GOAL = 4000
+/**
+ * The daily calorie target, and the day each one took effect, oldest first.
+ * A day is judged against the target it was eaten under: raising the bar is a
+ * new goal from here on, not a verdict on the weeks already logged, which the
+ * streak history and calorie records would otherwise re-score as misses.
+ */
+export const CALORIE_GOALS: readonly { from: string; goal: number }[] = [
+  { from: '0000-01-01', goal: 4000 },
+  // Weight held at ~174 for five weeks on ~4,100 a day: that's maintenance now.
+  { from: '2026-10-26', goal: 4500 },
+]
+
+/** Today's target — the newest entry in {@link CALORIE_GOALS}. */
+export const CALORIE_GOAL = CALORIE_GOALS[CALORIE_GOALS.length - 1].goal
+
+/** The target in force on the given YYYY-MM-DD date. */
+export function calorieGoalOn(date: string): number {
+  let goal = CALORIE_GOALS[0].goal
+  for (const g of CALORIE_GOALS) if (g.from <= date) goal = g.goal
+  return goal
+}
 
 /** Eating window (hours) used to pace calories through the day. */
 export const EAT_START_HOUR = 9
@@ -302,11 +322,14 @@ export function mergeCaloriesByDate(
   return out.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))
 }
 
-/** Distinct dates whose summed total meets or exceeds `goal`, sorted ascending. */
-export function calorieHitDates(entries: CalorieEntry[], goal: number = CALORIE_GOAL): string[] {
+/**
+ * Distinct dates whose summed total meets or exceeds `goal`, sorted ascending.
+ * Without one, each date is held to the target in force that day.
+ */
+export function calorieHitDates(entries: CalorieEntry[], goal?: number): string[] {
   const hits: string[] = []
   for (const [date, total] of dayTotals(entries)) {
-    if (total >= goal) hits.push(date)
+    if (total >= (goal ?? calorieGoalOn(date))) hits.push(date)
   }
   return hits.sort()
 }
@@ -316,7 +339,7 @@ export function calorieHitDates(entries: CalorieEntry[], goal: number = CALORIE_
  * Weeks with no qualifying day are absent rather than zero, so a lookup miss and
  * a washed-out week read the same.
  */
-export function calorieHitsByWeek(entries: CalorieEntry[], goal: number = CALORIE_GOAL): Map<string, number> {
+export function calorieHitsByWeek(entries: CalorieEntry[], goal?: number): Map<string, number> {
   const weeks = new Map<string, number>()
   for (const date of calorieHitDates(entries, goal)) {
     const week = weekStartISO(date)
@@ -333,7 +356,7 @@ export function calorieHitsByWeek(entries: CalorieEntry[], goal: number = CALORI
 export function caloriePR(
   entries: CalorieEntry[],
   today: Date = new Date(),
-  goal: number = CALORIE_GOAL,
+  goal: number = calorieGoalOn(toISODate(today)),
 ): { date: string; calories: number } | null {
   const totals = dayTotals(entries)
   const thisWeekStart = weekStartISO(toISODate(today))
@@ -373,7 +396,7 @@ export function caloriePR(
  */
 export function calorieSurplusSeries(
   entries: CalorieEntry[],
-  goal: number = CALORIE_GOAL,
+  goal?: number,
 ): { date: string; value: number }[] {
   const totals = dayTotals(entries)
   const dated = [...totals.entries()]
@@ -386,7 +409,7 @@ export function calorieSurplusSeries(
     let n = 0
     for (const d of dated) {
       if (d.t >= t - WINDOW_MS && d.t <= t) {
-        sum += d.total - goal
+        sum += d.total - (goal ?? calorieGoalOn(d.date))
         n++
       }
     }
@@ -423,7 +446,6 @@ export function weeklyCalorieSurplusSeries(
   entries: CalorieEntry[],
   opts: { goal?: number; assumedUnlogged?: number; today?: Date } = {},
 ): { date: string; value: number }[] {
-  const goal = opts.goal ?? CALORIE_GOAL
   const assumed = opts.assumedUnlogged ?? ASSUMED_UNLOGGED_CALORIES
   const today = opts.today ?? new Date()
 
@@ -443,7 +465,7 @@ export function weeklyCalorieSurplusSeries(
     const intake = totals.get(iso) ?? assumed
     const wk = weekStartISO(iso)
     const bucket = weeks.get(wk) ?? { sum: 0, days: 0 }
-    bucket.sum += intake - goal
+    bucket.sum += intake - (opts.goal ?? calorieGoalOn(iso))
     bucket.days += 1
     weeks.set(wk, bucket)
   }

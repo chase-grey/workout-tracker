@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
-  classifyWeek,
+  classifyWeek as classifyWith,
   computeWeeklyStreak,
   splitAtCurrentRun,
   weeklyStreakHistory,
+  weeklyGoalsFor,
   DEFAULT_WEEKLY_GOALS,
+  WEEKLY_GOAL_HISTORY,
+  type WeekCounts,
   type WeekResult,
 } from './weeklyStreak'
 import { parseISODate } from './dates'
@@ -36,7 +39,10 @@ const WK3 = '2026-06-29'
 // The week TODAY sits in, still in progress.
 const CUR = '2026-07-06'
 
-// Defaults: full = w>=2, f>=2, cal>=6; half = w>=1, f>=1, cal>=5.
+// The original goals, which every week below is dated under:
+// full = w>=2, f>=2, cal>=6; half = w>=1, f>=1, cal>=5.
+const G = WEEKLY_GOAL_HISTORY[0].goals
+const classifyWeek = (counts: WeekCounts) => classifyWith(counts, G)
 
 describe('classifyWeek', () => {
   it('classifies a full week (exactly at goal, not exceeded)', () => {
@@ -230,7 +236,7 @@ describe('computeWeeklyStreak', () => {
 
   it('respects a custom config', () => {
     const config = {
-      ...DEFAULT_WEEKLY_GOALS,
+      ...G,
       workouts: 4,
       halfWorkouts: 2,
     }
@@ -277,7 +283,7 @@ describe('weeklyStreakHistory — retroactive two-stretch goal', () => {
   // A caller handing in its own config is asking for that config over every week,
   // change date or not.
   it('leaves an explicit config alone on both sides of the date', () => {
-    const goals = { ...DEFAULT_WEEKLY_GOALS, flex: 3, halfFlex: 3 }
+    const goals = { ...G, flex: 3, halfFlex: 3 }
     expect(weeklyStreakHistory({ ...week(before, 2), config: goals })[0].tier).not.toBe('full')
     expect(weeklyStreakHistory({ ...week(before, 3), config: goals })[0].tier).toBe('full')
   })
@@ -515,5 +521,33 @@ describe('splitAtCurrentRun', () => {
 
   it('handles an empty history', () => {
     expect(splitAtCurrentRun([])).toEqual({ earlier: [], run: [] })
+  })
+})
+
+describe('weeklyStreakHistory — every calorie day from 2026-10-26', () => {
+  const week = (monday: string, calDays: number) => ({
+    workoutDates: daysInWeek(monday, 2),
+    flexDates: daysInWeek(monday, 2),
+    calorieHitDates: daysInWeek(monday, calDays),
+    today: parseISODate('2026-11-09'),
+  })
+
+  it('still calls a six-day week full when it predates the change', () => {
+    const [wk] = weeklyStreakHistory(week('2026-10-19', 6))
+    expect(wk.goals.calDays).toBe(6)
+    expect(wk.tier).toBe('full')
+  })
+
+  it('holds a week from the change on to all seven days', () => {
+    expect(weeklyStreakHistory(week('2026-10-26', 6))[0]).toMatchObject({
+      tier: 'half',
+      goals: { calDays: 7, halfCalDays: 6 },
+    })
+    expect(weeklyStreakHistory(week('2026-10-26', 7))[0].tier).toBe('full')
+  })
+
+  it('makes the newest set the default', () => {
+    expect(weeklyGoalsFor('2026-10-26')).toBe(DEFAULT_WEEKLY_GOALS)
+    expect(weeklyGoalsFor('2026-10-19')).toBe(G)
   })
 })

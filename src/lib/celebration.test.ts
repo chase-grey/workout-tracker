@@ -1,6 +1,6 @@
 ﻿import { describe, expect, it } from 'vitest'
 import type { WorkoutRow } from '../types'
-import { DEFAULT_WEEKLY_GOALS } from './weeklyStreak'
+import { WEEKLY_GOAL_HISTORY } from './weeklyStreak'
 import {
   achievementCelebration,
   baselineCelebration,
@@ -14,6 +14,9 @@ import {
   stretchDoneCelebration,
   weekAchievements,
 } from './celebration'
+
+// The original goals: six calorie days of seven.
+const GOALS = WEEKLY_GOAL_HISTORY[0].goals
 
 const TODAY = new Date('2026-07-21T12:00:00') // Tuesday; week starts Mon 2026-07-20
 
@@ -136,7 +139,7 @@ describe('currentWeekCounts', () => {
 })
 
 describe('weekAchievements', () => {
-  const g = DEFAULT_WEEKLY_GOALS
+  const g = GOALS
 
   it('marks full goal when every target is met exactly', () => {
     expect(
@@ -189,7 +192,7 @@ describe('newlyEarned', () => {
     const earned = newlyEarned(
       { workouts: 1, flex: 1, calDays: 4 },
       { workouts: 1, flex: 1, calDays: 5 },
-      DEFAULT_WEEKLY_GOALS,
+      GOALS,
     )
     expect(earned).toContain('checkpoint')
     expect(earned).not.toContain('fullGoal')
@@ -199,7 +202,7 @@ describe('newlyEarned', () => {
     const earned = newlyEarned(
       { workouts: 1, flex: 3, calDays: 6 },
       { workouts: 2, flex: 3, calDays: 6 },
-      DEFAULT_WEEKLY_GOALS,
+      GOALS,
     )
     expect(earned).toContain('workoutGoal')
     expect(earned).toContain('fullGoal')
@@ -217,7 +220,7 @@ describe('composeCelebration', () => {
     const goal = achievementCelebration(
       'fullGoal',
       { workouts: 2, flex: 3, calDays: 6 },
-      DEFAULT_WEEKLY_GOALS,
+      GOALS,
     )
     const c = composeCelebration([goal, pr])
     expect(c?.tier).toBe('epic')
@@ -229,7 +232,7 @@ describe('composeCelebration', () => {
     const goal = achievementCelebration(
       'fullGoal',
       { workouts: 2, flex: 3, calDays: 6 },
-      DEFAULT_WEEKLY_GOALS,
+      GOALS,
     )
     const c = composeCelebration([goal, stretchDoneCelebration])
     expect(c?.title).toBe('weekly goal complete!')
@@ -240,7 +243,7 @@ describe('composeCelebration', () => {
     const goal = achievementCelebration(
       'checkpoint',
       { workouts: 1, flex: 2, calDays: 3 },
-      DEFAULT_WEEKLY_GOALS,
+      GOALS,
     )
     expect(composeCelebration([goal])?.ack).toBeUndefined()
   })

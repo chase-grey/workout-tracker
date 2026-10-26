@@ -21,7 +21,7 @@ import type { CoreSet } from '../lib/flexSteps'
 import { dedupeFlexByDate, type FlexEntry } from '../lib/flex'
 import {
   calorieHitDates,
-  CALORIE_GOAL,
+  calorieGoalOn,
   coalesceHelping,
   mergeCaloriesByDate,
   setDayTotal,
@@ -828,8 +828,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await deliver(enqueue({ type: 'calorie', entry }))
       // Cheer: this date's total just crossed the goal + any weekly calorie-day goal.
       try {
+        const dayGoal = calorieGoalOn(entry.date)
         const crossed =
-          totalForDate(prevCals, entry.date) < CALORIE_GOAL && totalForDate(nextCals, entry.date) >= CALORIE_GOAL
+          totalForDate(prevCals, entry.date) < dayGoal && totalForDate(nextCals, entry.date) >= dayGoal
         const workoutsNow = storage.loadWorkouts()
         const flexDates = storage.loadFlex().map((f) => f.date)
         const before = currentWeekCounts(workoutsNow, flexDates, prevCals)
@@ -838,7 +839,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const afterRec: RecordSnapshot = { workouts: workoutsNow, flexDates, calorieEntries: nextCals }
         celebrate(
           composeCelebration([
-            crossed ? calorieGoalCelebration(CALORIE_GOAL) : null,
+            crossed ? calorieGoalCelebration(dayGoal) : null,
             ...weeklyCelebrations(before, after),
             ...newRecords(beforeRec, afterRec),
           ]),

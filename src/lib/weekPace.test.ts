@@ -1,13 +1,13 @@
 ﻿import { describe, expect, it } from 'vitest'
 import { DAYS_IN_WEEK, requiredByNow, weekDaysCompleted, weekPace } from './weekPace'
-import { DEFAULT_WEEKLY_GOALS, type WeeklyGoalConfig } from './weeklyStreak'
+import { WEEKLY_GOAL_HISTORY, type WeeklyGoalConfig } from './weeklyStreak'
 
 // 2026-06-15 is a Monday; the Mon–Sun week runs 06-15 … 06-21.
 const MON = 15
 const at = (day: number, hour = 9) => new Date(2026, 5, day, hour)
 
-// The shipped workout, flexibility, and calorie goals.
-const G: WeeklyGoalConfig = DEFAULT_WEEKLY_GOALS
+// The original workout, flexibility, and calorie goals: six calorie days of seven.
+const G: WeeklyGoalConfig = WEEKLY_GOAL_HISTORY[0].goals
 
 describe('weekDaysCompleted', () => {
   it('is 0 for all of Monday — the day in progress never counts', () => {
