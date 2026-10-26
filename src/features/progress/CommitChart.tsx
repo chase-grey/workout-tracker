@@ -16,7 +16,6 @@ import {
   Line,
   LineChart,
   ReferenceDot,
-  ReferenceLine,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -36,6 +35,8 @@ import { parseISODate, toISODate } from '../../lib/dates'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import { LiftKey, liftDot } from './liftMarks'
+import { goalLineMarks } from './goalLineMarks'
+import { goalLine, withGoalLine, type MovingTarget } from '../../lib/goalLine'
 
 const MS_PER_DAY = 86_400_000
 const axisTick = { fill: '#737373', fontSize: 10 }
@@ -91,6 +92,7 @@ export function CommitChart({
   goalId,
   proj,
   points,
+  moving,
   date,
   onChange,
   estimate,
@@ -101,6 +103,8 @@ export function CommitChart({
   proj: Projection
   /** The goal's logged history. */
   points: Point[]
+  /** A target that moves with bodyweight, drawn as it moves (see goalLine). */
+  moving?: MovingTarget
   /** The date currently chosen, ISO. */
   date: string
   onChange: (iso: string) => void
@@ -142,16 +146,26 @@ export function CommitChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goalId, proj, date])
 
+  // A target that moves is drawn across the whole drag window, so wherever the
+  // handle goes the line is already there under it. Fixed against the window and
+  // not the chosen date, so it doesn't redraw mid-drag.
+  const line = useMemo(() => {
+    const first = points[0]?.date
+    const start = toISODate(today)
+    return goalLine(moving, first && first < start ? first : start, range.latest, today)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, moving, range.latest])
+
   const rows = useMemo(
-    () => withTime(mergeRows(points, reference, candidate)),
-    [points, reference, candidate],
+    () => withTime(withGoalLine(mergeRows(points, reference, candidate), line)),
+    [points, reference, candidate, line],
   )
   const dot = useMemo(() => (lift ? liftDot(lift) : { r: 2 }), [lift])
 
   const { current, target } = proj
   const yScale = useMemo(
-    () => niceScale([...points.map((p) => p.value), current, target]),
-    [points, current, target],
+    () => niceScale([...points.map((p) => p.value), current, target, ...(line ?? []).map((p) => p.value)]),
+    [points, current, target, line],
   )
 
   // Fixed to the full drag window rather than to the data, so the handle can run
@@ -163,6 +177,12 @@ export function CommitChart({
     return [min, max + (max - min) * 0.06] as [number, number]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, range.latest])
+
+  // Where each curve meets the goal. A fixed target is the same height on every
+  // date; one that moves is wherever it will have got to by then, so the dots ride
+  // the ends of their own curves instead of a flat line the curves climb past.
+  const referenceEnd = reference.at(-1)?.value ?? target
+  const candidateEnd = candidate.at(-1)?.value ?? target
 
   /**
    * The date under a pointer at `clientX`, clamped to the drag window.
@@ -260,17 +280,19 @@ export function CommitChart({
           />
           <AxisBreak broken={yScale.broken} bg={CHART_SURFACE_2} />
           {/* No tooltip: a pointer on this chart is a drag, not a read. */}
-          <ReferenceLine
-            y={proj.target}
-            stroke={LINE_GOAL}
-            strokeDasharray="5 4"
-            label={<ChartTag text={`goal ${proj.target}`} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} side={tagSide} />}
-          />
+          {goalLineMarks({
+            line,
+            target: proj.target,
+            tagAt: { date: toISODate(today), value: proj.target },
+            label: `goal ${proj.target}`,
+            bg: CHART_SURFACE_2,
+            side: tagSide,
+          })}
           {/* The machine's date, left behind as the handle moves away from it. */}
           {showReferenceDot && (
             <ReferenceDot
               x={projectedMs}
-              y={proj.target}
+              y={referenceEnd}
               r={3.5}
               fill={LINE_GOAL}
               stroke={CHART_PAGE}
@@ -316,7 +338,7 @@ export function CommitChart({
               than another plotted point, and it grows while held. */}
           <ReferenceDot
             x={chosenMs}
-            y={proj.target}
+            y={candidateEnd}
             r={dragging ? 9 : 7}
             fill={CHART_PAGE}
             stroke={LINE_PRIMARY}
@@ -333,7 +355,7 @@ export function CommitChart({
               />
             }
           />
-          <ReferenceDot x={chosenMs} y={proj.target} r={3} fill={LINE_PRIMARY} />
+          <ReferenceDot x={chosenMs} y={candidateEnd} r={3} fill={LINE_PRIMARY} />
         </LineChart>
       </ResponsiveContainer>
       {lift && <LiftKey points={points} mainLift={lift} />}

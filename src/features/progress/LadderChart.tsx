@@ -4,20 +4,21 @@ import {
   Legend,
   Line,
   LineChart,
-  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 import { sharedCurrentPace, currentPaceAt, expectedAt, projectedSeries, type LockedProjection } from '../../lib/goalLock'
-import { CHART_SURFACE, CHART_SURFACE_2, LINE_CURRENT_PACE, LINE_GOAL, LINE_GOAL_LABEL, goalChartEnd, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { CHART_SURFACE, CHART_SURFACE_2, LINE_CURRENT_PACE, LINE_GOAL, goalChartEnd, niceScale, timeXAxis, withTime } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
-import { ChartTag } from '../../components/ChartTag'
 import type { DaySets } from '../../lib/goalSets'
 import { GoalTooltip } from './GoalTooltip'
 import { LiftKey, liftDot } from './liftMarks'
+import { goalLineMarks } from './goalLineMarks'
+import { goalLine, withGoalLine, type MovingTarget } from '../../lib/goalLine'
+import { toISODate } from '../../lib/dates'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 
@@ -37,6 +38,8 @@ export type LadderGoal = {
   target: number
   lock?: LockedProjection
   currentPace?: { date: string; value: number }[]
+  /** A target that moves with bodyweight, drawn as it moves (see goalLine). */
+  moving?: MovingTarget
 }
 
 /** A date's readings, one field per {@link LadderSeries} key. */
@@ -123,7 +126,15 @@ export function LadderChart({
 }) {
   const readout = useChartReadout()
   const dot = useMemo(() => (lift ? liftDot(lift) : { r: 2 }), [lift])
-  const rows = useMemo(() => withTime(mergeRows(readings, goals)), [readings, goals])
+  const { rows, lines } = useMemo(() => {
+    const merged = mergeRows(readings, goals)
+    const today = toISODate(new Date())
+    const last = goalChartEnd(readings, goals)
+    const lines = merged.length
+      ? goals.map((g) => goalLine(g.moving, merged[0].date, last > today ? last : today))
+      : goals.map(() => null)
+    return { lines, rows: withTime(lines.reduce((rs, line, i) => withGoalLine(rs, line, `goal${i}`), merged)) }
+  }, [readings, goals])
 
   // The axis has to frame the targets as well as the readings, or a goal above
   // the data would sit off the top of the chart.
@@ -132,8 +143,9 @@ export function LadderChart({
       niceScale([
         ...readings.flatMap((r) => series.map((s) => r[s.key])).filter((v): v is number => typeof v === 'number'),
         ...goals.map((g) => g.target),
+        ...lines.flatMap((line) => (line ?? []).map((p) => p.value)),
       ]),
-    [readings, series, goals],
+    [readings, series, goals, lines],
   )
 
   if (readings.length === 0) {
@@ -161,15 +173,20 @@ export function LadderChart({
               left — the targets climb away from the data on every ladder but the
               toe touch, whose targets sit below it and leave that side emptier
               still. ChartTag flips a tag that won't fit either way. */}
-          {goals.map((g) => (
-            <ReferenceLine
-              key={g.label}
-              y={g.target}
-              stroke={LINE_GOAL}
-              strokeDasharray="5 4"
-              label={<ChartTag text={g.label} color={LINE_GOAL_LABEL} bg={CHART_SURFACE} size={10} />}
-            />
-          ))}
+          {/* A target that moves with bodyweight is drawn moving, its tag on the
+              number it names: today's for an open rung, the committed one where
+              its curve lands for a locked rung. */}
+          {goals.flatMap((g, i) =>
+            goalLineMarks({
+              line: lines[i],
+              dataKey: `goal${i}`,
+              target: g.target,
+              tagAt: g.lock ? { date: g.lock.etaDate, value: g.lock.target } : { date: toISODate(new Date()), value: g.target },
+              label: g.label,
+              bg: CHART_SURFACE,
+              size: 10,
+            }),
+          )}
           {/* Committed curves sit with the rest of the goal furniture, in the same
               dark green as the target lines they run into — and behind the
               readings, so the line being read stays the brightest one. */}

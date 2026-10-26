@@ -59,7 +59,7 @@ import {
   timeXAxis,
   withTime,
 } from '../../lib/chart'
-import { daysBetween, parseISODate } from '../../lib/dates'
+import { daysBetween, parseISODate, toISODate } from '../../lib/dates'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
@@ -68,6 +68,8 @@ import { CommitChart } from './CommitChart'
 import { FlexLadderBlock, type Ladder } from './FlexLadderBlock'
 import { LiftLadderBlock } from './LiftLadderBlock'
 import { GoalTooltip } from './GoalTooltip'
+import { goalLineMarks } from './goalLineMarks'
+import { goalLine, movingTargetOf, withGoalLine, type MovingTarget } from '../../lib/goalLine'
 import { MdBolt, MdCelebration, MdEditCalendar, MdLockOutline } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -107,6 +109,7 @@ function LockChart({
   behind,
   sets,
   unit,
+  moving,
 }: {
   lock: LockedProjection
   actual: { date: string; value: number }[]
@@ -117,20 +120,26 @@ function LockChart({
   /** The sets behind each reading, for the tooltip (see goalSets.setsByDate). */
   sets?: Record<string, DaySets[]>
   unit: string
+  /** A target that moves with bodyweight, drawn as it moves (see goalLine). */
+  moving?: MovingTarget
 }) {
   const readout = useChartReadout()
   const end = goalChartEnd(actual, [{ lock }])
-  const rows = useMemo(
-    () => withTime(mergeActualProjected(actual, projectedSeries(lock), currentPace.filter((p) => p.date <= end)).map((row) => ({
-      ...row,
-      projected: row.date >= lock.lockedAt ? expectedAt(lock, row.date) : undefined,
-      currentPace: currentPaceAt(lock, currentPace, row.date),
-    }))),
-    [lock, actual, currentPace, end],
-  )
+  const { rows, line } = useMemo(() => {
+    const merged = mergeActualProjected(actual, projectedSeries(lock), currentPace.filter((p) => p.date <= end))
+    const line = merged.length ? goalLine(moving, merged[0].date, end) : null
+    return {
+      line,
+      rows: withTime(withGoalLine(merged, line).map((row) => ({
+        ...row,
+        projected: row.date >= lock.lockedAt ? expectedAt(lock, row.date) : undefined,
+        currentPace: currentPaceAt(lock, currentPace, row.date),
+      }))),
+    }
+  }, [lock, actual, currentPace, end, moving])
 
   const yScale = useMemo(
-    () => niceScale(rows.flatMap((r) => [r.actual, r.projected, r.currentPace]).filter((v): v is number => v != null)),
+    () => niceScale(rows.flatMap((r) => [r.actual, r.projected, r.currentPace, (r as { goal?: number }).goal]).filter((v): v is number => v != null)),
     [rows],
   )
 
@@ -180,13 +189,18 @@ function LockChart({
             label={<ChartTag text="locked" color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} side={tagSide} />}
           />
           {/* The target the line is climbing toward, so the goal reads off the
-              chart without doing the mental math from the projected curve's end. */}
-          <ReferenceLine
-            y={lock.target}
-            stroke={LINE_GOAL}
-            strokeDasharray="5 4"
-            label={<ChartTag text={`goal ${lock.target}`} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} side={tagSide} />}
-          />
+              chart without doing the mental math from the projected curve's end.
+              One that moves with bodyweight is drawn moving, its tag on the
+              committed number, across the line from the date under it. */}
+          {goalLineMarks({
+            line,
+            target: lock.target,
+            tagAt: { date: lock.etaDate, value: lock.target },
+            label: `goal ${lock.target}`,
+            bg: CHART_SURFACE_2,
+            side: line ? (rising ? 'above' : 'below') : tagSide,
+            align: line ? 'center' : undefined,
+          })}
           {/* The commitment: where the locked curve meets the goal. */}
           <ReferenceDot
             x={etaMs}
@@ -266,6 +280,7 @@ function DataChart({
   targetLabel,
   sets,
   unit,
+  moving,
 }: {
   points: Point[]
   target: number
@@ -273,10 +288,20 @@ function DataChart({
   /** The sets behind each reading, for the tooltip (see goalSets.setsByDate). */
   sets?: Record<string, DaySets[]>
   unit: string
+  /** A target that moves with bodyweight, drawn as it moves (see goalLine). */
+  moving?: MovingTarget
 }) {
   const readout = useChartReadout()
-  const rows = useMemo(() => withTime(points), [points])
-  const yScale = useMemo(() => niceScale([...points.map((p) => p.value), target]), [points, target])
+  const today = toISODate(new Date())
+  const line = useMemo(() => {
+    const last = points.at(-1)?.date ?? today
+    return points.length ? goalLine(moving, points[0].date, last > today ? last : today) : null
+  }, [points, moving, today])
+  const rows = useMemo(() => withTime(withGoalLine(points, line)), [points, line])
+  const yScale = useMemo(
+    () => niceScale([...points.map((p) => p.value), target, ...(line ?? []).map((p) => p.value)]),
+    [points, target, line],
+  )
 
   return (
     <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card}>
@@ -294,12 +319,14 @@ function DataChart({
           />
           <AxisBreak broken={yScale.broken} bg={CHART_SURFACE_2} />
           <Tooltip {...readout.tooltip} content={<GoalTooltip sets={sets} unit={unit} />} />
-          <ReferenceLine
-            y={target}
-            stroke={LINE_GOAL}
-            strokeDasharray="5 4"
-            label={<ChartTag text={targetLabel} color={LINE_GOAL_LABEL} bg={CHART_SURFACE_2} size={10} />}
-          />
+          {goalLineMarks({
+            line,
+            target,
+            tagAt: { date: today, value: target },
+            label: targetLabel,
+            bg: CHART_SURFACE_2,
+            size: 10,
+          })}
           <Line
             type="monotone"
             dataKey="value"
@@ -360,6 +387,7 @@ function LockInPrompt({
         goalId={goal.id}
         proj={proj}
         points={goal.points}
+        moving={movingTargetOf(goal, proj)}
         date={date}
         onChange={setDate}
         lift={goal.exerciseKey}
@@ -456,6 +484,7 @@ function RecommitPrompt({
             goalId={goal.id}
             proj={proj}
             points={goal.points}
+            moving={movingTargetOf(goal, proj)}
             date={date}
             onChange={setDate}
             estimate={estimate!}
@@ -787,6 +816,7 @@ function GoalRow({
               behind={pace?.status === 'behind'}
               sets={sets}
               unit={goal.unit}
+              moving={movingTargetOf(goal, proj)}
             />
           )}
         </>
@@ -819,6 +849,7 @@ function GoalRow({
           targetLabel={`goal ${shownTarget}`}
           sets={sets}
           unit={goal.unit}
+          moving={movingTargetOf(goal, proj)}
         />
       )}
 
