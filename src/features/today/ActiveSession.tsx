@@ -25,7 +25,6 @@ import { isChallenge } from '../../lib/challenge'
 import { gradeSet, type SetGrade } from '../../lib/setGrade'
 import { progressionVariant } from '../../lib/pushVariant'
 import { buildSetOrder, circuitStations, roundSteps } from '../../lib/circuit'
-import { checklistSetEdit } from '../../lib/checklistEdit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
 import { canSkip, resumeSkipped, toSkippedRecord, withSkipped } from '../../lib/skipped'
@@ -513,26 +512,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     const l = logFor(key)
     if (!l) return
     l.sets.forEach((_, i) => controls.updateSet(key, i, { done: complete }))
-  }
-
-  // A number typed into a checklist set is that set being logged: it's marked
-  // done with the number, and the number carries to the exercise's pending sets
-  // the way one logged from the set screen does (see lib/checklistEdit).
-  const editChecklistSet = (key: string, index: number, patch: Pick<SetLog, 'weightLbs'> | Pick<SetLog, 'reps'>) => {
-    const logged = logFor(key)?.sets[index]
-    if (!logged) return
-    const edit = checklistSetEdit(logged, patch)
-    controls.updateSet(key, index, edit.patch)
-    controls.carrySet(key, edit.carried)
-  }
-
-  // Land the set screen on a step from the checklist. An in-flight rest is banked
-  // first; the time on the set being left is charged to nothing.
-  const jumpToStep = (idx: number) => {
-    if (idx >= 0) setCurrent(idx)
-    activeStartRef.current = Date.now()
-    if (rest) closeRest()
-    setShowList(false)
   }
 
   // Attribute the time spent on the current set screen to its exercise, so the
@@ -1410,10 +1389,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                         onClick={() => {
                           // A skipped exercise has no step to jump to until it's
                           // back in the flow, so choosing it puts it back.
-                          if (isSkipped) {
-                            unskipAndJump(e.key)
-                            setShowList(false)
-                          } else jumpToStep(jumpStep)
+                          if (isSkipped) unskipAndJump(e.key)
+                          else {
+                            if (jumpStep >= 0) setCurrent(jumpStep)
+                            // An in-flight rest is banked first.
+                            activeStartRef.current = Date.now()
+                            if (rest) closeRest()
+                          }
+                          setShowList(false)
                         }}
                         className={`flex-1 py-3 text-left active:opacity-70 ${isSkipped ? 'opacity-50' : ''}`}
                       >
@@ -1452,73 +1435,40 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                     </div>
                     {!isSkipped && exerciseLog && (
                       <div className="mb-2 flex flex-col gap-1 border-t border-neutral-200/10 pt-1">
-                        {exerciseLog.sets.map((loggedSet, setIndex) => {
-                          // A set not yet done holds its prefilled target (see
-                          // lib/checklistEdit): shown as the prompt it is, not as
-                          // a number logged. Only a done set reads as a record.
-                          const isDone = !!loggedSet.done
-                          const stepIndex = steps.findIndex((s) => s.stepKey === `${e.key}:${setIndex}`)
-                          const weightHint = loggedSet.weightLbs != null ? String(loggedSet.weightLbs) : e.bodyweight ? 'bw' : ''
-                          const field = 'min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent'
-                          return (
-                            <div
-                              key={loggedSet.setNumber}
-                              className={`flex items-center gap-2 rounded-lg px-1 ${step.stepKey === `${e.key}:${setIndex}` ? 'bg-surface-2/60' : ''}`}
-                            >
-                              <button
-                                onClick={() => jumpToStep(stepIndex)}
-                                className="min-h-[40px] w-10 shrink-0 text-left text-xs text-neutral-500 active:opacity-70"
-                              >
-                                set {setIndex + 1}
-                              </button>
-                              {!e.repsOnly && (
-                                <label className="flex min-w-0 flex-1 items-center gap-1">
-                                  <span className="sr-only">set {setIndex + 1} weight</span>
-                                  <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    aria-label={`${e.name} set ${setIndex + 1} weight`}
-                                    value={isDone ? loggedSet.weightLbs ?? '' : ''}
-                                    placeholder={isDone ? '' : weightHint}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onChange={(event) => editChecklistSet(e.key, setIndex, { weightLbs: toWeight(event.target.value) })}
-                                    className={field}
-                                  />
-                                  <span className="text-xs text-neutral-500">lb</span>
-                                </label>
-                              )}
+                        {exerciseLog.sets.map((loggedSet, setIndex) => (
+                          <div key={loggedSet.setNumber} className="flex items-center gap-2 px-1">
+                            <span className="w-10 shrink-0 text-xs text-neutral-500">set {setIndex + 1}</span>
+                            {!e.repsOnly && (
                               <label className="flex min-w-0 flex-1 items-center gap-1">
-                                <span className="sr-only">set {setIndex + 1} reps</span>
+                                <span className="sr-only">set {setIndex + 1} weight</span>
                                 <input
                                   type="number"
-                                  inputMode="numeric"
-                                  min="0"
-                                  aria-label={`${e.name} set ${setIndex + 1} reps`}
-                                  value={isDone ? loggedSet.reps || '' : ''}
-                                  placeholder={isDone ? '' : String(loggedSet.reps || '')}
+                                  inputMode="decimal"
+                                  aria-label={`${e.name} set ${setIndex + 1} weight`}
+                                  value={loggedSet.weightLbs ?? ''}
                                   onClick={(event) => event.stopPropagation()}
-                                  onChange={(event) => editChecklistSet(e.key, setIndex, { reps: Number(event.target.value) || 0 })}
-                                  className={field}
+                                  onChange={(event) => controls.updateSet(e.key, setIndex, { weightLbs: toWeight(event.target.value) })}
+                                  className="min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
                                 />
-                                <span className="text-xs text-neutral-500">reps</span>
+                                <span className="text-xs text-neutral-500">lb</span>
                               </label>
-                              {/* Marking done logs the set at the numbers it holds, as
-                                  the set screen's tap would; unmarking takes back a
-                                  set logged by a stray one. */}
-                              <button
-                                onClick={() => controls.updateSet(e.key, setIndex, { done: !isDone })}
-                                aria-label={isDone ? `mark set ${setIndex + 1} incomplete` : `mark set ${setIndex + 1} complete`}
-                                className="p-1 text-xl"
-                              >
-                                {isDone ? (
-                                  <MdCheckCircle className="text-accent-2" aria-hidden />
-                                ) : (
-                                  <MdRadioButtonUnchecked className="text-neutral-600" aria-hidden />
-                                )}
-                              </button>
-                            </div>
-                          )
-                        })}
+                            )}
+                            <label className="flex min-w-0 flex-1 items-center gap-1">
+                              <span className="sr-only">set {setIndex + 1} reps</span>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="0"
+                                aria-label={`${e.name} set ${setIndex + 1} reps`}
+                                value={loggedSet.reps || ''}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => controls.updateSet(e.key, setIndex, { reps: Number(event.target.value) || 0 })}
+                                className="min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+                              />
+                              <span className="text-xs text-neutral-500">reps</span>
+                            </label>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
