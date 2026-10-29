@@ -153,3 +153,53 @@ describe('a goal waiting on a real single', () => {
     expect(goalCueForExercise({}, [done], 'barbell_squat', 8, TODAY)).toBeNull()
   })
 })
+
+describe('a goal on a lift that cannot be loaded to the line', () => {
+  /** Dumbbell bench: the rack ends at a pair of 50s, the target is bodyweight. */
+  const bench = (over: Partial<GoalSpec> = {}): GoalSpec =>
+    goal({
+      id: 'bench_bodyweight',
+      title: 'bench my bodyweight',
+      exerciseKey: 'flat_bench',
+      capLbs: 100,
+      points: [
+        { date: '2026-02-01', value: 136 },
+        { date: '2026-02-15', value: 140 },
+      ],
+      target: 185,
+      ...over,
+    })
+  const benchLock = (over: Partial<LockedProjection> = {}): LockedProjections => ({
+    bench_bodyweight: lock({ goalId: 'bench_bodyweight', startValue: 136, target: 185, ...over }),
+  })
+
+  it('turns the line into reps at the cap once the weight it wants is past the rack', () => {
+    // Two months into the lock the line is around 150, which at 8 reps is a
+    // 118-lb pair the rack hasn't got. So the cue is the cap, and the reps are
+    // whatever the line needs at it rather than the 8 on the card.
+    const cue = goalCueForExercise(benchLock(), [bench()], 'flat_bench', 8, TODAY)!
+    expect(cue.weightLbs).toBe(100)
+    expect(epley1RM(100, cue.reps)).toBeGreaterThanOrEqual(cue.lineE1RM)
+    expect(epley1RM(100, cue.reps - 1)).toBeLessThan(cue.lineE1RM)
+    expect(cue.ready).toBeUndefined()
+  })
+
+  it('leaves the ordinary weight-at-your-reps cue alone while the line is within the cap', () => {
+    // Twelve reps of a 108 line is 77 lbs — well under the cap, so nothing changes.
+    const low = benchLock({ startValue: 100, target: 110, slopePerWeek: 1 })
+    const cue = goalCueForExercise(low, [bench({ target: 110, points: [{ date: '2026-02-15', value: 104 }] })], 'flat_bench', 12, TODAY)!
+    expect(cue.reps).toBe(12)
+    expect(cue.weightLbs).toBeLessThan(100)
+    expect(Math.abs(epley1RM(cue.weightLbs, 12) - cue.lineE1RM)).toBeLessThan(1)
+  })
+
+  it('cues the settling set at the cap, for the reps the target takes, once ready', () => {
+    // Estimate past the target with no set at the cap logged: the ask is 100 × 26
+    // (100 × 25 estimates 183.3, short of 185).
+    const ready = bench({ singles: [], points: [{ date: '2026-02-15', value: 188 }] })
+    const cue = goalCueForExercise({}, [ready], 'flat_bench', 8, TODAY)!
+    expect(cue.ready).toBe(true)
+    expect(cue.weightLbs).toBe(100)
+    expect(cue.reps).toBe(26)
+  })
+})

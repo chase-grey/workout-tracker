@@ -292,6 +292,39 @@ export function bestSingleSeries(
 }
 
 /**
+ * One point per session for the best Epley estimate off a set performed AT a
+ * lift's heaviest available load — the set that settles a goal whose lift can't be
+ * loaded to the target (see goals.GoalSpec's `capLbs`).
+ *
+ * The single a strength goal is normally settled on (see {@link bestSingleSeries})
+ * assumes the weight exists to attempt. Where the rack ends at a pair of 50s, a
+ * bodyweight single doesn't, and the nearest honest thing is a set at that pair for
+ * the reps the formula asks: the estimate is trusted here because there's nothing
+ * else to trust. Only sets at or past the lift's cap count — a lighter set reaching
+ * the same estimate is the ordinary reading the goal paces on, not the set that
+ * closes it. `caps` names the lifts that count and where each tops out; `scale`
+ * works as in {@link combinedBest1RMSeries}.
+ */
+export function bestSetAtCapSeries(
+  rows: WorkoutRow[],
+  caps: Record<string, number>,
+  scale: Record<string, number> = {},
+): Point[] {
+  const bySession = new Map<string, { date: string; best: number }>()
+  for (const r of rows) {
+    const cap = caps[r.exercise]
+    if (cap == null || r.weight_lbs == null || r.weight_lbs < cap) continue
+    const key = r.session_id || r.date
+    const g = bySession.get(key) ?? { date: r.date, best: 0 }
+    g.best = Math.max(g.best, epley1RM(r.weight_lbs, r.reps) * (scale[r.exercise] ?? 1))
+    bySession.set(key, g)
+  }
+  return [...bySession.values()]
+    .map((g) => ({ date: g.date, value: Math.round(g.best * 10) / 10 }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
  * One point per session summing total reps across a *set* of exercise keys —
  * e.g. all core moves combined, so ab work shows up regardless of which ab
  * exercise (cable crunch, weighted sit-up, hanging leg raise) was logged that

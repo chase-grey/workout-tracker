@@ -240,7 +240,11 @@ type DataContextValue = {
   /** File a finished Stretch + Core session and hand back its recap. */
   finishStretch: (input: StretchFinishInput) => Promise<StretchFinishSummary>
   /** A single at `weightLbs` on `exerciseKey`, the way a strength goal is settled. */
-  logMaxAttempt: (exerciseKey: string, weightLbs: number) => Promise<void>
+  /**
+   * Log the set that settles a goal: a single at `weightLbs`, or on a lift capped
+   * short of its target the set at the cap for `reps` (see goals.attemptReps).
+   */
+  logMaxAttempt: (exerciseKey: string, weightLbs: number, reps?: number) => Promise<void>
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
@@ -1006,8 +1010,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // single isn't a session, and the week's count leaves it out (see
   // session.trainingSessions).
   const logMaxAttempt = useCallback(
-    async (exerciseKey: string, weightLbs: number) => {
-      if (!(weightLbs > 0)) return
+    async (exerciseKey: string, weightLbs: number, reps = 1) => {
+      if (!(weightLbs > 0) || !(reps >= 1)) return
       const day = DAY_TYPES.find((t) => plan[t].exercises.some((e) => e.key === exerciseKey))
       const row = maxAttemptRow({
         sessionId: uuid(),
@@ -1015,6 +1019,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         dayType: day ?? 'fullbody',
         exercise: exerciseKey,
         weightLbs,
+        reps: Math.round(reps),
       })
       persistWorkouts([...storage.loadWorkouts(), row])
       enqueue({ type: 'session', rows: [row] })

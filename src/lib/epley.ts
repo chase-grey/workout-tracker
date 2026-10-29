@@ -6,6 +6,17 @@ export function epley1RM(weightLbs: number, reps: number): number {
   return weightLbs * (1 + reps / 30)
 }
 
+/**
+ * The fewest whole reps at `weightLbs` whose Epley estimate reaches `e1rm` — the
+ * formula run backwards, for a lift that can't be loaded any heavier: when the
+ * weight is fixed, the reps are the only thing left to ask for. At or above the
+ * estimate already, a single is enough. Never fewer than one.
+ */
+export function repsForE1RM(e1rm: number, weightLbs: number): number {
+  if (weightLbs <= 0) return 1
+  return Math.max(1, Math.ceil((e1rm / weightLbs - 1) * 30 - 1e-9))
+}
+
 /** Best (highest) estimated 1RM across a session's sets. Ignores blank-weight sets. */
 export function bestSet1RM(sets: SetLog[]): number {
   let best = 0

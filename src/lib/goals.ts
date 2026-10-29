@@ -10,7 +10,9 @@
  */
 
 import type { BodyWeightEntry, WorkoutRow } from '../types'
+import { defaultWeightCap } from '../config/plan'
 import {
+  bestSetAtCapSeries,
   bestSingleSeries,
   combinedAverage1RMSeries,
   combinedBest1RMSeries,
@@ -19,6 +21,7 @@ import {
 } from './progress'
 import { inclineToFlat, LEG_PRESS_TO_SQUAT } from './liftRatios'
 import { isMaxAttempt } from './maxAttempt'
+import { repsForE1RM } from './epley'
 import { bodyFatSeries, personalSixPackTarget, type MeasurementEntry } from './bodyComp'
 import {
   legLiftAvgSeries,
@@ -303,8 +306,28 @@ export type GoalSpec = {
    * Left off the goals where the reading already is the achievement: bodyweight is
    * a weigh-in, a split is measured on the floor, and the pull-up ladder's rungs
    * are reps that were actually performed.
+   *
+   * On a goal whose lift tops out short of the target (see {@link capLbs}) the
+   * series holds sets at that top load instead of singles, read through Epley —
+   * the single can't be loaded, so the set at the cap is what settles it (see
+   * progress.bestSetAtCapSeries).
    */
   singles?: Point[]
+  /**
+   * The heaviest load the goal's lift (`exerciseKey`) can be given, in that lift's
+   * own pounds — the top of the rack (see PlannedExercise.weightCapLbs). Set on a
+   * goal whose target the lift may not be loadable to: a bench goal on dumbbells
+   * that end at a pair of 50s can't ask for a bodyweight single, so once the target
+   * is past the cap the goal is asked for as reps at the cap instead — the fewest
+   * whose Epley estimate reaches the target (see {@link attemptReps}), and the
+   * in-session cue says that number rather than a weight the rack hasn't got (see
+   * goalCue). The target itself stays an estimated max in pounds, so the line and
+   * the pace are untouched; only what you're asked to do about it changes.
+   *
+   * Does nothing while the target is within the cap — the goal is then an ordinary
+   * single away, as before (see {@link goalCapLbs}).
+   */
+  capLbs?: number
   /**
    * What an exercise-driven goal's series counts, for the caller that has to
    * know which language it's in: the in-session cue turns the e1RM its locked
@@ -424,8 +447,36 @@ export function isReadyToAttempt(goal: GoalSpec): boolean {
  * or bar is set to 383.
  */
 export function attemptWeight(goal: GoalSpec, key: string): number {
+  const cap = goalCapLbs(goal, key)
+  if (cap != null) return cap
   const scale = goal.scaleByKey?.[key] ?? 1
   return Math.ceil(goal.target / scale / 5) * 5
+}
+
+/**
+ * The reps the attempt that settles the goal takes on `key`: one, unless the lift
+ * can't be loaded to the target, in which case the set is done at the heaviest
+ * load there is and the reps make up the rest — the fewest whose Epley estimate
+ * reaches the target (see GoalSpec.capLbs, epley.repsForE1RM).
+ */
+export function attemptReps(goal: GoalSpec, key: string): number {
+  const cap = goalCapLbs(goal, key)
+  if (cap == null) return 1
+  const scale = goal.scaleByKey?.[key] ?? 1
+  return repsForE1RM(goal.target / scale, cap)
+}
+
+/**
+ * The load the goal is capped at on `key`, when the cap is what stands between
+ * the lift and the target — the heaviest the lift can be given is lighter than
+ * the single the goal would otherwise ask for (see GoalSpec.capLbs). null when
+ * the goal has no cap or the target is still within it, and the goal is an
+ * ordinary single away.
+ */
+export function goalCapLbs(goal: GoalSpec, key: string): number | null {
+  if (goal.capLbs == null) return null
+  const scale = goal.scaleByKey?.[key] ?? 1
+  return goal.target / scale > goal.capLbs ? goal.capLbs : null
 }
 
 /**
@@ -590,7 +641,15 @@ export function buildGoals({
   // better all the way through reads as better (see combinedAverage1RMSeries).
   const benchScaleByKey = benchScale(working)
   const benchPoints = combinedAverage1RMSeries(working, benchKeys, benchScaleByKey)
-  const benchSingles = bestSingleSeries(workouts, benchKeys)
+  // Where the presses are dumbbell presses and the rack ends, the single that
+  // would settle a bench goal can't be loaded, so what settles it is a set at the
+  // heaviest pair there is — on flat bench alone, at face value, the same way the
+  // singles are: the flat bench is right there to do it on (see GoalSpec.capLbs).
+  const benchCap = defaultWeightCap(BENCH_KEY)
+  const benchSingles =
+    benchCap == null
+      ? bestSingleSeries(workouts, benchKeys)
+      : bestSetAtCapSeries(workouts, { [BENCH_KEY]: benchCap })
   // The squat goals, in squat pounds, off whichever leg movement was trained —
   // the press converted, a barbell squat at face value (see SQUAT_SCALE).
   const squatKeys = [LEG_PRESS_KEY, ...SQUAT_ALSO_KEYS]
@@ -723,6 +782,7 @@ export function buildGoals({
       scaleByKey: benchScaleByKey,
       points: benchPoints,
       singles: benchSingles,
+      capLbs: benchCap,
       target: bwTarget(1),
       direction: 'up',
       movingTarget: true,
@@ -744,6 +804,7 @@ export function buildGoals({
       scaleByKey: benchScaleByKey,
       points: benchPoints,
       singles: benchSingles,
+      capLbs: benchCap,
       target: 200,
       direction: 'up',
       decayPerWeek: STRENGTH_GAIN_DECAY,

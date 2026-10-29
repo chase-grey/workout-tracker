@@ -12,14 +12,20 @@
 
 import { toISODate } from './dates'
 import { expectedAt, type LockedProjections } from './goalLock'
-import { attemptWeight, isReadyToAttempt, type GoalSpec } from './goals'
+import { attemptReps, attemptWeight, goalCapLbs, isReadyToAttempt, type GoalSpec } from './goals'
+import { repsForE1RM } from './epley'
 
 export type GoalCue = {
   goalTitle: string
+  /**
+   * The reps the cue is for. Normally the reps you're about to do; on a lift that
+   * can't be loaded to what the line asks, the reps it takes at the heaviest load
+   * there is instead (see goals.GoalSpec `capLbs`).
+   */
   reps: number
   /**
    * Weight to load on the exercise at `reps` whose Epley e1RM, in the goal's unit,
-   * lands on the locked line as of today.
+   * lands on the locked line as of today — never past the lift's cap.
    */
   weightLbs: number
   /** The e1RM the line calls for today. */
@@ -31,7 +37,8 @@ export type GoalCue = {
   /**
    * The goal isn't asking for another working set anymore — the estimate is there
    * and what's left is the single itself (see goals.isReadyToAttempt). `weightLbs`
-   * is then the attempt weight at one rep rather than a weight on the line.
+   * is then the attempt weight at one rep rather than a weight on the line — or,
+   * on a capped lift, the cap for the reps that settle it (see goals.attemptReps).
    */
   ready?: true
 }
@@ -100,7 +107,7 @@ export function goalCueForExercise(
     const over = round1((latest - goal.target) * toward)
     return {
       goalTitle: goal.title,
-      reps: 1,
+      reps: attemptReps(goal, exerciseKey),
       weightLbs: attemptWeight(goal, exerciseKey),
       lineE1RM: round1(readyLock ? expectedAt(readyLock, toISODate(today)) : goal.target),
       standing: over > 0.05 ? 'ahead' : 'on',
@@ -116,16 +123,24 @@ export function goalCueForExercise(
   // sled it takes, so the cue read as met by sets that were nowhere near the line.
   // A converted weight rounds up to a whole 5 rather than to the half pound: the
   // ratio is nowhere near that precise, and a sled or a pin isn't set to 316.5.
+  //
+  // A lift that can't be loaded that heavy turns the question around: the weight
+  // is the heaviest there is, and the reps are what the line asks for at it (see
+  // goals.GoalSpec `capLbs`). Only once the line actually calls for more than the
+  // cap — short of it, the cue is the ordinary weight at the reps you're doing.
   const lock = locked[goal.id]!
   const lineE1RM = expectedAt(lock, toISODate(today))
   const scale = goal.scaleByKey?.[exerciseKey] ?? 1
   const load = weightForE1RM(lineE1RM / scale, reps)
-  const weightLbs = scale === 1 ? roundHalf(load) : Math.ceil(load / 5) * 5
+  const cap = goalCapLbs(goal, exerciseKey)
+  const capped = cap != null && load > cap
+  const weightLbs = capped ? cap : scale === 1 ? roundHalf(load) : Math.ceil(load / 5) * 5
+  const cueReps = capped ? repsForE1RM(lineE1RM / scale, cap) : reps
 
   const last = goal.points[goal.points.length - 1]
   const toward = Math.sign(lock.target - lock.startValue) || 1
   const aheadBy = round1((last.value - expectedAt(lock, last.date)) * toward)
   const standing = Math.abs(aheadBy) < 0.05 ? 'on' : aheadBy > 0 ? 'ahead' : 'behind'
 
-  return { goalTitle: goal.title, reps, weightLbs, lineE1RM: round1(lineE1RM), standing, aheadBy }
+  return { goalTitle: goal.title, reps: cueReps, weightLbs, lineE1RM: round1(lineE1RM), standing, aheadBy }
 }

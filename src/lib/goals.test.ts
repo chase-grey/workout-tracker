@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
+  attemptReps,
   attemptWeight,
   BARBELL_SQUAT_KEY,
   BENCH_GAIN_CAP,
   BODYWEIGHT_GAIN_CAP,
   buildGoals,
   GOAL_IDS,
+  goalCapLbs,
   type GoalSpec,
   goalsHitInWeek,
   isReached,
@@ -929,9 +931,22 @@ describe('the bench goal reads both presses', () => {
     expect(benchGoal(rows).points).toEqual([{ date: '2026-08-08', value: 196.6, from: 'incline_bench' }])
   })
 
-  it('settles on an incline single at face value, not converted', () => {
-    const rows = [{ ...press('a', '2026-08-15', 'incline_bench', 160, 1, 'A'), notes: MAX_ATTEMPT_NOTE }]
-    expect(benchGoal(rows).singles).toEqual([{ date: '2026-08-15', value: 160 }])
+  it('is settled on flat bench alone — a set at the cap on incline is a reading, not the set', () => {
+    // The presses are dumbbell presses that end at a pair of 50s, so what settles
+    // the goal is a set at 100 — and only on the lift the goal is named for. An
+    // incline set at 100 moves the estimate (converted) but not the settlement.
+    const rows = [
+      press('a', '2026-08-15', 'incline_bench', 100, 20, 'A'),
+      press('b', '2026-08-22', 'flat_bench', 100, 20, 'B'),
+    ]
+    expect(benchGoal(rows).capLbs).toBe(100)
+    expect(benchGoal(rows).singles).toEqual([{ date: '2026-08-22', value: 166.7 }])
+  })
+
+  it('leaves a true single uncounted now that the set at the cap is what settles it', () => {
+    const rows = [{ ...press('a', '2026-08-15', 'flat_bench', 100, 1, 'A'), notes: MAX_ATTEMPT_NOTE }]
+    // A single at the cap is a set at the cap: it enters through Epley like any other.
+    expect(benchGoal(rows).singles).toEqual([{ date: '2026-08-15', value: 103.3 }])
   })
 
   it('names flat bench as the lift it is cued on, with incline counted alongside', () => {
@@ -1074,14 +1089,40 @@ describe('the bench goal is settled the same way', () => {
       (g) => g.id === GOAL_IDS.benchBodyweight,
     )!
 
-  it('reads ready on the estimate and reached on the single', () => {
-    const ready = benchGoal([bench('2026-08-08', 150, 8)]) // 190 estimated, bodyweight is 170
+  it('asks for reps at the heaviest pair, since a bodyweight single cannot be loaded', () => {
+    // Bodyweight is 170 and the rack ends at a pair of 50s. 100 × 21 is the first
+    // set whose estimate reaches 170 (100 × 20 is 166.7), so that is the ask.
+    const open = benchGoal([bench('2026-08-08', 100, 12)]) // 140 estimated
+    expect(open.capLbs).toBe(100)
+    expect(isReached(open)).toBe(false)
+    expect(isReadyToAttempt(open)).toBe(false)
+    expect(attemptWeight(open, 'flat_bench')).toBe(100)
+    expect(attemptReps(open, 'flat_bench')).toBe(21)
+
+    // The set at the cap settles it on the spot — it is the only proof there is.
+    const done = benchGoal([bench('2026-08-08', 100, 12), bench('2026-08-12', 100, 21)])
+    expect(isReached(done)).toBe(true)
+    expect(reachedDate(done)).toBe('2026-08-12')
+  })
+
+  it('does not let a lighter set settle it, however far its estimate reaches', () => {
+    // 90 × 30 estimates 180 — past bodyweight — but 90 is not the heaviest pair,
+    // so the goal reads ready and asks for the set at 100 rather than calling
+    // itself done.
+    const ready = benchGoal([bench('2026-08-08', 90, 30)])
     expect(isReached(ready)).toBe(false)
     expect(isReadyToAttempt(ready)).toBe(true)
-    expect(attemptWeight(ready, 'flat_bench')).toBe(170)
+    expect(attemptWeight(ready, 'flat_bench')).toBe(100)
+    expect(attemptReps(ready, 'flat_bench')).toBe(21)
+  })
 
-    const done = benchGoal([bench('2026-08-08', 150, 8), bench('2026-08-12', 175, 1)])
-    expect(isReached(done)).toBe(true)
+  it('goes back to asking for a single if the target ever sits within the cap', () => {
+    // The cap only changes the ask when it is what stands between the lift and the
+    // target. A rack that reached the target would leave the goal a single away.
+    const g = { ...benchGoal([bench('2026-08-08', 100, 12)]), capLbs: 200 }
+    expect(goalCapLbs(g, 'flat_bench')).toBeNull()
+    expect(attemptWeight(g, 'flat_bench')).toBe(170)
+    expect(attemptReps(g, 'flat_bench')).toBe(1)
   })
 
   describe('and the 200 above it', () => {
@@ -1097,24 +1138,25 @@ describe('the bench goal is settled the same way', () => {
       expect(g.exerciseKey).toBe('flat_bench')
       expect(g.alsoCounts).toEqual(['incline_bench'])
       expect(g.points).toEqual(benchGoal([bench('2026-08-08', 150, 8)]).points)
-      expect(attemptWeight(g, 'flat_bench')).toBe(200)
+      // Two plates off a pair of 50s is thirty reps at 100, exactly.
+      expect(attemptWeight(g, 'flat_bench')).toBe(100)
+      expect(attemptReps(g, 'flat_bench')).toBe(30)
     })
 
-    it('waits on the single the bodyweight rung waits on', () => {
-      // 170×8 estimates 215, so the estimate is there and the goal is asking for
-      // the attempt rather than calling itself done.
-      const ready = twoHundred([bench('2026-08-08', 170, 8)])
-      expect(isReached(ready)).toBe(false)
-      expect(isReadyToAttempt(ready)).toBe(true)
+    it('is settled by the set at the cap the bodyweight rung is settled by', () => {
+      // 90 × 35 estimates 195 — not there yet, and not at the cap either.
+      const open = twoHundred([bench('2026-08-08', 90, 35)])
+      expect(isReached(open)).toBe(false)
+      expect(isReadyToAttempt(open)).toBe(false)
 
-      const done = twoHundred([bench('2026-08-08', 170, 8), bench('2026-08-12', 200, 1)])
+      const done = twoHundred([bench('2026-08-08', 90, 35), bench('2026-08-12', 100, 30)])
       expect(isReached(done)).toBe(true)
     })
 
     it('stays open on a bodyweight rung that got cleared under it', () => {
-      // A single at bodyweight settles "bench my bodyweight" and leaves 200 to go —
-      // which is the whole reason the rung is there.
-      const rows = [bench('2026-08-08', 150, 8), bench('2026-08-12', 175, 1)]
+      // 100 × 21 settles "bench my bodyweight" and leaves 200 to go — which is
+      // the whole reason the rung is there.
+      const rows = [bench('2026-08-08', 100, 12), bench('2026-08-12', 100, 21)]
       expect(isReached(benchGoal(rows))).toBe(true)
       expect(isReached(twoHundred(rows))).toBe(false)
     })

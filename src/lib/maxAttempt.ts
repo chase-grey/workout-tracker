@@ -24,6 +24,14 @@ import type { DayType, WorkoutRow } from '../types'
 
 /** Note written on rows the goal prompt logs, so the sheet says what they were. */
 export const MAX_ATTEMPT_NOTE = '1rm attempt'
+/**
+ * Note on the set the goal prompt logs for a lift that can't be loaded to a
+ * single: the heaviest load there is, for the reps that settle the goal (see
+ * goals.attemptReps). It's a set of many reps at a working weight, so unlike a
+ * single it IS a working set — nothing here needs to tell the rest of the app
+ * otherwise, and the note is only so the sheet says why it stands alone.
+ */
+export const GOAL_SET_NOTE = 'goal set'
 
 /** Whether a logged set is a max attempt: a single, with a weight on it. */
 export function isMaxAttempt(row: { reps: number; weight_lbs: number | null }): boolean {
@@ -35,19 +43,25 @@ export function isAttemptOnly(rows: { reps: number; weight_lbs: number | null }[
   return rows.length > 0 && rows.every(isMaxAttempt)
 }
 
-/** The row a logged attempt becomes. */
+/**
+ * The row a logged attempt becomes: a single, unless the goal is settled by a set
+ * at the lift's cap instead, in which case `reps` is that set's count (see
+ * goals.attemptReps) and the row is an ordinary working set with a note.
+ */
 export function maxAttemptRow({
   sessionId,
   date,
   dayType,
   exercise,
   weightLbs,
+  reps = 1,
 }: {
   sessionId: string
   date: string
   dayType: DayType
   exercise: string
   weightLbs: number
+  reps?: number
 }): WorkoutRow {
   return {
     session_id: sessionId,
@@ -56,8 +70,8 @@ export function maxAttemptRow({
     exercise,
     set_number: 1,
     weight_lbs: weightLbs,
-    reps: 1,
-    notes: MAX_ATTEMPT_NOTE,
+    reps,
+    notes: reps === 1 ? MAX_ATTEMPT_NOTE : GOAL_SET_NOTE,
     is_historical: false,
   }
 }

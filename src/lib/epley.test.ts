@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bestSet1RM, bestSetWeight, epley1RM, sessionVolume } from './epley'
+import { bestSet1RM, bestSetWeight, epley1RM, repsForE1RM, sessionVolume } from './epley'
 import type { SetLog } from '../types'
 
 const sets: SetLog[] = [
@@ -15,6 +15,22 @@ describe('epley1RM', () => {
   })
   it('returns 0 for non-positive reps', () => {
     expect(epley1RM(100, 0)).toBe(0)
+  })
+})
+
+describe('repsForE1RM', () => {
+  it('is the inverse of epley1RM at a fixed weight, rounded up to a whole rep', () => {
+    // 100 × 26 → 186.7 is the first whole rep count past a 185 estimate.
+    expect(repsForE1RM(185, 100)).toBe(26)
+    expect(epley1RM(100, 26)).toBeGreaterThanOrEqual(185)
+    expect(epley1RM(100, 25)).toBeLessThan(185)
+    // Two plates off a pair of 50s is thirty reps exactly.
+    expect(repsForE1RM(200, 100)).toBe(30)
+    expect(epley1RM(100, 30)).toBe(200)
+  })
+  it('asks for a single when the weight already meets the estimate', () => {
+    expect(repsForE1RM(100, 100)).toBe(1)
+    expect(repsForE1RM(90, 100)).toBe(1)
   })
 })
 

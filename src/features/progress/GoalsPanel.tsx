@@ -15,10 +15,12 @@ import { isPaceCapped, type Projection } from '../../lib/predictions'
 import { type Point } from '../../lib/progress'
 import { calorieHitsByWeek } from '../../lib/calories'
 import {
+  attemptReps,
   attemptWeight,
   bodyWeightPoints,
   buildGoals,
   GOAL_IDS,
+  goalCapLbs,
   isReached,
   isReadyToAttempt,
   projectGoal,
@@ -27,6 +29,7 @@ import {
 } from '../../lib/goals'
 import { exerciseName } from '../../config/plan'
 import { setsByDate, type DaySets } from '../../lib/goalSets'
+import { repsForE1RM } from '../../lib/epley'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import { isLiftLadder } from '../../lib/liftLadder'
 import type { SixPackStatus } from '../../services/storage'
@@ -548,6 +551,10 @@ function goalRing(lockable: boolean, committed: boolean, reached = false, ready 
  * real number: going heavier than the goal asked deserves to be logged as what it
  * was, and a miss logged honestly leaves the goal open, which is the point of
  * settling it this way.
+ *
+ * On a lift that can't be loaded to the target, the single becomes a set: the
+ * weight is pinned at the heaviest there is and the reps are what's asked and
+ * what's editable (see goals.GoalSpec `capLbs`, goals.attemptReps).
  */
 function AttemptPrompt({
   goal,
@@ -557,13 +564,18 @@ function AttemptPrompt({
   goal: GoalSpec
   /** The lift the attempt is taken on — the goal's own (see GoalSpec.exerciseKey). */
   exerciseKey: string
-  onLog: (weightLbs: number) => void
+  onLog: (weightLbs: number, reps: number) => void
 }) {
   const [open, setOpen] = useState(false)
   const needed = attemptWeight(goal, exerciseKey)
+  const neededReps = attemptReps(goal, exerciseKey)
+  const capped = goalCapLbs(goal, exerciseKey) != null
   const [weight, setWeight] = useState(String(needed))
+  const [reps, setReps] = useState(String(neededReps))
   const entered = Number(weight)
-  const valid = Number.isFinite(entered) && entered > 0
+  const enteredReps = capped ? Number(reps) : 1
+  const valid =
+    Number.isFinite(entered) && entered > 0 && Number.isInteger(enteredReps) && enteredReps >= 1
 
   if (!open) {
     return (
@@ -573,7 +585,7 @@ function AttemptPrompt({
       >
         <p className="text-sm font-medium text-accent-bright">
           <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
-          ready to try it · {needed} × 1 {exerciseName(exerciseKey)}
+          ready to try it · {needed} × {neededReps} {exerciseName(exerciseKey)}
         </p>
       </button>
     )
@@ -583,22 +595,36 @@ function AttemptPrompt({
     <div className="mt-2 rounded-xl bg-accent-bright/10 p-3">
       <p className="text-sm font-medium text-accent-bright">
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
-        {exerciseName(exerciseKey)} single
+        {exerciseName(exerciseKey)} {capped ? `set at ${needed}` : 'single'}
       </p>
       <div className="mt-3 flex items-center gap-2">
-        <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
-          lbs
-          <input
-            type="number"
-            inputMode="decimal"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            aria-label={`weight lifted for ${goal.title}`}
-            className="min-h-[36px] w-24 rounded-lg bg-surface-2 px-2 text-sm tabular-nums text-neutral-200"
-          />
-        </label>
+        {capped ? (
+          <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
+            reps
+            <input
+              type="number"
+              inputMode="numeric"
+              value={reps}
+              onChange={(e) => setReps(e.target.value)}
+              aria-label={`reps at ${needed} lbs for ${goal.title}`}
+              className="min-h-[36px] w-24 rounded-lg bg-surface-2 px-2 text-sm tabular-nums text-neutral-200"
+            />
+          </label>
+        ) : (
+          <label className="flex flex-1 items-center gap-2 text-sm text-neutral-400">
+            lbs
+            <input
+              type="number"
+              inputMode="decimal"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              aria-label={`weight lifted for ${goal.title}`}
+              className="min-h-[36px] w-24 rounded-lg bg-surface-2 px-2 text-sm tabular-nums text-neutral-200"
+            />
+          </label>
+        )}
         <button
-          onClick={() => valid && onLog(entered)}
+          onClick={() => valid && onLog(entered, enteredReps)}
           disabled={!valid}
           className="min-h-[36px] shrink-0 rounded-lg bg-accent-bright px-3 text-sm font-medium text-black active:opacity-70 disabled:opacity-40"
         >
@@ -636,8 +662,11 @@ function GoalRow({
   onDrop: () => void
   /** Commit the goal to a target date — the first one, or a changed one. */
   onLock: (etaDate: string) => void
-  /** Log the single that settles the goal, once it's ready to be attempted. */
-  onLogAttempt: (weightLbs: number) => void
+  /**
+   * Log the single that settles the goal, once it's ready to be attempted — or,
+   * on a lift capped short of the target, the set at the cap (see AttemptPrompt).
+   */
+  onLogAttempt: (weightLbs: number, reps: number) => void
   /** Plot the goal's own series (with its target line) while it's unlocked. */
   showData?: boolean
   /**
@@ -689,6 +718,15 @@ function GoalRow({
   // goal shows the live target instead, since that's the one it was judged met
   // against (see isReached).
   const shownTarget = lock && !reached ? lock.target : goal.target
+  // A target the lift can't be loaded to is also said as what it comes to on the
+  // lift itself: the heaviest load there is, for the reps whose estimate reaches
+  // the target (see goals.GoalSpec `capLbs`). Read off the target shown, so a
+  // locked goal's ask matches the number it's measured against.
+  const cap = goal.exerciseKey ? goalCapLbs({ ...goal, target: shownTarget }, goal.exerciseKey) : null
+  const capAsk =
+    cap != null && goal.exerciseKey
+      ? `${cap} × ${repsForE1RM(shownTarget / (goal.scaleByKey?.[goal.exerciseKey] ?? 1), cap)}`
+      : null
   // The date of the latest reading: the pace is measured against the line on that
   // date, not against today, so a goal sits where the last session left it rather
   // than drifting behind as rest days pass (see paceAgainstLock).
@@ -720,6 +758,7 @@ function GoalRow({
           !reached && (
             <span className="text-sm text-neutral-400 tabular-nums">
               {has ? `${proj.current}` : '—'} → {shownTarget} {goal.unit}
+              {capAsk && ` · ${capAsk}`}
             </span>
           )
         )}
@@ -1032,8 +1071,8 @@ export function GoalsPanel() {
       lock={locked[g.id]}
       onDrop={() => dropCommitment(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
-      onLogAttempt={(weightLbs) => {
-        if (g.exerciseKey) void logMaxAttempt(g.exerciseKey, weightLbs)
+      onLogAttempt={(weightLbs, reps) => {
+        if (g.exerciseKey) void logMaxAttempt(g.exerciseKey, weightLbs, reps)
       }}
       showData={g.exerciseKey != null || g.milestone}
       sets={setsFor(g)}
