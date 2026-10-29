@@ -115,7 +115,10 @@ export type PlannedExercise = {
    * Loaded with a dumbbell in each hand, and the weight logged is the pair's
    * total. The rack steps in 5s, but both hands change at once, so the smallest
    * move available is 10 lbs — every paired movement's `increment` is 10, and one
-   * added later should be too.
+   * added later should be too. The rack also ends: its heaviest dumbbell is
+   * {@link DUMBBELL_MAX_LBS}, so a pair can never log more than twice that, and
+   * every paired movement carries that as its `weightCapLbs` (see
+   * {@link DUMBBELL_PAIR}).
    *
    * A movement loaded one side at a time isn't one of these: the lateral raise
    * is done one arm at a time off the cable stack, so each side logs the single
@@ -124,15 +127,18 @@ export type PlannedExercise = {
   dumbbellPair?: boolean
   /**
    * The heaviest load this movement can actually be given — the top of the stack,
-   * the last plate on the rack. Once a session is working at it, double progression
-   * has no weight left to add, so the reps become the ladder instead: the top of the
-   * rep range stops applying and the prescription is simply one more rep than last
-   * time, session after session (see progression.nextTarget).
+   * the last plate on the rack, the heaviest pair of dumbbells. Once a session is
+   * working at it, double progression has no weight left to add, so the reps become
+   * the ladder instead: the top of the rep range stops applying and the
+   * prescription is simply one more rep than last time, session after session (see
+   * progression.nextTarget).
    *
    * Only worth setting where the ceiling is real. A movement with room left on
    * the stack progresses in weight the ordinary way — the cap only keeps the last
    * step from being prescribed past it, and does nothing more until the load
-   * arrives at it.
+   * arrives at it. A goal cued on a capped lift reads it too: a target the cap
+   * can't be loaded to is asked for as reps at the cap instead (see goals.GoalSpec
+   * `capLbs`).
    */
   weightCapLbs?: number
   /**
@@ -397,6 +403,22 @@ export const SIDE_RAISE_ROUND_REST_SEC = 45
  */
 export const CABLE_STACK = { increment: 1, weightCapLbs: 15, stackSetting: true } as const
 
+/**
+ * The heaviest dumbbell on the rack. Nothing done with dumbbells can be asked for
+ * more than this per hand, so a paired movement tops out at twice it and climbs
+ * in reps from there (see DUMBBELL_PAIR); a goal cued on one of them is asked for
+ * as reps at that load rather than as a single it can't be loaded to (see
+ * goals.GoalSpec `capLbs`).
+ */
+export const DUMBBELL_MAX_LBS = 50
+
+/**
+ * The load fields of every movement done with a dumbbell in each hand: the
+ * logged weight is the pair's total, so it moves in 10s and can never go past
+ * two of the heaviest dumbbell (see PlannedExercise.dumbbellPair, DUMBBELL_MAX_LBS).
+ */
+export const DUMBBELL_PAIR = { increment: 10, dumbbellPair: true, weightCapLbs: DUMBBELL_MAX_LBS * 2 } as const
+
 export const DEFAULT_PLAN: Plan = {
   push: {
     type: 'push',
@@ -420,8 +442,12 @@ export const DEFAULT_PLAN: Plan = {
       // keeping weekly chest volume near 16 sets instead of an unproductive 20+.
       // Either press can carry the bench-bodyweight goal's reading, so whichever
       // one leads, the day counts (see goals.BENCH_ALSO_KEYS).
-      { key: 'incline_bench', name: 'incline bench press', sets: 4, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest', byVariant: { B: { sets: 3 } } },
-      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'chest', byVariant: { B: { sets: 4, swapWith: 'incline_bench' } } },
+      //
+      // Both presses are dumbbell presses — there's no barbell bench to use — so
+      // both log the pair's total and both end where the rack does, at a pair of
+      // 50s. From there the reps are the ladder (see DUMBBELL_PAIR).
+      { key: 'incline_bench', name: 'incline bench press', sets: 4, repMin: 6, repMax: 10, restSec: 150, ...DUMBBELL_PAIR, group: 'chest', byVariant: { B: { sets: 3 } } },
+      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 8, repMax: 12, restSec: 120, ...DUMBBELL_PAIR, group: 'chest', byVariant: { B: { sets: 4, swapWith: 'incline_bench' } } },
 
       // Overhead press follows the presses directly now that the fly is gone —
       // front delts already take heavy work from seven press sets above, so three
@@ -521,9 +547,10 @@ export const DEFAULT_PLAN: Plan = {
 
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
-      // Both are a dumbbell in each hand, so both step in 10s (see dumbbellPair).
-      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, increment: 10, dumbbellPair: true, group: 'biceps' },
-      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 45, increment: 10, dumbbellPair: true, group: 'biceps' },
+      // Both are a dumbbell in each hand, so both step in 10s and top out at the
+      // rack's heaviest pair (see DUMBBELL_PAIR).
+      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
 
       // Extension and flexion are antagonists, so they rotate as a circuit and the
       // pair costs about as long as one of them would alone. Two directions is what
@@ -544,11 +571,11 @@ export const DEFAULT_PLAN: Plan = {
     // push + core day rather than shorter.
     exercises: [
       { key: 'leg_press', name: 'leg press', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 10, group: 'legs' },
-      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 5, group: 'chest' },
+      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 150, ...DUMBBELL_PAIR, group: 'chest' },
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
-      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, dumbbellPair: true, group: 'shoulders' },
+      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, ...DUMBBELL_PAIR, group: 'shoulders' },
 
-      { key: 'hammer_curl', name: 'hammer curl', sets: 2, repMin: 10, repMax: 15, restSec: 60, increment: 10, dumbbellPair: true, group: 'arms circuit', circuit: 'arms' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 2, repMin: 10, repMax: 15, restSec: 60, ...DUMBBELL_PAIR, group: 'arms circuit', circuit: 'arms' },
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms' },
 
       { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'core' },
@@ -602,11 +629,19 @@ export function withDayOrder(plan: Plan, order: DayType[]): Plan {
  * or because the movement can't be loaded at all — so the reps go on climbing past
  * it and a closed range would be describing a ceiling that isn't there (see
  * {@link PlannedExercise.weightCapLbs} and {@link PlannedExercise.repLadder}).
+ *
+ * A capped movement is only open-ended once it's AT the cap — a curl with a cap of
+ * 100 and 60 on the bar still has weight to earn, and its range still closes at
+ * the top (see progression.nextTarget). So the label takes the load it's being
+ * read at, `weightLbs`; without one, a cap it can't tell is reached shows the
+ * range as it is. A movement that can't be loaded at all is open-ended regardless.
  */
 export function repRangeLabel(
   e: Pick<PlannedExercise, 'repMin' | 'repMax' | 'weightCapLbs' | 'repLadder'>,
+  weightLbs?: number | null,
 ): string {
-  if (e.weightCapLbs != null || e.repLadder) return `${e.repMax}+`
+  const atCap = e.weightCapLbs != null && weightLbs != null && weightLbs >= e.weightCapLbs
+  if (atCap || e.repLadder) return `${e.repMax}+`
   return e.repMin === e.repMax ? `${e.repMin}` : `${e.repMin}–${e.repMax}`
 }
 
@@ -688,6 +723,18 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
 })()
 
 /**
+ * The heaviest load a shipped movement can be given, or undefined when it has no
+ * ceiling (see PlannedExercise.weightCapLbs). Read off the defaults rather than
+ * the live plan because the cap is program design, not preference: a stored plan
+ * always takes it from the defaults (see mergeDayExercises), so the two agree, and
+ * a goal built without a plan in hand (see goals.buildGoals) still knows where
+ * its lift tops out.
+ */
+export function defaultWeightCap(key: string): number | undefined {
+  return ALL_EXERCISES.find((e) => e.key === key)?.weightCapLbs
+}
+
+/**
  * Day labels the defaults used to ship with. A plan saved under an old name
  * keeps that label forever, so a rename here would never reach a device that
  * had already stored one — these get upgraded to the current default instead.
@@ -731,6 +778,10 @@ const LEGACY_EXERCISE_INCREMENTS: Record<string, number[]> = {
   overhead_tricep_ext: [2.5],
   lateral_raise_l: [2.5],
   lateral_raise_r: [2.5],
+  // Shipped as barbell steps before the presses were read as the dumbbell lifts
+  // they are (see DUMBBELL_PAIR).
+  flat_bench: [5],
+  incline_bench: [5],
 }
 
 /** Same idea as LEGACY_EXERCISE_NAMES, for the display group. */

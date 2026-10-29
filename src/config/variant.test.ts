@@ -155,8 +155,15 @@ describe('the pull + legs day', () => {
     expect(rest('weighted_pullups')).toBe(120)
   })
 
-  it('shows a capped movement as an open-ended rep range', () => {
-    expect(repRangeLabel({ repMin: 20, repMax: 20, weightCapLbs: 100 })).toBe('20+')
+  it('shows a capped movement as an open-ended rep range once it is at the cap', () => {
+    const calf = { repMin: 20, repMax: 20, weightCapLbs: 100 }
+    expect(repRangeLabel(calf, 100)).toBe('20+')
+    // Short of the cap there is still weight to earn, so the range still closes;
+    // and with no load to read it at, the cap can't be called reached.
+    expect(repRangeLabel({ ...calf, repMin: 15 }, 80)).toBe('15–20')
+    expect(repRangeLabel({ ...calf, repMin: 15 })).toBe('15–20')
+    // A movement that takes no weight is open-ended from the first session.
+    expect(repRangeLabel({ repMin: 15, repMax: 15, repLadder: true })).toBe('15+')
   })
 
   it('pairs the two neck directions as a circuit', () => {

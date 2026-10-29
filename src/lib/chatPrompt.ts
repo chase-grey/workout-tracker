@@ -1,5 +1,5 @@
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types'
-import { PLAN, DAY_TYPES, exerciseName, repRangeLabel } from '../config/plan'
+import { PLAN, DAY_TYPES, DUMBBELL_MAX_LBS, exerciseName, repRangeLabel } from '../config/plan'
 import { toISODate, parseISODate } from './dates'
 import { parseDiscomfort } from './discomfort'
 import { CALORIE_GOAL } from './calories'
@@ -25,8 +25,10 @@ function renderPlan(): string {
       // A dumbbell in each hand: the logged number is the pair's total, so the
       // smallest change is 10 lbs. The coach talks in these numbers and can add
       // exercises, so the rule belongs where it can read it.
+      // The rack also ends, and the coach has to know where: a weight it can't
+      // actually hand you is worse than no suggestion (see DUMBBELL_MAX_LBS).
       const paired = ex.dumbbellPair
-        ? ' [a dumbbell in each hand, so the weight logged is the pair total and only moves in 10s]'
+        ? ` [a dumbbell in each hand, so the weight logged is the pair total and only moves in 10s; the heaviest dumbbell is ${DUMBBELL_MAX_LBS} lbs, so never suggest more than ${DUMBBELL_MAX_LBS * 2} total — at ${DUMBBELL_MAX_LBS * 2} it progresses by reps only]`
         : ''
       // Circuit stations rotate rather than running their sets back to back, and
       // each one sets the rest that follows it, so both belong on the line.
@@ -151,7 +153,7 @@ function renderTools(skills: CoachSkills): string[] {
     lines.push(
       `Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. ${elsewhere}`,
       ``,
-      `A movement done with a dumbbell in each hand logs the pair's total, so its weight step is 10 lbs and never 5: the rack moves in 5s and both hands change at once. Give any such exercise you add \`increment: 10\`, and never talk about a 5-lb jump on one of the paired movements marked in the plan below.`,
+      `A movement done with a dumbbell in each hand logs the pair's total, so its weight step is 10 lbs and never 5: the rack moves in 5s and both hands change at once. The heaviest dumbbell available is ${DUMBBELL_MAX_LBS} lbs, so no paired movement can ever be given more than ${DUMBBELL_MAX_LBS * 2} lbs total — never suggest more; once a lift is there, the only way up is reps, and a strength goal on it is reached by reps at that weight rather than by a heavier single. Give any such exercise you add \`increment: 10\` and \`weightCapLbs: ${DUMBBELL_MAX_LBS * 2}\`, and never talk about a 5-lb jump on one of the paired movements marked in the plan below.`,
       ``,
       `The cable pulldown machine's stack is numbered 1 to 15 rather than weighed. Every movement marked as a stack setting in the plan below logs that number, not pounds: talk about it as a setting, move it one at a time, and never suggest a setting above 15 — once a lift is at 15 the only way up is reps. Give any exercise you add on that machine \`increment: 1\`.`,
       ``,

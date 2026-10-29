@@ -5,6 +5,7 @@ import {
   COPENHAGEN_HOLD_SEC,
   DAY_TYPES,
   DEFAULT_PLAN,
+  DUMBBELL_MAX_LBS,
   MAT_SITUP_KEY,
   STRETCH_CORE,
   TODAY_DAY_ORDER,
@@ -27,6 +28,7 @@ import {
 import { buildSetOrder } from '../lib/circuit'
 import { nextTarget } from '../lib/progression'
 import { restBeforeNextSet } from '../lib/rest'
+import type { WorkoutRow } from '../types'
 
 describe('TODAY_DAY_ORDER', () => {
   it('offers every day exactly once', () => {
@@ -685,10 +687,59 @@ describe('the two-dumbbell movements as they ship', () => {
     }
   })
 
-  it('covers the curls and the overhead press', () => {
+  it('covers the curls, the overhead press and both bench presses', () => {
     expect(new Set(paired.map((p) => p.ex.key))).toEqual(
-      new Set(['hammer_curl', 'incline_db_curl', 'db_overhead_press']),
+      new Set(['hammer_curl', 'incline_db_curl', 'db_overhead_press', 'flat_bench', 'incline_bench']),
     )
+  })
+
+  it('tops every one of them out at a pair of the heaviest dumbbell', () => {
+    // The rack ends at 50s. Nothing done with two of them can be asked for more
+    // than 100, and from there the progression is reps (see DUMBBELL_PAIR).
+    expect(DUMBBELL_MAX_LBS).toBe(50)
+    for (const { day, ex } of paired) {
+      expect(ex.weightCapLbs, `${ex.key} on ${day}`).toBe(DUMBBELL_MAX_LBS * 2)
+    }
+  })
+
+  it('never asks a bench at the heaviest pair for a heavier pair', () => {
+    const flat = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'flat_bench')!
+    const set = (date: string, reps: number): WorkoutRow => ({
+      session_id: date,
+      date,
+      day_type: 'push',
+      exercise: 'flat_bench',
+      set_number: 1,
+      weight_lbs: 100,
+      reps,
+      notes: '',
+      is_historical: false,
+    })
+    // Topped the range at the cap: the ordinary bump to 110 doesn't exist, so the
+    // ask is one more rep at 100 instead.
+    const rows = [set('2026-10-26', 12), { ...set('2026-10-26', 12), set_number: 2 }, { ...set('2026-10-26', 12), set_number: 3 }]
+    const next = nextTarget(rows, 'flat_bench', { ...flat, variant: 'B', today: new Date(2026, 9, 29) })
+    expect(next).toEqual({ weightLbs: 100, reps: 13 })
+  })
+
+  it('brings a stored barbell-sized step on the presses up to the pair step', () => {
+    // Both presses shipped stepping in 5s before they were marked as dumbbell
+    // lifts. A saved 5 is that old default and follows the defaults to 10.
+    const stored: Plan = {
+      ...DEFAULT_PLAN,
+      push: {
+        ...DEFAULT_PLAN.push,
+        exercises: DEFAULT_PLAN.push.exercises.map((e) =>
+          e.key === 'flat_bench' || e.key === 'incline_bench' ? { ...e, increment: 5 } : e,
+        ),
+      },
+    }
+    const merged = withPlanDefaults(stored)
+    for (const key of ['flat_bench', 'incline_bench']) {
+      const ex = merged.push.exercises.find((e) => e.key === key)!
+      expect(ex.increment, key).toBe(10)
+      expect(ex.weightCapLbs, key).toBe(100)
+    }
   })
 
   it('leaves the one-arm lateral raise out: it is pinned on the cable stack', () => {

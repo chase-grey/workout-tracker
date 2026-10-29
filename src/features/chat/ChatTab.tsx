@@ -259,10 +259,11 @@ function circuitNote(e: PlannedExercise): string {
 }
 
 /**
- * Why a rep range reads open-ended: either the load has a ceiling and the movement
- * is at it, or the movement can't be loaded at all. Without the note the coach sees
- * a `15+` and suggests adding weight the gym hasn't got — or that the exercise
- * can't take (see PlannedExercise.weightCapLbs / repLadder).
+ * Where a movement's load ends, or that it can't be loaded at all. Without the
+ * note the coach suggests adding weight the gym hasn't got — a pair of 55s, a 16th
+ * plate — or that the exercise can't take (see PlannedExercise.weightCapLbs /
+ * repLadder). Said as the ceiling rather than as "reps only", because a capped
+ * movement still earns weight until it gets there.
  */
 function capNote(e: PlannedExercise): string {
   if (e.repLadder) return ', takes no weight at all — progress by reps only'
@@ -272,7 +273,7 @@ function capNote(e: PlannedExercise): string {
   if (e.stackSetting) {
     return `, loaded as a stack setting from 1 to ${e.weightCapLbs} (not lbs) — step it by 1, never suggest above ${e.weightCapLbs}, and at ${e.weightCapLbs} progress by reps only`
   }
-  return `, ${e.weightCapLbs} lbs is the heaviest available — progress by reps only`
+  return `, ${e.weightCapLbs} lbs is the heaviest available — never suggest more; at ${e.weightCapLbs} progress by reps only`
 }
 
 /**

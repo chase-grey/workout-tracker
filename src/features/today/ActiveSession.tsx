@@ -1089,7 +1089,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       ) : (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
           set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
-          {repRangeLabel(planned)} {planned.timed ? 'sec' : 'reps'} · rest {restLabel(restShownSec)}
+          {repRangeLabel(planned, target?.weightLbs)} {planned.timed ? 'sec' : 'reps'} · rest {restLabel(restShownSec)}
         </p>
       )}
     </div>
