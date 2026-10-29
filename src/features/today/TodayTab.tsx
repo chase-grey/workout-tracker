@@ -8,7 +8,6 @@ import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
 import { dayOrder, type VariantKey } from '../../config/plan'
 import { lastTrainingSession } from '../../lib/session'
-import { lastStretchRoutine } from '../../lib/stretchRotation'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
@@ -24,7 +23,7 @@ type Props = {
 }
 
 export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
-  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries } =
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan } =
     useData()
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
@@ -64,9 +63,13 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const lastDay = lastTrainingSession(workouts)?.dayType ?? null
   const dimmedDay: DayType | null = lastDay === 'push' || lastDay === 'pull' ? lastDay : null
 
-  // The two stretch routines dim the same way and for the same reason: whichever
-  // was done last steps back so the other reads as up next.
-  const dimmedStretch = lastStretchRoutine(flexEntries)
+  // The two stretch routines would dim the same way and for the same reason —
+  // whichever was done last steps back so the other reads as up next — but for
+  // now head to toe is the focus, so the side split is pinned dim and head to
+  // toe always reads as up next. Dimming is only a hint; the side split still
+  // starts. To go back to alternating, read `lastStretchRoutine` from
+  // lib/stretchRotation off `flexEntries` here instead of the constant.
+  const dimmedStretch: FlexRoutineKey = 'side_split'
   const abDays = weeklyAbsDays(workouts, plan, toISODate(new Date()))
   const absRemaining = Math.max(0, WEEKLY_ABS_GOAL - abDays.length)
 
