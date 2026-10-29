@@ -1,7 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MdKeyboardArrowDown, MdKeyboardArrowUp } from 'react-icons/md'
 import { parseTempo, workPhaseCount, type TempoPhase } from '../lib/tempo'
-import { rhythmWaveGlowStart, rhythmWavePath, rhythmWavePoint } from '../lib/rhythmWave'
+import {
+  rhythmWaveEnd,
+  rhythmWaveGlowStart,
+  rhythmWavePath,
+  rhythmWavePoint,
+  rhythmWaveTailPath,
+} from '../lib/rhythmWave'
 import {
   attack,
   cycleCloses,
@@ -51,6 +57,14 @@ type Variant = RhythmVariant
 
 /** Depth 0–1 (0 = neutral/top, 1 = deepest) mapped to a breathing orb's scale. */
 const SCALE_MIN = 0.55
+
+/**
+ * How the wave's white spreads back from the dot once the dot reaches it: far
+ * enough, in wave units (the screen is 100 wide and the dot sits at 50), to clear
+ * the left edge, and slow enough to be seen moving.
+ */
+const SWEEP_UNITS = 60
+const SWEEP_MS = 450
 const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
 
 /**
@@ -93,9 +107,13 @@ const TONES: Record<RepGlow, {
   },
 }
 
-function useTone(glow: RepGlow) {
+/**
+ * A value that eases toward `target` over `ms` whenever the target changes,
+ * starting wherever it was. Mounts already at the target, so a guide that begins
+ * in its finished state doesn't animate into it.
+ */
+function useRamp(target: number, ms: number) {
   const reduced = usePrefersReducedMotion()
-  const target = glow === 'done' ? 1 : 0
   const [amount, setAmount] = useState(target)
   const current = useRef(target)
   useEffect(() => {
@@ -103,14 +121,19 @@ function useTone(glow: RepGlow) {
     const start = performance.now()
     let frame = 0
     const tick = (now: number) => {
-      const t = reduced ? 1 : Math.min(1, (now - start) / 180)
+      const t = reduced ? 1 : Math.min(1, (now - start) / ms)
       current.current = from + (target - from) * t * t * (3 - 2 * t)
       setAmount(current.current)
       if (t < 1) frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [target, reduced])
+  }, [target, ms, reduced])
+  return amount
+}
+
+function useTone(glow: RepGlow) {
+  const amount = useRamp(glow === 'done' ? 1 : 0, 180)
   return {
     ...TONES[glow],
     dimmest: 0.2 + amount * 0.3,
@@ -341,6 +364,8 @@ function PushPullShape({
   phaseIndex,
   progress,
   glowStart,
+  end,
+  tail,
 }: {
   variant: Variant
   drive: number
@@ -352,18 +377,27 @@ function PushPullShape({
   progress: number
   /** Where the wave turns white (see `rhythmWaveGlowStart`), or null. */
   glowStart: number | null
+  /** Where the set is over (see `rhythmWaveEnd`), or null when a tap ends it. */
+  end: number | null
+  /** The wave past `end` (see `rhythmWaveTailPath`). */
+  tail: string
 }) {
   const wavePath = useMemo(() => rhythmWavePath(phases), [phases])
   const clipId = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const [dotX, dotY] = rhythmWavePoint(phases, phaseIndex, progress)
+  // Once the dot lands on the white, the white spreads back over the wave behind
+  // it, rather than the whole wave switching in a frame.
+  const sweep = useRamp(glowStart != null && dotX >= glowStart ? 1 : 0, SWEEP_MS)
   // How lit each end is: fully while you drive into it, filling while a rest primes
   // it. `side` is +1 for the bottom (pressing down) and −1 for the top.
   const endLit = (side: number) => Math.max(clamp01(drive * side), primeDir === side ? prime : 0)
   switch (variant) {
     case 'wave': {
-      const [dotX, dotY] = rhythmWavePoint(phases, phaseIndex, progress)
       // The stretch of wave that finishes the set comes in already white, at the
-      // brightness the whole wave takes on once the dot reaches it.
-      const split = glowStart != null && glowStart > dotX ? glowStart : null
+      // brightness the whole wave takes on once the dot reaches it. The white's
+      // near edge sits at `glowStart` until the dot gets there, then runs off the
+      // left of the screen.
+      const split = glowStart == null ? null : glowStart - SWEEP_UNITS * sweep
       const stroke = {
         d: wavePath,
         fill: 'none',
@@ -385,9 +419,16 @@ function PushPullShape({
                     <rect x={-1000} y={-1000} width={1000 + split} height={3000} />
                   </clipPath>
                   <clipPath id={`${clipId}b`}>
-                    <rect x={split} y={-1000} width={3000} height={3000} />
+                    <rect x={split} y={-1000} width={(end ?? 3000) - split} height={3000} />
                   </clipPath>
-                  <path {...stroke} clipPath={`url(#${clipId}a)`} opacity={tone.dimmest} />
+                  {/* The wave behind the white keeps the set's own colour while the
+                      white overtakes it, rather than inheriting the finished tone. */}
+                  <path
+                    {...stroke}
+                    clipPath={`url(#${clipId}a)`}
+                    className="text-accent-bright"
+                    opacity={TONES.base.dimmest}
+                  />
                   <path
                     {...stroke}
                     clipPath={`url(#${clipId}b)`}
@@ -395,6 +436,20 @@ function PushPullShape({
                     opacity={TONES.done.dimmest}
                   />
                 </>
+              )}
+              {end != null && tail && (
+                // Past the end of the set the wave flattens onto its resting line
+                // and goes dashed: the mark you'll be done by, not a place the dot
+                // ever reaches.
+                <g transform={`translate(${end} 0)`}>
+                  <path
+                    {...stroke}
+                    d={tail}
+                    strokeDasharray="6 9"
+                    className="text-neutral-50"
+                    opacity={TONES.done.dimmest}
+                  />
+                </g>
               )}
             </g>
           </svg>
@@ -563,6 +618,10 @@ export function RhythmGuide({
   const efforts = useMemo(() => phaseEfforts(phases), [phases])
   const closes = useMemo(() => cycleCloses(phases), [phases])
   const motion = useMemo(() => motionForPhases(phases), [phases])
+  const waveTail = useMemo(
+    () => rhythmWaveTailPath(phases, endsOnTarget, skipFinalRepRest),
+    [phases, endsOnTarget, skipFinalRepRest],
+  )
   const [variant, setVariant] = useState<Variant>(() => chosenVariant ?? rhythmVariantForMotion(motion))
   // The floss guide draws its own figure, not one of the rotated shapes.
   useShownAnimation('rhythm', forwardBack ? null : variant, () =>
@@ -732,6 +791,8 @@ export function RhythmGuide({
               phaseIndex={i}
               progress={progress}
               glowStart={rhythmWaveGlowStart(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
+              end={rhythmWaveEnd(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
+              tail={waveTail}
             />
           </div>
         ) : (

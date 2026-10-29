@@ -1,6 +1,12 @@
 ﻿import { describe, expect, it } from 'vitest'
 import { parseTempo } from './tempo'
-import { rhythmWaveGlowStart, rhythmWavePath, rhythmWavePoint } from './rhythmWave'
+import {
+  rhythmWaveEnd,
+  rhythmWaveGlowStart,
+  rhythmWavePath,
+  rhythmWavePoint,
+  rhythmWaveTailPath,
+} from './rhythmWave'
 import { repGlow } from './rhythmMotion'
 
 describe('push/pull waveform', () => {
@@ -50,21 +56,27 @@ describe('push/pull waveform', () => {
 
 describe('where the wave turns white', () => {
   const phases = parseTempo('5s press down ; 5s rest ; 5s pull up ; 5s rest')
+  // The shoulder into a phase: 0.6 s of a 20 s rep, so 3 wave units.
+  const shoulder = 3
 
-  it('starts at the rest before the closing rep when that rep drops its own', () => {
-    expect(rhythmWaveGlowStart(phases, 1, 5, true, true)).toBe(375)
-    expect(rhythmWaveGlowStart(phases, 4, 5, true, true)).toBe(75)
-    expect(rhythmWaveGlowStart(phases, 5, 5, true, true)).toBe(-25)
+  it('starts on the flat of the rest before the closing rep when that rep drops its own', () => {
+    expect(rhythmWaveGlowStart(phases, 1, 5, true, true)).toBe(375 + shoulder)
+    expect(rhythmWaveGlowStart(phases, 4, 5, true, true)).toBe(75 + shoulder)
+    expect(rhythmWaveGlowStart(phases, 5, 5, true, true)).toBe(-25 + shoulder)
+    // The wave has already landed on the resting line where the white begins.
+    const [x, y] = rhythmWavePoint(phases, 3, shoulder / 25)
+    expect(x).toBe(75 + shoulder)
+    expect(y).toBe(50)
   })
 
   it('starts at the closing rep, or past the target for a tapped set', () => {
-    expect(rhythmWaveGlowStart(phases, 3, 5, true, false)).toBe(200)
-    expect(rhythmWaveGlowStart(phases, 3, 5, false, false)).toBe(300)
-    expect(rhythmWaveGlowStart(phases, 1, 1, true, true)).toBe(0)
+    expect(rhythmWaveGlowStart(phases, 3, 5, true, false)).toBe(200 + shoulder)
+    expect(rhythmWaveGlowStart(phases, 3, 5, false, false)).toBe(300 + shoulder)
+    expect(rhythmWaveGlowStart(phases, 1, 1, true, true)).toBe(shoulder)
     expect(rhythmWaveGlowStart(phases, 3, undefined, true, true)).toBeNull()
   })
 
-  it('is reached by the dot exactly when the guide turns white', () => {
+  it('is reached by the dot one shoulder after the guide turns white', () => {
     for (const [endsItself, skip] of [[true, true], [true, false], [false, false]] as const) {
       for (let rep = 1; rep <= 6; rep++) {
         for (let idx = 0; idx < phases.length; idx++) {
@@ -72,10 +84,45 @@ describe('where the wave turns white', () => {
             const [x] = rhythmWavePoint(phases, idx, progress)
             const start = rhythmWaveGlowStart(phases, rep, 5, endsItself, skip)!
             const lit = repGlow(rep, 5, endsItself, skip && idx >= 3) === 'done'
-            expect(x >= start).toBe(lit)
+            expect(x >= start - shoulder).toBe(lit)
           }
         }
       }
     }
+  })
+})
+
+describe('where the wave ends', () => {
+  const phases = parseTempo('5s press down ; 5s rest ; 5s pull up ; 5s rest')
+
+  it('ends with the last working phase when the closing rep drops its rest', () => {
+    expect(rhythmWaveEnd(phases, 1, 5, true, true)).toBe(475)
+    expect(rhythmWaveEnd(phases, 5, 5, true, true)).toBe(75)
+    expect(rhythmWaveEnd(phases, 1, 1, true, true)).toBe(75)
+  })
+
+  it('ends with the closing rep otherwise, and not at all for a tapped set', () => {
+    expect(rhythmWaveEnd(phases, 3, 5, true, false)).toBe(300)
+    expect(rhythmWaveEnd(phases, 3, 5, false, false)).toBeNull()
+    expect(rhythmWaveEnd(phases, 3, undefined, true, true)).toBeNull()
+  })
+
+  it('always lies past where the white begins', () => {
+    for (const skip of [true, false]) {
+      for (const reps of [1, 2, 5]) {
+        for (let rep = 1; rep <= reps; rep++) {
+          const start = rhythmWaveGlowStart(phases, rep, reps, true, skip)!
+          expect(rhythmWaveEnd(phases, rep, reps, true, skip)!).toBeGreaterThan(start)
+        }
+      }
+    }
+  })
+
+  it('tails off from the level the set ends at onto the resting line', () => {
+    // Dropping the rest, the set ends at the top of the pull; the tail borrows the
+    // rest's shoulder to come down.
+    expect(rhythmWaveTailPath(phases, true, true)).toBe('M 0 22 C 1 22 2 50 3 50 L 1000 50')
+    // Ending on the rest, it is already there.
+    expect(rhythmWaveTailPath(phases, true, false)).toBe('M 0 50 C 1 50 2 50 3 50 L 1000 50')
   })
 })
