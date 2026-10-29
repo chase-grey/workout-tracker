@@ -36,7 +36,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import { LiftKey, liftDot } from './liftMarks'
 import { goalLineMarks } from './goalLineMarks'
-import { goalLine, withGoalLine, type MovingTarget } from '../../lib/goalLine'
+import { targetAtEta } from '../../lib/goalLine'
 
 const MS_PER_DAY = 86_400_000
 const axisTick = { fill: '#737373', fontSize: 10 }
@@ -92,7 +92,6 @@ export function CommitChart({
   goalId,
   proj,
   points,
-  moving,
   date,
   onChange,
   estimate,
@@ -103,8 +102,6 @@ export function CommitChart({
   proj: Projection
   /** The goal's logged history. */
   points: Point[]
-  /** A target that moves with bodyweight, drawn as it moves (see goalLine). */
-  moving?: MovingTarget
   /** The date currently chosen, ISO. */
   date: string
   onChange: (iso: string) => void
@@ -146,26 +143,17 @@ export function CommitChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goalId, proj, date])
 
-  // A target that moves is drawn across the whole drag window, so wherever the
-  // handle goes the line is already there under it. Fixed against the window and
-  // not the chosen date, so it doesn't redraw mid-drag.
-  const line = useMemo(() => {
-    const first = points[0]?.date
-    const start = toISODate(today)
-    return goalLine(moving, first && first < start ? first : start, range.latest, today)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, moving, range.latest])
-
-  const rows = useMemo(
-    () => withTime(withGoalLine(mergeRows(points, reference, candidate), line)),
-    [points, reference, candidate, line],
-  )
+  const rows = useMemo(() => withTime(mergeRows(points, reference, candidate)), [points, reference, candidate])
   const dot = useMemo(() => (lift ? liftDot(lift) : { r: 2 }), [lift])
 
-  const { current, target } = proj
+  const { current } = proj
+  // A target that moves with bodyweight is drawn where the machine's curve
+  // lands, not at today's weight, so the two meet (see targetAtEta). Fixed
+  // against the machine's date and not the handle's, so it holds still mid-drag.
+  const target = targetAtEta(proj)
   const yScale = useMemo(
-    () => niceScale([...points.map((p) => p.value), current, target, ...(line ?? []).map((p) => p.value)]),
-    [points, current, target, line],
+    () => niceScale([...points.map((p) => p.value), current, target]),
+    [points, current, target],
   )
 
   // Fixed to the full drag window rather than to the data, so the handle can run
@@ -281,10 +269,8 @@ export function CommitChart({
           <AxisBreak broken={yScale.broken} bg={CHART_SURFACE_2} />
           {/* No tooltip: a pointer on this chart is a drag, not a read. */}
           {goalLineMarks({
-            line,
-            target: proj.target,
-            tagAt: { date: toISODate(today), value: proj.target },
-            label: `goal ${proj.target}`,
+            target,
+            label: `goal ${target}`,
             bg: CHART_SURFACE_2,
             side: tagSide,
           })}

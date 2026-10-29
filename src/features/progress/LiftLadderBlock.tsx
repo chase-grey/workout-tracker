@@ -4,7 +4,7 @@ import { currentPaceSeries, type LockedProjections } from '../../lib/goalLock'
 import { LINE_PRIMARY } from '../../lib/chart'
 import type { DaySets } from '../../lib/goalSets'
 import { LIFT_LADDERS } from '../../lib/liftLadder'
-import { movingTargetOf } from '../../lib/goalLine'
+import { targetAtEta } from '../../lib/goalLine'
 import { LadderChart, type LadderReading } from './LadderChart'
 
 /**
@@ -61,16 +61,16 @@ export function LiftLadderBlock({
     return open
       .filter((g, i) => i === 0 || locked[g.id])
       .map((g) => {
-        // A lock froze the target it committed to, and the squat targets move
-        // with bodyweight — so the line comes off the lock rather than the live
-        // goal, or the chart and the row below it would disagree.
+        // A lock froze the target it committed to, and the bench and squat
+        // targets move with bodyweight — so the line comes off the lock, or for
+        // an open rung off the weight it's projected to be met at, rather than
+        // today's weight the projected curve would climb past (see targetAtEta).
         const lock = locked[g.id]
-        const target = lock ? lock.target : g.target
         const proj = projectGoal(g)
+        const target = lock ? lock.target : targetAtEta(proj)
         return {
           label: goalLabel(target), target, lock,
           currentPace: currentPaceSeries(lock, proj, g.points.at(-1)?.date),
-          moving: movingTargetOf(g, proj),
         }
       })
   }, [rungs, locked, goalLabel])

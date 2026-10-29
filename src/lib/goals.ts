@@ -326,12 +326,6 @@ export type GoalSpec = {
   movingTarget?: boolean
   targetSlopePerWeek?: number
   /**
-   * What a moving target was on each weigh-in date, oldest → newest — the
-   * bodyweight multiple the goal is named for, so its line can be drawn as it
-   * moved rather than as a flat rule at today's weight (see goalLine).
-   */
-  targetPoints?: Point[]
-  /**
    * A milestone that stays earned: "reached" is judged on the best reading ever
    * taken, not the latest (see {@link isReached}). Set on the flexibility goals —
    * a 111° split doesn't stop having happened because the next session came in
@@ -696,8 +690,6 @@ export function buildGoals({
   // 999 stands in for "no bodyweight logged yet", so a moving target can't be 0
   // and read as already reached.
   const bwTarget = (mult: number) => (currentBw > 0 ? Math.round(currentBw * mult * 10) / 10 : 999)
-  const bwTargetPoints = (mult: number): Point[] =>
-    bwPoints.map((p) => ({ date: p.date, value: Math.round(p.value * mult * 10) / 10 }))
 
   return [
     {
@@ -735,7 +727,6 @@ export function buildGoals({
       direction: 'up',
       movingTarget: true,
       targetSlopePerWeek: bwGain,
-      targetPoints: bwTargetPoints(1),
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: BENCH_GAIN_CAP,
     },
@@ -771,7 +762,6 @@ export function buildGoals({
       direction: 'up',
       movingTarget: true,
       targetSlopePerWeek: bwGain,
-      targetPoints: bwTargetPoints(1),
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: SQUAT_GAIN_CAP,
     },
@@ -788,7 +778,6 @@ export function buildGoals({
       direction: 'up',
       movingTarget: true,
       targetSlopePerWeek: bwGain * 1.5,
-      targetPoints: bwTargetPoints(1.5),
       decayPerWeek: STRENGTH_GAIN_DECAY,
       capPerWeek: SQUAT_GAIN_CAP,
     },
