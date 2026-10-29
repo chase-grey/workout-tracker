@@ -7,6 +7,7 @@ import { toISODate } from '../../lib/dates'
 import { useData } from '../../store/DataContext'
 import { nextTargets } from '../../lib/progression'
 import { spreadSharedWeight } from '../../lib/sharedLoad'
+import { mirrorSidedEdit } from '../../lib/sidePair'
 import { carryLoggedSet, type CarriedSet } from '../../lib/carryForward'
 import { sideOrderedExercises, variantExercises, type VariantKey } from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
@@ -155,21 +156,19 @@ export function useActiveSession() {
   const updateSet = useCallback(
     (exKey: string, index: number, patch: Partial<SetLog>) => {
       mutateExercise(exKey, (sets) => sets.map((s, i) => (i === index ? { ...s, ...patch } : s)))
-      // A weight entered at one station is the weight of the whole load-sharing
-      // group — one cable stack, one dumbbell — so it carries to the group's other
-      // stations instead of being typed again at each of them.
-      if (patch.weightLbs == null) return
       setSession((prev) => {
         if (!prev) return prev
-        return {
-          ...prev,
-          exercises: spreadSharedWeight({
-            logs: prev.exercises,
-            exercises: plan[prev.dayType]?.exercises ?? [],
-            exKey,
-            weightLbs: patch.weightLbs,
-          }),
+        const exercises = plan[prev.dayType]?.exercises ?? []
+        // A number typed for one arm of a sided pair is the number for the other
+        // arm's same set — one dumbbell, the same reps each side (see mirrorSidedEdit).
+        let logs = mirrorSidedEdit({ logs: prev.exercises, exercises, exKey, index, patch })
+        // A weight entered at one station is the weight of the whole load-sharing
+        // group — one cable stack, one dumbbell — so it carries to the group's other
+        // stations instead of being typed again at each of them.
+        if (patch.weightLbs != null) {
+          logs = spreadSharedWeight({ logs, exercises, exKey, weightLbs: patch.weightLbs })
         }
+        return logs === prev.exercises ? prev : { ...prev, exercises: logs }
       })
     },
     [mutateExercise, plan],
