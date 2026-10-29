@@ -117,9 +117,9 @@ export type PlannedExercise = {
    * move available is 10 lbs — every paired movement's `increment` is 10, and one
    * added later should be too.
    *
-   * A movement that shares a single dumbbell between the hands isn't one of
-   * these: the lateral raise logs that one dumbbell, so it steps in the rack's
-   * own smaller jumps.
+   * A movement loaded one side at a time isn't one of these: the lateral raise
+   * is done one arm at a time off the cable stack, so each side logs the single
+   * setting it was pinned at (see {@link stackSetting}).
    */
   dumbbellPair?: boolean
   /**
@@ -129,11 +129,21 @@ export type PlannedExercise = {
    * rep range stops applying and the prescription is simply one more rep than last
    * time, session after session (see progression.nextTarget).
    *
-   * Only worth setting where the ceiling is real and already reached. A movement
-   * with room left on the stack progresses in weight the ordinary way, and the cap
-   * does nothing until the load arrives at it.
+   * Only worth setting where the ceiling is real. A movement with room left on
+   * the stack progresses in weight the ordinary way — the cap only keeps the last
+   * step from being prescribed past it, and does nothing more until the load
+   * arrives at it.
    */
   weightCapLbs?: number
+  /**
+   * Loaded by pinning a stack whose plates are numbered rather than weighed: the
+   * number logged is the pin's setting, not pounds. The cable pulldown machine
+   * runs 1 to 15, so everything done on it steps by exactly one setting and can
+   * never be asked for more than 15 — `increment` is 1 and `weightCapLbs` is the
+   * top setting (see {@link CABLE_STACK}). Set so the coach and the set screen
+   * don't talk about the number as a weight in lbs.
+   */
+  stackSetting?: boolean
   /**
    * A movement that can't be loaded at all, so the reps are the only ladder it
    * has: the top of the rep range stops applying and the prescription is one more
@@ -379,13 +389,21 @@ export const SIDE_RAISE_START_REPS = 15
 export const SIDE_RAISE_SWITCH_SEC = 10
 export const SIDE_RAISE_ROUND_REST_SEC = 45
 
+/**
+ * The load fields of every movement done on the cable pulldown machine — the
+ * cable crunch, both tricep moves, and the one-arm lateral raise. Its stack is
+ * numbered 1 to 15 rather than weighed, so a step up is one setting and 15 is the
+ * end of the ladder; past it the reps take over (see PlannedExercise.weightCapLbs).
+ */
+export const CABLE_STACK = { increment: 1, weightCapLbs: 15, stackSetting: true } as const
+
 export const DEFAULT_PLAN: Plan = {
   push: {
     type: 'push',
     label: 'push + core',
     required: true,
     exercises: [
-      { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'abs' },
 
       // The day's second ab movement is loaded rather than reps-only: a plate held
       // at the chest gives the abs somewhere to progress once the reps are there,
@@ -426,11 +444,12 @@ export const DEFAULT_PLAN: Plan = {
       //
       // Both tricep moves work off the same cable stack, so they share one load —
       // rotating through the circuit would otherwise mean re-pinning it twice a
-      // round.
+      // round. The raise is off that same machine too, so the whole circuit is one
+      // numbered stack (see CABLE_STACK).
       //
       // The raise runs one arm at a time, so each side is its own station and its
       // own history: side-to-side differences in a delt are both common and worth
-      // seeing. They're one dumbbell between them, hence the shared load, and the
+      // seeing. They're one pin between them, hence the shared load, and the
       // leading arm alternates each session (see lib/pushSide).
       //
       // The whole round goes on one screen (`roundScreen`): all four done back to
@@ -439,10 +458,10 @@ export const DEFAULT_PLAN: Plan = {
       // the rest the round used to spread over its two raises is taken in one go
       // after it — the same two minutes, without the walk back to the phone
       // between every move.
-      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
-      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
-      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
-      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
+      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
     ],
   },
   pull: {
@@ -450,7 +469,7 @@ export const DEFAULT_PLAN: Plan = {
     label: 'pull + legs',
     required: false,
     exercises: [
-      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 45, increment: 5, group: 'abs' },
+      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 45, ...CABLE_STACK, group: 'abs' },
 
       // The day's heavy leg movement. It's the leg press rather than a barbell
       // squat because there's no rack to squat in — the press is what's actually
@@ -530,9 +549,9 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, dumbbellPair: true, group: 'shoulders' },
 
       { key: 'hammer_curl', name: 'hammer curl', sets: 2, repMin: 10, repMax: 15, restSec: 60, increment: 10, dumbbellPair: true, group: 'arms circuit', circuit: 'arms' },
-      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 2, repMin: 10, repMax: 15, restSec: 60, increment: 2.5, group: 'arms circuit', circuit: 'arms' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms' },
 
-      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, increment: 5, group: 'core' },
+      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'core' },
 
       // The only day that trains the raise now, so it's the day graduation has to
       // be earned on — hence the set count comes from the standard itself rather
@@ -706,6 +725,12 @@ const LEGACY_EXERCISE_INCREMENTS: Record<string, number[]> = {
   db_overhead_press: [5],
   incline_db_curl: [5],
   hammer_curl: [5],
+  // Shipped as pound steps before the cable stack was read as the 1–15 setting it is.
+  cable_crunch: [5],
+  tricep_pushdown: [2.5],
+  overhead_tricep_ext: [2.5],
+  lateral_raise_l: [2.5],
+  lateral_raise_r: [2.5],
 }
 
 /** Same idea as LEGACY_EXERCISE_NAMES, for the display group. */
@@ -832,7 +857,7 @@ function mergeDayExercises(
   // or a step the user actually chose reads as neither and is left alone.
   //
   // The structural fields (circuit, sharedLoad, dumbbellPair, side, byVariant,
-  // repsOnly, weightCapLbs, repLadder, timed, roundScreen) are program design
+  // repsOnly, weightCapLbs, stackSetting, repLadder, timed, roundScreen) are program design
   // rather than user preference, and the plan editor doesn't expose them, so they
   // always come from the defaults — otherwise a stored day would never pick up
   // the arm circuit, the shared tricep load, which arm a raise trains, the push A/B
@@ -866,6 +891,7 @@ function mergeDayExercises(
       byVariant: def.byVariant,
       repsOnly: def.repsOnly,
       weightCapLbs: def.weightCapLbs,
+      stackSetting: def.stackSetting,
       repLadder: def.repLadder,
       timed: def.timed,
       roundScreen: def.roundScreen,

@@ -267,6 +267,11 @@ function circuitNote(e: PlannedExercise): string {
 function capNote(e: PlannedExercise): string {
   if (e.repLadder) return ', takes no weight at all — progress by reps only'
   if (e.weightCapLbs == null) return ''
+  // A numbered stack: the figure is a pin setting, not pounds, so a step is one
+  // setting and the top of the stack is the end of the weight ladder.
+  if (e.stackSetting) {
+    return `, loaded as a stack setting from 1 to ${e.weightCapLbs} (not lbs) — step it by 1, never suggest above ${e.weightCapLbs}, and at ${e.weightCapLbs} progress by reps only`
+  }
   return `, ${e.weightCapLbs} lbs is the heaviest available — progress by reps only`
 }
 

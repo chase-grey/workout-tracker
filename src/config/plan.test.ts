@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   ALL_EXERCISES,
+  CABLE_STACK,
   COPENHAGEN_HOLD_SEC,
   DAY_TYPES,
   DEFAULT_PLAN,
@@ -24,6 +25,7 @@ import {
   type PlannedExercise,
 } from './plan'
 import { buildSetOrder } from '../lib/circuit'
+import { nextTarget } from '../lib/progression'
 import { restBeforeNextSet } from '../lib/rest'
 
 describe('TODAY_DAY_ORDER', () => {
@@ -689,10 +691,71 @@ describe('the two-dumbbell movements as they ship', () => {
     )
   })
 
-  it('leaves the one-dumbbell lateral raise on its own smaller step', () => {
+  it('leaves the one-arm lateral raise out: it is pinned on the cable stack', () => {
     const raise = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'lateral_raise_l')
     expect(raise?.dumbbellPair).toBeUndefined()
-    expect(raise?.increment).toBe(2.5)
+    expect(raise?.stackSetting).toBe(true)
+  })
+})
+
+describe('the cable pulldown machine as it ships', () => {
+  const CABLE_KEYS = ['cable_crunch', 'tricep_pushdown', 'overhead_tricep_ext', 'lateral_raise_l', 'lateral_raise_r']
+  const onTheStack = DAY_TYPES.flatMap((d) =>
+    DEFAULT_PLAN[d].exercises.filter((e) => CABLE_KEYS.includes(e.key)).map((ex) => ({ day: d, ex })),
+  )
+
+  it('is the only machine with a numbered stack', () => {
+    const flagged = ALL_EXERCISES.filter((e) => e.stackSetting).map((e) => e.key)
+    expect(new Set(flagged)).toEqual(new Set(CABLE_KEYS))
+  })
+
+  it('steps every movement on it by one setting, with 15 as the top, on every day it appears', () => {
+    expect(onTheStack.length).toBeGreaterThanOrEqual(CABLE_KEYS.length)
+    for (const { ex } of onTheStack) {
+      expect(ex).toMatchObject(CABLE_STACK)
+    }
+  })
+
+  it('never prescribes a setting past 15, and climbs reps from there', () => {
+    const ex = DEFAULT_PLAN.push.exercises.find((e) => e.key === 'tricep_pushdown')!
+    const opts = { repMin: ex.repMin, repMax: ex.repMax, increment: ex.increment, weightCapLbs: ex.weightCapLbs }
+    const session = (weight: number, reps: number) =>
+      Array.from({ length: 3 }, (_, i) => ({
+        date: '2026-10-20',
+        session_id: 's',
+        exercise: ex.key,
+        set_number: i + 1,
+        weight_lbs: weight,
+        reps,
+      })) as unknown as Parameters<typeof nextTarget>[0]
+    const today = new Date(2026, 9, 27)
+    // A clean top-of-range session at 12 earns exactly one setting, not a pound step.
+    expect(nextTarget(session(12, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 13, reps: ex.repMin })
+    // The last step lands on 15 and no further.
+    expect(nextTarget(session(14, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 15, reps: ex.repMin })
+    // At 15 there is nothing left to add, so the ask is one more rep.
+    expect(nextTarget(session(15, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 15, reps: ex.repMax + 1 })
+  })
+
+  it('moves a stored plan off the old pound steps onto the setting step', () => {
+    const stored: Plan = {
+      ...DEFAULT_PLAN,
+      push: {
+        ...DEFAULT_PLAN.push,
+        exercises: DEFAULT_PLAN.push.exercises.map((e) => {
+          if (!CABLE_KEYS.includes(e.key)) return e
+          const { weightCapLbs: _cap, stackSetting: _flag, ...rest } = e
+          return { ...rest, increment: e.key === 'cable_crunch' ? 5 : 2.5 }
+        }),
+      },
+    }
+    const merged = withPlanDefaults(stored, PLAN_REVISION)
+    for (const key of CABLE_KEYS) {
+      expect(merged.push.exercises.find((e) => e.key === key)).toMatchObject(CABLE_STACK)
+    }
+    // A step the user set themselves is not one of the shipped values, so it stays.
+    const custom = { ...stored, push: { ...stored.push, exercises: stored.push.exercises.map((e) => (e.key === 'cable_crunch' ? { ...e, increment: 2 } : e)) } }
+    expect(withPlanDefaults(custom, PLAN_REVISION).push.exercises.find((e) => e.key === 'cable_crunch')?.increment).toBe(2)
   })
 })
 

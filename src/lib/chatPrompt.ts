@@ -41,8 +41,14 @@ function renderPlan(): string {
       // coach would otherwise answer with a weight to add. There is no weight to
       // add: more of them is the only progression it has.
       const ladder = ex.repLadder ? ' [takes no weight — it progresses by reps alone, with no top]' : ''
+      // A numbered stack logs the pin's setting, not a weight. Without the note the
+      // coach reads a 12 as twelve pounds and suggests a 2.5-lb jump, or a 20 that
+      // the machine hasn't got.
+      const stack = ex.stackSetting
+        ? ` [the number logged is a stack setting from 1 to ${ex.weightCapLbs}, not lbs — go up by 1 at a time and never suggest more than ${ex.weightCapLbs}; at ${ex.weightCapLbs} it progresses by reps only]`
+        : ''
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}${ladder}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}${ladder}${stack}`,
       )
     }
   }
@@ -146,6 +152,8 @@ function renderTools(skills: CoachSkills): string[] {
       `Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. ${elsewhere}`,
       ``,
       `A movement done with a dumbbell in each hand logs the pair's total, so its weight step is 10 lbs and never 5: the rack moves in 5s and both hands change at once. Give any such exercise you add \`increment: 10\`, and never talk about a 5-lb jump on one of the paired movements marked in the plan below.`,
+      ``,
+      `The cable pulldown machine's stack is numbered 1 to 15 rather than weighed. Every movement marked as a stack setting in the plan below logs that number, not pounds: talk about it as a setting, move it one at a time, and never suggest a setting above 15 — once a lift is at 15 the only way up is reps. Give any exercise you add on that machine \`increment: 1\`.`,
       ``,
     )
   } else {
