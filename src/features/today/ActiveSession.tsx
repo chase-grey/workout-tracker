@@ -52,7 +52,7 @@ import {
 import { toISODate } from '../../lib/dates'
 import { toWeight } from '../../lib/weightField'
 import { usePressAction } from '../../lib/usePressAction'
-import { useScreenTap } from '../../lib/useScreenTap'
+import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useBackGuard } from '../../lib/useBackGuard'
@@ -1084,8 +1084,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     <div ref={fadeRef} className="flex min-h-full flex-col gap-3 pb-6" {...screenTap}>
       {topBar}
 
+      {/* The card is where a tap reaches for a field, so it doesn't advance the
+          set (TAP_SHIELD); the blank screen around it does. */}
       {!roundMode && set && (
-        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
+        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
           {/* What to go for on this set. */}
           {challenging && targetNumbers ? (
             <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
@@ -1181,7 +1183,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             if (!logged) return null
             const { hint: cue, challenging: stepUp, goal } = roundCues[i] ?? {}
             return (
-              <div key={s.stepKey} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 pb-4 pt-1">
+              <div key={s.stepKey} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 pb-4 pt-1" {...TAP_SHIELD}>
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="min-w-0 truncate font-semibold">{s.ex.name}</h3>
                   <div className="flex shrink-0 items-center gap-1">

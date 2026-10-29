@@ -11,7 +11,10 @@ the stretch routine (`src/features/flex/StretchSession.tsx`) — obey one rule:
 
 - **Advancing is a tap anywhere on the screen, never a button.** Your hands are
   busy and a button is a small target. Both sessions put the handler on the root
-  element (`onScreenTap`) and ignore taps that land on `button, input, label, a`.
+  element (`useScreenTap`) and ignore taps that land on `button, input, label, a`
+  or inside a card spread with `TAP_SHIELD` — the set card with the weight and
+  reps fields, where a tap is a reach for a field, not a set finished. The blank
+  screen around the card is the target.
 - **A set that runs on a clock ends itself.** A prescribed hold or a paced set
   rolls into its own rest on target (`HoldTimer.onTargetEnd`,
   `RhythmGuide.onTargetHit`); a stretch hold additionally takes a double tap

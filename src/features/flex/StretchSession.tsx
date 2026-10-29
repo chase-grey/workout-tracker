@@ -48,7 +48,7 @@ import {
 import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
-import { useScreenTap } from '../../lib/useScreenTap'
+import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
 import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 
@@ -1013,7 +1013,10 @@ export function StretchSession({
           />
         )
       ) : (
-        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
+        // The core set's card is where a tap reaches for a field, so it doesn't
+        // end the set (TAP_SHIELD); the blank screen around it does. A hold or a
+        // paced set has nothing to edit, so its whole screen stays the target.
+        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
           <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
             <MdTrackChanges aria-hidden />
             {targetLabel(coreTarget)}

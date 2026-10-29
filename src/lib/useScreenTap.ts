@@ -3,6 +3,15 @@ import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
 const SLOP_PX = 24
 
 /**
+ * Spread onto a card whose taps are its own — the set card, where a tap is a
+ * reach for the weight or reps field — so the screen tap passes over it the way
+ * it passes over a button. The blank screen around the card keeps advancing.
+ */
+export const TAP_SHIELD = { 'data-tap-shield': '' } as const
+
+const CONTROL_SELECTOR = 'button, input, label, a, [data-tap-shield]'
+
+/**
  * Pointer handlers for a screen-wide tap that is not meant for a control. The
  * action is told where the tap landed, for a caller that marks the spot.
  */
@@ -10,7 +19,7 @@ export function useScreenTap(action: (at: { x: number; y: number }) => void, ena
   const press = useRef<{ id: number; x: number; y: number } | null>(null)
 
   const isControl = (target: EventTarget | null) =>
-    target instanceof Element && !!target.closest('button, input, label, a')
+    target instanceof Element && !!target.closest(CONTROL_SELECTOR)
 
   const cancel = () => {
     press.current = null
