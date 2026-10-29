@@ -11,7 +11,7 @@ function setup(reduced = false) {
   vi.stubGlobal('window', { matchMedia: () => ({ matches: reduced }) })
 }
 
-const FIGURES: readonly FlossVariant[] = ['beads', 'thread', 'wake', 'grass']
+const FIGURES: readonly FlossVariant[] = ['beads', 'thread', 'wake', 'grass', 'slats', 'tiles', 'capsule']
 
 const frame = (phaseIndex: number, progress: number, variant: FlossVariant = 'beads') =>
   renderToStaticMarkup(createElement(FlossGuide, { phaseIndex, progress, seconds: 3, variant }))

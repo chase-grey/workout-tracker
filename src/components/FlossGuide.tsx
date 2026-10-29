@@ -78,6 +78,13 @@ function positionAt(phaseIndex: number, progress: number): number {
  *   it, so where it has been is written on the water and where it's going is clear.
  * - 'grass': a field of stalks combed by a gust — the stalks under it brighten and
  *   bend the way it's going, and the ones it has passed are still coming back up.
+ * Three more are plain geometry, for the sets where the organic ones have worn in:
+ * - 'slats': a row of bars that rise and light under the crest and shear as one
+ *   into the heading, a histogram leaning the way it's read.
+ * - 'tiles': a grid of squares; the column under the crest turns to diamonds and
+ *   the ones behind are still turning back, with the whole grid skewed into the lean.
+ * - 'capsule': one pill with two echoes behind it; it stretches with speed and
+ *   squares off its trailing end, so at speed it's a slug and at the turn a circle.
  */
 export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
   phaseIndex: number
@@ -122,6 +129,12 @@ export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
         <Wake glide={glide} />
       ) : figure === 'grass' ? (
         <Grass glide={glide} />
+      ) : figure === 'slats' ? (
+        <Slats glide={glide} />
+      ) : figure === 'tiles' ? (
+        <Tiles glide={glide} />
+      ) : figure === 'capsule' ? (
+        <Capsule glide={glide} />
       ) : (
         <Beads glide={glide} />
       )}
@@ -278,6 +291,119 @@ function Grass({ glide }: { glide: Glide }) {
           />
         )
       })}
+    </>
+  )
+}
+
+/** Slats set evenly across the frame, a little past either end of the run. */
+const SLATS = Array.from({ length: 15 }, (_, k) => 8 + k * 6)
+/** How far the row shears into the heading at full speed, in degrees. */
+const SHEAR = 22
+
+function Slats({ glide }: { glide: Glide }) {
+  const { crest, heading, speed } = glide
+  // CSS skewX leans the top of a bar the other way from its sign, so a forward
+  // lean is a negative skew. The whole row shears as one; the bump travels.
+  const shear = -heading * speed * SHEAR
+  return (
+    <>
+      {SLATS.map((x, k) => {
+        const l = lit((x - crest) * heading, glide)
+        const height = 10 + l * 30
+        return (
+          <div
+            key={k}
+            className="absolute w-[2.6%] rounded-[1px] bg-current"
+            style={{
+              left: `${x}%`,
+              top: `${r(50 - height / 2)}%`,
+              height: `${r(height)}%`,
+              opacity: r(DIM + l * (BRIGHT - DIM)),
+              transform: `translateX(-50%) skewX(${r(shear)}deg)`,
+            }}
+          />
+        )
+      })}
+    </>
+  )
+}
+
+/** The grid: columns a little past either end of the run, rows about the midline. */
+const TILE_COLUMNS = Array.from({ length: 9 }, (_, c) => 10 + c * 10)
+const TILE_ROWS = Array.from({ length: 5 }, (_, row) => 30 + row * 10)
+/** How far the grid skews into the heading at full speed, in degrees. */
+const TILT = 14
+
+function Tiles({ glide }: { glide: Glide }) {
+  const { crest, heading, speed } = glide
+  return (
+    <div className="absolute inset-0" style={{ transform: `skewX(${r(-heading * speed * TILT)}deg)` }}>
+      {TILE_COLUMNS.map((x) => {
+        // A column turns toward the diamond as the crest reaches it and turns back
+        // along the wake. The turn itself is unsigned: the lean is all in the skew.
+        const l = lit((x - crest) * heading, glide)
+        return TILE_ROWS.map((y, row) => (
+          <div
+            key={`${x}:${row}`}
+            className="absolute h-[5%] w-[5%] rounded-[12%] bg-current"
+            style={{
+              left: `${x}%`,
+              top: `${y}%`,
+              opacity: r(DIM + l * (BRIGHT - DIM)),
+              transform: `translate(-50%, -50%) rotate(${r(l * 45)}deg) scale(${r(0.8 + l * 0.5)})`,
+            }}
+          />
+        ))
+      })}
+    </div>
+  )
+}
+
+/** The capsule's height, its width at a standstill, and the extra at full speed. */
+const CAPSULE_HEIGHT = 18
+const CAPSULE_WIDTH = 18
+const CAPSULE_STRETCH = 22
+/** Echoes behind the capsule, so many phase-lengths back. */
+const ECHOES = [0.07, 0.14]
+
+function Capsule({ glide }: { glide: Glide }) {
+  const { crest, heading, speed, trail } = glide
+  const width = CAPSULE_WIDTH + speed * CAPSULE_STRETCH
+  // Horizontal radii in percent of the width; fully round is half the height.
+  const round = (CAPSULE_HEIGHT / 2 / width) * 100
+  // The leading end stays round and the trailing end squares off with speed. At
+  // a standstill both ends are round, so the turn changes nothing.
+  const tail = round * (1 - speed * 0.85)
+  const [left, right] = heading > 0 ? [tail, round] : [round, tail]
+  const radius = `${r(left)}% ${r(right)}% ${r(right)}% ${r(left)}% / 50% 50% 50% 50%`
+  return (
+    <>
+      {ECHOES.map((back, k) => (
+        <div
+          key={k}
+          className="absolute rounded-full bg-current"
+          style={{
+            left: `${r(trail(back))}%`,
+            top: '50%',
+            width: `${r(CAPSULE_WIDTH * (0.8 - k * 0.2))}%`,
+            height: `${r(CAPSULE_HEIGHT * (0.8 - k * 0.2))}%`,
+            opacity: r(DIM + (BRIGHT - DIM) * (0.5 - k * 0.2)),
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      ))}
+      <div
+        className="absolute bg-current"
+        style={{
+          left: `${r(crest)}%`,
+          top: '50%',
+          width: `${r(width)}%`,
+          height: `${CAPSULE_HEIGHT}%`,
+          borderRadius: radius,
+          opacity: CREST,
+          transform: 'translate(-50%, -50%)',
+        }}
+      />
     </>
   )
 }

@@ -43,6 +43,7 @@ describe('isFlossVariant', () => {
   it('knows the floss figures from the other families', () => {
     expect(isFlossVariant('beads')).toBe(true)
     expect(isFlossVariant('grass')).toBe(true)
+    expect(isFlossVariant('capsule')).toBe(true)
     expect(isFlossVariant('orb')).toBe(false)
     expect(isFlossVariant('wave')).toBe(false)
   })
