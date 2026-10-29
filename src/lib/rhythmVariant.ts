@@ -8,11 +8,21 @@ const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as
 // Fewer shapes here than in the other families, and all four say the same thing
 // the same way round: the direction has to be unmistakable at a glance.
 const PUSHPULL_VARIANTS = ['anvil', 'chevrons', 'gauge', 'wave'] as const
+// The floss glides forward and back rather than down and up, so it has figures of
+// its own (see components/FlossGuide). As in the push/pull family, every one of
+// them says the heading the same way: by leaning into it.
+const FLOSS_VARIANTS = ['beads', 'thread', 'wake', 'grass'] as const
+
+export type FlossVariant = (typeof FLOSS_VARIANTS)[number]
 
 export type RhythmVariant =
   | (typeof BREATHE_VARIANTS)[number]
   | (typeof DESCENT_VARIANTS)[number]
   | (typeof PUSHPULL_VARIANTS)[number]
+  | FlossVariant
+
+export const isFlossVariant = (variant: string): variant is FlossVariant =>
+  (FLOSS_VARIANTS as readonly string[]).includes(variant)
 
 // One rotation per family, held across mounted guides: the order stays random,
 // but a shape never follows itself and none sits out for long. Shapes marked bad
@@ -24,14 +34,23 @@ const rotations: Record<MotionKind, Rotation<RhythmVariant>> = {
   descent: createRotation(DESCENT_VARIANTS, Math.random, notHidden),
   pushpull: createRotation(PUSHPULL_VARIANTS, Math.random, notHidden),
 }
+const flossRotation = createRotation(FLOSS_VARIANTS, Math.random, notHidden)
 
 export function rhythmVariantForMotion(kind: MotionKind): RhythmVariant {
   return rotations[kind].next()
 }
 
-/** Draw the animation for a set before its guide mounts. */
-export function nextRhythmVariant(tempo: string): RhythmVariant {
-  return rhythmVariantForMotion(motionForPhases(parseTempo(tempo)))
+/** The next floss figure: the forward/back sets draw from their own family. */
+export function nextFlossVariant(): FlossVariant {
+  return flossRotation.next()
+}
+
+/**
+ * Draw the animation for a set before its guide mounts. A forward/back set is the
+ * floss, whatever words its tempo was saved with, and draws a floss figure.
+ */
+export function nextRhythmVariant(tempo: string, forwardBack = false): RhythmVariant {
+  return forwardBack ? nextFlossVariant() : rhythmVariantForMotion(motionForPhases(parseTempo(tempo)))
 }
 
 /**
@@ -40,14 +59,14 @@ export function nextRhythmVariant(tempo: string): RhythmVariant {
  * fresh rather than bringing it back.
  */
 export function createRhythmVariantSelector(
-  draw: (tempo: string) => RhythmVariant = nextRhythmVariant,
+  draw: (tempo: string, forwardBack: boolean) => RhythmVariant = nextRhythmVariant,
   hidden: (variant: RhythmVariant) => boolean = rhythmHidden,
 ) {
   const selected = new Map<string, RhythmVariant>()
-  return (roundKey: string, tempo: string): RhythmVariant => {
+  return (roundKey: string, tempo: string, forwardBack = false): RhythmVariant => {
     const existing = selected.get(roundKey)
     if (existing && !hidden(existing)) return existing
-    const chosen = draw(tempo)
+    const chosen = draw(tempo, forwardBack)
     selected.set(roundKey, chosen)
     return chosen
   }

@@ -24,7 +24,7 @@ import {
   type RepGlow,
 } from '../lib/rhythmMotion'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
-import { rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
+import { nextFlossVariant, rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
 import { useShownAnimation } from '../lib/useShownAnimation'
 import { FlossGuide } from './FlossGuide'
 
@@ -622,11 +622,11 @@ export function RhythmGuide({
     () => rhythmWaveTailPath(phases, endsOnTarget, skipFinalRepRest),
     [phases, endsOnTarget, skipFinalRepRest],
   )
-  const [variant, setVariant] = useState<Variant>(() => chosenVariant ?? rhythmVariantForMotion(motion))
-  // The floss guide draws its own figure, not one of the rotated shapes.
-  useShownAnimation('rhythm', forwardBack ? null : variant, () =>
-    setVariant(rhythmVariantForMotion(motion)),
-  )
+  // The floss draws from its own family of figures (see FlossGuide), rotated and
+  // hidden from the kebab like any other shape.
+  const draw = () => (forwardBack ? nextFlossVariant() : rhythmVariantForMotion(motion))
+  const [variant, setVariant] = useState<Variant>(() => chosenVariant ?? draw())
+  useShownAnimation('rhythm', variant, () => setVariant(draw()))
   const [idx, setIdx] = useState(0)
   const [rep, setRep] = useState(startRep)
   // The rep count also lives in a ref so the animation loop increments from the
@@ -754,7 +754,7 @@ export function RhythmGuide({
         glow === 'done' ? 'text-neutral-50' : 'text-accent-bright'
       }`}>
         {forwardBack ? (
-          <FlossGuide phaseIndex={i} progress={progress} seconds={phases[i].seconds} />
+          <FlossGuide phaseIndex={i} progress={progress} seconds={phases[i].seconds} variant={variant} />
         ) : motion === 'descent' ? (
           <>
             {showPrevRep && (
