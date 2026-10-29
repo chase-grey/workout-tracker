@@ -66,7 +66,6 @@ export function GetReady({
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">get ready</p>
         <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
           <div className="absolute h-[62%] w-[62%] rounded-full bg-accent/15 ring-1 ring-accent/30" />
           {untilTap ? (
