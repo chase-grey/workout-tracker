@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fmtBytes, formatLastError, formatProbe } from './poseReport'
+import { fmtBytes, formatDetail, formatLastError, formatProbe, shortMessage } from './poseReport'
 import type { AssetProbe, PoseProbe } from './pose'
 
 const asset = (over: Partial<AssetProbe> = {}): AssetProbe => ({
@@ -25,6 +25,38 @@ describe('fmtBytes', () => {
   })
 })
 
+describe('shortMessage', () => {
+  it('leaves a short plain message alone', () => {
+    expect(shortMessage('Failed to fetch')).toBe('Failed to fetch')
+  })
+
+  // Emscripten's abort wraps the real reason in boilerplate about rebuilding
+  // the wasm, which nobody holding a phone can act on.
+  it('unwraps an Emscripten abort down to what was aborted on', () => {
+    expect(
+      shortMessage(
+        'RuntimeError: Aborted(RangeError: WebAssembly.instantiate(): Out of memory: Cannot allocate Wasm memory for new instance). Build with -sASSERTIONS for more info.',
+      ),
+    ).toBe(
+      'RangeError: WebAssembly.instantiate(): Out of memory: Cannot allocate Wasm memory for new instance',
+    )
+    expect(shortMessage('Aborted(OOM)')).toBe('OOM')
+  })
+
+  it('flattens a multi-line graph error onto one line', () => {
+    expect(shortMessage('INVALID_ARGUMENT: Graph has errors:\n   Calculator::Open() failed')).toBe(
+      'INVALID_ARGUMENT: Graph has errors: Calculator::Open() failed',
+    )
+  })
+
+  it('cuts a long message with an ellipsis', () => {
+    const long = 'x'.repeat(400)
+    const short = shortMessage(long)
+    expect(short.length).toBe(120)
+    expect(short.endsWith('…')).toBe(true)
+  })
+})
+
 describe('formatProbe', () => {
   it('says working when every file came back and the detector built', () => {
     expect(formatProbe(probe())).toBe('working')
@@ -46,15 +78,27 @@ describe('formatProbe', () => {
 
   it('reports a fetch that never answered, with why', () => {
     const p = probe({
-      assets: [asset({ status: null, bytes: 0, declared: null, ok: false, note: 'Load failed' })],
+      assets: [
+        asset({
+          status: null,
+          bytes: 0,
+          declared: null,
+          ok: false,
+          note: 'Load failed',
+        }),
+      ],
     })
     expect(formatProbe(p)).toBe("pose_landmarker_full.task didn't download (Load failed)")
   })
 
-  it('names the error when the files are fine but the detector would not build', () => {
+  it('names the error, shortened, when the files are fine but the detector would not build', () => {
     expect(
-      formatProbe(probe({ build: { ok: false, stage: 'model', message: 'Aborted(OOM)' } })),
-    ).toBe("didn't start: Aborted(OOM)")
+      formatProbe(
+        probe({
+          build: { ok: false, stage: 'model', message: 'Aborted(OOM)' },
+        }),
+      ),
+    ).toBe("didn't start: OOM")
   })
 })
 
@@ -70,5 +114,58 @@ describe('formatLastError', () => {
       message: 'Failed to fetch dynamically imported module',
     })
     expect(line).toMatch(/^didn't load .+: Failed to fetch dynamically imported module$/)
+  })
+
+  it('keeps the line short however long the error ran', () => {
+    const line = formatLastError({
+      at: '2026-08-26T18:22:31.000Z',
+      stage: 'model',
+      message: 'y'.repeat(900),
+    })
+    expect(line!.length).toBeLessThan(160)
+  })
+})
+
+describe('formatDetail', () => {
+  it('has nothing to copy when the check passed', () => {
+    expect(formatDetail(probe(), null)).toBeNull()
+    expect(formatDetail(null, null)).toBeNull()
+  })
+
+  it('gives the whole stored error, with its stage and time', () => {
+    const long = 'z'.repeat(500)
+    expect(
+      formatDetail(null, {
+        at: '2026-08-26T18:22:31.000Z',
+        stage: 'model',
+        message: long,
+      }),
+    ).toBe(`model 2026-08-26T18:22:31.000Z\n${long}`)
+  })
+
+  it('lists each file and the whole build error for a failed check', () => {
+    const p = probe({
+      assets: [
+        asset(),
+        asset({
+          name: 'vision_wasm_internal.wasm',
+          bytes: 1048576,
+          declared: 11153617,
+          ok: false,
+        }),
+      ],
+      build: {
+        ok: false,
+        stage: 'model',
+        message: 'Aborted(OOM). Build with -sASSERTIONS for more info.',
+      },
+    })
+    expect(formatDetail(p, null)).toBe(
+      [
+        'pose_landmarker_full.task: 200, 9.0 MB',
+        'vision_wasm_internal.wasm: 200, 1.0 MB of 10.6 MB',
+        'build failed at model: Aborted(OOM). Build with -sASSERTIONS for more info.',
+      ].join('\n'),
+    )
   })
 })
