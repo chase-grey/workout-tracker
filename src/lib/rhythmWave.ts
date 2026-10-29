@@ -19,7 +19,7 @@ export function rhythmWavePath(phases: TempoPhase[]): string {
   const drives = phaseDrives(phases)
   const parts = [`M -100 ${height(drives[drives.length - 1])}`]
   for (let cycle = -1; cycle <= 2; cycle++) {
-    phases.forEach((phase, i) => {
+    phases.forEach((_, i) => {
       const start = (cycle + cycleProgress(phases, i, 0)) * 100
       const end = (cycle + cycleProgress(phases, i, 1)) * 100
       const width = shoulderWidth(phases, i)
