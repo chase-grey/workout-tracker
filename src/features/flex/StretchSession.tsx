@@ -1078,6 +1078,10 @@ export function StretchSession({
           // stay put and stay tappable while you settle into position.
           header={topBar}
           untilTap={settleInWaitsForTap(step, prevStep) || (fast && intoNewExercise)}
+          // The floss's "go" says the strap is in hand, not that you're lying in
+          // position with it, so the count still runs after the tap. Hands-free
+          // has no counts, and its tap goes straight in.
+          tapStartsCount={settleInWaitsForTap(step, prevStep) && !fast}
           onDone={() => {
             setPreparing(false)
             setReadyOverrideSec(null)
