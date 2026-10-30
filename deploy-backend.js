@@ -58,8 +58,8 @@ function readEnv(key) {
 }
 
 const user = readEnv('CLASP_USER') || 'default'
-const clasp = (cmdArgs, opts = {}) =>
-  execFileSync('clasp', ['--user', user, ...cmdArgs], { cwd: root, encoding: 'utf8', stdio: opts.quiet ? 'pipe' : ['inherit', 'pipe', 'inherit'], shell: process.platform === 'win32' })
+const clasp = (cmdArgs) =>
+  execFileSync('clasp', ['--user', user, ...cmdArgs], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], shell: process.platform === 'win32' })
 
 function fail(msg) {
   console.error(msg)
@@ -127,14 +127,15 @@ async function main() {
   clasp(['push', '-f'])
 
   console.log('Creating a version…')
-  const out = clasp(['version', `Workout Tracker backend v${version}`], { quiet: true })
-  const created = out.match(/version (\d+)/i)
+  // --json: clasp's plain output is a spinner line that doesn't survive a pipe.
+  const out = clasp(['version', '--json', `workout-tracker-backend-v${version}`])
+  const created = out.match(/"versionNumber":\s*(\d+)/)
   if (!created) fail(`Could not read the new version number from clasp:\n${out}`)
   const scriptVersion = created[1]
   console.log(`Script version ${scriptVersion}.`)
 
   console.log(`Pointing deployment ${deploymentId.slice(0, 12)}… at it…`)
-  clasp(['redeploy', deploymentId, '-V', scriptVersion, '-d', `Workout Tracker backend v${version}`])
+  clasp(['redeploy', deploymentId, '-V', scriptVersion, '-d', `workout-tracker-backend-v${version}`])
 
   console.log('Asking the live URL what it is now…')
   let live
