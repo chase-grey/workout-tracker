@@ -1,4 +1,13 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import {
+  BLACK_HOLE_DEBRIS,
+  HORIZON_REST,
+  debrisState,
+  horizonRadius,
+  isConsumed,
+  orbitPeriod,
+  unitArc,
+} from '../lib/blackHole'
 import { bulbPath, createBulbs, sandLevels, waistY } from '../lib/bulbs'
 import { CometRest } from './CometRest'
 import { NatureRest } from './NatureRest'
@@ -1168,21 +1177,37 @@ function FuseLine({ fraction }: { fraction: number }) {
 /* --------------------------------------------------------------- black hole */
 
 /**
- * A face-on view: a fixed horizon consumes a finite field of orbiting matter.
- * The countdown shrinks each orbit; independent, continuous rotations never
- * reset an object's distance. Staggered arrivals make the field empty over time.
+ * A face-on view: a horizon consumes a finite field of orbiting matter and
+ * swells with each meal. The countdown shrinks each orbit; independent,
+ * continuous rotations never reset an object's distance. Staggered arrivals
+ * make the field empty over time. The geometry lives in lib/blackHole.
  */
-const BLACK_HOLE_DEBRIS = Array.from({ length: 18 }, (_, i) => ({
-  angle: i * 137.508,
-  radius: 23 + ((i * 7) % 22),
-  size: 0.65 + (i % 4) * 0.22,
-  duration: 16 + (i % 6) * 2.4,
-  consumedAt: 0.22 + (i / 17) * 0.78,
-}))
+
+/** How far past the horizon its glow reaches, in horizon radii. */
+const GLOW_REACH = 19 / HORIZON_REST
 
 function BlackHole({ fraction }: { fraction: number }) {
   const eaten = 1 - clamp01(fraction)
   const glowId = useId()
+  const horizon = horizonRadius(eaten)
+  const consumed = BLACK_HOLE_DEBRIS.filter((p) => isConsumed(p, eaten)).length
+
+  // One gulp per meal: a ring leaves the horizon each time the count goes up.
+  // Tracked against the last count rather than keyed on it, so a remount
+  // partway through a rest doesn't flash for everything already eaten.
+  const [gulp, setGulp] = useState(0)
+  const lastConsumed = useRef(consumed)
+  useEffect(() => {
+    if (consumed > lastConsumed.current) setGulp((g) => g + 1)
+    lastConsumed.current = consumed
+  }, [consumed])
+
+  // Everything sized to the horizon sits in a group scaled by it, so one
+  // transition carries the glow, the disc, and the ring through each swell.
+  const horizonScale = {
+    className: 'rest-black-hole-radius',
+    style: { transform: `scale(${horizon})` } as CSSProperties,
+  }
 
   return (
     <svg
@@ -1193,48 +1218,63 @@ function BlackHole({ fraction }: { fraction: number }) {
       <defs>
         <radialGradient id={glowId}>
           <stop offset="0.38" stopColor="currentColor" stopOpacity="0" />
-          <stop offset="0.46" stopColor="currentColor" stopOpacity="0.26" />
-          <stop offset="0.62" stopColor="currentColor" stopOpacity="0.07" />
+          <stop offset="0.46" stopColor="currentColor" stopOpacity="0.34" />
+          <stop offset="0.62" stopColor="currentColor" stopOpacity="0.09" />
           <stop offset="1" stopColor="currentColor" stopOpacity="0" />
         </radialGradient>
       </defs>
-      <circle cx="50" cy="50" r="19" fill={`url(#${glowId})`} />
       <g transform="translate(50 50)">
+        {/* A feeding hole is a bright one: the glow comes up as the field goes down. */}
+        <g {...horizonScale}>
+          <circle r={GLOW_REACH} fill={`url(#${glowId})`} opacity={0.6 + 0.4 * eaten} />
+        </g>
         {BLACK_HOLE_DEBRIS.map((piece, i) => {
-          // Move fully behind the opaque horizon at each object's arrival time.
-          const pull = clamp01(eaten / piece.consumedAt)
-          const radius = piece.radius + (7 - piece.radius) * pull
+          const { radius, across, along, wake } = debrisState(piece, eaten, horizon)
           return (
             <g key={i} transform={`rotate(${piece.angle})`}>
               <g
                 className="rest-black-hole-orbit"
-                style={{ animationDuration: `${piece.duration}s` }}
+                style={{ animationDuration: `${orbitPeriod(piece.radius)}s` }}
               >
                 <g
                   className="rest-black-hole-radius"
                   style={{ transform: `scale(${radius})` }}
                 >
-                  {/* Short, tapered wakes follow the same orbit as their objects. */}
+                  {/* Tapered wakes follow the same orbit as their objects, longer the faster they go. */}
                   <path
-                    d="M .94 -.342 A 1 1 0 0 1 .985 -.174"
-                    fill="none" stroke="currentColor" strokeWidth={0.36 / piece.radius}
+                    d={unitArc(-wake, -wake / 2)}
+                    fill="none" stroke="currentColor" strokeWidth={across * 0.55}
                     strokeLinecap="round" opacity="0.12"
                   />
                   <path
-                    d="M .985 -.174 A 1 1 0 0 1 1 0"
-                    fill="none" stroke="currentColor" strokeWidth={0.65 / piece.radius}
+                    d={unitArc(-wake / 2, 0)}
+                    fill="none" stroke="currentColor" strokeWidth={across}
                     strokeLinecap="round" opacity="0.32"
                   />
-                  <circle cx="1" cy="0" r={piece.size / piece.radius} fill="currentColor" opacity="0.9" />
-                  <circle cx="1" cy="0" r={piece.size * 0.4 / piece.radius} fill={tint('#effff6')} />
+                  {/* The tide draws each piece out along its orbit as it nears the horizon. */}
+                  <ellipse cx="1" cy="0" rx={across} ry={along} fill="currentColor" opacity="0.9" />
+                  <ellipse cx="1" cy="0" rx={across * 0.4} ry={along * 0.4} fill={tint('#effff6')} />
                 </g>
               </g>
             </g>
           )
         })}
+        {/* Painted last so matter vanishes behind the horizon, never in a central pile. */}
+        <g {...horizonScale}>
+          <circle r="1" fill="black" stroke="currentColor" strokeOpacity="0.55" strokeWidth={0.35 / horizon} />
+          {/* The photon ring: light bent right round, a thin bright circle just outside the dark. */}
+          <circle
+            r="1.22" fill="none" stroke={tint('#effff6')} strokeOpacity="0.42"
+            strokeWidth={0.22 / horizon}
+          />
+          {gulp > 0 && (
+            <circle
+              key={gulp} className="rest-black-hole-gulp"
+              r="1" fill="none" stroke="currentColor" strokeWidth={0.5 / horizon}
+            />
+          )}
+        </g>
       </g>
-      {/* Painted last so matter vanishes behind the horizon, never in a central pile. */}
-      <circle cx="50" cy="50" r="8.5" fill="black" stroke="currentColor" strokeOpacity="0.55" strokeWidth="0.35" />
     </svg>
   )
 }

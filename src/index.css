@@ -796,6 +796,15 @@ input[type='number'] {
   transform-origin: 0 0;
   transition: transform 260ms linear;
 }
+/* A ring let go of the horizon as it swallows something, gone before the next. */
+@keyframes rest-black-hole-gulp {
+  from { transform: scale(1); opacity: 0.6; }
+  to { transform: scale(1.8); opacity: 0; }
+}
+.rest-black-hole-gulp {
+  transform-origin: 0 0;
+  animation: rest-black-hole-gulp 700ms ease-out forwards;
+}
 
 @media (prefers-reduced-motion: reduce) {
   /* The flame isn't listed: it has no animation to switch off. RestTimer skips
@@ -837,7 +846,8 @@ input[type='number'] {
   .rest-icicle-drip,
   .rest-fuse-spark,
   .rest-smoke,
-  .rest-smoke-thread {
+  .rest-smoke-thread,
+  .rest-black-hole-gulp {
     display: none;
   }
 }
