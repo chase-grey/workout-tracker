@@ -15,12 +15,12 @@ describe('the field', () => {
     for (const p of BLACK_HOLE_DEBRIS) expect(p.radius).toBeGreaterThanOrEqual(INNER_ORBIT)
   })
 
-  it('consumes pieces one after another, the last exactly as rest ends', () => {
+  it('consumes pieces one after another, the last just before rest ends', () => {
     const times = BLACK_HOLE_DEBRIS.map((p) => p.consumedAt)
     expect(times).toEqual([...times].sort((a, b) => a - b))
-    expect(times.at(-1)).toBeCloseTo(1)
+    expect(times.at(-1)).toBeCloseTo(0.98)
     expect(BLACK_HOLE_DEBRIS.filter((p) => isConsumed(p, 0))).toHaveLength(0)
-    expect(BLACK_HOLE_DEBRIS.filter((p) => isConsumed(p, 1))).toHaveLength(18)
+    expect(BLACK_HOLE_DEBRIS.filter((p) => isConsumed(p, 0.98))).toHaveLength(18)
   })
 })
 
@@ -43,9 +43,9 @@ describe('horizonRadius', () => {
     }
   })
 
-  it('grows visibly on a full meal but never reaches the inner orbit', () => {
+  it('about doubles on a full meal but never reaches the inner orbit', () => {
     const full = horizonRadius(1)
-    expect(full).toBeGreaterThan(12)
+    expect(full).toBeGreaterThan(16)
     expect(full).toBeLessThan(INNER_ORBIT - 5)
   })
 })
@@ -53,33 +53,36 @@ describe('horizonRadius', () => {
 describe('debrisState', () => {
   const piece = BLACK_HOLE_DEBRIS[0]
 
-  it('sits round on its orbit before anything has happened', () => {
+  it('sits on its orbit before anything has happened', () => {
     const s = debrisState(piece, 0, HORIZON_REST)
     expect(s.radius).toBe(piece.radius)
-    expect(s.across).toBeCloseTo(s.along)
   })
 
   it('keeps its drawn size as it falls, rather than shrinking with its orbit', () => {
     const far = debrisState(piece, 0, HORIZON_REST)
     const nearer = debrisState(piece, piece.consumedAt * 0.4, HORIZON_REST)
-    // Half-widths are fractions of the orbit radius; the product is the drawn size.
-    expect(nearer.across * nearer.radius).toBeCloseTo(far.across * far.radius, 1)
+    // The dot's radius is a fraction of the orbit radius; the product is the drawn size.
+    expect(nearer.size * nearer.radius).toBeCloseTo(far.size * far.radius, 1)
   })
 
-  it('stretches along its orbit as it nears the horizon', () => {
-    const s = debrisState(piece, piece.consumedAt * 0.9, HORIZON_REST)
-    expect(s.along).toBeGreaterThan(s.across * 2)
-    expect(s.wake).toBeGreaterThan(debrisState(piece, 0, HORIZON_REST).wake)
+  it('is still a round dot of the same size at the horizon, with its wake unchanged', () => {
+    const start = debrisState(piece, 0, HORIZON_REST)
+    const s = debrisState(piece, piece.consumedAt * 0.95, HORIZON_REST)
+    expect(s.size * s.radius).toBeCloseTo(start.size * start.radius, 1)
+    expect(s.wake).toBe(start.wake)
   })
 
-  it('ends hidden inside the horizon, stretched tail and all', () => {
-    const horizon = horizonRadius(1)
+  it('is only just hidden when it counts as eaten, so the swell lands as it vanishes', () => {
     for (const p of BLACK_HOLE_DEBRIS) {
-      const s = debrisState(p, 1, horizon)
-      const tip = Math.hypot(s.radius, s.along * s.radius)
-      expect(tip).toBeLessThan(horizon)
+      // The horizon as it stood before this piece went in.
+      const horizon = horizonRadius(p.consumedAt - 1e-9)
+      const s = debrisState(p, p.consumedAt, horizon)
+      const farEdge = s.radius + s.size * s.radius
+      expect(farEdge).toBeLessThan(horizon)
+      expect(farEdge).toBeGreaterThan(horizon - 1)
     }
   })
+
 })
 
 describe('unitArc', () => {

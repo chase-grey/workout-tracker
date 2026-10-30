@@ -1229,7 +1229,7 @@ function BlackHole({ fraction }: { fraction: number }) {
           <circle r={GLOW_REACH} fill={`url(#${glowId})`} opacity={0.6 + 0.4 * eaten} />
         </g>
         {BLACK_HOLE_DEBRIS.map((piece, i) => {
-          const { radius, across, along, wake } = debrisState(piece, eaten, horizon)
+          const { radius, size, wake } = debrisState(piece, eaten, horizon)
           return (
             <g key={i} transform={`rotate(${piece.angle})`}>
               <g
@@ -1243,17 +1243,17 @@ function BlackHole({ fraction }: { fraction: number }) {
                   {/* Tapered wakes follow the same orbit as their objects, longer the faster they go. */}
                   <path
                     d={unitArc(-wake, -wake / 2)}
-                    fill="none" stroke="currentColor" strokeWidth={across * 0.55}
+                    fill="none" stroke="currentColor" strokeWidth={size * 0.55}
                     strokeLinecap="round" opacity="0.12"
                   />
                   <path
                     d={unitArc(-wake / 2, 0)}
-                    fill="none" stroke="currentColor" strokeWidth={across}
+                    fill="none" stroke="currentColor" strokeWidth={size}
                     strokeLinecap="round" opacity="0.32"
                   />
-                  {/* The tide draws each piece out along its orbit as it nears the horizon. */}
-                  <ellipse cx="1" cy="0" rx={across} ry={along} fill="currentColor" opacity="0.9" />
-                  <ellipse cx="1" cy="0" rx={across * 0.4} ry={along * 0.4} fill={tint('#effff6')} />
+                  {/* A round dot all the way down; it sinks behind the horizon rather than smearing into it. */}
+                  <circle cx="1" cy="0" r={size} fill="currentColor" opacity="0.9" />
+                  <circle cx="1" cy="0" r={size * 0.4} fill={tint('#effff6')} />
                 </g>
               </g>
             </g>
@@ -1270,7 +1270,7 @@ function BlackHole({ fraction }: { fraction: number }) {
           {gulp > 0 && (
             <circle
               key={gulp} className="rest-black-hole-gulp"
-              r="1" fill="none" stroke="currentColor" strokeWidth={0.5 / horizon}
+              r="1" fill="none" stroke="currentColor" strokeWidth={0.28 / horizon}
             />
           )}
         </g>

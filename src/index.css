@@ -796,14 +796,16 @@ input[type='number'] {
   transform-origin: 0 0;
   transition: transform 260ms linear;
 }
-/* A ring let go of the horizon as it swallows something, gone before the next. */
+/* A ring let go of the horizon as it swallows something, gone before the next.
+   Faint and short-reaching: the swell of the horizon is the event, this only
+   marks the moment. */
 @keyframes rest-black-hole-gulp {
-  from { transform: scale(1); opacity: 0.6; }
-  to { transform: scale(1.8); opacity: 0; }
+  from { transform: scale(1); opacity: 0.22; }
+  to { transform: scale(1.35); opacity: 0; }
 }
 .rest-black-hole-gulp {
   transform-origin: 0 0;
-  animation: rest-black-hole-gulp 700ms ease-out forwards;
+  animation: rest-black-hole-gulp 600ms ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

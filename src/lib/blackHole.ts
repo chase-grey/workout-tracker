@@ -25,22 +25,32 @@ export const HORIZON_REST = 8.5
 /** The innermost starting orbit. Nothing starts inside it, and the horizon never reaches it. */
 export const INNER_ORBIT = 23
 
-/** How far inside the horizon a piece is pulled, so its stretched tail hides too. */
-const HIDE_MARGIN = 2.5
+/**
+ * How far inside the horizon a piece comes to rest, beyond its own radius. Small
+ * on purpose: a piece counts as eaten the moment its last edge slips behind the
+ * dark, so the swell and the gulp land as it vanishes, not a beat later.
+ */
+const HIDE_MARGIN = 0.4
 
 /**
  * The horizon grows by the area it eats, exaggerated: eighteen dots together
  * add perhaps a sixth to its radius for real, which no one would notice. Tuned so
- * a full meal takes it from 8.5 to about 13, still well short of the inner orbit.
+ * a full meal takes it from 8.5 to about 17, twice its resting size and still
+ * short of the inner orbit by enough that the last piece has somewhere to fall from.
  */
-const GROWTH = 5.5
+const GROWTH = 12
 
-/** A finite field, spread by the golden angle so no two line up. */
+/**
+ * A finite field, spread by the golden angle so no two line up. The last piece
+ * goes in just short of the end: the timer ticks every quarter second and the
+ * fall has a transition to finish, so a piece due at exactly 1 would still be
+ * visible when the rest is called.
+ */
 export const BLACK_HOLE_DEBRIS: readonly Debris[] = Array.from({ length: 18 }, (_, i) => ({
   angle: i * 137.508,
   radius: INNER_ORBIT + ((i * 7) % 22),
   size: 0.65 + (i % 4) * 0.22,
-  consumedAt: 0.22 + (i / 17) * 0.78,
+  consumedAt: 0.22 + (i / 17) * 0.76,
 }))
 
 /**
@@ -72,29 +82,27 @@ export function horizonRadius(eaten: number, debris: readonly Debris[] = BLACK_H
 export type DebrisState = {
   /** Its current orbit. */
   radius: number
-  /** Half-widths of the dot, across the orbit and along it, as fractions of `radius`. */
-  across: number
-  along: number
+  /** The dot's radius, as a fraction of `radius`. */
+  size: number
   /** Degrees of orbit its wake trails behind it. */
   wake: number
 }
 
 /**
  * A piece falls in a straight line from its orbit to just inside the horizon,
- * and the tide stretches it along its orbit as it nears — slowly at first, then
- * most of it in the last third. The wake is longer the faster the piece moves,
- * and lengthens again as the piece itself smears into it.
+ * where its far edge is the last of it to go. It stays a round dot the whole way:
+ * the real tide would draw it out along its orbit, but a smear reads as a glitch
+ * at this size, so the falling and the dark do all the telling. The wake is
+ * longer the faster the piece moves, fixed per piece like its period.
  */
 export function debrisState(piece: Debris, eaten: number, horizon: number): DebrisState {
   const pull = pullOf(piece, eaten)
-  const radius = piece.radius + (horizon - HIDE_MARGIN - piece.radius) * pull
-  const tide = pull ** 3
-  const speed = 300 / orbitPeriod(piece.radius)
+  const rest = horizon - piece.size - HIDE_MARGIN
+  const radius = piece.radius + (rest - piece.radius) * pull
   return {
     radius,
-    across: (piece.size * (1 - 0.45 * tide)) / radius,
-    along: (piece.size * (1 + 2.2 * tide)) / radius,
-    wake: speed * (1 + 1.5 * tide),
+    size: piece.size / radius,
+    wake: 300 / orbitPeriod(piece.radius),
   }
 }
 
