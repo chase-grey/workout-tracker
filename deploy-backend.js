@@ -1,87 +1,152 @@
 #!/usr/bin/env node
 /**
- * Push and deploy the Google Apps Script backend via clasp.
+ * Deploy SimpleBackend.gs to the Apps Script web app the phone already talks to.
  *
- * Prereqs (one-time):
+ *   npm run deploy:backend                       # push, version, redeploy, verify
+ *   npm run deploy:backend -- --script-id <id>   # first run: record the script id
+ *   npm run deploy:backend -- --deployment <id>  # a deployment other than the baked URL's
+ *
+ * One-time setup, on the Google account that owns the sheet (not necessarily
+ * the one clasp is signed into for anything else — clasp keeps named logins):
+ *
  *   npm install -g @google/clasp
- *   clasp login
- *   Create a Google Sheet, open Extensions > Apps Script, and either:
- *     - copy the scriptId from the script's URL into .clasp.json, or
- *     - run this script and let `clasp create` make a standalone project,
- *       then bind it to your sheet (Project settings > container).
+ *   clasp login --user workout
+ *   echo CLASP_USER=workout >> .env
+ *   npm run deploy:backend -- --script-id <Apps Script editor → Project settings → Script ID>
  *
- * NOTE: never run `clasp deploy --deploymentId <id>` on an existing
- * deployment — it converts the deployment into a library. Create a fresh
- * deployment (as below) or redeploy from the Apps Script UI instead.
+ * What a run does, in order, and why each step is there:
+ *   1. `npm run backend:stamp -- --check`: refuses to deploy a backend whose
+ *      BACKEND_VERSION wasn't bumped, because the app's banner and the Pages
+ *      workflow compare that number and a stale one would say "current" of a
+ *      backend that isn't.
+ *   2. `clasp push -f`: uploads SimpleBackend.gs and appsscript.json (and only
+ *      those — see .claspignore) to the script's head.
+ *   3. `clasp version`: freezes the head as an immutable version.
+ *   4. `clasp redeploy <deploymentId> -V <n>`: points the EXISTING deployment at
+ *      that version. This is the editor's "Manage deployments → New version",
+ *      so the /exec URL baked into the app and stored on the phone stays the
+ *      same. The deployment id is the `/s/<id>/exec` segment of that URL.
+ *   5. Asks the live URL for ?route=version and compares it with what was just
+ *      pushed. A deployment that answers anything else is reported, with the
+ *      editor steps to put it right, rather than trusted.
+ *
+ * Never `clasp deploy` (create-deployment) for a routine update: that makes a
+ * second web app at a new URL and the phone keeps talking to the old one.
  */
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const claspConfig = path.join(__dirname, '.clasp.json')
+const root = path.dirname(fileURLToPath(import.meta.url))
+const claspConfig = path.join(root, '.clasp.json')
+const args = process.argv.slice(2)
+const flag = (name) => {
+  const at = args.indexOf(name)
+  return at === -1 ? undefined : args[at + 1]
+}
 
-function run(cmd, opts = {}) {
-  return execSync(cmd, { stdio: 'inherit', ...opts })
+function readEnv(key) {
+  if (process.env[key]) return process.env[key]
+  try {
+    const line = fs.readFileSync(path.join(root, '.env'), 'utf8').split(/\r?\n/)
+      .find((l) => l.trim().startsWith(`${key}=`))
+    return line ? line.slice(line.indexOf('=') + 1).trim().replace(/^"(.*)"$/, '$1') : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const user = readEnv('CLASP_USER') || 'default'
+const clasp = (cmdArgs, opts = {}) =>
+  execFileSync('clasp', ['--user', user, ...cmdArgs], { cwd: root, encoding: 'utf8', stdio: opts.quiet ? 'pipe' : ['inherit', 'pipe', 'inherit'], shell: process.platform === 'win32' })
+
+function fail(msg) {
+  console.error(msg)
+  process.exit(1)
 }
 
 function ensureClasp() {
   try {
-    execSync('clasp --version', { stdio: 'ignore' })
+    execFileSync('clasp', ['--version'], { stdio: 'ignore', shell: process.platform === 'win32' })
   } catch {
-    console.error('clasp is not installed. Run: npm install -g @google/clasp')
-    process.exit(1)
+    fail('clasp is not installed. Run: npm install -g @google/clasp')
   }
 }
 
 function ensureProject() {
-  if (fs.existsSync(claspConfig)) {
-    const { scriptId } = JSON.parse(fs.readFileSync(claspConfig, 'utf8'))
-    console.log(`Using existing Apps Script project: ${scriptId}`)
-    return
+  const scriptId = flag('--script-id')
+  if (scriptId) {
+    fs.writeFileSync(claspConfig, JSON.stringify({ scriptId, rootDir: '.' }, null, 2) + '\n')
+    console.log(`Recorded script id in .clasp.json (gitignored).`)
   }
-  console.log('No .clasp.json found — creating a new Apps Script project…')
-  run('clasp create --title "Workout Tracker Backend" --type webapp --rootDir .')
-}
-
-/**
- * Set one key in .env, leaving every other line alone.
- *
- * This used to overwrite the whole file with just VITE_API_URL, which silently
- * destroyed the other secrets living there — GITHUB_ISSUE_TOKEN (the auto-fixer
- * stops running without it), CHAT_SHARED_SECRET, and the OpenAI keys.
- */
-function writeEnvVar(key, value) {
-  const envPath = path.join(__dirname, '.env')
-  const line = `${key}="${value}"`
-  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
-  const lines = existing.split(/\r?\n/)
-  const at = lines.findIndex((l) => l.trim().startsWith(`${key}=`))
-  if (at === -1) {
-    const body = existing.trimEnd()
-    fs.writeFileSync(envPath, body ? `${body}\n${line}\n` : `${line}\n`)
-  } else {
-    lines[at] = line
-    fs.writeFileSync(envPath, lines.join('\n'))
+  if (!fs.existsSync(claspConfig)) {
+    fail('No .clasp.json. Run once with --script-id <id> (Apps Script editor → Project settings → Script ID).')
   }
 }
 
-function main() {
+function bakedUrl() {
+  const src = fs.readFileSync(path.join(root, 'src', 'config', 'backend.ts'), 'utf8')
+  return (src.match(/'(https:[^']+\/exec)'/) || [])[1]
+}
+
+function deploymentIdOf(url) {
+  return (url.match(/\/macros\/s\/([\w-]+)\/exec/) || [])[1]
+}
+
+function requiredVersion() {
+  const src = fs.readFileSync(path.join(root, 'src', 'config', 'backendVersion.ts'), 'utf8')
+  return Number((src.match(/REQUIRED_BACKEND_VERSION = (\d+)/) || [])[1])
+}
+
+async function liveVersion(url) {
+  const u = new URL(url)
+  u.searchParams.set('route', 'version')
+  const res = await fetch(u, { signal: AbortSignal.timeout(60_000) })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const body = await res.json()
+  return typeof body?.version === 'number' ? body.version : 0
+}
+
+async function main() {
   ensureClasp()
   ensureProject()
-  console.log('Pushing code…')
-  run('clasp push -f')
-  console.log('Creating a new web app deployment…')
-  const out = execSync('clasp deploy --description "Workout Tracker backend"', { encoding: 'utf8' })
-  process.stdout.write(out)
-  const url = out.match(/https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/)
-  if (url) {
-    writeEnvVar('VITE_API_URL', url[0])
-    console.log(`\nUpdated .env with VITE_API_URL=${url[0]}`)
-  } else {
-    console.log('\nDeployed. Grab the /exec URL from the Apps Script UI and put it in .env or Settings.')
+  const url = readEnv('VITE_API_URL') || bakedUrl()
+  const deploymentId = flag('--deployment') || deploymentIdOf(url || '')
+  if (!deploymentId) fail('No deployment id: pass --deployment <id>, or bake the /exec URL into src/config/backend.ts')
+  const version = requiredVersion()
+
+  console.log('Checking the version stamp…')
+  try {
+    execFileSync(process.execPath, [path.join(root, 'scripts', 'backend-stamp.mjs'), '--check'], { stdio: 'inherit' })
+  } catch {
+    fail('Stamp first: npm run backend:stamp')
   }
+
+  console.log(`Pushing SimpleBackend.gs as ${user}…`)
+  clasp(['push', '-f'])
+
+  console.log('Creating a version…')
+  const out = clasp(['version', `Workout Tracker backend v${version}`], { quiet: true })
+  const created = out.match(/version (\d+)/i)
+  if (!created) fail(`Could not read the new version number from clasp:\n${out}`)
+  const scriptVersion = created[1]
+  console.log(`Script version ${scriptVersion}.`)
+
+  console.log(`Pointing deployment ${deploymentId.slice(0, 12)}… at it…`)
+  clasp(['redeploy', deploymentId, '-V', scriptVersion, '-d', `Workout Tracker backend v${version}`])
+
+  console.log('Asking the live URL what it is now…')
+  let live
+  try {
+    live = await liveVersion(url)
+  } catch (e) {
+    fail(`The deployment no longer answers (${e.message}). In the Apps Script editor: Deploy → Manage deployments → edit → Version ${scriptVersion} → Deploy, and check it is still a Web app.`)
+  }
+  if (live !== version) {
+    fail(`Live backend answers version ${live}, expected ${version}. In the Apps Script editor: Deploy → Manage deployments → edit → Version ${scriptVersion} → Deploy.`)
+  }
+  console.log(`Deployed. Live backend is version ${live}.`)
 }
 
 main()

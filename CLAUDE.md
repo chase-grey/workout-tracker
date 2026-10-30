@@ -67,6 +67,13 @@ stuck write. The script also says when the backend doesn't answer at all, the
 one failure a phone can't report. It exits 3 if the deployed backend predates
 the route; that means `SimpleBackend.gs` needs redeploying (see BACKEND.md).
 
+Before any of that, check the backend's version against the app's: `npm run
+backend:check`. The app shows "Backend is behind" on Today and in Settings when
+the deployed `SimpleBackend.gs` answers a lower version than the build needs,
+and the Pages workflow's last job goes red for the same reason. Every change
+to `SimpleBackend.gs` must be followed by `npm run backend:stamp` (the tests
+fail otherwise) and `npm run deploy:backend`; see BACKEND.md "Versioning".
+
 Then rule out a stale build: "I don't see X" on the phone usually means the
 Pages deploy didn't land (`gh run list`), or a later commit from another
 session reverted it (`git log -- <file>`).

@@ -49,3 +49,18 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # The backend deploys by hand, not from here. This turns the run red when the
+  # app just shipped needs a newer SimpleBackend.gs than the one answering, so
+  # the gap is seen here rather than as a queued write on a phone.
+  backend-version:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/check-backend.mjs
+        env:
+          API_URL: ${{ secrets.VITE_API_URL }}

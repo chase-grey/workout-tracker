@@ -15,18 +15,26 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
 
 3. **Deploy.** Two options:
 
-   **A. clasp (scripted):**
+   **A. clasp (scripted, the routine path):**
    ```bash
    npm install -g @google/clasp
-   clasp login
-   # Put the script's ID (from its URL) into .clasp.json:
-   #   { "scriptId": "…", "rootDir": "." }
-   npm run deploy:backend
+   clasp login --user workout        # the Google account that owns the sheet
+   echo CLASP_USER=workout >> .env   # clasp keeps named logins; this picks it
+   npm run deploy:backend -- --script-id <id>   # once: Project settings → Script ID
+   npm run deploy:backend                       # every time after
    ```
+   The first deployment still has to be made in the editor (step B) so there is
+   an `/exec` URL to point at; after that `npm run deploy:backend` pushes the
+   file, cuts a version, moves that **same deployment** onto it (`clasp
+   redeploy`, which is what the editor's "New version" does, so the URL never
+   changes) and then asks the live URL for its version to prove it took.
 
    **B. Manual:** paste `SimpleBackend.gs` and `appsscript.json` into the Apps
    Script editor, then **Deploy → New deployment → Web app** with
    **Execute as: Me** and **Who has access: Anyone**. Copy the `/exec` URL.
+   For every later update: **Deploy → Manage deployments → ✎ → Version: New
+   version → Deploy**. A *New deployment* instead makes a second web app at a
+   new URL, and the phone goes on talking to the old one.
 
 4. **Point the app at it.** Paste the `/exec` URL into the app's **Settings**
    screen (or set `VITE_API_URL` in `.env` / the `VITE_API_URL` repo secret to
@@ -38,9 +46,34 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
   and skips a preflight Apps Script can't answer. The body is JSON.
 - Apps Script `/exec` responses are readable cross-origin (from GitHub Pages)
   for these simple requests — no custom CORS headers are set server-side.
-- ⚠️ **Never** run `clasp deploy --deploymentId <id>` against an existing
-  deployment — it turns the deployment into a library. Make a *new* deployment,
-  or redeploy from the Apps Script UI.
+- ⚠️ For a routine update, never `clasp deploy` (create-deployment): it makes a
+  new web app at a new URL. `npm run deploy:backend` uses `clasp redeploy`
+  against the existing deployment, and verifies the live version afterwards.
+
+## Versioning
+
+The app and this file ship from one commit but deploy separately, and the
+backend's deploy is the one somebody has to do by hand. Between the two, a write
+the new app makes can be one the old backend rejects; the client rightly keeps
+it queued, and for a month in autumn 2026 all anyone saw of that was "Couldn't
+save" on a phone. So the gap is now measured:
+
+- `SimpleBackend.gs` declares `BACKEND_VERSION` and answers it at
+  `GET ?route=version`. A backend too old to have the route counts as **0**.
+- The app ships the version it needs in `src/config/backendVersion.ts`, next to
+  a fingerprint of this file at that version. **`npm run backend:stamp`** bumps
+  both; `scripts/backendVersion.test.mjs` fails when the file changed and the
+  number didn't, so a backend change cannot ship unstamped.
+- After every sync the app asks the live backend its version
+  (`store/useBackendVersion.ts`). When it's lower, the Today tab and Settings
+  show **"Backend is behind"** with both numbers, until a sync says otherwise.
+- The Pages workflow's last job runs `scripts/check-backend.mjs` and goes red
+  when the backend answering is older than the app it just shipped.
+
+The compatibility rules below still hold; the version is how a client says
+"newer than you" by number instead of by the shape of an error. The order of
+operations for a change that needs new backend behaviour is unchanged: stamp,
+`npm run deploy:backend`, then push the commit.
 
 ## API
 
@@ -70,6 +103,7 @@ the backend separately using the deployment instructions above.
 
 | Method | Route | Body / params | Returns |
 |---|---|---|---|
+| GET | `?route=version` | — | `{ version }` (see Versioning) |
 | GET | `?route=workouts&since=YYYY-MM-DD` | — | `WorkoutRow[]` |
 | GET | `?route=bodyweight&since=YYYY-MM-DD` | — | `{date, weightLbs}[]` |
 | POST | `?route=session` | `{ rows: WorkoutRow[] }` | `{ saved }` |

@@ -54,6 +54,7 @@ const KEYS = {
   activeSkipped: 'wt.activeSkipped',
   stretch: 'wt.stretch',
   lastSync: 'wt.lastSync',
+  backendVersion: 'wt.backendVersion',
 } as const
 
 /**
@@ -264,6 +265,9 @@ export const storage = {
 
   loadLastSync: (): string | null => read(KEYS.lastSync, null),
   saveLastSync: (iso: string) => write(KEYS.lastSync, iso),
+  /** The backend version last seen at ?route=version, so the banner needn't wait for a fetch. */
+  loadBackendVersion: (): number | null => read(KEYS.backendVersion, null),
+  saveBackendVersion: (v: number) => write(KEYS.backendVersion, v),
 
   loadQueue: (): QueuedWrite[] => normalizeQueue(read<unknown>(KEYS.queue, []), uuid),
   /**

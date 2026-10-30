@@ -3,6 +3,7 @@ import { useData } from '../../store/DataContext'
 import { ThisWeek } from './ThisWeek'
 import { DailyHabits } from './DailyHabits'
 import { WeightCard } from './WeightCard'
+import { BackendBanner } from '../../components/BackendBanner'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
@@ -97,6 +98,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     // stacking a second 1rem on top of it pushed the home page just past the
     // viewport — enough to make it scroll by a hair with nothing to scroll to.
     <div className="flex flex-col gap-2">
+      <BackendBanner />
       {photoDue && (
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">

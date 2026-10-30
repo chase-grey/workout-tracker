@@ -1,0 +1,4 @@
+# clasp push sends every pushable file under rootDir; the backend is two of them.
+**/**
+!SimpleBackend.gs
+!appsscript.json

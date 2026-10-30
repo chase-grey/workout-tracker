@@ -32,6 +32,7 @@
  *                 appendSaveError)
  *
  * Routes:
+ *   GET  ?route=version          -> { version: BACKEND_VERSION } (see the constant)
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
  *   GET  ?route=bodyweight[&since=YYYY-MM-DD]
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
@@ -114,6 +115,13 @@ const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note', 'body_fat_pc
 const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec', 'routine']
 const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
 const SAVE_ERROR_HEADERS = ['at', 'build', 'route', 'write_id', 'message', 'pending', 'payload']
+
+// What this file answers at ?route=version. `npm run backend:stamp` bumps it on
+// every change to this file and records the matching fingerprint for the app,
+// which ships the number it needs (src/config/backendVersion.ts) and shows a
+// banner when the deployed backend answers a lower one. A backend too old to
+// have the route counts as version 0. See BACKEND.md "Versioning".
+const BACKEND_VERSION = 1
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -127,6 +135,8 @@ const REST_RATIO_KEY = '__rest_ratio__'
 function doGet(e) {
   try {
     switch (e.parameter.route) {
+      case 'version':
+        return json({ version: BACKEND_VERSION })
       case 'workouts':
         return json(getWorkouts(e.parameter.since))
       case 'bodyweight':

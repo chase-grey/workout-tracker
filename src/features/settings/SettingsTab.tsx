@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MdKeyboardArrowDown } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { SaveStatus } from '../../components/SaveStatus'
+import { BackendBanner } from '../../components/BackendBanner'
 import {
   issueProgress,
   partitionIssues,
@@ -162,6 +163,7 @@ export function SettingsTab({
   return (
     <div className="flex flex-col gap-6 pb-4">
       <h2 className="text-xl font-bold">settings</h2>
+      <BackendBanner />
       <SaveStatus />
 
       <ThemePicker />

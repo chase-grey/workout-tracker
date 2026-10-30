@@ -10,6 +10,7 @@ import type { IssueThread, TrackedIssue } from './issues'
 import type { SaveErrorReport } from '../lib/saveErrorReport'
 import { storage } from './storage'
 import { DEFAULT_API_URL } from '../config/backend'
+import { liveBackendVersion } from '../lib/backendVersion'
 
 /**
  * Thin client for the Google Apps Script web app that proxies the Sheet.
@@ -130,4 +131,18 @@ export const api = {
   answerIssue: (body: { secret: string; number: number; answer: string }) =>
     post<{ answered: number }>('answer_issue', body),
   reportSaveError: (report: SaveErrorReport) => post<{ saved: number }>('save_error', report),
+  /**
+   * The deployed backend's BACKEND_VERSION: 0 for one too old to have the route
+   * (it answers `{error}`, which is why this doesn't go through `get`). Throws
+   * only when the backend can't be reached at all, so offline isn't "behind".
+   */
+  fetchBackendVersion: async (): Promise<number> => {
+    const base = baseUrl()
+    if (!base) throw new Error('api not configured')
+    const url = new URL(base)
+    url.searchParams.set('route', 'version')
+    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(30_000) })
+    if (!res.ok) throw new Error(`GET version failed: ${res.status}`)
+    return liveBackendVersion(await res.json())
+  },
 }
