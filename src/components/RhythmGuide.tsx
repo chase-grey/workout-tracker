@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { MdKeyboardArrowDown, MdKeyboardArrowUp } from 'react-icons/md'
+import { MdKeyboardArrowDown } from 'react-icons/md'
 import { parseTempo, workPhaseCount, type TempoPhase } from '../lib/tempo'
 import {
   rhythmWaveEnd,
@@ -65,6 +65,23 @@ const SCALE_MIN = 0.55
  */
 const SWEEP_UNITS = 60
 const SWEEP_MS = 450
+
+/**
+ * The push/pull chevron stacks, in the shape's 100-unit frame. Each stack is three
+ * chevrons counted outward from the centre line; the strokes are what tell a push
+ * (thick, pulsing outward) from the rest priming it (thin, still).
+ */
+const CHEVRON_HALF_WIDTH = 36
+const CHEVRON_RISE = 8
+const CHEVRON_FIRST = 10
+const CHEVRON_GAP = 13
+const CHEVRON_THIN = 3.5
+const CHEVRON_THICK = 9
+/** How far a driving stack leans toward its end, in frame units. */
+const CHEVRON_SHIFT = 4
+/** One pulse runs the length of a stack in this long, bottoming out at this share of lit. */
+const CHEVRON_PULSE_SECONDS = 0.9
+const CHEVRON_PULSE_FLOOR = 0.45
 const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
 
 /**
@@ -388,6 +405,7 @@ function PushPullShape({
   // Once the dot lands on the white, the white spreads back over the wave behind
   // it, rather than the whole wave switching in a frame.
   const sweep = useRamp(glowStart != null && dotX >= glowStart ? 1 : 0, SWEEP_MS)
+  const reduced = usePrefersReducedMotion()
   // How lit each end is: fully while you drive into it, filling while a rest primes
   // it. `side` is +1 for the bottom (pressing down) and −1 for the top.
   const endLit = (side: number) => Math.max(clamp01(drive * side), primeDir === side ? prime : 0)
@@ -460,38 +478,54 @@ function PushPullShape({
         </div>
       )
     }
-    case 'chevrons':
-      // Arrows pointing the way to drive, lighting from the middle outward so the
-      // stack itself reads as the push travelling. A rest empties both stacks and
-      // then fills the one it's priming.
+    case 'chevrons': {
+      // Two stacks of chevrons, one pointing each way you drive, filling most of
+      // the frame. Thickness is the state: a push draws its stack in heavy strokes
+      // and runs a pulse through it outward, so it's plainly moving; a rest draws
+      // the stack it's priming in thin strokes that fill from the centre out, a
+      // ghost of the push to come and never mistakable for it.
+      const elapsed = progress * phases[phaseIndex].seconds
       return (
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center"
-          style={{ fontSize: 'var(--pushpull-arrow-size, min(17vw, 6rem))' }}
-        >
+        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full overflow-visible text-current" aria-hidden>
           {[-1, 1].map((side) => {
-            const lit = endLit(side)
-            const Arrow = side === 1 ? MdKeyboardArrowDown : MdKeyboardArrowUp
-            // Index counts outward from the centre line, whichever way the stack points.
-            const steps = side === 1 ? [0, 1, 2] : [2, 1, 0]
+            const driving = clamp01(drive * side)
+            const priming = primeDir === side ? prime : 0
+            const width = CHEVRON_THIN + (CHEVRON_THICK - CHEVRON_THIN) * driving
             return (
-              <div key={side} className="flex flex-col items-center">
-                {steps.map((step, k) => (
-                  <Arrow
-                    key={k}
-                    aria-hidden
-                    className="-my-[7%] text-current"
-                    style={{
-                      opacity: litOpacity(tone, clamp01(lit * 3 - step)),
-                      transform: `translateY(${side * clamp01(drive * side) * 8}%)`,
-                    }}
-                  />
-                ))}
-              </div>
+              <g key={side} transform={`translate(0 ${side * driving * CHEVRON_SHIFT})`}>
+                {[0, 1, 2].map((step) => {
+                  // Index counts outward from the centre line, whichever way the stack points.
+                  const fill = clamp01(Math.max(driving, priming) * 3 - step)
+                  // The pulse peaks at the centre first and reaches each chevron in
+                  // turn, so the lit stack reads as the push travelling outward.
+                  const pulse = reduced
+                    ? 1
+                    : CHEVRON_PULSE_FLOOR +
+                      (1 - CHEVRON_PULSE_FLOOR) *
+                        (0.5 + 0.5 * Math.cos(2 * Math.PI * (elapsed / CHEVRON_PULSE_SECONDS - step / 3)))
+                  const lit = fill * (1 - driving + driving * pulse)
+                  const y = 50 + side * (CHEVRON_FIRST + step * CHEVRON_GAP)
+                  const tip = y + side * CHEVRON_RISE
+                  const base = y - side * CHEVRON_RISE
+                  return (
+                    <polyline
+                      key={step}
+                      points={`${50 - CHEVRON_HALF_WIDTH},${base} 50,${tip} ${50 + CHEVRON_HALF_WIDTH},${base}`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={width}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={litOpacity(tone, lit)}
+                    />
+                  )
+                })}
+              </g>
             )
           })}
-        </div>
+        </svg>
       )
+    }
     case 'gauge': {
       // A needle track: the bar runs out from the centre line toward the end you're
       // driving into, so its length is the effort and its half is the direction.

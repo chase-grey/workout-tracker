@@ -180,7 +180,6 @@ html {
 }
 .stretch-session .rhythm-shape {
   --descent-arrow-size: min(32cqw, 32cqh);
-  --pushpull-arrow-size: min(24cqw, 24cqh);
 }
 
 body {
