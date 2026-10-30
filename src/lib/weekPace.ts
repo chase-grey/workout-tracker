@@ -1,7 +1,9 @@
 /**
- * Steady weekly pace, independent of logged progress: a Monday evening grace
- * period followed by a smooth ramp to the last intended day's evening deadline.
- * Remaining-day buffers are separate, since pace and feasibility differ.
+ * Weekly pace, independent of logged progress. Workouts and flex sessions run
+ * on a steady ramp: a Monday evening grace period, then a smooth climb to the
+ * last intended day's evening deadline. Calorie days are owed one a day, so
+ * their schedule is a staircase: each day's share comes due at that day's
+ * 10pm. Remaining-day buffers are separate, since pace and feasibility differ.
  */
 
 import { mondayOf } from './dates'
@@ -39,6 +41,34 @@ export function requiredByNow(
   end.setHours(WEEK_DEADLINE_HOUR)
   const fraction = (now.getTime() - start.getTime()) / (end.getTime() - start.getTime())
   return goal * Math.min(1, Math.max(0, fraction))
+}
+
+/**
+ * Local hour at which a calorie day is due. Every day of the week is a calorie
+ * day now, so there is nothing to spread across the week: Monday's day is owed
+ * Monday night, and the schedule steps up once a night rather than ramping.
+ * An hour past the eating window, so a late plate still lands before the bar
+ * moves.
+ */
+export const CAL_DAY_DEADLINE_HOUR = 22
+
+/**
+ * Calorie days the schedule expects by `now`: the goal's share for every day of
+ * this week whose {@link CAL_DAY_DEADLINE_HOUR} has passed. Zero all day Monday
+ * until 10pm, one step per night after that, the whole goal from Sunday 10pm.
+ * Fractional when the goal isn't seven, so the staircase still tops out at the
+ * goal rather than overshooting it.
+ */
+export function calDaysRequiredByNow(goal: number, now: Date = new Date()): number {
+  if (goal <= 0) return 0
+  const due = new Date(mondayOf(now))
+  due.setHours(CAL_DAY_DEADLINE_HOUR, 0, 0, 0)
+  let days = 0
+  while (days < DAYS_IN_WEEK && due.getTime() <= now.getTime()) {
+    days++
+    due.setDate(due.getDate() + 1)
+  }
+  return (goal * days) / DAYS_IN_WEEK
 }
 
 export type MetricKey = keyof WeekCounts
@@ -88,8 +118,9 @@ export type WeekPace = {
   /**
    * Where the pace marker sits on the overall bar: the mean of the per-metric
    * required fractions, aggregated the same way progress is so the two are
-   * directly comparable. Reaches 1 at the week's deadline, where the schedule has
-   * nothing left to say and the marker goes away.
+   * directly comparable. Reaches 1 at the week's last deadline — Sunday 10pm,
+   * when the final calorie day comes due — where the schedule has nothing left
+   * to say and the marker goes away.
    */
   requiredFraction: number
   /**
@@ -137,7 +168,7 @@ export function weekPace(
       key,
       done,
       goal,
-      required: requiredByNow(goal, now, windowDays),
+      required: key === 'calDays' ? calDaysRequiredByNow(goal, now) : requiredByNow(goal, now, windowDays),
       windowDays,
       daysLeft: windowLeft,
       remaining,
