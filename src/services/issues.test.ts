@@ -129,6 +129,14 @@ describe('issueProgress', () => {
     expect(issueProgress(issue({ labels: ['from-app', 'needs-input'] }))).toBe('asks')
   })
 
+  it('is in review once the fix is up as a pull request', () => {
+    expect(issueProgress(issue({ labels: ['from-app', 'autofix-review'] }))).toBe('review')
+  })
+
+  it('reads review over a running label left on beside it', () => {
+    expect(issueProgress(issue({ labels: ['autofix-running', 'autofix-review'] }))).toBe('review')
+  })
+
   it('still asks if the running label was left on alongside the question', () => {
     expect(issueProgress(issue({ labels: ['autofix-running', 'needs-input'] }))).toBe('asks')
   })
@@ -268,7 +276,7 @@ describe('partitionIssues', () => {
     expect(closed.map((i) => i.number)).toEqual([3])
   })
 
-  it('orders the live half asks, working, open, stalled, then today’s fixes', () => {
+  it('orders the live half asks, review, working, open, stalled, then today’s fixes', () => {
     const now = new Date(2026, 7, 8, 16, 8)
     const { active } = partitionIssues(
       [
@@ -276,11 +284,12 @@ describe('partitionIssues', () => {
         issue(2, { labels: ['autofix-failed'] }),
         issue(3),
         issue(4, { labels: ['autofix-running'] }),
+        issue(6, { labels: ['autofix-review'] }),
         issue(5, { labels: ['needs-input'] }),
       ],
       now,
     )
-    expect(active.map((i) => i.number)).toEqual([5, 4, 3, 2, 1])
+    expect(active.map((i) => i.number)).toEqual([5, 6, 4, 3, 2, 1])
   })
 
   it('keeps issues at the same stage in the order they arrived', () => {

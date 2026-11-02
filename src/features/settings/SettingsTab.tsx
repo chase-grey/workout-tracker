@@ -25,10 +25,11 @@ const FIELD =
 // The accent shades run brightest-first down the same order the list is sorted in:
 // `working` is a run happening right now, `open` is waiting its turn, and a fix
 // that landed sits in the dark accent with the rest of history. `stalled` drops out of
-// the ladder into grey — nothing is moving on it. `asks` keeps the solid fill:
-// it's the only one that wants something from you.
+// the ladder into grey — nothing is moving on it. `asks` and `review` keep the solid
+// fill: they're the two that want something from you — an answer, or a merge.
 const ISSUE_BADGE: Record<IssueProgress, string> = {
   asks: 'bg-accent text-on-accent',
+  review: 'bg-accent-bright text-on-accent',
   working: 'bg-accent-bright/20 text-accent-bright',
   open: 'bg-accent-2/20 text-accent-2',
   stalled: 'bg-neutral-700 text-neutral-300',

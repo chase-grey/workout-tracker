@@ -72,18 +72,27 @@ export type IssueThread = {
  *
  * `working` means the auto-fixer (scripts/autofix.mjs) has claimed the issue and
  * Claude is on it right now; `asks` means it stopped to ask something and is
- * waiting on an answer; `stalled` means it tried and backed off, leaving the
- * issue open for a human. All come from labels the fixer sets, so this is the
- * real state of the run and not a guess from timestamps.
+ * waiting on an answer; `review` means the fix is written and up as a pull
+ * request, waiting on you to merge it; `stalled` means it tried and backed off,
+ * leaving the issue open for a human. All come from labels the fixer sets, so
+ * this is the real state of the run and not a guess from timestamps.
  *
  * `completed` is a fix that landed today: still closed on GitHub, but shown as a
  * result you can see rather than folded into history — see issueProgress.
  */
-export type IssueProgress = 'open' | 'working' | 'asks' | 'stalled' | 'completed' | 'closed'
+export type IssueProgress =
+  | 'open'
+  | 'working'
+  | 'asks'
+  | 'review'
+  | 'stalled'
+  | 'completed'
+  | 'closed'
 
-/** Labels scripts/autofix.mjs sets — RUNNING_LABEL, ASK_LABEL, FAILED_LABEL there. */
+/** Labels scripts/autofix.mjs sets — RUNNING_LABEL, ASK_LABEL, REVIEW_LABEL, FAILED_LABEL there. */
 const WORKING_LABEL = 'autofix-running'
 const ASKS_LABEL = 'needs-input'
+const REVIEW_LABEL = 'autofix-review'
 const STALLED_LABEL = 'autofix-failed'
 
 /** Whether two instants land on the same day on this device's clock. */
@@ -120,23 +129,27 @@ export function issueProgress(issue: TrackedIssue, now: Date = new Date()): Issu
   // Ahead of `working`: the fixer drops its running label before asking, but the
   // two calls aren't atomic and an issue caught between them is asking, not running.
   if (labels.includes(ASKS_LABEL)) return 'asks'
+  // The fix exists and the issue is open only until you merge: like `asks`, it
+  // can't move without you, so it reads ahead of the runs still in progress.
+  if (labels.includes(REVIEW_LABEL)) return 'review'
   if (labels.includes(WORKING_LABEL)) return 'working'
   if (labels.includes(STALLED_LABEL)) return 'stalled'
   return 'open'
 }
 
 /**
- * Where each state sits in the Settings list: working first, then open, then
- * stalled, then today's fixes down with the rest of history. `asks` leads the
- * lot — it's the only state that can't move without you.
+ * Where each state sits in the Settings list: the two that wait on you first
+ * (`asks`, then `review`), then working, then open, then stalled, then today's
+ * fixes down with the rest of history.
  */
 const PROGRESS_ORDER: Record<IssueProgress, number> = {
   asks: 0,
-  working: 1,
-  open: 2,
-  stalled: 3,
-  completed: 4,
-  closed: 5,
+  review: 1,
+  working: 2,
+  open: 3,
+  stalled: 4,
+  completed: 5,
+  closed: 6,
 }
 
 /** The issues the fixer is blocked on, oldest question first. */
