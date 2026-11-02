@@ -291,7 +291,7 @@ vite.on('exit', (code) => {
  * is no version of this where you want the coach on and the fixer off by accident.
  * The default should be the pair.
  *
- * AUTOFIX=0 still turns it off, for a run that has no business committing to `main`.
+ * AUTOFIX=0 still turns it off, for a run that has no business opening pull requests.
  */
 if (process.env.AUTOFIX === '0') {
   console.log('\n  AUTOFIX=0 — the fixer is off for this run; `auto-fix` issues will queue.\n')

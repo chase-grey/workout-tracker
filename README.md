@@ -183,7 +183,9 @@ reset between sets, file that as a bug"*. It calls a `report_issue` tool, a grey
 `chase-grey/workout-tracker` labelled `from-app` **and `auto-fix`**, with your
 userAgent, the current URL, and the last few chat turns attached so it's actionable.
 The `auto-fix` label hands it straight to the fixer below (if it's running) — so a
-coach-filed bug fixes itself with no extra step.
+coach-filed bug fixes itself with no extra step. The issue is locked the moment it's
+filed: its thread is going to be read to a model, and on a public repo anyone can
+comment on an open issue. Locked, only you can.
 
 The report goes through the **always-on Apps Script backend** (not your laptop), so
 it works even when your computer is asleep — and unlike the coach, from any network.
@@ -209,10 +211,11 @@ It's gated by a shared token, so only you can file.
 ### Auto-fixing (opt-in, laptop must be awake)
 
 `npm run autofix` watches for issues labelled `auto-fix` and hands each to your
-local `claude`, which fixes it in a **dedicated git worktree** (`.autofix/`, never
-your live checkout), commits straight to `main`, comments the commit SHA, and closes
-the issue. `main` auto-deploys, and the deploy workflow runs `npm test` first, so a
-change that breaks tests fails the deploy instead of shipping.
+local `claude`, which writes the fix in a **dedicated git worktree** (`.autofix/`,
+never your live checkout). The harness then audits the change, typechecks it, runs
+the suite in a sandbox, pushes it to `autofix/issue-<n>` and **opens a pull
+request**. Merging the PR is yours to do — GitHub's mobile app is enough — and the
+merge closes the issue and deploys. Until then the issue reads `review` in the app.
 
 It runs **locally, not as a GitHub Action**, on purpose: the `claude` here is signed
 in with an Epic work account, and that credential must never go into a public repo's
@@ -223,40 +226,35 @@ the fixer alongside the dev server by default (`AUTOFIX=0` opts out).
 **One-time setup:**
 
 1. Put the same fine-grained PAT in `.env` as `GITHUB_ISSUE_TOKEN` — the local fixer
-   additionally needs **Contents: Read/Write** on it (to push to `main`).
+   additionally needs **Contents: Read/Write** (to push the fix branch) and **Pull
+   requests: Read/Write** (to open the PR).
 2. Run `npm run autofix` (or `npm run dev:phone`). Coach-filed issues
-   already carry the `auto-fix` label; to fix an issue raised any other way, add
-   that label to it yourself.
+   already carry the labels it looks for. To hand it an issue raised any other way,
+   open the issue yourself and label it both `from-app` and `auto-fix` — it will not
+   touch an issue opened by anyone else, whatever its labels.
+3. To send a reviewed fix back for another go, take `autofix-review` off the issue
+   and put `auto-fix` back. The next run force-pushes the same branch, and the open
+   PR follows it.
 
-`AUTOFIX_PERMISSION` in `.env` controls how hands-off it is: `acceptEdits` (default)
-lets `claude` edit files while the script handles git; `skip` passes
-`--dangerously-skip-permissions` so it can run `npm test` itself before the commit
-(more autonomous, riskier).
+### What the fixer is allowed to do
 
-### When a fix loses a race with `main`
+The fixer runs a model on text typed into a public GitHub issue, on a work PC that
+holds far more than this project. So every run is built as if the issue were
+hostile, and the controls are in the harness, not in the prompt:
 
-Writing a fix takes minutes, and `main` moves the whole time — you push, or the
-previous fix lands. Usually the fixer just rebases onto whatever arrived, but that
-rebase can conflict, and then the fix is *stale rather than wrong*: issue #7 died on
-nothing more than two commits adding an import to the same line.
+| | |
+|---|---|
+| **Who is heard** | Only issues opened by the token's own account and labelled `from-app`; only that account's comments in the thread. Everyone else's words never reach the model. |
+| **What the model can do** | `claude --restricted`: no Bash, no WebFetch, no MCP servers (`--strict-mcp-config`), none of your settings files (so no global allow-list can hand it a shell), and `--tools` pinned to Read, Edit, Write, Glob, Grep. File tools are fenced to the worktree, junctions included, so the borrowed `node_modules` and the `.env` two directories up are unreachable. |
+| **What it can see** | The worktree and the issue. The `.env` this script loads is stripped from the child's environment, with anything else named like a credential. |
+| **What may change** | `src/`, `public/`, `index.html` and the top-level `.md` docs. A diff that touches anything else — build config, `scripts/`, workflows, `.claude/`, `CLAUDE.md`, the backend — adds a symlink, imports a Node built-in into browser code, or contains anything credential-shaped is rejected **before** anything in the tree is executed. |
+| **How the tests run** | Under Node's permission model: reads confined to the worktree and `node_modules`, writes to one scratch dir, no child processes. The flags are forwarded into vitest's worker threads, which otherwise run unsandboxed. |
+| **What ships** | Nothing, on its own. The fix is a branch and a pull request; `main` moves when you merge. |
 
-So a conflict is no longer the end. The fixer starts over on the `main` that now
-exists and lets `claude` write against the code that's really there, which beats
-resolving a conflict it can't see. It spends at most `FIX_ATTEMPTS` (2) tries — an
-issue that can't win twice wants a human, not a third round.
-
-Either way the losing commit is kept, because it was only ever held by
-`autofix-work` and the next run resets that branch to `origin/main` — which is how
-issue #7's fix, five files and a passing suite, survived only until the next issue
-arrived. Now it's parked under a ref of its own first:
-
-```sh
-git for-each-ref refs/autofix          # what's waiting
-git cherry-pick refs/autofix/issue-7   # replay it onto main, resolve, test, push
-git update-ref -d refs/autofix/issue-7 # done with it
-```
-
-The failure comment on the issue names the ref, so you don't have to go looking.
+What this does not cover: a test can still open a network connection (Node's
+permission model has no network switch), and the sandboxed run is only `src/**`
+tests — `scripts/` tests can't have changed, and the deploy runs the whole suite
+again. The merge is the last gate, and it is a human one.
 
 ### When the fixer needs to ask you something
 
@@ -270,6 +268,7 @@ your phone         → dot on the settings tab; the issue reads "asks"
 tap it             → the coach chat opens with the question above the composer
 you reply          → posted as a comment, label swaps back to `auto-fix`
 next poll (≤60s)   → the fixer picks it up again, thread and all
+fix written        → pushed as a PR, issue reads "review" until you merge
 ```
 
 Nothing is resumed from a stored Claude session: each attempt is a fresh run given
