@@ -166,7 +166,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
 
       <div className="mt-3 flex flex-col gap-2">
         <MetricBar label="workouts" m={byKey.get('workouts')!} />
-        <MetricBar label="flex sessions" m={byKey.get('flex')!} />
+        <MetricBar label="stretch sessions" m={byKey.get('flex')!} />
         <MetricBar label="calorie days" m={byKey.get('calDays')!} />
       </div>
 

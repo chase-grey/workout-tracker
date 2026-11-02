@@ -68,7 +68,7 @@ function Row({ row, onSelectWeek }: { row: WeekResult; onSelectWeek: (week: stri
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
           <Count label="workouts" value={row.counts.workouts} goal={goals.workouts} />
-          <Count label="flex" value={row.counts.flex} goal={goals.flex} />
+          <Count label="stretch" value={row.counts.flex} goal={goals.flex} />
           <Count label="cal days" value={row.counts.calDays} goal={goals.calDays} />
         </div>
       </div>
