@@ -152,11 +152,11 @@ export type Settings = {
    */
   chatToken: string
   /**
-   * Whether this phone shows the coach tab. Off until you turn it on in
+   * Whether this device shows the coach tab. Off until you turn it on in
    * Settings: the coach needs a key this device holds (see openAiKey), so a
-   * phone without one would only ever show the tab asking for it. A desktop
-   * shows the coach regardless (see lib/device). Device-local, like the key
-   * it unlocks — see lib/settingsSync.DEVICE_LOCAL_KEYS.
+   * device without one would only ever show the tab asking for it.
+   * Device-local, like the key it unlocks — see
+   * lib/settingsSync.DEVICE_LOCAL_KEYS.
    */
   coachEnabled?: boolean
   /** OpenAI model for the chat assistant. */

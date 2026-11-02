@@ -21,7 +21,6 @@ import { StretchSession } from './features/flex/StretchSession'
 import { storage } from './services/storage'
 import { useTrackedIssues } from './store/useTrackedIssues'
 import { issuesAwaitingAnswer } from './services/issues'
-import { IS_DESKTOP } from './lib/device'
 import { useBackGuard } from './lib/useBackGuard'
 import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
@@ -49,11 +48,10 @@ function AppShell() {
   const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, settings, updateSettings, saveError } = useData()
-  // The coach is always there where the dev server's proxy can hold an Epic key
-  // or an OpenAI key is a keyboard away: a desktop, or a phone that loaded the
-  // dev server itself over Epic wifi (see lib/device). On the installed app it
-  // waits to be switched on in Settings, which is where the key gets typed too.
-  const showChat = IS_DESKTOP || settings.coachEnabled === true
+  // The coach waits to be switched on in Settings, which is where its key gets
+  // typed too — on every device alike. A dev build still reaches the proxy's
+  // Epic key without one, but it flips the same switch to get the tab.
+  const showChat = settings.coachEnabled === true
   const { celebrate } = useCelebrate()
   const controls = useActiveSession()
   // Which stretch routine is on screen, or null for none. A session restored from
