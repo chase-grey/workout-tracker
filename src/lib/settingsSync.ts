@@ -33,9 +33,17 @@ import { unionHidden } from './hiddenAnimations'
  *
  * `coachEnabled` goes with the key it unlocks. Turning the coach on is a
  * promise to type a key into this phone; synced, it would switch on a coach
- * tab on every other phone with nothing behind it.
+ * tab on every other phone with nothing behind it. The provider and its base
+ * URL say what the key is for, so they stay with it too.
  */
-export const DEVICE_LOCAL_KEYS = ['apiUrl', 'openAiKey', 'chatToken', 'coachEnabled'] as const
+export const DEVICE_LOCAL_KEYS = [
+  'apiUrl',
+  'openAiKey',
+  'chatToken',
+  'coachEnabled',
+  'aiProvider',
+  'aiBaseUrl',
+] as const
 
 type DeviceLocalKey = (typeof DEVICE_LOCAL_KEYS)[number]
 

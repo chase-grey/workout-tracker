@@ -17,8 +17,10 @@ import { stashResumeTab } from '../../lib/resumeTab'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import { ACCENTS, MODES, palette } from '../../lib/theme'
 import { setTheme, useTheme } from '../../lib/themeStore'
+import { PROVIDERS, providerOf, trimBaseUrl } from '../../lib/aiProvider'
 
-const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
+const FIELD =
+  'min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent'
 
 // The accent shades run brightest-first down the same order the list is sorted in:
 // `working` is a run happening right now, `open` is waiting its turn, and a fix
@@ -136,8 +138,14 @@ export function SettingsTab({
   // it, which is the point after a bad one, but not something to do by brush.
   // Held per routine, so arming one doesn't arm the other.
   const [confirmRestore, setConfirmRestore] = useState<FlexRoutineKey | null>(null)
+  // The coach's key, base url and model are drafts until `save`: every
+  // settings write goes to the backend, and a model name typed letter by
+  // letter would send one per letter.
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
+  const [baseUrlDraft, setBaseUrlDraft] = useState(settings.aiBaseUrl ?? '')
+  const [modelDraft, setModelDraft] = useState(settings.openAiModel ?? '')
   const [keySaved, setKeySaved] = useState(false)
+  const provider = providerOf(settings.aiProvider)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
@@ -148,9 +156,22 @@ export function SettingsTab({
   const { active, closed } = partitionIssues(issues ?? [])
 
   const saveKey = () => {
-    updateSettings({ ...settings, openAiKey: openAiKey.trim() })
+    updateSettings({
+      ...settings,
+      openAiKey: openAiKey.trim(),
+      aiBaseUrl: trimBaseUrl(baseUrlDraft),
+      openAiModel: modelDraft.trim() || provider.defaultModel,
+    })
     setKeySaved(true)
     setTimeout(() => setKeySaved(false), 1500)
+  }
+
+  // A new service means a new model name, filled in to be saved with the key
+  // you're about to replace in the field beneath.
+  const pickProvider = (id: string) => {
+    const next = providerOf(id)
+    setModelDraft(next.defaultModel)
+    updateSettings({ ...settings, aiProvider: next.id, openAiModel: next.defaultModel })
   }
 
   const saveChatToken = () => {
@@ -325,32 +346,58 @@ export function SettingsTab({
 
       {settings.coachEnabled && (
         <section className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-300">openai api key (for chat)</label>
+          <label className="text-sm font-medium text-neutral-300">ai provider</label>
+          <select value={provider.id} onChange={(e) => pickProvider(e.target.value)} className={FIELD}>
+            {PROVIDERS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          {provider.baseUrl === null && (
+            <input
+              type="url"
+              value={baseUrlDraft}
+              onChange={(e) => setBaseUrlDraft(e.target.value)}
+              placeholder="https://host/v1"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              className={FIELD}
+            />
+          )}
           <input
             type="password"
             value={openAiKey}
             onChange={(e) => setOpenAiKey(e.target.value)}
-            placeholder="sk-…"
+            placeholder={provider.keyHint}
             autoComplete="off"
-            className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            className={FIELD}
           />
+          {/* Free text with the provider's models as suggestions: a service
+              adds models faster than a list here would follow, and OpenRouter
+              alone has hundreds. */}
+          <input
+            list="coach-models"
+            value={modelDraft}
+            onChange={(e) => setModelDraft(e.target.value)}
+            placeholder={provider.defaultModel || 'model'}
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            className={FIELD}
+          />
+          <datalist id="coach-models">
+            {provider.models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
           <button
             onClick={saveKey}
             className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
           >
-            {keySaved ? 'saved ✓' : 'save key'}
+            {keySaved ? 'saved ✓' : 'save'}
           </button>
-          <select
-            value={settings.openAiModel ?? 'gpt-4o-mini'}
-            onChange={(e) => updateSettings({ ...settings, openAiModel: e.target.value })}
-            className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          >
-            {MODELS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
         </section>
       )}
     </div>

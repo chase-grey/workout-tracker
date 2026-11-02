@@ -14,6 +14,8 @@ describe('syncablePart', () => {
     const part = syncablePart({
       ...base,
       coachEnabled: true,
+      aiProvider: 'anthropic',
+      aiBaseUrl: 'https://llm.local/v1',
       heightIn: 70,
       lockedGoals: { a: lock('a', '2026-01-01') },
     })
@@ -21,6 +23,8 @@ describe('syncablePart', () => {
     expect(part).not.toHaveProperty('openAiKey')
     expect(part).not.toHaveProperty('chatToken')
     expect(part).not.toHaveProperty('coachEnabled')
+    expect(part).not.toHaveProperty('aiProvider')
+    expect(part).not.toHaveProperty('aiBaseUrl')
     expect(part.heightIn).toBe(70)
     expect(part.lockedGoals?.a.goalId).toBe('a')
   })
@@ -33,11 +37,19 @@ describe('mergeSettings', () => {
 
   it('never takes credentials or the api url from the backend', () => {
     // The backend shouldn't hold these at all, but a hand-edited sheet might.
-    const remote = { apiUrl: 'https://evil', openAiKey: 'sk-theirs', chatToken: 'theirs' } as SyncedSettings
+    const remote = {
+      apiUrl: 'https://evil',
+      openAiKey: 'sk-theirs',
+      chatToken: 'theirs',
+      aiProvider: 'custom',
+      aiBaseUrl: 'https://evil/v1',
+    } as SyncedSettings
     const merged = mergeSettings({ ...base, updatedAt: '2026-01-01T00:00:00Z' }, remote)
     expect(merged.apiUrl).toBe('https://mine')
     expect(merged.openAiKey).toBe('sk-local')
     expect(merged.chatToken).toBe('tok')
+    expect(merged.aiProvider).toBeUndefined()
+    expect(merged.aiBaseUrl).toBeUndefined()
   })
 
   // The coach switch travels with the key it unlocks: another phone turning

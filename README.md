@@ -42,13 +42,13 @@ yearly reviews.
 **Coach** — a chat that answers questions about your own data, proposes edits to
 your workout plan or stretch routines for you to approve, and files bugs about the
 app itself (see [Report bugs](#report-bugs-from-the-chat-and-auto-fix-them)). The tab
-is off until you switch it on in Settings and give it an OpenAI key. See
-[AI chat assistant](#ai-chat-assistant).
+is off until you switch it on in Settings and give it an API key — OpenAI, Anthropic,
+OpenRouter, or any OpenAI-compatible server. See [AI chat assistant](#ai-chat-assistant).
 
 **Settings** — sync and the build stamp, the plan editor, restoring a coach-edited
 stretch routine, the issue token, the issues you've filed and what the fixer did with
-them, the QR that opens the dev server on your phone, the coach switch, and the OpenAI
-key and model for the coach.
+them, the QR that opens the dev server on your phone, the coach switch, and the coach's
+provider, key and model.
 
 ## Develop
 
@@ -117,12 +117,17 @@ yourself.
 
 The chat can answer questions about your data, propose edits to your plan and stretch
 routines, and file bugs about the app. The Coach tab starts hidden on every device: Settings
-has a **coach** switch, and turning it on shows the tab and the key field together. Two ways
+has a **coach** switch, and turning it on shows the tab and the key fields together. Two ways
 to power it:
 
-- **Deployed site, with the coach switched on:** needs a **standard OpenAI key**, entered in
-  Settings (stored on-device, never synced, sent directly to OpenAI), with a model picker
-  beside it.
+- **Deployed site, with the coach switched on:** pick a provider in Settings and enter
+  **your own key** for it (stored on-device, never synced, sent directly to that service),
+  with a model field beside it that takes any id the service knows. The presets are
+  **OpenAI**, **Anthropic** (via the official SDK, straight from the browser) and
+  **OpenRouter**; **other** takes the base URL of anything that speaks OpenAI's
+  chat-completions wire (a local server, Groq, Mistral, …). Google's compatible endpoint
+  isn't offered because it refuses browser calls. The provider table is
+  `src/lib/aiProvider.ts`; the Anthropic translation is `src/lib/anthropicWire.ts`.
 - **Epic (Noggin) key:** the Epic LLM proxy (`llmproxy.epic.com`) is **internal-network only**,
   so it can't be reached from the public site or a cross-origin browser call. Use it by running
   the app **locally on Epic's network**:
@@ -150,9 +155,9 @@ phone:     scan the QR under Settings → "open on your phone"
 private wifi**, on the same network as the computer. That's the entire reach. From cell data,
 home wifi, or a gym on guest wifi the address doesn't answer and there is no coach at all — the
 installed app keeps logging every workout, stretch, and measurement — it just has no coach,
-and so no way to file or answer an issue from the phone either. A standard OpenAI key brings a
-coach back anywhere, talking to OpenAI rather than to Epic, behind the same Settings **coach**
-switch.
+and so no way to file or answer an issue from the phone either. A key of your own brings a
+coach back anywhere, talking to its service rather than to Epic, behind the same Settings
+**coach** switch.
 
 What the phone loads this way is the dev build, not the installed app: handy for testing the real
 thing, but don't install from it — the address changes with the network you're on.

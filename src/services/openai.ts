@@ -1,16 +1,20 @@
 /**
- * Minimal OpenAI Chat Completions client.
+ * Minimal OpenAI Chat Completions client — for OpenAI, and for anything else
+ * that speaks its wire (OpenRouter, a local server; see lib/aiProvider).
  *
  * The API key is supplied by the caller (stored on-device in Settings) and is
  * never logged or persisted here.
  */
+
+import { chatCompletionsUrl } from '../lib/aiProvider'
 
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
 
-const ENDPOINT = 'https://api.openai.com/v1/chat/completions'
+const OPENAI_BASE = 'https://api.openai.com/v1'
+const ENDPOINT = chatCompletionsUrl(OPENAI_BASE)
 const DEFAULT_MODEL = 'gpt-4o-mini'
 
 type ChatCompletionResponse = {
@@ -85,6 +89,8 @@ export async function chatCompleteRaw(
     tools?: Tool[]
     /** Called with the reply so far as it arrives. Its presence asks for a stream. */
     onText?: (textSoFar: string) => void
+    /** API root of an OpenAI-compatible service; OpenAI's own when unset. */
+    baseUrl?: string
   },
 ): Promise<AssistantTurn> {
   const wantStream = typeof opts?.onText === 'function'
@@ -92,9 +98,12 @@ export async function chatCompleteRaw(
   //   1. the dev server's /api/chat proxy, holding an Epic key server-side. This
   //      is the only way to an Epic key, and it is same-origin by definition —
   //      including from a phone, which reaches the coach by loading the dev
-  //      server itself over Epic wifi rather than by calling out to it.
-  //   2. anywhere else — a plain OpenAI key the user typed into Settings.
-  const res = import.meta.env.DEV
+  //      server itself over Epic wifi rather than by calling out to it. A dev
+  //      build takes it when no key of its own was typed.
+  //   2. anywhere else — a key the user typed into Settings, sent straight to
+  //      the service it belongs to.
+  const viaProxy = import.meta.env.DEV && !apiKey.trim()
+  const res = viaProxy
     ? await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,7 +114,7 @@ export async function chatCompleteRaw(
           stream: wantStream,
         }),
       })
-    : await fetch(ENDPOINT, {
+    : await fetch(opts?.baseUrl ? chatCompletionsUrl(opts.baseUrl) : ENDPOINT, {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({

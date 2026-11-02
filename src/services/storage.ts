@@ -7,6 +7,7 @@ import type { FlexEntry } from '../lib/flex'
 import type { CalorieEntry } from '../lib/calories'
 import type { MeasurementEntry } from '../lib/bodyComp'
 import type { LockedProjections } from '../lib/goalLock'
+import type { ProviderId } from '../lib/aiProvider'
 import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
 import { withMatSitups } from '../lib/stretchCore'
@@ -142,6 +143,11 @@ export type ActiveRest = RestState & {
 
 export type Settings = {
   apiUrl: string
+  /**
+   * The coach's key, for whichever service `aiProvider` names. The name is
+   * from when OpenAI was the only one, and isn't worth renaming out from
+   * under the devices holding it.
+   */
   openAiKey: string
   /**
    * Shared token this device proves itself to the backend's issue routes with.
@@ -159,7 +165,14 @@ export type Settings = {
    * lib/settingsSync.DEVICE_LOCAL_KEYS.
    */
   coachEnabled?: boolean
-  /** OpenAI model for the chat assistant. */
+  /**
+   * Which service the coach talks to (see lib/aiProvider). Unset means
+   * OpenAI, as it always was. Device-local with the key.
+   */
+  aiProvider?: ProviderId
+  /** API root for the `custom` provider; ignored for the presets. */
+  aiBaseUrl?: string
+  /** Model for the coach, in whatever naming the provider uses. Unset means the provider's default. */
   openAiModel?: string
   /** ISO date of the last progress photo the user logged (for reminders). */
   lastProgressPhoto?: string
