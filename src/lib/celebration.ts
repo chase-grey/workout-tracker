@@ -167,21 +167,10 @@ export function overallProgress(c: WeekCounts, g: WeeklyGoalConfig): number {
   )
 }
 
-/** Fraction of the bar where the "checkpoint" marker sits (mean of half goals). */
-export function checkpointFraction(g: WeeklyGoalConfig): number {
-  return (
-    (g.halfWorkouts / g.workouts +
-      g.halfFlex / g.flex +
-      g.halfCalDays / g.calDays) /
-    3
-  )
-}
-
 export type WeekAchievements = {
   workoutGoal: boolean
   flexGoal: boolean
   calGoal: boolean
-  checkpoint: boolean
   fullGoal: boolean
   exceeded: boolean
 }
@@ -190,7 +179,6 @@ const ACHIEVEMENT_KEYS: (keyof WeekAchievements)[] = [
   'workoutGoal',
   'flexGoal',
   'calGoal',
-  'checkpoint',
   'fullGoal',
   'exceeded',
 ]
@@ -205,13 +193,10 @@ export function weekAchievements(c: WeekCounts, g: WeeklyGoalConfig): WeekAchiev
     c.workouts > g.workouts ||
     c.flex > g.flex ||
     c.calDays > g.calDays
-  // 1e-9 guards floating-point equality when progress exactly meets the marker.
-  const checkpoint = overallProgress(c, g) + 1e-9 >= checkpointFraction(g)
   return {
     workoutGoal,
     flexGoal,
     calGoal,
-    checkpoint,
     fullGoal,
     exceeded: fullGoal && overAny,
   }
@@ -251,12 +236,6 @@ export function achievementCelebration(
         title: 'weekly calorie days done',
         subtitle: `${counts.calDays} of ${goals.calDays} days this week.`,
         icon: 'medal',
-      }
-    case 'checkpoint':
-      return {
-        tier: 'medium',
-        title: 'checkpoint reached',
-        icon: 'flag',
       }
     case 'fullGoal':
       return {

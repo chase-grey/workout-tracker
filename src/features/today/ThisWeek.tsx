@@ -15,7 +15,7 @@ import { parseISODate } from '../../lib/dates'
 import { caloriePR } from '../../lib/calories'
 import { buildGoals, goalsHitInWeek } from '../../lib/goals'
 import { weekPace, type MetricPace } from '../../lib/weekPace'
-import { checkpointFraction, overallProgress } from '../../lib/celebration'
+import { overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
 import { Collapse } from '../../components/Collapse'
 
@@ -98,7 +98,6 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   // agree about what "the week" averages, and a fourth metric added to one and
   // not the other is exactly how they'd drift.
   const overallToGoal = overallProgress(wp, goals)
-  const checkpointFrac = checkpointFraction(goals)
 
   // Refresh while open and immediately after returning from a suspended tab.
   const [now, setNow] = useState(() => new Date())
@@ -146,14 +145,13 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
         />
       </Collapse>
 
-      {/* Milestone bar: fill = progress; white line = where the schedule expects you; the grey and
-          green ticks are the checkpoint and the goal, unlabelled — the two marks read on their own. */}
+      {/* Milestone bar: fill = progress; white line = where the schedule expects you; the green
+          tick at the end is the goal, unlabelled — it reads on its own. */}
       <div className="relative h-3 rounded-full bg-surface-2">
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-accent transition-all"
           style={{ width: `${overallToGoal * 100}%` }}
         />
-        <div className="absolute inset-y-0 w-0.5 bg-neutral-500" style={{ left: `${checkpointFrac * 100}%` }} />
         <div className="absolute inset-y-0 right-0 w-0.5 bg-accent-2" />
         {pace.requiredFraction < 1 && (
           <div

@@ -4,7 +4,6 @@ import { WEEKLY_GOAL_HISTORY } from './weeklyStreak'
 import {
   achievementCelebration,
   baselineCelebration,
-  checkpointFraction,
   composeCelebration,
   currentWeekCounts,
   detectPRs,
@@ -151,12 +150,18 @@ describe('weekAchievements', () => {
       workoutGoal: true,
       flexGoal: true,
       calGoal: true,
-      checkpoint: true,
       fullGoal: true,
       exceeded: false,
     })
   })
 
+
+  it('fills the week bar by the mean of the capped ratios', () => {
+    expect(overallProgress({ workouts: 1, flex: 1, calDays: 3 }, g)).toBeCloseTo(0.5, 6)
+    // Over on one goal never fills in for another.
+    expect(overallProgress({ workouts: 4, flex: 0, calDays: 0 }, g)).toBeCloseTo(1 / 3, 6)
+    expect(overallProgress({ workouts: 2, flex: 2, calDays: 6 }, g)).toBe(1)
+  })
 
   it('marks exceeded only once the full goal is met and a metric is over', () => {
     expect(
@@ -174,28 +179,16 @@ describe('weekAchievements', () => {
     ).toBe(false)
   })
 
-  it('reaches the checkpoint at the half-goal marker', () => {
-    const half = { workouts: 1, flex: 1, calDays: 5 }
-    expect(overallProgress(half, g)).toBeCloseTo(checkpointFraction(g), 6)
-    expect(weekAchievements(half, g).checkpoint).toBe(true)
-    expect(
-      weekAchievements(
-        { workouts: 0, flex: 0, calDays: 0 },
-        g,
-      ).checkpoint,
-    ).toBe(false)
-  })
 })
 
 describe('newlyEarned', () => {
   it('returns only achievements that flipped false → true', () => {
     const earned = newlyEarned(
-      { workouts: 1, flex: 1, calDays: 4 },
       { workouts: 1, flex: 1, calDays: 5 },
+      { workouts: 1, flex: 2, calDays: 5 },
       GOALS,
     )
-    expect(earned).toContain('checkpoint')
-    expect(earned).not.toContain('fullGoal')
+    expect(earned).toEqual(['flexGoal'])
   })
 
   it('reports the full-goal crossing', () => {
@@ -241,7 +234,7 @@ describe('composeCelebration', () => {
 
   it('leaves ack unset when nothing earned asks for it', () => {
     const goal = achievementCelebration(
-      'checkpoint',
+      'flexGoal',
       { workouts: 1, flex: 2, calDays: 3 },
       GOALS,
     )

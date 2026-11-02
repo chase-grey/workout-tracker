@@ -6,9 +6,6 @@ export type WeeklyGoalConfig = {
   workouts: number
   flex: number
   calDays: number
-  halfWorkouts: number
-  halfFlex: number
-  halfCalDays: number
 }
 
 /**
@@ -19,12 +16,12 @@ export type WeeklyGoalConfig = {
 export const WEEKLY_GOAL_HISTORY: readonly { from: string; goals: WeeklyGoalConfig }[] = [
   {
     from: '0000-01-01',
-    goals: { workouts: 2, flex: 2, calDays: 6, halfWorkouts: 1, halfFlex: 1, halfCalDays: 5 },
+    goals: { workouts: 2, flex: 2, calDays: 6 },
   },
   {
     // Every day of the week on calories, now that the target is a real surplus.
     from: '2026-10-26',
-    goals: { workouts: 2, flex: 2, calDays: 7, halfWorkouts: 1, halfFlex: 1, halfCalDays: 6 },
+    goals: { workouts: 2, flex: 2, calDays: 7 },
   },
 ]
 
@@ -39,7 +36,7 @@ export function weeklyGoalsFor(week: string): WeeklyGoalConfig {
   return goals
 }
 
-export type WeekTier = 'full' | 'half' | 'under'
+export type WeekTier = 'full' | 'short'
 
 export type WeekCounts = {
   workouts: number
@@ -48,47 +45,38 @@ export type WeekCounts = {
 }
 
 /**
- * Classify a single week's counts against the goal config.
+ * Judge a single week's counts against the goal config.
+ *
+ * A week is `full` only when every goal is met; `exceeded` when it is full and
+ * over on something, which is what earns a freeze. Any other week is `short`,
+ * and `cost` is what keeping the streak through it takes: one freeze for each
+ * day it fell short, summed over the three goals, less one for each day it went
+ * over on another goal — a third stretch pays for a missed workout. The cost
+ * never drops below one, though: covering every miss with surplus is not the
+ * same as hitting the goals, and only that advances the run. A full week costs
+ * nothing.
  *
  * A goal of 0 is a goal not being judged — every count clears it — which is how
- * a week from before a habit was being tracked is left alone (see
- * {@link weeklyStreakHistory}).
+ * a week from before a habit was being tracked is left alone.
  */
 export function classifyWeek(
   counts: WeekCounts,
   config: WeeklyGoalConfig = DEFAULT_WEEKLY_GOALS,
-): { tier: WeekTier; exceeded: boolean } {
-  const isFull =
-    counts.workouts >= config.workouts &&
-    counts.flex >= config.flex &&
-    counts.calDays >= config.calDays
+): { tier: WeekTier; exceeded: boolean; cost: number } {
+  const over = (have: number, want: number) => Math.max(0, have - want)
+  const under = (have: number, want: number) => Math.max(0, want - have)
 
-  if (isFull) {
-    const exceeded =
-      counts.workouts > config.workouts ||
-      counts.flex > config.flex ||
-      counts.calDays > config.calDays
-    return { tier: 'full', exceeded }
-  }
-
-  // Extra days above a full goal cover shortfalls below the reduced goals
-  // one-for-one. Only actually meeting every full goal can advance the streak;
-  // even a surplus that covers every miss still requires one banked freeze.
+  const shortfall =
+    under(counts.workouts, config.workouts) +
+    under(counts.flex, config.flex) +
+    under(counts.calDays, config.calDays)
   const surplus =
-    Math.max(0, counts.workouts - config.workouts) +
-    Math.max(0, counts.flex - config.flex) +
-    Math.max(0, counts.calDays - config.calDays)
-  const halfShortfall =
-    Math.max(0, config.halfWorkouts - counts.workouts) +
-    Math.max(0, config.halfFlex - counts.flex) +
-    Math.max(0, config.halfCalDays - counts.calDays)
-  const isHalf = surplus >= halfShortfall
+    over(counts.workouts, config.workouts) +
+    over(counts.flex, config.flex) +
+    over(counts.calDays, config.calDays)
 
-  if (isHalf) {
-    return { tier: 'half', exceeded: false }
-  }
-
-  return { tier: 'under', exceeded: false }
+  if (shortfall === 0) return { tier: 'full', exceeded: surplus > 0, cost: 0 }
+  return { tier: 'short', exceeded: false, cost: Math.max(1, shortfall - surplus) }
 }
 
 export type WeeklyStreak = { streak: number; freezes: number }
@@ -187,7 +175,7 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   for (const week of weeks) {
     const counts = countsFor(week)
     const goals = goalsFor(week)
-    const { tier, exceeded } = classifyWeek(counts, goals)
+    const { tier, exceeded, cost } = classifyWeek(counts, goals)
 
     let outcome: WeekOutcome
     let freezesSpent = 0
@@ -197,9 +185,8 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
       if (exceeded) freezes += 1
       outcome = 'advanced'
     } else {
-      // A half week costs one banked freeze, a washed-out week two. Short the
-      // bank and the run ends.
-      const cost = tier === 'half' ? 1 : 2
+      // A short week costs a freeze per day it was short, net of any surplus
+      // (see classifyWeek). Short the bank and the run ends.
       if (freezes >= cost) {
         freezes -= cost
         freezesSpent = cost

@@ -283,10 +283,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Weekly-goal celebrations earned when this-week counts move before → after.
   const weeklyCelebrations = useCallback((before: WeekCounts, after: WeekCounts): Celebration[] => {
-    // Crossing the checkpoint updates the week bar without interrupting the user.
-    return newlyEarned(before, after, DEFAULT_WEEKLY_GOALS)
-      .filter((key) => key !== 'checkpoint')
-      .map((key) => achievementCelebration(key, after, DEFAULT_WEEKLY_GOALS))
+    return newlyEarned(before, after, DEFAULT_WEEKLY_GOALS).map((key) =>
+      achievementCelebration(key, after, DEFAULT_WEEKLY_GOALS),
+    )
   }, [])
 
   const workoutRevision = useRef(0)
