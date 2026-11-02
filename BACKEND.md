@@ -155,6 +155,13 @@ even when the laptop running the auto-fixer is asleep. They need a `GITHUB_ISSUE
 property — a fine-grained PAT scoped to this one repo with Issues: Read/Write — and the same
 `CHAT_SHARED_SECRET` as the chat routes, for the same reason.
 
+`report_issue` locks the issue it creates. The thread is going to be read by the auto-fixer and
+handed to a model, and on a public repo anyone can comment on an open issue; locked, only
+collaborators can, which here is the token's own account — the one `answer_issue` posts as. The
+fixer also drops every comment not by that account (see "What the fixer is allowed to do" in the
+[README](./README.md)); the lock just stops the words arriving at all. A failed lock is logged
+and the filing still succeeds, since throwing would have the app file the issue twice.
+
 `issue_thread` and `answer_issue` are the question round-trip: the auto-fixer parks an issue it
 can't act on under a `needs-input` label and comments its questions, the app reads that comment and
 takes a reply, and `answer_issue` posts the reply and swaps the label back to `auto-fix` — which is

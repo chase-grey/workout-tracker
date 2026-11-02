@@ -121,7 +121,7 @@ const SAVE_ERROR_HEADERS = ['at', 'build', 'route', 'write_id', 'message', 'pend
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 1
+const BACKEND_VERSION = 2
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -1162,6 +1162,14 @@ function requireAppIssue(number) {
  * the bundle, so without it anyone could spam the repo with issues on the token
  * held here. `context` is whatever the client attached (userAgent, url, a chat
  * tail) and is appended verbatim under a fenced block.
+ *
+ * The issue is locked as soon as it exists. Its thread is read by the auto-fixer
+ * and fed to a model, and on a public repo anyone at all can comment on an open
+ * issue — a locked one takes comments only from collaborators, which here means
+ * the account this token belongs to, the same one answerIssue posts as. The
+ * fixer filters the thread by author as well; this closes the door at the source.
+ * A lock that fails is logged and not fatal: the issue is already filed, and
+ * throwing here would have the app retry and file it twice.
  */
 function createIssue(body) {
   if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
@@ -1183,6 +1191,11 @@ function createIssue(body) {
     body: parts.join('\n'),
     labels: labels,
   })
+  try {
+    githubApi('put', '/issues/' + data.number + '/lock', { lock_reason: 'off-topic' })
+  } catch (err) {
+    console.error('Filed #' + data.number + ' but could not lock it: ' + err)
+  }
   return { number: data.number, url: data.html_url }
 }
 
