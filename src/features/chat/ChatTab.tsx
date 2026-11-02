@@ -693,11 +693,6 @@ export function ChatTab({
       <div className="flex flex-col items-center justify-center gap-3 pb-24 pt-24 text-center">
         <MdVpnKey className="text-5xl" aria-hidden />
         <h2 className="text-xl font-bold">add your api key</h2>
-        <p className="max-w-xs text-sm text-neutral-500">
-          pick a provider and add its api key in settings — it stays on this device and goes
-          straight to that service. an epic key only works when you run the app locally
-          (<code>npm run dev</code>) on epic's network — see the readme.
-        </p>
       </div>
     )
   }
