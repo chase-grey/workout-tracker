@@ -42,13 +42,14 @@ yearly reviews.
 **Coach** — a chat that answers questions about your own data, proposes edits to
 your workout plan or stretch routines for you to approve, and files bugs about the
 app itself (see [Report bugs](#report-bugs-from-the-chat-and-auto-fix-them)). The tab
-shows up on a computer or on a phone loaded from the dev server — not on the installed
-app, which has no LLM to reach. See [AI chat assistant](#ai-chat-assistant).
+is always there on a computer or on a phone loaded from the dev server; on the installed
+app it's off until you switch it on in Settings and give it an OpenAI key. See
+[AI chat assistant](#ai-chat-assistant).
 
 **Settings** — sync and the build stamp, the plan editor, restoring a coach-edited
 stretch routine, the issue token, the issues you've filed and what the fixer did with
-them, the QR that opens the dev server on your phone, and (on a computer) the OpenAI
-key and model for the coach.
+them, the QR that opens the dev server on your phone, the coach switch (on a phone), and
+the OpenAI key and model for the coach.
 
 ## Develop
 
@@ -116,12 +117,14 @@ yourself.
 ## AI chat assistant
 
 The chat can answer questions about your data, propose edits to your plan and stretch
-routines, and file bugs about the app. The Coach tab only appears where it has something
-to talk to (`IS_DESKTOP` in `src/lib/device.ts` — a dev build, or any non-touch device),
-so **the installed phone app from Pages has no Coach tab at all**. Two ways to power it:
+routines, and file bugs about the app. The Coach tab is always there where it has something
+to talk to (`IS_DESKTOP` in `src/lib/device.ts` — a dev build, or any non-touch device). On
+**the installed phone app from Pages** it starts hidden: Settings has a **coach** switch, and
+turning it on shows the tab and the key field together. Two ways to power it:
 
-- **Deployed site on a computer:** needs a **standard OpenAI key**, entered in Settings
-  (stored on-device, sent directly to OpenAI), with a model picker beside it.
+- **Deployed site, on a computer or a phone with the coach switched on:** needs a
+  **standard OpenAI key**, entered in Settings (stored on-device, never synced, sent directly
+  to OpenAI), with a model picker beside it.
 - **Epic (Noggin) key:** the Epic LLM proxy (`llmproxy.epic.com`) is **internal-network only**,
   so it can't be reached from the public site or a cross-origin browser call. Use it by running
   the app **locally on Epic's network**:
@@ -150,8 +153,8 @@ private wifi**, on the same network as the computer. That's the entire reach. Fr
 home wifi, or a gym on guest wifi the address doesn't answer and there is no coach at all — the
 installed app keeps logging every workout, stretch, and measurement — it just has no coach,
 and so no way to file or answer an issue from the phone either. A standard OpenAI key brings a
-coach back on a computer, talking to OpenAI rather than to Epic; on a touch device the tab stays
-hidden regardless.
+coach back anywhere, talking to OpenAI rather than to Epic: on a computer it's always offered,
+and on the installed phone app the Settings **coach** switch turns it on.
 
 What the phone loads this way is the dev build, not the installed app: handy for testing the real
 thing, but don't install from it — the address changes with the network you're on.

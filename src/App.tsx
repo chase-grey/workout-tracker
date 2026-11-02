@@ -49,10 +49,11 @@ function AppShell() {
   const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, settings, updateSettings, saveError } = useData()
-  // Chat needs the dev server's proxy to hold the Epic key, so the coach exists
-  // only where that proxy does: a desktop, or a phone that loaded the dev server
-  // itself over Epic wifi. The deployed site never has it (see lib/device).
-  const showChat = IS_DESKTOP
+  // The coach is always there where the dev server's proxy can hold an Epic key
+  // or an OpenAI key is a keyboard away: a desktop, or a phone that loaded the
+  // dev server itself over Epic wifi (see lib/device). On the installed app it
+  // waits to be switched on in Settings, which is where the key gets typed too.
+  const showChat = IS_DESKTOP || settings.coachEnabled === true
   const { celebrate } = useCelebrate()
   const controls = useActiveSession()
   // Which stretch routine is on screen, or null for none. A session restored from

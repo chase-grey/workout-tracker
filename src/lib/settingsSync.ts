@@ -30,8 +30,12 @@ import { unionHidden } from './hiddenAnimations'
  * why the issue routes take a shared token — see services/issues.ts), so anything
  * stored here is readable by anyone holding that URL. A synced key would be a
  * published key.
+ *
+ * `coachEnabled` goes with the key it unlocks. Turning the coach on is a
+ * promise to type a key into this phone; synced, it would switch on a coach
+ * tab on every other phone with nothing behind it.
  */
-export const DEVICE_LOCAL_KEYS = ['apiUrl', 'openAiKey', 'chatToken'] as const
+export const DEVICE_LOCAL_KEYS = ['apiUrl', 'openAiKey', 'chatToken', 'coachEnabled'] as const
 
 type DeviceLocalKey = (typeof DEVICE_LOCAL_KEYS)[number]
 
@@ -131,7 +135,7 @@ export function mergeSettings(local: Settings, remote: SyncedSettings | null): S
   const older = remoteIsNewer ? local : remote
 
   const merged = { ...older, ...definedOnly(newer) } as Settings
-  for (const k of DEVICE_LOCAL_KEYS) merged[k] = local[k]
+  for (const k of DEVICE_LOCAL_KEYS) (merged as Record<string, unknown>)[k] = local[k]
   merged.lockedGoals = mergeLockedGoals(local, remote)
   const hidden = unionHidden(local.hiddenAnimations, remote.hiddenAnimations)
   if (hidden) merged.hiddenAnimations = hidden

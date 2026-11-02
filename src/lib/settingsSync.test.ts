@@ -11,10 +11,16 @@ function lock(goalId: string, lockedAt: string, etaDate = '2026-12-01'): LockedP
 
 describe('syncablePart', () => {
   it('drops the device-local fields and keeps the rest', () => {
-    const part = syncablePart({ ...base, heightIn: 70, lockedGoals: { a: lock('a', '2026-01-01') } })
+    const part = syncablePart({
+      ...base,
+      coachEnabled: true,
+      heightIn: 70,
+      lockedGoals: { a: lock('a', '2026-01-01') },
+    })
     expect(part).not.toHaveProperty('apiUrl')
     expect(part).not.toHaveProperty('openAiKey')
     expect(part).not.toHaveProperty('chatToken')
+    expect(part).not.toHaveProperty('coachEnabled')
     expect(part.heightIn).toBe(70)
     expect(part.lockedGoals?.a.goalId).toBe('a')
   })
@@ -32,6 +38,16 @@ describe('mergeSettings', () => {
     expect(merged.apiUrl).toBe('https://mine')
     expect(merged.openAiKey).toBe('sk-local')
     expect(merged.chatToken).toBe('tok')
+  })
+
+  // The coach switch travels with the key it unlocks: another phone turning
+  // its coach on must not turn this one's on, and this one turning it off must
+  // not be undone by a copy that still says on.
+  it('keeps the coach switch where it was flipped', () => {
+    const remote = { coachEnabled: true, updatedAt: '2026-02-01T00:00:00Z' } as SyncedSettings
+    expect(mergeSettings(base, remote).coachEnabled).toBeUndefined()
+    const off = { ...base, coachEnabled: false, updatedAt: '2026-01-01T00:00:00Z' }
+    expect(mergeSettings(off, remote).coachEnabled).toBe(false)
   })
 
   // The reinstall this module exists for: storage is gone, so the account's

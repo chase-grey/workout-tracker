@@ -302,7 +302,32 @@ export function SettingsTab({
         </button>
       </section>
 
-      {IS_DESKTOP && (
+      {/* A desktop always has the coach (see App.showChat), so the switch is
+          the phone's alone. Flipping it on is what brings the key field up
+          underneath, and the tab appears in the nav at the same moment. */}
+      {!IS_DESKTOP && (
+        <section className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-neutral-300">coach</label>
+          <div className="flex gap-1 rounded-xl bg-surface p-1">
+            {([false, true] as const).map((on) => (
+              <button
+                key={String(on)}
+                onClick={() => updateSettings({ ...settings, coachEnabled: on })}
+                aria-pressed={(settings.coachEnabled ?? false) === on}
+                className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
+                  (settings.coachEnabled ?? false) === on
+                    ? 'bg-accent text-on-accent'
+                    : 'text-neutral-400'
+                }`}
+              >
+                {on ? 'on' : 'off'}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(IS_DESKTOP || settings.coachEnabled) && (
         <section className="flex flex-col gap-2">
           <label className="text-sm font-medium text-neutral-300">openai api key (for chat)</label>
           <input

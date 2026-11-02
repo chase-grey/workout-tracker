@@ -697,9 +697,9 @@ export function ChatTab({
         <MdVpnKey className="text-5xl" aria-hidden />
         <h2 className="text-xl font-bold">add your openai key</h2>
         <p className="max-w-xs text-sm text-neutral-500">
-          to use the coach in the deployed app, add an openai api key in settings (stored on this
-          device only). an epic key only works when you run the app locally (<code>npm run dev</code>)
-          on epic's network — see the readme.
+          add an openai api key in settings — it stays on this device and goes straight to openai.
+          an epic key only works when you run the app locally (<code>npm run dev</code>) on epic's
+          network — see the readme.
         </p>
       </div>
     )
