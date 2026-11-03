@@ -6,10 +6,10 @@ import { WEEKLY_GOAL_HISTORY, type WeeklyGoalConfig } from './weeklyStreak'
 const MON = 15
 const at = (day: number, hour = 9) => new Date(2026, 5, day, hour)
 
-// The original workout, flexibility, and calorie goals: six calorie days of seven.
-const G: WeeklyGoalConfig = WEEKLY_GOAL_HISTORY[0].goals
-// Today's goals: every day a calorie day.
-const G7: WeeklyGoalConfig = WEEKLY_GOAL_HISTORY[WEEKLY_GOAL_HISTORY.length - 1].goals
+// The workout, flexibility, and calorie goals: six calorie days of seven.
+const G: WeeklyGoalConfig = WEEKLY_GOAL_HISTORY[WEEKLY_GOAL_HISTORY.length - 1].goals
+// Every day a calorie day, so the staircase steps in whole days.
+const G7: WeeklyGoalConfig = { ...G, calDays: 7 }
 
 describe('weekDaysCompleted', () => {
   it('is 0 for all of Monday — the day in progress never counts', () => {
@@ -154,7 +154,7 @@ describe('weekPace — the schedule marker', () => {
   it('leaves the last two hours open even with the schedule finished', () => {
     // 10pm Sunday, a calorie day short: the whole goal is due, but the day it can
     // still be logged on has not ended, so nothing is lost yet.
-    const p = weekPace({ workouts: 2, flex: 3, calDays: 6 }, G7, at(MON + 6, 22))
+    const p = weekPace({ workouts: 2, flex: 3, calDays: 5 }, G, at(MON + 6, 22))
     expect(p.requiredFraction).toBe(1)
     expect(p.binding?.key).toBe('calDays')
     expect(p.binding?.missed).toBe(false)

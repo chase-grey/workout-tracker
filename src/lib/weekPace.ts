@@ -44,9 +44,9 @@ export function requiredByNow(
 }
 
 /**
- * Local hour at which a calorie day is due. Every day of the week is a calorie
- * day now, so there is nothing to spread across the week: Monday's day is owed
- * Monday night, and the schedule steps up once a night rather than ramping.
+ * Local hour at which a calorie day is due. Calorie days are owed one a night,
+ * not spread across the week: Monday's share is due Monday night, and the
+ * schedule steps up once a night rather than ramping.
  * An hour past the eating window, so a late plate still lands before the bar
  * moves.
  */

@@ -431,11 +431,11 @@ describe('weeklyStreakHistory', () => {
   })
 
   it('charges a week short on two goals a freeze for each miss', () => {
-    // 1/2 workouts, 2/2 stretches, 6/7 calorie days: two misses, two freezes.
+    // 1/2 workouts, 2/2 stretches, 5/6 calorie days: two misses, two freezes.
     const rows = weeklyStreakHistory({
       workoutDates: [...daysInWeek('2026-10-12', 3), ...daysInWeek('2026-10-19', 3), ...daysInWeek('2026-10-26', 1)],
       flexDates: [...daysInWeek('2026-10-12', 2), ...daysInWeek('2026-10-19', 2), ...daysInWeek('2026-10-26', 2)],
-      calorieHitDates: [...daysInWeek('2026-10-12', 6), ...daysInWeek('2026-10-19', 6), ...daysInWeek('2026-10-26', 6)],
+      calorieHitDates: [...daysInWeek('2026-10-12', 6), ...daysInWeek('2026-10-19', 6), ...daysInWeek('2026-10-26', 5)],
       today: parseISODate('2026-11-02'),
     })
     expect(rows.at(-1)).toMatchObject({
@@ -540,7 +540,7 @@ describe('splitAtCurrentRun', () => {
   })
 })
 
-describe('weeklyStreakHistory — every calorie day from 2026-10-26', () => {
+describe('weeklyStreakHistory — six calorie days of seven, every week', () => {
   const week = (monday: string, calDays: number) => ({
     workoutDates: daysInWeek(monday, 2),
     flexDates: daysInWeek(monday, 2),
@@ -548,22 +548,23 @@ describe('weeklyStreakHistory — every calorie day from 2026-10-26', () => {
     today: parseISODate('2026-11-09'),
   })
 
-  it('still calls a six-day week full when it predates the change', () => {
+  it('calls a six-day week full', () => {
     const [wk] = weeklyStreakHistory(week('2026-10-19', 6))
     expect(wk.goals.calDays).toBe(6)
     expect(wk.tier).toBe('full')
   })
 
-  it('holds a week from the change on to all seven days', () => {
+  it('holds the weeks that were briefly asked for seven to six as well', () => {
     expect(weeklyStreakHistory(week('2026-10-26', 6))[0]).toMatchObject({
-      tier: 'short',
-      goals: { calDays: 7 },
+      tier: 'full',
+      goals: { calDays: 6 },
     })
-    expect(weeklyStreakHistory(week('2026-10-26', 7))[0].tier).toBe('full')
+    expect(weeklyStreakHistory(week('2026-11-02', 5))[0].tier).toBe('short')
   })
 
-  it('makes the newest set the default', () => {
+  it('has one set of goals, which is the default', () => {
     expect(weeklyGoalsFor('2026-10-26')).toBe(DEFAULT_WEEKLY_GOALS)
     expect(weeklyGoalsFor('2026-10-19')).toBe(G)
+    expect(DEFAULT_WEEKLY_GOALS.calDays).toBe(6)
   })
 })

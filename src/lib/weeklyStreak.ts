@@ -15,13 +15,11 @@ export type WeeklyGoalConfig = {
  */
 export const WEEKLY_GOAL_HISTORY: readonly { from: string; goals: WeeklyGoalConfig }[] = [
   {
+    // Six calorie days of seven. The week of 2026-10-26 briefly asked for all
+    // seven alongside the 4,500 target; that was withdrawn and the weeks it
+    // covered are judged at six like every other, so it has no entry here.
     from: '0000-01-01',
     goals: { workouts: 2, flex: 2, calDays: 6 },
-  },
-  {
-    // Every day of the week on calories, now that the target is a real surplus.
-    from: '2026-10-26',
-    goals: { workouts: 2, flex: 2, calDays: 7 },
   },
 ]
 
