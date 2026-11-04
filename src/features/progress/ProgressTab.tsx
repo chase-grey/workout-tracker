@@ -36,6 +36,7 @@ import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
 import { MetricChart } from './MetricChart'
 import { MassSplitChart } from './MassSplitChart'
+import { BulkGradePanel } from './BulkGradePanel'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
@@ -363,7 +364,10 @@ export function ProgressTab() {
       </div>
       <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
       {bodyMetric === 'mass' ? (
-        <MassSplitChart points={massSeries} empty="log body fat % to split the weight" />
+        <>
+          <MassSplitChart points={massSeries} empty="log body fat % to split the weight" />
+          <BulkGradePanel points={massSeries} />
+        </>
       ) : (
         <MetricChart
           data={bodySeries}
