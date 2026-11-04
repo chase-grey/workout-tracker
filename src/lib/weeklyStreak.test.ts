@@ -47,29 +47,53 @@ describe('classifyWeek', () => {
   it('classifies a full week (exactly at goal, not exceeded)', () => {
     expect(
       classifyWeek({ workouts: 2, flex: 2, calDays: 6 }),
-    ).toEqual({ tier: 'full', exceeded: false, cost: 0 })
+    ).toEqual({ tier: 'full', exceeded: false, earned: 0, cost: 0 })
   })
 
   it('classifies an exceeded full week', () => {
     expect(
       classifyWeek({ workouts: 3, flex: 3, calDays: 6 }),
-    ).toEqual({ tier: 'full', exceeded: true, cost: 0 })
+    ).toEqual({ tier: 'full', exceeded: true, earned: 2, cost: 0 })
+  })
+
+  it('earns one freeze per day over, summed across the goals, once every goal is met', () => {
+    // 4/2 workouts, 3/2 stretches, 7/6 calorie days: two, one and one over.
+    expect(classifyWeek({ workouts: 4, flex: 3, calDays: 7 }).earned).toBe(4)
+    expect(classifyWeek({ workouts: 2, flex: 2, calDays: 7 }).earned).toBe(1)
+    // Over on two goals but short on the third earns nothing: the surplus goes
+    // toward the shortfall instead.
+    expect(classifyWeek({ workouts: 4, flex: 3, calDays: 5 })).toMatchObject({
+      tier: 'short',
+      earned: 0,
+      cost: 1,
+    })
+  })
+
+  it('mints nothing over a goal of 0, which is a goal not being judged', () => {
+    expect(
+      classifyWith({ workouts: 2, flex: 2, calDays: 7 }, { ...G, calDays: 0 }),
+    ).toEqual({ tier: 'full', exceeded: false, earned: 0, cost: 0 })
+    // Nor does an unjudged goal's count pay down a shortfall elsewhere.
+    expect(classifyWith({ workouts: 1, flex: 2, calDays: 7 }, { ...G, calDays: 0 }).cost).toBe(1)
   })
 
   it('charges one freeze per day short, summed across the goals', () => {
     expect(classifyWeek({ workouts: 1, flex: 2, calDays: 6 })).toEqual({
       tier: 'short',
       exceeded: false,
+      earned: 0,
       cost: 1,
     })
     expect(classifyWeek({ workouts: 1, flex: 2, calDays: 5 })).toEqual({
       tier: 'short',
       exceeded: false,
+      earned: 0,
       cost: 2,
     })
     expect(classifyWeek({ workouts: 0, flex: 2, calDays: 4 })).toEqual({
       tier: 'short',
       exceeded: false,
+      earned: 0,
       cost: 4,
     })
   })
@@ -83,6 +107,7 @@ describe('classifyWeek', () => {
     expect(classifyWeek({ workouts: 1, flex: 3, calDays: 4 })).toEqual({
       tier: 'short',
       exceeded: false,
+      earned: 0,
       cost: 2,
     })
     expect(classifyWeek({ workouts: 0, flex: 2, calDays: 7 }).cost).toBe(1)
@@ -94,7 +119,7 @@ describe('classifyWeek', () => {
     { workouts: 0, flex: 4, calDays: 6 },
     { workouts: 3, flex: 3, calDays: 4 },
   ])('never lets surplus make a missed goal full, or free: %o', (counts) => {
-    expect(classifyWeek(counts)).toEqual({ tier: 'short', exceeded: false, cost: 1 })
+    expect(classifyWeek(counts)).toEqual({ tier: 'short', exceeded: false, earned: 0, cost: 1 })
   })
 })
 
@@ -142,6 +167,25 @@ describe('computeWeeklyStreak', () => {
       today: TODAY,
     })
     expect(result).toEqual({ streak: 2, freezes: 1 })
+  })
+
+  it('grants a freeze for every day over when the week is full', () => {
+    // WK2: 4/2 workouts, 3/2 stretches, 7/6 calorie days -> four freezes.
+    const result = computeWeeklyStreak({
+      workoutDates: daysInWeek(WK2, 4),
+      flexDates: daysInWeek(WK2, 3),
+      calorieHitDates: daysInWeek(WK2, 7),
+      today: TODAY,
+    })
+    // WK3 is empty and gets replayed: cost 10 against a bank of 4 -> reset.
+    expect(result).toEqual({ streak: 0, freezes: 4 })
+    const rows = weeklyStreakHistory({
+      workoutDates: daysInWeek(WK2, 4),
+      flexDates: daysInWeek(WK2, 3),
+      calorieHitDates: daysInWeek(WK2, 7),
+      today: TODAY,
+    })
+    expect(rows[0]).toMatchObject({ outcome: 'advanced', freezesEarned: 4, freezesAfter: 4 })
   })
 
   it('spends 1 freeze on a week one day short and keeps the streak', () => {
@@ -289,6 +333,7 @@ describe('weeklyStreakHistory — retroactive two-stretch goal', () => {
 describe('weeklyStreakHistory', () => {
   it.each([0, 1])('spends one banked freeze for 2 workouts, %i stretches and 7 calorie days', (flex) => {
     // Short 2 - flex on stretches, over 1 on calories, floored at one freeze.
+    // The week before banked two (a third workout and a third stretch).
     const rows = weeklyStreakHistory({
       workoutDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', 2)],
       flexDates: [...daysInWeek('2026-08-31', 3), ...daysInWeek('2026-09-07', flex)],
@@ -301,7 +346,7 @@ describe('weeklyStreakHistory', () => {
       exceeded: false,
       outcome: 'froze',
       freezesSpent: 1,
-      freezesAfter: 0,
+      freezesAfter: 1,
       streakAfter: 1,
     })
   })
@@ -387,7 +432,7 @@ describe('weeklyStreakHistory', () => {
       calorieHitDates: [...daysInWeek(WK2, 6), ...daysInWeek(WK3, 5)],
       today: TODAY,
     })
-    expect(rows[0]).toMatchObject({ exceeded: true, outcome: 'advanced', freezesAfter: 1 })
+    expect(rows[0]).toMatchObject({ exceeded: true, outcome: 'advanced', freezesEarned: 1, freezesAfter: 1 })
     expect(rows[1]).toMatchObject({
       tier: 'short',
       outcome: 'froze',

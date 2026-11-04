@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { MdAcUnit, MdChevronRight, MdLocalFireDepartment, MdMoreHoriz, MdStar } from 'react-icons/md'
+import { MdAcUnit, MdChevronRight, MdLocalFireDepartment, MdMoreHoriz } from 'react-icons/md'
 import { Collapse } from '../../components/Collapse'
 import { useData } from '../../store/DataContext'
 import { parseISODate } from '../../lib/dates'
@@ -32,7 +32,11 @@ function Outcome({ row }: { row: WeekResult }) {
   if (row.outcome === 'advanced') {
     return (
       <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-accent">
-        {row.exceeded && <MdStar className="text-accent-bright" aria-hidden />}
+        {row.freezesEarned > 0 && (
+          <span className="flex items-center text-accent-bright">
+            <MdAcUnit aria-hidden />+{row.freezesEarned}
+          </span>
+        )}
         <MdLocalFireDepartment aria-hidden />
         {row.streakAfter}
       </span>
