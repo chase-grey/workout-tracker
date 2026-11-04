@@ -19,7 +19,7 @@ import {
   type Point,
 } from '../../lib/progress'
 import { weeklyCalorieSurplusSeries } from '../../lib/calories'
-import { buildGoals, GOAL_IDS } from '../../lib/goals'
+import { bodyWeightPoints, buildGoals, GOAL_IDS } from '../../lib/goals'
 import {
   CHART_SURFACE,
   CHART_SURFACE_2,
@@ -35,10 +35,12 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
 import { MetricChart } from './MetricChart'
+import { MassSplitChart } from './MassSplitChart'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
 import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
 import { bodyFatSeries, waistSeries, latestMeasurement } from '../../lib/bodyComp'
+import { massPoints } from '../../lib/massSplit'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
 import {
   buildReview,
@@ -184,9 +186,12 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   )
 }
 
-const BODY_METRICS: { label: string; value: 'bf' | 'waist' }[] = [
+type BodyMetric = 'bf' | 'waist' | 'mass'
+
+const BODY_METRICS: { label: string; value: BodyMetric }[] = [
   { label: 'body fat %', value: 'bf' },
   { label: 'waist', value: 'waist' },
+  { label: 'muscle vs fat', value: 'mass' },
 ]
 
 export function ProgressTab() {
@@ -194,7 +199,7 @@ export function ProgressTab() {
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [showMeasure, setShowMeasure] = useState(false)
-  const [bodyMetric, setBodyMetric] = useState<'bf' | 'waist'>('bf')
+  const [bodyMetric, setBodyMetric] = useState<BodyMetric>('bf')
   const [recap, setRecap] = useState<Review | null>(null)
 
   // The recap buttons are a treat, not clutter: show "Month in review" only on
@@ -233,6 +238,12 @@ export function ProgressTab() {
   const bodySeries = useMemo(
     () => (bodyMetric === 'bf' ? bodyFatSeries(measurements) : waistSeries(measurements)),
     [measurements, bodyMetric],
+  )
+  // The weight put on since body fat was first read, split into muscle and fat
+  // by the readings since — see massPoints.
+  const massSeries = useMemo(
+    () => massPoints(bodyWeightPoints(bodyWeights), bodyFatSeries(measurements)),
+    [bodyWeights, measurements],
   )
 
   // Weekly rather than daily, complete days only, unlogged days assumed —
@@ -351,13 +362,17 @@ export function ProgressTab() {
         </button>
       </div>
       <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
-      <MetricChart
-        data={bodySeries}
-        unit={bodyMetric === 'bf' ? '%' : 'in'}
-        label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
-        calories={calorieSurplus}
-        goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
-      />
+      {bodyMetric === 'mass' ? (
+        <MassSplitChart points={massSeries} empty="log body fat % to split the weight" />
+      ) : (
+        <MetricChart
+          data={bodySeries}
+          unit={bodyMetric === 'bf' ? '%' : 'in'}
+          label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
+          calories={calorieSurplus}
+          goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
+        />
+      )}
 
       <TimeSpent />
 
