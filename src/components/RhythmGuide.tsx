@@ -24,6 +24,7 @@ import {
   type RepGlow,
 } from '../lib/rhythmMotion'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
+import { SPREAD_MS, spreadMode, spreadStyle } from '../lib/glowSpread'
 import { nextFlossVariant, rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
 import { useShownAnimation } from '../lib/useShownAnimation'
 import { FlossGuide } from './FlossGuide'
@@ -90,6 +91,12 @@ const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
  * rep, so the finish needs a separate colour as well as higher opacity. A set
  * that ends itself turns white on its closing rep (see `repGlow`), because after
  * it there is no guide left to look at.
+ *
+ * The white doesn't land in a frame. Once the set is done the shape is drawn
+ * twice, in its own tone and in the finished one, and the two are masked against
+ * each other so the white is watched taking the shape over `SPREAD_MS` — out
+ * from the centre, up from the floor, round the dial, whichever suits the shape
+ * (see lib/glowSpread). The wave paints its own: its white runs along the line.
  */
 const TONES: Record<RepGlow, {
   fill: string
@@ -149,6 +156,10 @@ function useRamp(target: number, ms: number) {
   return amount
 }
 
+/**
+ * The tone eased between base and done, for the one shape that isn't drawn twice
+ * (the wave): there the brightening rides the container's own colour fade.
+ */
 function useTone(glow: RepGlow) {
   const amount = useRamp(glow === 'done' ? 1 : 0, 180)
   return {
@@ -728,6 +739,10 @@ export function RhythmGuide({
   const i = idx % phases.length
   const glow = repGlow(rep, reps, endsOnTarget, skipFinalRepRest && i >= workPhaseCount(phases))
   const tone = useTone(glow)
+  // How far the white has got across the shape (see lib/glowSpread). Mounts at
+  // its target, so a set resumed past its target is simply white.
+  const mode = spreadMode(variant)
+  const spread = useRamp(glow === 'done' ? 1 : 0, SPREAD_MS)
 
   if (phases.length === 0) return null
 
@@ -782,65 +797,97 @@ export function RhythmGuide({
   // rep to end, so the brightening lands as the set closes. When the set closes
   // itself there is no "after" to brighten in, so the closing rep is bright the
   // whole way through it.
+  //
+  // The shape is drawn by `figure`, in whatever tone it's handed. Every shape but
+  // the wave is drawn twice while the white comes in — the set's own colour under
+  // the finished one, each masked to its share (see lib/glowSpread) — and once
+  // only at either end, so nothing is doubled at rest. The wave carries its own
+  // white along the line, so it's drawn once in the eased tone.
+  const figure = (tone: Tone) =>
+    forwardBack ? (
+      <FlossGuide phaseIndex={i} progress={progress} seconds={phases[i].seconds} variant={variant} />
+    ) : motion === 'descent' ? (
+      <>
+        {showPrevRep && (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ opacity: 1 - fadeIn }}
+          >
+            <DescentShape variant={variant} depth={depths[depths.length - 1]} tone={tone} />
+          </div>
+        )}
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{
+            opacity: fadeIn * (REST_DIM + effort * (1 - REST_DIM)),
+            filter: `blur(${(1 - effort) * REST_BLUR_PX}px)`,
+            transform: `translateY(${tremor * STRAIN_PCT}%)`,
+          }}
+        >
+          <DescentShape variant={variant} depth={depth} tone={tone} />
+        </div>
+      </>
+    ) : motion === 'pushpull' ? (
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ transform: variant === 'wave' ? undefined : `translateY(${tremor * STRAIN_PCT}%)` }}
+      >
+        <PushPullShape
+          variant={variant}
+          drive={drive}
+          prime={prime}
+          primeDir={primeDir}
+          tone={tone}
+          phases={phases}
+          phaseIndex={i}
+          progress={progress}
+          glowStart={rhythmWaveGlowStart(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
+          end={rhythmWaveEnd(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
+          tail={waveTail}
+        />
+      </div>
+    ) : (
+      <BreatheShape variant={variant} scale={scaleFromDepth(depth)} tone={tone} />
+    )
+
   return (
     <div className="rhythm-guide flex flex-1 flex-col items-center justify-center py-3">
       <div className={`rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center ${
         glow === 'done' ? 'text-neutral-50' : 'text-accent-bright'
       }`}>
-        {forwardBack ? (
-          <FlossGuide phaseIndex={i} progress={progress} seconds={phases[i].seconds} variant={variant} />
-        ) : motion === 'descent' ? (
+        {mode === 'own' ? (
+          figure(tone)
+        ) : (
           <>
-            {showPrevRep && (
+            {spread < 1 && (
               <div
-                className="absolute inset-0 flex items-center justify-center"
-                style={{ opacity: 1 - fadeIn }}
+                className="absolute inset-0 flex items-center justify-center text-accent-bright"
+                style={spreadStyle(mode, spread, 'accent')}
               >
-                <DescentShape variant={variant} depth={depths[depths.length - 1]} tone={tone} />
+                {figure(TONES.base)}
               </div>
             )}
-            <div
-              className="absolute inset-0 flex items-center justify-center"
-              style={{
-                opacity: fadeIn * (REST_DIM + effort * (1 - REST_DIM)),
-                filter: `blur(${(1 - effort) * REST_BLUR_PX}px)`,
-                transform: `translateY(${tremor * STRAIN_PCT}%)`,
-              }}
-            >
-              <DescentShape variant={variant} depth={depth} tone={tone} />
-            </div>
+            {spread > 0 && (
+              <div
+                className="absolute inset-0 flex items-center justify-center text-neutral-50"
+                style={spreadStyle(mode, spread, 'white')}
+              >
+                {figure(TONES.done)}
+              </div>
+            )}
           </>
-        ) : motion === 'pushpull' ? (
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ transform: variant === 'wave' ? undefined : `translateY(${tremor * STRAIN_PCT}%)` }}
-          >
-            <PushPullShape
-              variant={variant}
-              drive={drive}
-              prime={prime}
-              primeDir={primeDir}
-              tone={tone}
-              phases={phases}
-              phaseIndex={i}
-              progress={progress}
-              glowStart={rhythmWaveGlowStart(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
-              end={rhythmWaveEnd(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
-              tail={waveTail}
-            />
-          </div>
-        ) : (
-          <BreatheShape variant={variant} scale={scaleFromDepth(depth)} tone={tone} />
         )}
       </div>
 
       {/* Only for a set that waits on a tap — see the note up top. It brightens
-          with the shape, so the target being met reads the same in both. */}
+          with the shape, over the same stretch, so the target being met reads the
+          same in both. */}
       {!endsOnTarget && (
         <p
-          className={`transition-colors duration-200 motion-reduce:transition-none text-2xl font-bold tabular-nums ${
+          className={`transition-colors motion-reduce:transition-none text-2xl font-bold tabular-nums ${
             glow === 'done' ? 'text-neutral-50' : 'text-neutral-500'
           }`}
+          style={{ transitionDuration: `${SPREAD_MS}ms` }}
         >
           {reps ? `${rep} / ${reps}` : rep}
         </p>
