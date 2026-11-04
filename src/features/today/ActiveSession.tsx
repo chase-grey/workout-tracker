@@ -57,6 +57,7 @@ import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useBackGuard } from '../../lib/useBackGuard'
+import { leaveRest, resumeLeftRest, type LeftRest } from '../../lib/leftRest'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
@@ -64,7 +65,7 @@ import { RestTimer } from '../../components/RestTimer'
 import { HoldTimer } from '../../components/HoldTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
-import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock } from '../../lib/setClock'
+import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
 import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
@@ -179,6 +180,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // screen whichever station's trend button was pressed.
   const [historyKey, setHistoryKey] = useState<string | null>(null)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
+  // The rest the last tap cut short, held so Android back can step into it again
+  // (see lib/leftRest), with the set its seconds were running up on the set clock.
+  const [leftRest, setLeftRest] = useState<(LeftRest<ActiveRest> & { clockKey: SetKeys | null }) | null>(null)
   // A first set that's a hold waits on a tap to begin (see `awaitingStart`).
   const [started, setStarted] = useState(false)
   // Whether a timed hold's clock is running (see HoldTimer). While it is, the
@@ -353,6 +357,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     storage.saveActiveRest(rest)
   }, [rest])
 
+  // What back can step into lasts only until the flow moves on: a rest opening —
+  // that one again, or the next set's — or the set screen changing hands.
+  useEffect(() => {
+    if (rest) setLeftRest(null)
+  }, [rest])
+  useEffect(() => {
+    setLeftRest(null)
+  }, [safeCurrent])
+
   useEffect(() => {
     storage.saveFastMode(fastMode)
   }, [fastMode])
@@ -390,6 +403,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // the whole session aside, which is what the guard underneath does (see App).
   useBackGuard(showList, () => setShowList(false))
   useBackGuard(showAddExercise, () => setShowAddExercise(false))
+  useBackGuard(historyKey != null, () => setHistoryKey(null))
+  useBackGuard(showCircuitRest, () => setShowCircuitRest(false))
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its clocks are wall-clock, so they'd otherwise keep advancing
@@ -626,6 +641,21 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setRest(null)
   }
 
+  // Back into the rest the last tap cut short, with the seconds it had left (see
+  // lib/leftRest). It is the same interval, not a new one: it was counted and its
+  // prescription banked when it opened, so only its clock restarts, and the span
+  // since the tap — charged to nothing yet — goes on running up on the set that
+  // was resting, where the rest it extends belongs. The time on this set screen
+  // is dropped, as reopening a rest from the menu drops it.
+  const resumeRest = () => {
+    if (!leftRest) return
+    const now = Date.now()
+    activeStartRef.current = 0
+    restStartRef.current = now
+    if (leftRest.clockKey) commitSetClock(restAfter(setClock.current, leftRest.clockKey))
+    setRest(resumeLeftRest(leftRest, now))
+  }
+
   /**
    * Drop an exercise from today's workout, or bring one back.
    *
@@ -853,6 +883,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // close a set on their own.
   const setScreenLive =
     rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest
+  // With nothing over the set, Android back steps the workout itself back: into
+  // the rest the last tap cut short, picking up the seconds it had left. That one
+  // step only — a rest that ran out, or that the flow has since moved past,
+  // leaves nothing to return to, and the press falls through to App's guard.
+  useBackGuard(leftRest != null && setScreenLive, resumeRest)
   // A round screen waits for every station on it, back to back.
   const turboMs = roundOnScreen.reduce((sum, s) => sum + turboSetMs(exerciseAverages, s.ex.key), 0)
   const turboArmed =
@@ -1282,7 +1317,13 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           fastMode={
             startsNewExercise(rest.exKey, planned.key, !!log?.sets.some((s) => s.done)) ? 'off' : fastMode
           }
-          onClose={closeRest}
+          // A tap that cuts the rest short leaves it where back can find it (see
+          // lib/leftRest); a rest that ran out leaves nothing.
+          onClose={() => {
+            const left = leaveRest(rest, Date.now())
+            setLeftRest(left && { ...left, clockKey: setClock.current.restingKey })
+            closeRest()
+          }}
         />
       )}
 

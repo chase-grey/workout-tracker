@@ -103,7 +103,8 @@ function AppShell() {
   // only way out of a session screen short of finishing one, so the overflow menu
   // carries no "back" of its own; browser back does the same on a desktop.
   // A sheet opened over the session claims the press while it is up, and closing
-  // it is all that press does (see useBackGuard).
+  // it is all that press does (see useBackGuard); so does a session with a step
+  // of its own to take back — the rest a tap just cut short (see lib/leftRest).
   useBackGuard(sessionActive && !minimized, () => setMinimized(true))
 
   // Month/year in review, once per new period. On the feature's first run the

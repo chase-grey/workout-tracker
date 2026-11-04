@@ -5,7 +5,7 @@ import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
-import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock } from '../../lib/setClock'
+import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
 import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
@@ -34,6 +34,7 @@ import { useStepElapsed } from '../../lib/useStepElapsed'
 import { canResumeRest, restScreenSec, staleRestSec } from '../../lib/rest'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useBackGuard } from '../../lib/useBackGuard'
+import { leaveRest, resumeLeftRest, type LeftRest } from '../../lib/leftRest'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
@@ -303,6 +304,9 @@ export function StretchSession({
   // when a side switch replaces the settle-in with a reposition.
   const [readyOverrideSec, setReadyOverrideSec] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
+  // The rest the last tap cut short, held so Android back can step into it again
+  // (see lib/leftRest), with the set its seconds were running up on the set clock.
+  const [leftRest, setLeftRest] = useState<(LeftRest<RestState> & { clockKey: SetKeys | null }) | null>(null)
   // Photo screens already offered this session, so resuming doesn't re-ask.
   const [seenGates, setSeenGates] = useState<Set<string>>(() => new Set(saved?.photoGates ?? []))
   // The cold shots open the session, before anything has warmed up. A resume
@@ -416,6 +420,32 @@ export function StretchSession({
   // session-level guard in App can handle a later press.
   useBackGuard(showList, () => setShowList(false))
 
+  // Back into the rest the last tap cut short, with the seconds it had left (see
+  // lib/leftRest). The same interval, not a new one: the slice before the tap was
+  // banked as a whole rest, so its entry is taken back here and the close puts it
+  // in again with both slices counted. The span since the tap goes on running up
+  // on the set that was resting, where the rest it extends belongs, and the
+  // get-into-position count the rest had handed on to stands down.
+  const resumeRest = () => {
+    if (!leftRest) return
+    const now = Date.now()
+    restLearning.current.prescribedSec -= leftRest.rest.seconds
+    restLearning.current.count -= 1
+    restStartRef.current = now
+    if (leftRest.clockKey) setClock.current = restAfter(setClock.current, leftRest.clockKey)
+    setPreparing(false)
+    setRest(resumeLeftRest(leftRest, now))
+  }
+
+  // What back can step into lasts only until the flow moves on: a rest opening —
+  // that one again, or the next set's — or the set screen changing hands.
+  useEffect(() => {
+    if (rest) setLeftRest(null)
+  }, [rest])
+  useEffect(() => {
+    setLeftRest(null)
+  }, [safeCurrent])
+
   // A static hold has nothing to animate, so it runs on a clock of its own — see
   // HoldTimer. Read here rather than beside the set below, because the wake lock
   // sits above the empty-routine return and needs it.
@@ -428,7 +458,16 @@ export function StretchSession({
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
   const readyToFinish = N > 0 && steps.every((step) => done.has(step.stepKey)) && photos == null
-  const setLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && !preparing
+  const routineLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList
+  const setLive = routineLive && !preparing
+
+  // With nothing over the routine — the get-into-position count included, which
+  // is where a tapped-past rest lands — Android back steps the routine itself
+  // back: into the rest the last tap cut short, picking up the seconds it had
+  // left. That one step only — a rest that ran out, or that the flow has since
+  // moved past, leaves nothing to return to, and the press falls through to App's
+  // guard.
+  useBackGuard(leftRest != null && routineLive, resumeRest)
 
   // And while it's on, the screen stays lit — a paced routine is one nobody is
   // tapping, and the phone would dim mid-hold. A hold's clock runs unattended
@@ -1064,7 +1103,13 @@ export function StretchSession({
           // up there moves when rest opens.
           header={topBar}
           fastMode={fast ? 'on' : 'off'}
-          onClose={closeRest}
+          // A tap that cuts the rest short leaves it where back can find it (see
+          // lib/leftRest); a rest that ran out leaves nothing.
+          onClose={() => {
+            const left = leaveRest(rest, Date.now())
+            setLeftRest(left && { ...left, clockKey: setClock.current.restingKey })
+            closeRest()
+          }}
         />
       )}
       {/* The get-into-position count waits its turn behind a photo screen, and
