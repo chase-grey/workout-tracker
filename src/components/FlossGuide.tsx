@@ -16,6 +16,14 @@ const WAKE_GAIN = 24
 /** The front stays tight, so every figure leans into the way it's going. */
 const FRONT = 6
 
+/**
+ * The figures that run up the phone instead of across it. They draw the same glide
+ * on the same clock; only the axis turns, and forward is up.
+ */
+const VERTICAL: ReadonlySet<FlossVariant> = new Set(['kite', 'helix', 'fill', 'scan'])
+/** The frame's `top` for a point so far along the run, forward being up. */
+const up = (along: number) => 100 - along
+
 const easeInOutSine = (t: number) => 0.5 - Math.cos(Math.PI * t) / 2
 const front = (d: number) => Math.exp(-((d / FRONT) ** 2))
 /** Three decimals: plenty for a percent of the frame, and never in exponent form. */
@@ -85,6 +93,17 @@ function positionAt(phaseIndex: number, progress: number): number {
  *   the ones behind are still turning back, with the whole grid skewed into the lean.
  * - 'capsule': one pill with two echoes behind it; it stretches with speed and
  *   squares off its trailing end, so at speed it's a slug and at the turn a circle.
+ * Four more run up the phone instead of across it — forward climbs toward the top
+ * of the screen and back sinks toward the bottom — so they read differently from
+ * the rest at a glance before any of them has moved:
+ * - 'kite': a diamond with a ribbon tail of bows, the tail trailing behind it and
+ *   swaying, and its nose drawn out into the heading with speed.
+ * - 'helix': a mote climbing a spiral, nearer and farther as it goes round, with a
+ *   string of fading motes behind it tracing the turns it has made.
+ * - 'fill': a tube that fills toward the top and drains toward the bottom; the
+ *   surface domes when it's rising and sags when it's draining, flat at the turns.
+ * - 'scan': a line sweeping the frame with a trail of light behind it, over rungs
+ *   that brighten as it passes and dim again along its wake.
  */
 export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
   phaseIndex: number
@@ -113,6 +132,7 @@ export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
     trail: (back) => (reduced ? crest - heading * back * RUN_SPAN : positionAt(phaseIndex, progress - back)),
   }
   const figure: FlossVariant = isFlossVariant(variant) ? variant : 'beads'
+  const vertical = VERTICAL.has(figure)
 
   return (
     <div
@@ -121,9 +141,22 @@ export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
       aria-label={forward ? 'forward' : 'back'}
       data-direction={forward ? 'forward' : 'back'}
       data-variant={figure}
+      data-axis={vertical ? 'vertical' : 'horizontal'}
     >
-      <Glow x={crest} y={figure === 'beads' ? 46 : figure === 'grass' ? 52 : 50} />
-      {figure === 'thread' ? (
+      {vertical ? (
+        <Glow x={50} y={up(crest)} />
+      ) : (
+        <Glow x={crest} y={figure === 'beads' ? 46 : figure === 'grass' ? 52 : 50} />
+      )}
+      {figure === 'kite' ? (
+        <Kite glide={glide} />
+      ) : figure === 'helix' ? (
+        <Helix glide={glide} />
+      ) : figure === 'fill' ? (
+        <Fill glide={glide} />
+      ) : figure === 'scan' ? (
+        <Scan glide={glide} />
+      ) : figure === 'thread' ? (
         <Thread glide={glide} />
       ) : figure === 'wake' ? (
         <Wake glide={glide} />
@@ -147,10 +180,13 @@ function Glow({ x, y }: { x: number; y: number }) {
   return (
     <div
       className="absolute h-[40%] w-[40%] rounded-full bg-current/40 blur-2xl"
-      style={{ left: `${r(x)}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
+      style={{ left: `${r(x)}%`, top: `${r(y)}%`, transform: 'translate(-50%, -50%)' }}
     />
   )
 }
+
+/** A gradient id with the punctuation stripped, so it's safe inside a url() wherever React writes it. */
+const useGradientId = () => `floss-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
 
 /** Beads strung evenly across the frame, a little past either end of the run. */
 const BEADS = Array.from({ length: 13 }, (_, k) => 6 + k * 7.333)
@@ -189,8 +225,7 @@ const KNOT_LIGHT = FRONT * 1.5
 
 function Thread({ glide }: { glide: Glide }) {
   const { crest, heading, speed, wake } = glide
-  // Punctuation stripped, so the id is safe inside a url() wherever React writes it.
-  const id = `floss-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const id = useGradientId()
   // Taut ahead of the knot; behind it, the slack the knot drags waves and dies away.
   const y = (x: number) => {
     const ahead = (x - crest) * heading
@@ -405,5 +440,229 @@ function Capsule({ glide }: { glide: Glide }) {
         }}
       />
     </>
+  )
+}
+
+/** The kite's half-height and half-width at a standstill, and the nose it grows with speed. */
+const KITE_HALF_HEIGHT = 9
+const KITE_HALF_WIDTH = 6
+const KITE_NOSE = 6
+/** The tail: how far back it reaches in phase-lengths, how far it sways, the length of a sway, and where its bows sit. */
+const TAIL_REACH = 0.3
+const TAIL_SWAY = 5
+const TAIL_WAVE = 18
+const BOWS = [0.08, 0.16, 0.24]
+
+function Kite({ glide }: { glide: Glide }) {
+  const { crest, heading, speed, trail } = glide
+  const cy = up(crest)
+  // The tail follows the glide round its turns, swaying side to side as a wave
+  // fixed in the frame: where the kite has been it draws, and after a turn it
+  // folds back over the way the kite is now going, which is how the turn reads.
+  const sway = (along: number) => 50 + TAIL_SWAY * Math.sin((2 * Math.PI * along) / TAIL_WAVE)
+  const at = (back: number) => {
+    const along = trail(back)
+    return { x: sway(along), y: up(along) }
+  }
+  const points: string[] = []
+  for (let back = 0; back <= TAIL_REACH + 1e-9; back += 0.01) {
+    const p = at(back)
+    points.push(`${r(p.x)} ${r(p.y)}`)
+  }
+  // The nose reaches into the heading with speed; the trailing tip stays put. At a
+  // standstill the diamond is even, so the turn changes nothing. The points are
+  // written top, right, bottom, left whichever end is the nose, so the markup is
+  // the same across the turn too.
+  const nose = cy - heading * (KITE_HALF_HEIGHT + speed * KITE_NOSE)
+  const tip = cy + heading * KITE_HALF_HEIGHT
+  const [top, bottom] = heading > 0 ? [nose, tip] : [tip, nose]
+  const body = `50 ${r(top)} ${50 + KITE_HALF_WIDTH} ${r(cy)} 50 ${r(bottom)} ${50 - KITE_HALF_WIDTH} ${r(cy)}`
+  return (
+    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+      <path
+        d={`M ${points.join(' L ')}`}
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={DIM + (BRIGHT - DIM) * 0.5}
+        strokeWidth="0.9"
+        strokeLinejoin="round"
+      />
+      {BOWS.map((back, k) => {
+        const p = at(back)
+        const fade = 1 - k / BOWS.length
+        return (
+          <rect
+            key={k}
+            x={r(p.x - 2)}
+            y={r(p.y - 2)}
+            width="4"
+            height="4"
+            rx="0.6"
+            fill="currentColor"
+            opacity={r(DIM + (BRIGHT - DIM) * fade)}
+            transform={`rotate(45 ${r(p.x)} ${r(p.y)})`}
+          />
+        )
+      })}
+      <polygon points={body} fill="currentColor" opacity={CREST} />
+    </svg>
+  )
+}
+
+/**
+ * The helix: its radius across the frame, the rise of one turn, and the motes
+ * trailing the crest, so many phase-lengths apart. The pitch is long and the trail
+ * short because the spiral turns a hair of travel along the run into a few hairs
+ * across it; any more and the trail would be seen to shift at the turn.
+ */
+const HELIX_RADIUS = 22
+const HELIX_PITCH = 46
+const HELIX_TRAIL = 10
+const HELIX_SPACING = 0.02
+
+function Helix({ glide }: { glide: Glide }) {
+  const { crest, speed, trail } = glide
+  // Round the helix: across the frame by the sine, and nearer or farther by the
+  // cosine, which the size carries so the spiral reads in depth.
+  const place = (along: number) => {
+    const angle = (2 * Math.PI * along) / HELIX_PITCH
+    return { x: 50 + HELIX_RADIUS * Math.sin(angle), y: up(along), depth: (1 + Math.cos(angle)) / 2 }
+  }
+  const head = place(crest)
+  return (
+    <>
+      {Array.from({ length: HELIX_TRAIL }, (_, k) => {
+        const p = place(trail((k + 1) * HELIX_SPACING))
+        const fade = 1 - (k + 1) / (HELIX_TRAIL + 1)
+        const size = (2 + fade * 2.5) * (0.6 + 0.4 * p.depth)
+        return (
+          <div
+            key={k}
+            className="absolute rounded-full bg-current"
+            style={{
+              left: `${r(p.x)}%`,
+              top: `${r(p.y)}%`,
+              width: `${r(size)}%`,
+              height: `${r(size)}%`,
+              opacity: r(DIM + fade * (BRIGHT - DIM)),
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        )
+      })}
+      <div
+        className="absolute h-[6%] w-[6%] rounded-full bg-current"
+        style={{
+          left: `${r(head.x)}%`,
+          top: `${r(head.y)}%`,
+          opacity: CREST,
+          transform: `translate(-50%, -50%) scale(${r((0.8 + 0.4 * head.depth) * (1 + speed * 0.3))})`,
+        }}
+      />
+    </>
+  )
+}
+
+/** The tube's walls, top and floor, and how far the surface domes into the heading at full speed. */
+const TUBE_LEFT = 34
+const TUBE_RIGHT = 66
+const TUBE_TOP = 5
+const TUBE_FLOOR = 95
+const DOME = 7
+/** How far below the surface the column's light fades to the floor's dimness. */
+const FILL_FADE = 45
+
+function Fill({ glide }: { glide: Glide }) {
+  const { crest, heading, speed } = glide
+  const id = useGradientId()
+  const level = up(crest)
+  // The surface bulges the way the column is going: a dome when it's rising, a
+  // sag when it's draining, flat at the turns. A quadratic's control point sits
+  // twice as far out as the curve itself reaches.
+  const control = r(level - 2 * heading * speed * DOME)
+  const surface = `M ${TUBE_LEFT} ${r(level)} Q 50 ${control} ${TUBE_RIGHT} ${r(level)}`
+  const column = `${surface} L ${TUBE_RIGHT} ${TUBE_FLOOR} L ${TUBE_LEFT} ${TUBE_FLOOR} Z`
+  return (
+    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id={id} gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={r(level)} y2={r(level + FILL_FADE)}>
+          <stop offset="0" stopColor="currentColor" stopOpacity={BRIGHT} />
+          <stop offset="1" stopColor="currentColor" stopOpacity={DIM} />
+        </linearGradient>
+      </defs>
+      <rect
+        x={TUBE_LEFT}
+        y={TUBE_TOP}
+        width={TUBE_RIGHT - TUBE_LEFT}
+        height={TUBE_FLOOR - TUBE_TOP}
+        rx="4"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={DIM}
+        strokeWidth="0.8"
+      />
+      <path d={column} fill={`url(#${id})`} />
+      <path d={surface} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity={CREST} />
+    </svg>
+  )
+}
+
+/** Rungs set evenly up the frame, a little past either end of the run. */
+const RUNGS = Array.from({ length: 15 }, (_, k) => 8 + k * 6)
+/** The sweep's reach across the frame, and how far its trail of light stretches behind it at full speed. */
+const SWEEP_LEFT = 8
+const SWEEP_RIGHT = 92
+const SWEEP_TRAIL = 30
+
+function Scan({ glide }: { glide: Glide }) {
+  const { crest, heading, speed } = glide
+  const id = useGradientId()
+  const y = up(crest)
+  // The trail: light from the line back along the way it came, as long as the
+  // glide is fast and gone at the turns. Behind a rising line is below it.
+  const reach = speed * SWEEP_TRAIL
+  const behind = y + heading * reach
+  return (
+    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id={id} gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={r(y)} y2={r(behind)}>
+          <stop offset="0" stopColor="currentColor" stopOpacity={0.35} />
+          <stop offset="1" stopColor="currentColor" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      {RUNGS.map((ry) => {
+        const l = lit((up(ry) - crest) * heading, glide)
+        return (
+          <line
+            key={ry}
+            x1={SWEEP_LEFT}
+            x2={SWEEP_RIGHT}
+            y1={ry}
+            y2={ry}
+            stroke="currentColor"
+            strokeOpacity={r(DIM + l * (BRIGHT - DIM))}
+            strokeWidth={r(0.5 + l * 0.9)}
+            strokeLinecap="round"
+          />
+        )
+      })}
+      <rect
+        x={SWEEP_LEFT}
+        y={r(Math.min(y, behind))}
+        width={SWEEP_RIGHT - SWEEP_LEFT}
+        height={r(reach)}
+        fill={`url(#${id})`}
+      />
+      <line
+        x1={SWEEP_LEFT}
+        x2={SWEEP_RIGHT}
+        y1={r(y)}
+        y2={r(y)}
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity={CREST}
+      />
+    </svg>
   )
 }

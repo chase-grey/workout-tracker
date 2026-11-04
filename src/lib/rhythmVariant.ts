@@ -9,10 +9,14 @@ const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as
 // the same way round: the direction has to be unmistakable at a glance.
 const PUSHPULL_VARIANTS = ['anvil', 'chevrons', 'gauge', 'wave'] as const
 // The floss glides forward and back rather than down and up, so it has figures of
-// its own (see components/FlossGuide): four drawn from nature, three from geometry.
-// As in the push/pull family, every one of them says the heading the same way: by
-// leaning into it.
-const FLOSS_VARIANTS = ['beads', 'thread', 'wake', 'grass', 'slats', 'tiles', 'capsule'] as const
+// its own (see components/FlossGuide): four drawn from nature, three from geometry,
+// and four that run up the phone instead of across it, forward climbing toward the
+// top of the screen. As in the push/pull family, every one of them says the heading
+// the same way: by leaning into it.
+const FLOSS_VARIANTS = [
+  'beads', 'thread', 'wake', 'grass', 'slats', 'tiles', 'capsule',
+  'kite', 'helix', 'fill', 'scan',
+] as const
 
 export type FlossVariant = (typeof FLOSS_VARIANTS)[number]
 

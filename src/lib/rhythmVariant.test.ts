@@ -44,6 +44,8 @@ describe('isFlossVariant', () => {
     expect(isFlossVariant('beads')).toBe(true)
     expect(isFlossVariant('grass')).toBe(true)
     expect(isFlossVariant('capsule')).toBe(true)
+    expect(isFlossVariant('kite')).toBe(true)
+    expect(isFlossVariant('scan')).toBe(true)
     expect(isFlossVariant('orb')).toBe(false)
     expect(isFlossVariant('wave')).toBe(false)
   })
