@@ -22,10 +22,15 @@ import type { MassPoint } from './massSplit'
  * mostly fat; past very aggressive, Garthe's fast group gained five times the
  * fat of the slow one for a small, non-significant edge in lean mass.
  *
- * Both are read over the whole span the chart shows, from the first body-fat
- * reading to the newest weigh-in. A couple of weeks is too short to grade — a
+ * Both are read over the whole span the chart shows, from the first week with
+ * a body-fat reading to the newest. A couple of weeks is too short to grade — a
  * pound of water either way swamps the signal — so under {@link MIN_GRADE_DAYS}
- * there is no verdict yet.
+ * there is no reading yet.
+ *
+ * There is deliberately no one-word verdict rolled up from the two. An earlier
+ * cut printed one — "leaning dirty" over a track lit at "clean" whenever the
+ * pace was the thing drifting — and the headline contradicted the evidence
+ * under it more often than it summed it up. The two tracks are the grade.
  */
 
 export const MIN_GRADE_DAYS = 14
@@ -44,14 +49,11 @@ export type PaceBand = (typeof PACE_BANDS)[number]
 /** Percent of bodyweight a week at the top of each band but the last: the intermediate row. */
 export const PACE_CEILINGS = [0.2, 0.45, 0.8] as const
 
-export type Verdict = 'recomp' | 'clean bulk' | 'leaning dirty' | 'dirty bulk' | 'not gaining'
-
 export type BulkGrade =
   | { ready: false; days: number }
   | {
       ready: true
       days: number
-      verdict: Verdict
       /** Muscle's share of the weight gained, 0–1; over 1 on a recomp, null when nothing went on. */
       share: number | null
       partition: PartitionBand | null
@@ -96,14 +98,6 @@ export function paceOf(pctPerWeek: number): { band: PaceBand; at: number } {
   return { band: 'too fast', at: 1 }
 }
 
-/** The one-line call, from where the two readings fall. */
-export function verdictOf(partition: PartitionBand | null, pace: PaceBand, gained: number, muscle: number): Verdict {
-  if (gained <= 0.5) return muscle > 0.5 ? 'recomp' : 'not gaining'
-  if (partition === 'dirty' || pace === 'too fast') return 'dirty bulk'
-  if (partition === 'loose' || pace === 'fast') return 'leaning dirty'
-  return 'clean bulk'
-}
-
 export function bulkGrade(points: MassPoint[]): BulkGrade {
   const first = points[0]
   const last = points[points.length - 1]
@@ -126,7 +120,6 @@ export function bulkGrade(points: MassPoint[]): BulkGrade {
   return {
     ready: true,
     days,
-    verdict: verdictOf(split?.band ?? null, pace, gained, muscle),
     share,
     partition: split?.band ?? null,
     partitionAt: split?.at ?? null,

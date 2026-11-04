@@ -51,9 +51,10 @@ function Track({
 /**
  * How the bulk is going, judged on the two things the trials measure (see
  * lib/bulkGrade): how much of the weight gained is muscle, and how fast it is
- * going on. The headline is the call; the two tracks under it are the evidence,
- * each with the marker sat where this bulk falls, so a reading drifting toward
- * the dirty end is visible weeks before it gets there.
+ * going on. Two tracks, each with the marker sat where this bulk falls, so a
+ * reading drifting toward the dirty end is visible weeks before it gets there.
+ * No headline over them: a one-word call rolled up from two readings only ever
+ * argued with the track it was summarising (see the note in lib/bulkGrade).
  */
 export function BulkGradePanel({ points }: { points: MassPoint[] }) {
   const grade = useMemo(() => bulkGrade(points), [points])
@@ -80,10 +81,7 @@ export function BulkGradePanel({ points }: { points: MassPoint[] }) {
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-surface px-4 py-3">
-      <div className="flex items-baseline justify-between">
-        <span className="font-semibold">{grade.verdict}</span>
-        <span className="text-xs text-neutral-500">over {weeks} weeks</span>
-      </div>
+      <span className="text-xs text-neutral-500">{weeks} weeks in</span>
       <Track value={shareLabel} bands={PARTITION_BANDS} at={grade.partitionAt} active={grade.partition} />
       <Track
         value={`${grade.lbsPerWeek.toFixed(1)} lb/wk`}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bulkGrade, paceOf, partitionOf, verdictOf, MIN_GRADE_DAYS } from './bulkGrade'
+import { bulkGrade, paceOf, partitionOf, MIN_GRADE_DAYS } from './bulkGrade'
 import type { MassPoint } from './massSplit'
 
 const point = (date: string, weight: number, muscleGain: number, fatGain: number): MassPoint => ({
@@ -47,30 +47,8 @@ describe('paceOf', () => {
   })
 })
 
-describe('verdictOf', () => {
-  it('calls it dirty on either a fat-heavy split or a reckless pace', () => {
-    expect(verdictOf('dirty', 'steady', 5, 2)).toBe('dirty bulk')
-    expect(verdictOf('lean', 'too fast', 5, 4)).toBe('dirty bulk')
-  })
-
-  it('warns when either reading is drifting', () => {
-    expect(verdictOf('loose', 'steady', 5, 3)).toBe('leaning dirty')
-    expect(verdictOf('clean', 'fast', 5, 3.5)).toBe('leaning dirty')
-  })
-
-  it('is a clean bulk when both are in band', () => {
-    expect(verdictOf('clean', 'steady', 5, 3.5)).toBe('clean bulk')
-    expect(verdictOf('lean', 'slow', 2, 1.8)).toBe('clean bulk')
-  })
-
-  it('names a recomp, and says when nothing has gone on', () => {
-    expect(verdictOf(null, 'slow', 0, 2)).toBe('recomp')
-    expect(verdictOf(null, 'slow', -1, 0)).toBe('not gaining')
-  })
-})
-
 describe('bulkGrade', () => {
-  it('has no verdict inside the first two weeks', () => {
+  it('has no reading inside the first two weeks', () => {
     const g = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-01-10', 181, 0.8, 0.2)])
     expect(g).toEqual({ ready: false, days: 9 })
     expect(MIN_GRADE_DAYS).toBe(14)
@@ -86,7 +64,6 @@ describe('bulkGrade', () => {
     expect(g.lbsPerWeek).toBeCloseTo(0.7)
     expect(g.pctPerWeek).toBeCloseTo(0.39)
     expect(g.pace).toBe('steady')
-    expect(g.verdict).toBe('clean bulk')
   })
 
   it('pins a recomp to the lean end instead of running off the track', () => {
@@ -95,13 +72,13 @@ describe('bulkGrade', () => {
     expect(g.share).toBe(2)
     expect(g.partition).toBe('lean')
     expect(g.partitionAt).toBe(0)
-    expect(g.verdict).toBe('clean bulk')
   })
 
-  it('calls a stall with the fat down a recomp and one with nothing moving not gaining', () => {
-    const recomp = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-03-01', 180, 2, -2)])
-    const still = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-03-01', 180, 0.1, -0.1)])
-    expect(recomp.ready && recomp.verdict).toBe('recomp')
-    expect(still.ready && still.verdict).toBe('not gaining')
+  it('has no share to place when nothing has gone on', () => {
+    const still = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-03-01', 180, 0, 0)])
+    if (!still.ready) throw new Error('not ready')
+    expect(still.share).toBeNull()
+    expect(still.partition).toBeNull()
+    expect(still.pace).toBe('slow')
   })
 })
