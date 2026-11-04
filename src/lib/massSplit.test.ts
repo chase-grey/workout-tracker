@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bodyFatOn, fmtGain, gainRatioLabel, massPoints, MAX_READING_GAP_DAYS } from './massSplit'
+import { bodyFatOn, fmtGain, gainRatioLabel, massPoints, massTrend, MAX_READING_GAP_DAYS, SEAM_ERROR_SE } from './massSplit'
 
 describe('bodyFatOn', () => {
   const readings = [
@@ -134,6 +134,95 @@ describe('massPoints', () => {
     )
     expect(out.map((p) => p.date)).toEqual(['2026-09-28', '2026-10-12'])
     expect(out[0].muscleGain).toBe(0)
+  })
+})
+
+describe('massTrend', () => {
+  // 2026-01-05 is a Monday. `day(n)` is n days on from it.
+  const day = (n: number): string => {
+    const d = new Date(Date.UTC(2026, 0, 5 + n))
+    return d.toISOString().slice(0, 10)
+  }
+  /** A weigh-in every morning for `days`, climbing `perDay` from 180. */
+  const mornings = (days: number, perDay: number, wobble = (_: number) => 0) =>
+    Array.from({ length: days }, (_, i) => ({ date: day(i), value: 180 + perDay * i + wobble(i) }))
+  /** A body-fat reading every `every` days across `days`, `pct` plus whatever `wobble` says. */
+  const readings = (days: number, every: number, pct: number, wobble = (_: number) => 0) =>
+    Array.from({ length: Math.ceil(days / every) }, (_, i) => ({ date: day(i * every), value: pct + wobble(i) }))
+
+  it('reads the bands off straight lines, with no doubt when the data is a line', () => {
+    // 0.1 lb a day at a steady 20 % fat: each pound is 0.2 fat and 0.8 lean.
+    const t = massTrend(mornings(28, 0.1), readings(28, 7, 20))
+    expect(t).not.toBeNull()
+    if (!t) return
+    expect(t.points.map((p) => p.date)).toEqual([day(0), day(7), day(14), day(21)])
+    expect(t.days).toBe(21)
+    expect(t.weighIns).toBe(28)
+    expect(t.readings).toBe(4)
+    // Each week is read at the middle of its mornings, three weeks apart first to last.
+    expect(t.startWeight).toBeCloseTo(180.3, 1)
+    expect(t.weightPerWeek).toBeCloseTo(0.7)
+    expect(t.fatPerWeek).toBeCloseTo(0.14, 1)
+    expect(t.leanPerWeek).toBeCloseTo(0.56, 1)
+    expect(t.fatPerWeekSE).toBeCloseTo(0)
+    const last = t.points[3]
+    expect(last.muscleGain).toBeCloseTo(1.7, 1)
+    expect(last.fatGain).toBeCloseTo(0.4, 1)
+    expect(last.seamError).toBe(0)
+    // The weeks' own means sit on the lines, give or take the tenth they are rounded to.
+    for (const p of t.points) {
+      expect(Math.abs(p.weekTotalGain - (p.muscleGain + p.fatGain))).toBeLessThanOrEqual(0.15)
+      expect(Math.abs(p.weekMuscleGain - p.muscleGain)).toBeLessThanOrEqual(0.15)
+    }
+  })
+
+  it('widens the give-or-take on the seam with the span when the readings scatter', () => {
+    const wobble = (i: number) => (i % 2 === 0 ? 0.4 : -0.4)
+    const t = massTrend(mornings(42, 0.1), readings(42, 2, 20, wobble))
+    if (!t) throw new Error('no trend')
+    expect(t.points[0].seamError).toBe(0)
+    for (let i = 1; i < t.points.length; i++) {
+      expect(t.points[i].seamError).toBeGreaterThan(t.points[i - 1].seamError)
+    }
+    expect(t.fatPerWeekSE).toBeGreaterThan(0)
+    // The haze is SEAM_ERROR_SE errors wide, grown over the days since the start.
+    const last = t.points[t.points.length - 1]
+    const weeksAcross = (t.points.length - 1) * 1
+    expect(last.seamError).toBeCloseTo(SEAM_ERROR_SE * t.fatPerWeekSE * weeksAcross, 0)
+    expect(SEAM_ERROR_SE).toBe(2)
+  })
+
+  it('is surer of the seam the more readings it has', () => {
+    const wobble = (i: number) => (i % 2 === 0 ? 0.4 : -0.4)
+    const sparse = massTrend(mornings(42, 0.1), readings(42, 7, 20, wobble))
+    const dense = massTrend(mornings(42, 0.1), readings(42, 1, 20, wobble))
+    if (!sparse || !dense) throw new Error('no trend')
+    expect(dense.fatPerWeekSE).toBeLessThan(sparse.fatPerWeekSE)
+  })
+
+  it('keeps the weeks\' own means as dots that stray from the lines', () => {
+    const t = massTrend(mornings(28, 0.1, (i) => (i === 10 ? 3 : 0)), readings(28, 7, 20))
+    if (!t) throw new Error('no trend')
+    // The week with the heavy morning sits above the line; the trend barely moves.
+    const heavy = t.points[1]
+    expect(heavy.weekTotalGain).toBeGreaterThan(heavy.muscleGain + heavy.fatGain + 0.2)
+    expect(t.weightPerWeek).toBeCloseTo(0.7, 0)
+  })
+
+  it('reads rising body fat at a steady weight as fat on and lean off', () => {
+    const t = massTrend(mornings(28, 0), readings(28, 7, 20, (i) => i * 0.5))
+    if (!t) throw new Error('no trend')
+    const last = t.points[t.points.length - 1]
+    expect(last.fatGain).toBeGreaterThan(0)
+    expect(last.muscleGain).toBeCloseTo(-last.fatGain, 1)
+    expect(t.weightPerWeek).toBeCloseTo(0)
+  })
+
+  it('has no trend inside one week, or on fewer than three of either', () => {
+    expect(massTrend(mornings(6, 0.1), readings(6, 2, 20))).toBeNull()
+    expect(massTrend(mornings(28, 0.1), readings(28, 14, 20))).toBeNull()
+    expect(massTrend([{ date: day(0), value: 180 }, { date: day(8), value: 181 }], readings(14, 3, 20))).toBeNull()
+    expect(massTrend([], [])).toBeNull()
   })
 })
 

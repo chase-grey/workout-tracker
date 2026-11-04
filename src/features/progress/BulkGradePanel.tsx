@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { bulkGrade, PACE_BANDS, PARTITION_BANDS } from '../../lib/bulkGrade'
-import type { MassPoint } from '../../lib/massSplit'
+import type { MassTrend } from '../../lib/massSplit'
 
 /**
  * One reading on a four-band track: the band it falls in lit in the accent, a
@@ -51,14 +51,15 @@ function Track({
 /**
  * How the bulk is going, judged on the two things the trials measure (see
  * lib/bulkGrade): how much of the weight gained is muscle, and how fast it is
- * going on. Two tracks, each with the marker sat where this bulk falls, so a
+ * going on, both read off the trend lines the chart above draws. Two tracks,
+ * each with the marker sat where this bulk falls, so a
  * reading drifting toward the dirty end is visible weeks before it gets there.
  * No headline over them: a one-word call rolled up from two readings only ever
  * argued with the track it was summarising (see the note in lib/bulkGrade).
  */
-export function BulkGradePanel({ points }: { points: MassPoint[] }) {
-  const grade = useMemo(() => bulkGrade(points), [points])
-  if (points.length === 0) return null
+export function BulkGradePanel({ trend }: { trend: MassTrend | null }) {
+  const grade = useMemo(() => bulkGrade(trend), [trend])
+  if (!trend) return null
 
   if (!grade.ready) {
     return (

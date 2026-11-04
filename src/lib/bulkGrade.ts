@@ -1,5 +1,4 @@
-import { daysBetween } from './dates'
-import type { MassPoint } from './massSplit'
+import type { MassTrend } from './massSplit'
 
 /**
  * How clean a bulk has been, judged on the two things the research actually
@@ -22,10 +21,12 @@ import type { MassPoint } from './massSplit'
  * mostly fat; past very aggressive, Garthe's fast group gained five times the
  * fat of the slow one for a small, non-significant edge in lean mass.
  *
- * Both are read over the whole span the chart shows, from the first week with
- * a body-fat reading to the newest. A couple of weeks is too short to grade — a
- * pound of water either way swamps the signal — so under {@link MIN_GRADE_DAYS}
- * there is no reading yet.
+ * Both are read off the trend lines the chart draws (see massSplit.massTrend),
+ * over the whole span from the first week with a body-fat reading to the
+ * newest: pace is the weight line's slope, and share is the lean line's slope
+ * over it. A couple of weeks is too short to grade — a pound of water either
+ * way swamps the signal — so under {@link MIN_GRADE_DAYS} there is no reading
+ * yet.
  *
  * There is deliberately no one-word verdict rolled up from the two. An earlier
  * cut printed one — "leaning dirty" over a track lit at "clean" whenever the
@@ -98,23 +99,18 @@ export function paceOf(pctPerWeek: number): { band: PaceBand; at: number } {
   return { band: 'too fast', at: 1 }
 }
 
-export function bulkGrade(points: MassPoint[]): BulkGrade {
-  const first = points[0]
-  const last = points[points.length - 1]
-  const days = first && last ? daysBetween(first.date, last.date) : 0
-  if (!first || !last || days < MIN_GRADE_DAYS) return { ready: false, days }
+export function bulkGrade(trend: MassTrend | null): BulkGrade {
+  if (!trend) return { ready: false, days: 0 }
+  const { days } = trend
+  if (days < MIN_GRADE_DAYS) return { ready: false, days }
 
-  const muscle = last.muscleGain
-  const fat = last.fatGain
-  const gained = muscle + fat
-  const weeks = days / 7
-  const lbsPerWeek = gained / weeks
-  const pctPerWeek = (100 * lbsPerWeek) / first.weight
+  const lbsPerWeek = trend.weightPerWeek
+  const pctPerWeek = (100 * lbsPerWeek) / trend.startWeight
   const { band: pace, at: paceAt } = paceOf(Math.max(0, pctPerWeek))
 
   // On a recomp — fat down, muscle up — muscle is more than all of the gain, and
   // the marker pins to the lean end rather than running off the track.
-  const share = gained > 0 ? muscle / gained : null
+  const share = lbsPerWeek > 0 ? trend.leanPerWeek / lbsPerWeek : null
   const split = share != null ? partitionOf(Math.min(1, share)) : null
 
   return {

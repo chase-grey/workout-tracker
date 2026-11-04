@@ -1,16 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import { bulkGrade, paceOf, partitionOf, MIN_GRADE_DAYS } from './bulkGrade'
-import type { MassPoint } from './massSplit'
+import type { MassTrend } from './massSplit'
 
-const point = (date: string, weight: number, muscleGain: number, fatGain: number): MassPoint => ({
-  date,
-  weighIns: 7,
-  weight,
-  bodyFat: 15,
-  lean: weight * 0.85,
-  fat: weight * 0.15,
-  muscleGain,
-  fatGain,
+/** A trend over `days` that put on `lbsPerWeek`, `leanShare` of it lean, from 180 lbs. */
+const trend = (days: number, lbsPerWeek: number, leanShare: number): MassTrend => ({
+  points: [],
+  days,
+  startWeight: 180,
+  weightPerWeek: lbsPerWeek,
+  leanPerWeek: lbsPerWeek * leanShare,
+  fatPerWeek: lbsPerWeek * (1 - leanShare),
+  fatPerWeekSE: 0.1,
+  weighIns: 30,
+  readings: 10,
 })
 
 describe('partitionOf', () => {
@@ -49,14 +51,14 @@ describe('paceOf', () => {
 })
 
 describe('bulkGrade', () => {
-  it('has no reading inside the first two weeks', () => {
-    const g = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-01-10', 181, 0.8, 0.2)])
-    expect(g).toEqual({ ready: false, days: 9 })
+  it('has no reading without a trend, or inside the first two weeks', () => {
+    expect(bulkGrade(null)).toEqual({ ready: false, days: 0 })
+    expect(bulkGrade(trend(9, 0.7, 0.8))).toEqual({ ready: false, days: 9 })
     expect(MIN_GRADE_DAYS).toBe(14)
   })
 
-  it('reads share and pace over the whole span', () => {
-    const g = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-03-12', 187, 5, 2)])
+  it('reads share and pace off the trend slopes', () => {
+    const g = bulkGrade(trend(70, 0.7, 5 / 7))
     expect(g.ready).toBe(true)
     if (!g.ready) return
     expect(g.days).toBe(70)
@@ -68,7 +70,7 @@ describe('bulkGrade', () => {
   })
 
   it('pins a recomp to the lean end instead of running off the track', () => {
-    const g = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-03-01', 182, 4, -2)])
+    const g = bulkGrade(trend(60, 0.25, 2))
     if (!g.ready) throw new Error('not ready')
     expect(g.share).toBe(2)
     expect(g.partition).toBe('lean')
@@ -76,10 +78,18 @@ describe('bulkGrade', () => {
   })
 
   it('has no share to place when nothing has gone on', () => {
-    const still = bulkGrade([point('2026-01-01', 180, 0, 0), point('2026-03-01', 180, 0, 0)])
+    const still = bulkGrade(trend(60, 0, 0))
     if (!still.ready) throw new Error('not ready')
     expect(still.share).toBeNull()
     expect(still.partition).toBeNull()
     expect(still.pace).toBe('slow')
+  })
+
+  it('has no share on a cut either, and never a pace below standing still', () => {
+    const cut = bulkGrade(trend(60, -0.5, 0.2))
+    if (!cut.ready) throw new Error('not ready')
+    expect(cut.share).toBeNull()
+    expect(cut.pace).toBe('slow')
+    expect(cut.paceAt).toBe(0)
   })
 })

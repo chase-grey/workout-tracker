@@ -40,7 +40,7 @@ import { BulkGradePanel } from './BulkGradePanel'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
 import { bodyFatSeries, waistSeries, latestMeasurement } from '../../lib/bodyComp'
-import { massPoints } from '../../lib/massSplit'
+import { massTrend } from '../../lib/massSplit'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
 import {
   buildReview,
@@ -239,9 +239,10 @@ export function ProgressTab() {
     [measurements, bodyMetric],
   )
   // The weight put on since body fat was first read, split into muscle and fat
-  // by the readings since — see massPoints.
+  // by trends through the weigh-ins and the readings since — see massTrend.
+  // Null until there are two weeks and three of each to fit a line through.
   const massSeries = useMemo(
-    () => massPoints(bodyWeightPoints(bodyWeights), bodyFatSeries(measurements)),
+    () => massTrend(bodyWeightPoints(bodyWeights), bodyFatSeries(measurements)),
     [bodyWeights, measurements],
   )
 
@@ -325,8 +326,11 @@ export function ProgressTab() {
       <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
       {bodyMetric === 'mass' ? (
         <>
-          <MassSplitChart points={massSeries} empty="log body fat % to split the weight" />
-          <BulkGradePanel points={massSeries} />
+          <MassSplitChart
+            trend={massSeries}
+            empty={latestBf == null ? 'log body fat % to split the weight' : 'not enough readings yet'}
+          />
+          <BulkGradePanel trend={massSeries} />
         </>
       ) : (
         <MetricChart
