@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -931,7 +931,13 @@ function SixPackRow({
   )
 }
 
-export function GoalsPanel() {
+/**
+ * `underBodyWeight` is drawn directly beneath the body weight block, wherever
+ * that block has floated to in the panel's order — the place for the body
+ * composition charts, which read the same weigh-ins the weight chart does and
+ * belong under it rather than a screen further down.
+ */
+export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode }) {
   const {
     workouts,
     bodyWeights,
@@ -1232,7 +1238,16 @@ export function GoalsPanel() {
   // block carries it, and the block moves as a unit.
   const blockOf = (g: GoalSpec): { key: string; goals: GoalSpec[]; node: React.ReactNode } | null => {
     if (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) {
-      return { key: 'bodyweight', goals: weightGoals, node: <Fragment key="bodyweight">{bodyWeightBlock}</Fragment> }
+      return {
+        key: 'bodyweight',
+        goals: weightGoals,
+        node: (
+          <Fragment key="bodyweight">
+            {bodyWeightBlock}
+            {underBodyWeight}
+          </Fragment>
+        ),
+      }
     }
     const lift = liftLadders.find((l) => l.rungs.some((r) => r.id === g.id))
     if (lift) return { key: `lift:${lift.lift}`, goals: lift.rungs, node: lift.node }

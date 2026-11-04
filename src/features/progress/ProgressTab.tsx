@@ -190,9 +190,9 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
 type BodyMetric = 'bf' | 'waist' | 'mass'
 
 const BODY_METRICS: { label: string; value: BodyMetric }[] = [
+  { label: 'muscle vs fat', value: 'mass' },
   { label: 'body fat %', value: 'bf' },
   { label: 'waist', value: 'waist' },
-  { label: 'muscle vs fat', value: 'mass' },
 ]
 
 export function ProgressTab() {
@@ -200,7 +200,7 @@ export function ProgressTab() {
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [showMeasure, setShowMeasure] = useState(false)
-  const [bodyMetric, setBodyMetric] = useState<BodyMetric>('bf')
+  const [bodyMetric, setBodyMetric] = useState<BodyMetric>('mass')
   const [recap, setRecap] = useState<Review | null>(null)
 
   // The recap buttons are a treat, not clutter: show "Month in review" only on
@@ -308,6 +308,46 @@ export function ProgressTab() {
 
   const unit = metric === 'volume' ? 'vol' : metric === 'reps' ? 'reps' : 'lbs'
 
+  // The body-composition block: the split of the weight put on, body fat and
+  // waist, under one header with the measurement log beside it. Drawn by the
+  // goals panel directly beneath the body weight chart, which plots the same
+  // weigh-ins these read off — see GoalsPanel's underBodyWeight.
+  const bodySection = (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h4 className="px-1 font-semibold">
+          body fat
+          {latestBf != null
+            ? ` · ${latestBf}%`
+            : lastMeasure?.waistIn != null
+              ? ` · ${lastMeasure.waistIn}" waist`
+              : ''}
+        </h4>
+        <button
+          onClick={() => setShowMeasure(true)}
+          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
+        >
+          log measurement
+        </button>
+      </div>
+      <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
+      {bodyMetric === 'mass' ? (
+        <>
+          <MassSplitChart points={massSeries} empty="log body fat % to split the weight" />
+          <BulkGradePanel points={massSeries} />
+        </>
+      ) : (
+        <MetricChart
+          data={bodySeries}
+          unit={bodyMetric === 'bf' ? '%' : 'in'}
+          label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
+          calories={calorieSurplus}
+          goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
+        />
+      )}
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-4 pb-4">
       <h2 className="text-xl font-bold">progress</h2>
@@ -333,7 +373,7 @@ export function ProgressTab() {
         </div>
       )}
 
-      <GoalsPanel />
+      <GoalsPanel underBodyWeight={bodySection} />
 
       <MuscleAvatar />
 
@@ -344,38 +384,6 @@ export function ProgressTab() {
         <BenchChart data={benchSeries} unit={unit} />
       ) : (
         <MetricChart data={series} unit={unit} label={exerciseLabel} offSlot={offSeries} />
-      )}
-
-      <div className="mt-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold tracking-wider text-neutral-500">
-          body fat
-          {latestBf != null
-            ? ` · ${latestBf}%`
-            : lastMeasure?.waistIn != null
-              ? ` · ${lastMeasure.waistIn}" waist`
-              : ''}
-        </h3>
-        <button
-          onClick={() => setShowMeasure(true)}
-          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
-        >
-          log measurement
-        </button>
-      </div>
-      <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
-      {bodyMetric === 'mass' ? (
-        <>
-          <MassSplitChart points={massSeries} empty="log body fat % to split the weight" />
-          <BulkGradePanel points={massSeries} />
-        </>
-      ) : (
-        <MetricChart
-          data={bodySeries}
-          unit={bodyMetric === 'bf' ? '%' : 'in'}
-          label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
-          calories={calorieSurplus}
-          goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
-        />
       )}
 
       <TimeSpent />
