@@ -39,7 +39,6 @@ import { MassSplitChart } from './MassSplitChart'
 import { BulkGradePanel } from './BulkGradePanel'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
-import { MeasurementLogSheet } from '../today/MeasurementLogSheet'
 import { bodyFatSeries, waistSeries, latestMeasurement } from '../../lib/bodyComp'
 import { massPoints } from '../../lib/massSplit'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
@@ -199,7 +198,6 @@ export function ProgressTab() {
   const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries } = useData()
   const [exercise, setExercise] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
-  const [showMeasure, setShowMeasure] = useState(false)
   const [bodyMetric, setBodyMetric] = useState<BodyMetric>('mass')
   const [recap, setRecap] = useState<Review | null>(null)
 
@@ -309,12 +307,12 @@ export function ProgressTab() {
   const unit = metric === 'volume' ? 'vol' : metric === 'reps' ? 'reps' : 'lbs'
 
   // The body-composition block: the split of the weight put on, body fat and
-  // waist, under one header with the measurement log beside it. Drawn by the
-  // goals panel directly beneath the body weight chart, which plots the same
-  // weigh-ins these read off — see GoalsPanel's underBodyWeight.
+  // waist, under one header. Drawn by the goals panel directly beneath the body
+  // weight chart, which plots the same weigh-ins these read off — see
+  // GoalsPanel's underBodyWeight.
   const bodySection = (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+      <div>
         <h4 className="px-1 font-semibold">
           body fat
           {latestBf != null
@@ -323,12 +321,6 @@ export function ProgressTab() {
               ? ` · ${lastMeasure.waistIn}" waist`
               : ''}
         </h4>
-        <button
-          onClick={() => setShowMeasure(true)}
-          className="min-h-[36px] rounded-lg bg-surface px-3 text-sm font-medium active:bg-surface-2"
-        >
-          log measurement
-        </button>
       </div>
       <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
       {bodyMetric === 'mass' ? (
@@ -388,7 +380,6 @@ export function ProgressTab() {
 
       <TimeSpent />
 
-      {showMeasure && <MeasurementLogSheet onClose={() => setShowMeasure(false)} />}
       {recap && <ReviewOverlay review={recap} onClose={() => setRecap(null)} />}
     </div>
   )
