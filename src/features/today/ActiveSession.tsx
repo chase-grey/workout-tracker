@@ -1093,10 +1093,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
       <header className="flex items-start justify-between gap-2">
         {/* The controls beside it are 44px tap targets with their glyphs centred, so
-            the name takes the same band: its first line lands on their centreline
-            instead of riding above it, and a name long enough to wrap still starts
-            level with them. */}
-        <h2 className="min-w-0 py-1 text-3xl font-bold leading-9">{roundMode ? planned.group : planned.name}</h2>
+            the name takes the same band: at the session's type size (see
+            .session-type) a tight line box comes out a hair over 44px, so its first
+            line lands on their centreline instead of riding above it, and a name
+            long enough to wrap still starts level with them. */}
+        <h2 className="min-w-0 text-3xl font-bold leading-tight">{roundMode ? planned.group : planned.name}</h2>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
           {/* Puts the set in the context of the whole history for the lift. A round
@@ -1139,8 +1140,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   return (
     // min-h-full: the tap target is this element, so it has to reach the bottom of
     // the screen rather than stop where the set card does (the stretch routine's
-    // root fills the screen the same way).
-    <div ref={fadeRef} className="flex min-h-full flex-col gap-3 pb-6" {...screenTap}>
+    // root fills the screen the same way). session-type: every piece of text in
+    // here, the rest and pause screens over it included, is read from across the
+    // gym floor, so the whole tree takes the larger type scale (see index.css).
+    <div ref={fadeRef} className="session-type flex min-h-full flex-col gap-3 pb-6" {...screenTap}>
       {topBar}
 
       {/* The card is where a tap reaches for a field, so it doesn't advance the

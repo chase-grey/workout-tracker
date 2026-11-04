@@ -967,8 +967,11 @@ export function StretchSession({
       />
 
       <header className="flex items-start justify-between gap-2">
-        <div className="min-w-0 py-1">
-          <h2 className="text-3xl font-bold leading-9">{stepTitle(step)}</h2>
+        {/* A tight line box on the session's type size (see .session-type) comes
+            out a hair over the 44px controls beside it, so the title's first line
+            sits on their centreline. */}
+        <div className="min-w-0">
+          <h2 className="text-3xl font-bold leading-tight">{stepTitle(step)}</h2>
           {/* The move the position belongs to, which set of it, and for the core
               block the rep range — which leg and which of the calf stretch's three
               shapes are up in the title, where they can't be missed mid-stretch. */}
@@ -987,7 +990,10 @@ export function StretchSession({
   )
 
   return (
-    <div ref={fadeRef} className="stretch-session flex min-h-full flex-col gap-3" {...screenTap}>
+    // session-type: every piece of text in here — the hold's title, the rep count,
+    // the rest and settle-in screens over it — is read from the far end of a mat,
+    // so the whole tree takes the larger type scale (see index.css).
+    <div ref={fadeRef} className="session-type stretch-session flex min-h-full flex-col gap-3" {...screenTap}>
       {topBar}
 
       {!started && photos == null && (

@@ -145,6 +145,35 @@ html {
   }
 }
 
+/* A session is read from across the room: the phone is propped on the rack or
+   the floor at the far end of a mat, and the name of the lift, the set coming,
+   the rest clock and the rep count all have to carry to where you are standing.
+   Tailwind's text-* utilities take their size from these variables (and their
+   line-height from unitless ratios of them), so overriding the scale on the two
+   session roots steps every piece of type inside them up — the overlays that
+   cover a set included, since rest, the settle-in count and the pause curtain
+   are all children of the same root — while rem spacing, tap targets and the
+   shapes stay exactly where they were. The root font-size is left alone on
+   purpose: taking it up would scale the padding and gaps along with the text,
+   and a session screen has no room to spare for bigger gutters. The biggest
+   steps grow the least, so the rest clock still fits a narrow phone in
+   overtime ("+12:34" in the mono face). */
+.session-type {
+  --text-xs: 1rem;
+  --text-sm: 1.125rem;
+  --text-base: 1.25rem;
+  --text-lg: 1.5rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.125rem;
+  --text-3xl: 2.5rem;
+  --text-4xl: 3.25rem;
+  --text-5xl: 4rem;
+  --text-6xl: 5rem;
+  --text-7xl: 5.5rem;
+  --text-8xl: 7.5rem;
+  font-size: var(--text-base);
+}
+
 /* Stretch guides use the space left by the real header and controls. Container
    units fit both axes, including landscape and the final set's finish button. */
 .stretch-session {
