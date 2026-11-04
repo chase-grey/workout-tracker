@@ -27,7 +27,9 @@ a Google Apps Script backend. Deployed as a static site on GitHub Pages.
 
 **Today** — start a push, pull, or full-body session (push alternates an A/B
 variant), or one of the two stretch routines (side split / head to toe), whichever
-was done last dimmed so the other reads as up next. Guided sessions advance on a
+was done last dimmed so the next reads as up next. Every lift day opens in a short
+form sized to finish inside an hour; the checklist's "do the full workout" opens it
+up to the whole day when the time is there. Guided sessions advance on a
 tap anywhere: rest timer with animated shapes, get-into-position counts, paced-rep
 and hold timers, pause curtain, per-set grading, a recap when you finish. Plus this
 week at a glance, streak with freeze credits, body weight, the daily habits

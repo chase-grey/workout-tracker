@@ -57,12 +57,13 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     setTimeout(() => setFlash(null), 1800)
   }
 
-  // If the last training day was push or pull, dim that day's button so the app
-  // nudges you toward the other half of the split. A full-body day trains both, so
-  // it dims neither; stretch + core isn't training and never changes this. Dimming
+  // Dim the button of whichever lift day was trained last, so the app nudges you
+  // on round the three — push, pull + legs and full body each take a turn in the
+  // week now that every day has a form that fits inside an hour (see
+  // SessionLength). Stretch + core isn't training and never changes this. Dimming
   // is only a hint — the button still starts the session.
   const lastDay = lastTrainingSession(workouts)?.dayType ?? null
-  const dimmedDay: DayType | null = lastDay === 'push' || lastDay === 'pull' ? lastDay : null
+  const dimmedDay: DayType | null = lastDay
 
   // The two stretch routines would dim the same way and for the same reason —
   // whichever was done last steps back so the other reads as up next — but for
@@ -84,7 +85,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
 
   // The alternating lifts in the left column. Full body is placed rather than
   // ordered — it sits at bottom right whatever Settings says — so the order
-  // chosen there applies to the two days that alternate.
+  // chosen there applies to the two days that alternate. A full-body day just
+  // done dims its own button and leaves this pair's order alone.
   const liftDays = nextUpFirst(
     dayOrder(plan).filter((t) => t !== 'fullbody'),
     dimmedDay,
@@ -171,7 +173,10 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         <button onClick={onStartAbs} className={`${sessionButton} ${absRemaining === 0 ? 'opacity-50' : ''}`}>
           core
         </button>
-        <button onClick={() => onStart('fullbody')} className={sessionButton}>
+        <button
+          onClick={() => onStart('fullbody')}
+          className={`${sessionButton} ${dimmedDay === 'fullbody' ? 'opacity-50' : ''}`}
+        >
           {plan.fullbody.label}
         </button>
       </div>

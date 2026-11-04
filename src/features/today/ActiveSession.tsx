@@ -12,6 +12,7 @@ import type { SetLog, WorkoutSession } from '../../types'
 import { useData, type SessionDurationInput } from '../../store/DataContext'
 import {
   repRangeLabel,
+  shortExercises,
   sideOrderedExercises,
   variantExercises,
   withCircuitRest,
@@ -246,15 +247,39 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
   const day = plan[session.dayType]
   // The day as this session is actually performing it: the A/B variant's set
-  // counts and press order, and which arm leads the one-arm-at-a-time work —
-  // both pinned when the session started.
+  // counts and press order, how much of the day it's running (the short form
+  // until the checklist opens it up — see SessionLength), and which arm leads the
+  // one-arm-at-a-time work — all pinned when the session started.
   const exercises = useMemo(
     () => [
-      ...sideOrderedExercises(variantExercises(day, session.variant ?? null), session.startSide),
+      ...sideOrderedExercises(
+        shortExercises(variantExercises(day, session.variant ?? null), session.length),
+        session.startSide,
+      ),
       ...(session.adHocExercises ?? []),
     ],
-    [day, session.variant, session.startSide, session.adHocExercises],
+    [day, session.variant, session.length, session.startSide, session.adHocExercises],
   )
+
+  // Open the short session up to the whole day (see lib/sessionLength). The set on
+  // screen is held by key across the reshaped step list, the way a skip holds it:
+  // the full day can put sets and movements ahead of it, so its bare index would
+  // land somewhere else.
+  //
+  // Resting off what the short day called a movement's last set, when the full
+  // day has more of them, the rest leads into that movement's next set rather
+  // than on to the next movement — the same re-aim a set added mid-rest gets (see
+  // addSet). The rest itself runs on: it's a real rest whichever set it leads to.
+  const expandToFullDay = () => {
+    let held = step.stepKey
+    if (rest?.isLastSetOfExercise) {
+      const fullCount = variantExercises(day, session.variant ?? null).find((e) => e.key === rest.exKey)?.sets ?? 0
+      const have = logFor(rest.exKey)?.sets.length ?? 0
+      if (fullCount > have) held = `${rest.exKey}:${have}`
+    }
+    controls.expandToFull()
+    setPendingStepKey(held)
+  }
 
   // The exercises actually being performed. Everything the workout is measured
   // against downstream — the step flow, the set count, the time left — is built
@@ -1429,12 +1454,26 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               readRestSec={(now) => tally.current.takenSec + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
               left={sumTiming(remainingRows)}
             />
-            <button
-              onClick={() => setShowAddExercise(true)}
-              className="mb-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
-            >
-              + add exercise
-            </button>
+            {/* A short session's way up to the whole day — there when the time
+                turns out to be there, gone once it's been taken. Beside the add
+                button rather than in the kebab: it's a decision about what today's
+                workout is, made while reading what's left of it. */}
+            <div className="mb-3 flex gap-2">
+              {session.length === 'short' && (
+                <button
+                  onClick={expandToFullDay}
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-surface-2 px-3 font-semibold active:opacity-80"
+                >
+                  do the full workout
+                </button>
+              )}
+              <button
+                onClick={() => setShowAddExercise(true)}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
+              >
+                + add exercise
+              </button>
+            </div>
             <div className="flex flex-col gap-1">
               {exercises.map((e) => {
                 const isSkipped = skipped.has(e.key)

@@ -20,9 +20,22 @@ import type { DayType, Side } from '../types'
  */
 export type VariantKey = 'A' | 'B'
 
+/**
+ * How much of a day a session runs. Every lift day ships in two lengths: the
+ * SHORT form it opens in — built to finish inside an hour at the pace the rests
+ * are actually taken, not the pace they're prescribed — and the FULL form, which
+ * is the whole day as written. A session starts short and can be opened up to the
+ * full day from the checklist mid-workout, when the time turns out to be there
+ * (see lib/sessionLength.expandToFull). Nothing is ever taken away by the switch:
+ * full only adds sets and movements, so a set already logged stays logged.
+ */
+export type SessionLength = 'short' | 'full'
+
 /** Per-variant overrides for one exercise: its set count and/or its position. */
 export type VariantOverride = {
   sets?: number
+  /** The set count in the day's SHORT form under this variant (see PlannedExercise.shortSets). */
+  shortSets?: number
   /**
    * Trade places with this exercise in this variant. Relative rather than an
    * absolute index, so a user who reorders the day can't end up with the swap
@@ -179,6 +192,19 @@ export type PlannedExercise = {
    * same arm isn't always the one working second.
    */
   side?: Side
+  /**
+   * The set count in the day's SHORT form (see {@link SessionLength}). Absent
+   * means the short day trains it exactly as the full one does; `0` leaves it out
+   * of the short day altogether, so it's one of the movements that arrive when the
+   * session is opened up to the full day. Read against the full count rather than
+   * trusted on its own — a day edited down to two sets in Settings doesn't run
+   * three in its short form (see {@link shortExercises}).
+   *
+   * Program design rather than preference, like `byVariant`: a stored plan always
+   * takes it from the defaults (see mergeDayExercises), and a variant that trains
+   * the exercise at a different count carries its own in {@link VariantOverride}.
+   */
+  shortSets?: number
   /** Per-variant deltas; absent means the exercise is identical in both. */
   byVariant?: Partial<Record<VariantKey, VariantOverride>>
 }
@@ -281,7 +307,14 @@ export type Plan = Record<DayType, DayPlan>
 // to 20 seconds with a 90-second round rest, and the isolation work rests shorter.
 // 15: push + core's arm circuit runs a round at a time on one screen, with two
 // minutes after each round and no rest between its stations.
-export const PLAN_REVISION = 15
+// 16: every day gains a SHORT form built to finish inside an hour, and full body
+// is reworked as the third session of the week (see SessionLength). Push + core
+// is otherwise unchanged. Pull + legs opens with the incline sit-up instead of
+// the cable crunch, and its neck pair runs a round at a time with 45 seconds
+// after each round. Full body leads with the hanging raise, rests its three
+// compounds two minutes, runs its arm pair a round at a time, and ends with the
+// cable crunch.
+export const PLAN_REVISION = 16
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -396,6 +429,20 @@ export const SIDE_RAISE_SWITCH_SEC = 10
 export const SIDE_RAISE_ROUND_REST_SEC = 45
 
 /**
+ * The rest after a round of the neck pair — extension then flexion, back to back
+ * on one screen. Forty-five seconds: light loads and high reps, and each direction
+ * has already rested through the other's set.
+ */
+export const NECK_ROUND_REST_SEC = 45
+
+/**
+ * The rest after a round of full body's arm pair — a curl and a tricep extension,
+ * back to back on one screen. A minute, which is what each of them rested on its
+ * own before they were paired.
+ */
+export const FULLBODY_ARMS_ROUND_REST_SEC = 60
+
+/**
  * The load fields of every movement done on the cable pulldown machine — the
  * cable crunch, both tricep moves, and the one-arm lateral raise. Its stack is
  * numbered 1 to 15 rather than weighed, so a step up is one setting and 15 is the
@@ -425,17 +472,21 @@ export const DEFAULT_PLAN: Plan = {
     label: 'push + core',
     required: true,
     exercises: [
-      { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'abs' },
+      // The short day trains one ab movement, fresh, and leaves the other to pull +
+      // legs — three days a week each opening with a different ab move is more
+      // ab work, better rested, than two days opening with two.
+      { key: 'cable_crunch', name: 'cable crunch', sets: 4, shortSets: 3, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'abs' },
 
       // The day's second ab movement is loaded rather than reps-only: a plate held
       // at the chest gives the abs somewhere to progress once the reps are there,
-      // which a hanging raise capped at 20 doesn't. The raise isn't gone — it still
-      // runs on pull + legs and full body, so it's trained twice a week.
+      // which a hanging raise capped at 20 doesn't. The raise isn't gone — it
+      // still runs on full body. Full day only here: the short day's sit-ups are
+      // pull + legs's, where this is the ab move that opens the day.
       //
       // Named for the incline bench with the feet strapped in, which is where it's
       // actually done — and which is why the mat sit-up a stretch ends with is a
       // separate movement with a separate ladder (see MAT_SITUP_KEY).
-      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, shortSets: 0, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
 
       // Incline leads variant A (upper-chest emphasis is the aesthetic priority);
       // flat leads variant B. The non-primary press drops to 3 sets that day,
@@ -446,8 +497,12 @@ export const DEFAULT_PLAN: Plan = {
       // Both presses are dumbbell presses — there's no barbell bench to use — so
       // both log the pair's total and both end where the rack does, at a pair of
       // 50s. From there the reps are the ladder (see DUMBBELL_PAIR).
-      { key: 'incline_bench', name: 'incline bench press', sets: 4, repMin: 6, repMax: 10, restSec: 150, ...DUMBBELL_PAIR, group: 'chest', byVariant: { B: { sets: 3 } } },
-      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 8, repMax: 12, restSec: 120, ...DUMBBELL_PAIR, group: 'chest', byVariant: { B: { sets: 4, swapWith: 'incline_bench' } } },
+      //
+      // The short day keeps the lead press whole and cuts the second to two sets:
+      // the lead is where the goal is read and where the day's chest work is
+      // heaviest, and full body presses again later in the week.
+      { key: 'incline_bench', name: 'incline bench press', sets: 4, shortSets: 4, repMin: 6, repMax: 10, restSec: 150, ...DUMBBELL_PAIR, group: 'chest', byVariant: { B: { sets: 3, shortSets: 2 } } },
+      { key: 'flat_bench', name: 'flat bench press', sets: 3, shortSets: 2, repMin: 8, repMax: 12, restSec: 120, ...DUMBBELL_PAIR, group: 'chest', byVariant: { B: { sets: 4, shortSets: 4, swapWith: 'incline_bench' } } },
 
       // Overhead press follows the presses directly now that the fly is gone —
       // front delts already take heavy work from seven press sets above, so three
@@ -484,10 +539,13 @@ export const DEFAULT_PLAN: Plan = {
       // the rest the round used to spread over its two raises is taken in one go
       // after it — the same two minutes, without the walk back to the phone
       // between every move.
-      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
-      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, repMin: 12, repMax: 20, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
-      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
-      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, repMin: 12, repMax: 20, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
+      //
+      // Two rounds on the short day, which is what the block actually got on most
+      // of the long days anyway — the third round was the one that ran out of time.
+      { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'triceps' },
+      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: 60, ...CABLE_STACK, group: 'delts + triceps circuit', circuit: 'arms', circuitRoundRestSec: 120, roundScreen: true, sharedLoad: 'lateral' },
     ],
   },
   pull: {
@@ -495,7 +553,13 @@ export const DEFAULT_PLAN: Plan = {
     label: 'pull + legs',
     required: false,
     exercises: [
-      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 45, ...CABLE_STACK, group: 'abs' },
+      // The incline sit-up opens the day, fresh — the slot it was retired from at
+      // the END of the day (revision 12), where twenty sets of legs and pulling had
+      // already spent the trunk. The cable crunch it replaces here still opens
+      // push + core, and still closes the full-length full body, so every ab move
+      // leads exactly one day: the crunch on push, this on pull, the hanging raise
+      // on full body. Three sets whichever length the day runs.
+      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
 
       // The day's heavy leg movement. It's the leg press rather than a barbell
       // squat because there's no rack to squat in — the press is what's actually
@@ -503,11 +567,18 @@ export const DEFAULT_PLAN: Plan = {
       // being abandoned (see lib/liftRatios). The load steps in 10s: a sled moves
       // in bigger jumps than a bar, and 5 lbs on a press this strong is inside
       // the noise of how the pad was set.
-      { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
+      //
+      // Three sets on the short day rather than four: full body presses the sled
+      // again three days later, so the week still has more leg press in it than
+      // the long day alone ever delivered.
+      { key: 'leg_press', name: 'leg press', sets: 4, shortSets: 3, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
       // The leg press keeps its two minutes, as the pull-ups below do: those are the
       // sets the squat and pull-up goals are read from, and a short rest there costs
       // reps on exactly the numbers being chased. Everything isolated on this day
       // rests shorter, which is where the time a long day can spare actually was.
+      //
+      // The curl is the only hamstring work in the week, so the short day keeps all
+      // three sets of it.
       { key: 'hamstring_curl', name: 'hamstring curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'legs' },
 
       // A hold rather than a count of reps (see PlannedExercise.timed), trained one
@@ -525,8 +596,13 @@ export const DEFAULT_PLAN: Plan = {
       // Grouped as adductors rather than core: it's what the movement actually
       // trains, and it keeps a hold measured in seconds out of the aggregates that
       // sum their members as reps (see absExerciseKeys / legExerciseKeys).
-      { key: 'copenhagen_plank_l', name: 'copenhagen plank (left)', side: 'left', sets: 3, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
-      { key: 'copenhagen_plank_r', name: 'copenhagen plank (right)', side: 'right', sets: 3, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
+      //
+      // Full day only, with the sideways raise below. The two hip circuits are a
+      // quarter of an hour between them on the floor, and the logs say they were
+      // the first thing dropped when the long day ran out of time — the short day
+      // drops them deliberately instead, and they come back with the full day.
+      { key: 'copenhagen_plank_l', name: 'copenhagen plank (left)', side: 'left', sets: 3, shortSets: 0, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
+      { key: 'copenhagen_plank_r', name: 'copenhagen plank (right)', side: 'right', sets: 3, shortSets: 0, repMin: COPENHAGEN_HOLD_SEC, repMax: COPENHAGEN_HOLD_SEC, restSec: COPENHAGEN_ROUND_REST_SEC, timed: true, bodyweight: true, repsOnly: true, group: 'adductors', circuit: 'copenhagen', circuitRestSec: COPENHAGEN_SWITCH_SEC, circuitRoundRestSec: COPENHAGEN_ROUND_REST_SEC },
 
       // The other half of the hip, and the abductor machine's replacement now that
       // the machine is retired: the same outer hip, trained by lifting the leg
@@ -542,48 +618,80 @@ export const DEFAULT_PLAN: Plan = {
       // the two sides share a history. They rotate as a circuit too: the resting hip
       // recovers while the other works, so the switch is just the time it takes to
       // roll over, and the real rest lands after both sides.
-      { key: 'sideways_leg_raise_l', name: 'sideways leg raise (left)', side: 'left', sets: 3, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
-      { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
+      { key: 'sideways_leg_raise_l', name: 'sideways leg raise (left)', side: 'left', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
+      { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
 
-      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+      // Three sets on the short day, like the leg press and for the same reason:
+      // full body pulls again later in the week.
+      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, shortSets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
       // Both are a dumbbell in each hand, so both step in 10s and top out at the
       // rack's heaviest pair (see DUMBBELL_PAIR).
-      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
-      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
+      //
+      // The short day keeps two sets of the incline curl and leaves the hammer curl
+      // to full body's arm pair, so each curl is trained once a week and neither is
+      // trained twice in one session.
+      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, shortSets: 2, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 0, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
 
       // Extension and flexion are antagonists, so they rotate as a circuit and the
       // pair costs about as long as one of them would alone. Two directions is what
       // changes how the neck reads front and back; lateral flexion is the slow
       // third and isn't worth the sets yet. Load stays light and the reps stay
       // high — the neck is the one place where grinding a heavy single is a bad bet.
-      { key: 'neck_extension', name: 'neck extension', sets: 3, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
-      { key: 'neck_flexion', name: 'neck flexion', sets: 3, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck' },
+      //
+      // A round at a time: the two directions go back to back on one screen — the
+      // flexors rest while the extensors work and the load is light enough that
+      // neither needs more — and the one rest of the round comes after both. Two
+      // rounds on the short day.
+      { key: 'neck_extension', name: 'neck extension', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck', circuitRoundRestSec: NECK_ROUND_REST_SEC, roundScreen: true },
+      { key: 'neck_flexion', name: 'neck flexion', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck', circuitRoundRestSec: NECK_ROUND_REST_SEC, roundScreen: true },
     ],
   },
   fullbody: {
     type: 'fullbody',
     label: 'full body',
     required: false,
-    // The everything-at-once option: for a day with extra time, or to front-load
-    // a week you know gets busy later. One heavy movement per pattern plus a
-    // little arm and core work — ~20 sets, so it runs a touch longer than a
-    // push + core day rather than shorter.
+    // The third session of the week: the three goal lifts a second time, three
+    // sets each, with a little shoulder, arm and core work around them. Built so
+    // every big muscle is trained twice a week across the three days — the leg
+    // press and the pull-ups here and on pull + legs, the bench here and on push +
+    // core — rather than once on a long day.
+    //
+    // The short form is eighteen sets and the full one twenty-four; the compounds
+    // and the raise are the same in both, and what the full day adds is a third set
+    // of the dumbbell press, a third round of the arm pair, and the crunch.
     exercises: [
-      { key: 'leg_press', name: 'leg press', sets: 3, repMin: 6, repMax: 10, restSec: 150, increment: 10, group: 'legs' },
-      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 150, ...DUMBBELL_PAIR, group: 'chest' },
-      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
-      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, ...DUMBBELL_PAIR, group: 'shoulders' },
-
-      { key: 'hammer_curl', name: 'hammer curl', sets: 2, repMin: 10, repMax: 15, restSec: 60, ...DUMBBELL_PAIR, group: 'arms circuit', circuit: 'arms' },
-      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms' },
-
-      { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'core' },
-
-      // The only day that trains the raise now, so it's the day graduation has to
-      // be earned on — hence the set count comes from the standard itself rather
-      // than being written out beside it (see GRADUATION_SETS).
+      // Abs first, as on every day — and the only day that trains the raise, so
+      // it's the day graduation has to be earned on; hence the set count comes
+      // from the standard itself rather than being written out beside it (see
+      // GRADUATION_SETS). Fresh, at the top, rather than after three compounds
+      // with the grip already spent on pull-ups.
       { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: GRADUATION_SETS, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
+
+      // Two minutes between sets of the compounds rather than two and a half: at
+      // three sets each this is the week's second exposure to each lift, not its
+      // heaviest, and the longer rests were a third of what made the old day run
+      // longer than a push day.
+      { key: 'leg_press', name: 'leg press', sets: 3, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
+      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 120, ...DUMBBELL_PAIR, group: 'chest' },
+      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+
+      // The dumbbell press keeps its place here, pressed fresh — push + core has
+      // the machine. Two sets on the short day.
+      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, shortSets: 2, repMin: 8, repMax: 12, restSec: 120, ...DUMBBELL_PAIR, group: 'shoulders' },
+
+      // A curl and a tricep extension, a round at a time on one screen with a
+      // minute after each round (see FULLBODY_ARMS_ROUND_REST_SEC) — antagonists,
+      // so neither is pre-fatigued by the other and the walk between the dumbbell
+      // and the cable is the only break they need. The hammer curl's only slot in
+      // the week; the extension's second. Two rounds on the short day.
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...DUMBBELL_PAIR, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
+
+      // The full day's finisher. The raise at the top is the short day's ab work;
+      // a day with the time for it gets the crunch too.
+      { key: 'cable_crunch', name: 'cable crunch', sets: 3, shortSets: 0, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'core' },
     ],
   },
 }
@@ -816,9 +924,11 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'iso_chest',
   ],
   pull: [
-    // Cable ab pulldowns use the existing cable-crunch history and lead the day.
+    // Cable ab pulldowns use the existing cable-crunch history. The crunch itself
+    // is retired from THIS day too, since revision 16: the incline sit-up opens
+    // pull + legs now, and the crunch still ships on push + core and full body.
     'cable_pulldown',
-    'weighted_situp',
+    'cable_crunch',
     // The barbell squat, replaced by the leg press on both leg days: there's no
     // rack to squat in. Retiring it rather than leaving it means a device that
     // already saved a plan doesn't end up prescribing both.
@@ -908,7 +1018,7 @@ function mergeDayExercises(
   // or a step the user actually chose reads as neither and is left alone.
   //
   // The structural fields (circuit, sharedLoad, dumbbellPair, side, byVariant,
-  // repsOnly, weightCapLbs, stackSetting, repLadder, timed, roundScreen) are program design
+  // shortSets, repsOnly, weightCapLbs, stackSetting, repLadder, timed, roundScreen) are program design
   // rather than user preference, and the plan editor doesn't expose them, so they
   // always come from the defaults — otherwise a stored day would never pick up
   // the arm circuit, the shared tricep load, which arm a raise trains, the push A/B
@@ -940,6 +1050,7 @@ function mergeDayExercises(
       dumbbellPair: def.dumbbellPair,
       side: def.side,
       byVariant: def.byVariant,
+      shortSets: def.shortSets,
       repsOnly: def.repsOnly,
       weightCapLbs: def.weightCapLbs,
       stackSetting: def.stackSetting,
@@ -1189,10 +1300,16 @@ export function legExerciseKeys(plan: Plan): Set<string> {
 export function variantExercises(day: DayPlan, variant: VariantKey | null): PlannedExercise[] {
   if (variant == null) return day.exercises
 
-  // Set counts first — a pure per-exercise substitution.
+  // Set counts first — a pure per-exercise substitution, for the full count and
+  // the short one alike.
   const out = day.exercises.map((ex) => {
-    const sets = ex.byVariant?.[variant]?.sets
-    return sets != null ? { ...ex, sets } : ex
+    const o = ex.byVariant?.[variant]
+    if (!o || (o.sets == null && o.shortSets == null)) return ex
+    return {
+      ...ex,
+      ...(o.sets != null ? { sets: o.sets } : {}),
+      ...(o.shortSets != null ? { shortSets: o.shortSets } : {}),
+    }
   })
 
   // Then the swaps. Each pair is applied once (guarded by `done`), so declaring it
@@ -1210,6 +1327,30 @@ export function variantExercises(day: DayPlan, variant: VariantKey | null): Plan
     done.add(partnerKey)
   }
   return out
+}
+
+/**
+ * A day's exercise list in its SHORT form (see {@link SessionLength}): the
+ * movements with a short count of zero left out, and the rest cut to their short
+ * count. Applied after {@link variantExercises}, so a variant's own short count is
+ * what's read. The count is capped at the full one rather than trusted outright —
+ * a day the user has edited down to two sets doesn't run three in its short form
+ * — and a movement with no short count runs as it does on the full day.
+ *
+ * Only `'short'` cuts anything: `'full'` returns the list untouched, and so does
+ * nothing at all — a session saved before lengths existed is the whole day.
+ */
+export function shortExercises(
+  exercises: PlannedExercise[],
+  length: SessionLength | null | undefined,
+): PlannedExercise[] {
+  if (length !== 'short') return exercises
+  return exercises.flatMap((e) => {
+    if (e.shortSets == null) return [e]
+    const sets = Math.min(e.sets, Math.max(0, Math.floor(e.shortSets)))
+    if (sets <= 0) return []
+    return sets === e.sets ? [e] : [{ ...e, sets }]
+  })
 }
 
 /**

@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_PLAN,
+  FULLBODY_ARMS_ROUND_REST_SEC,
   GRADUATION_SETS,
+  NECK_ROUND_REST_SEC,
   STRETCH_CORE,
   repRangeLabel,
+  shortExercises,
   variantExercises,
 } from './plan'
 
@@ -129,11 +132,11 @@ describe('the pull + legs day', () => {
     expect(back.map((e) => e.key)).toEqual(['weighted_pullups'])
   })
 
-  it('starts with cable crunches as its only ab exercise', () => {
+  it('opens with the incline sit-up as its only ab exercise', () => {
     const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
-    expect(keys[0]).toBe('cable_crunch')
-    expect(DEFAULT_PLAN.pull.exercises.filter((e) => e.group === 'abs').map((e) => e.key)).toEqual(['cable_crunch'])
-    expect(keys).not.toContain('weighted_situp')
+    expect(keys[0]).toBe('weighted_situp')
+    expect(DEFAULT_PLAN.pull.exercises.filter((e) => e.group === 'abs').map((e) => e.key)).toEqual(['weighted_situp'])
+    expect(keys).not.toContain('cable_crunch')
     expect(keys).not.toContain('cable_pulldown')
     expect(keys).not.toContain('hanging_leg_raise')
     expect(DEFAULT_PLAN.pull.exercises.some((e) => e.group === 'core')).toBe(false)
@@ -143,6 +146,11 @@ describe('the pull + legs day', () => {
     expect(sets('A', 'cable_crunch')).toBe(4)
     expect(sets('A', 'weighted_situp')).toBe(4)
     expect(STRETCH_CORE.sets).toBe(4)
+  })
+
+  it('runs the neck pair a round at a time with its own rest after the round', () => {
+    const neck = DEFAULT_PLAN.pull.exercises.filter((e) => e.circuit === 'neck')
+    expect(neck.every((e) => e.roundScreen && e.circuitRoundRestSec === NECK_ROUND_REST_SEC)).toBe(true)
   })
 
   it('no longer carries the calf raise', () => {
@@ -205,6 +213,79 @@ describe('the full body day', () => {
     const push = variantExercises(DEFAULT_PLAN.push, 'A').reduce((s, e) => s + e.sets, 0)
     expect(full).toBeGreaterThan(15)
     expect(full).toBeLessThanOrEqual(push)
+  })
+
+  it('leads with the raise and rests its compounds two minutes', () => {
+    const keys = DEFAULT_PLAN.fullbody.exercises.map((e) => e.key)
+    expect(keys[0]).toBe('hanging_leg_raise')
+    for (const key of ['leg_press', 'flat_bench', 'weighted_pullups']) {
+      expect(DEFAULT_PLAN.fullbody.exercises.find((e) => e.key === key)?.restSec).toBe(120)
+    }
+  })
+
+  it('pairs the curl and the extension a round at a time', () => {
+    const arms = DEFAULT_PLAN.fullbody.exercises.filter((e) => e.circuit === 'arms')
+    expect(arms.map((e) => e.key)).toEqual(['hammer_curl', 'overhead_tricep_ext'])
+    expect(arms.every((e) => e.roundScreen && e.circuitRoundRestSec === FULLBODY_ARMS_ROUND_REST_SEC)).toBe(true)
+  })
+})
+
+describe('the short forms', () => {
+  const total = (list: { sets: number }[]) => list.reduce((s, e) => s + e.sets, 0)
+  const short = (type: 'push' | 'pull' | 'fullbody', variant: 'A' | 'B' | null = null) =>
+    shortExercises(variantExercises(DEFAULT_PLAN[type], variant), 'short')
+
+  it('cut every day to under two-thirds of its full set count', () => {
+    expect(total(short('push', 'A'))).toBe(20)
+    expect(total(short('push', 'B'))).toBe(20)
+    expect(total(short('pull'))).toBe(18)
+    expect(total(short('fullbody'))).toBe(18)
+    expect(total(variantExercises(DEFAULT_PLAN.push, 'A'))).toBe(30)
+    expect(total(DEFAULT_PLAN.pull.exercises)).toBe(38)
+    expect(total(DEFAULT_PLAN.fullbody.exercises)).toBe(24)
+  })
+
+  it('keep the lead press whole and cut the second to two, whichever press leads', () => {
+    const a = short('push', 'A')
+    const b = short('push', 'B')
+    expect(a.map((e) => [e.key, e.sets]).slice(1, 3)).toEqual([['incline_bench', 4], ['flat_bench', 2]])
+    expect(b.map((e) => [e.key, e.sets]).slice(1, 3)).toEqual([['flat_bench', 4], ['incline_bench', 2]])
+  })
+
+  it('open each day with one ab movement, a different one per day', () => {
+    const first = (type: 'push' | 'pull' | 'fullbody') => short(type, type === 'push' ? 'A' : null)[0].key
+    expect(first('push')).toBe('cable_crunch')
+    expect(first('pull')).toBe('weighted_situp')
+    expect(first('fullbody')).toBe('hanging_leg_raise')
+    expect(short('push', 'A').map((e) => e.key)).not.toContain('weighted_situp')
+    expect(short('fullbody').map((e) => e.key)).not.toContain('cable_crunch')
+  })
+
+  it('leave the hip circuits and the hammer curl to the full pull day', () => {
+    const keys = short('pull').map((e) => e.key)
+    for (const key of ['copenhagen_plank_l', 'copenhagen_plank_r', 'sideways_leg_raise_l', 'sideways_leg_raise_r', 'hammer_curl']) {
+      expect(keys).not.toContain(key)
+      expect(DEFAULT_PLAN.pull.exercises.map((e) => e.key)).toContain(key)
+    }
+  })
+
+  it('train the three goal lifts twice a week between them', () => {
+    const count = (key: string) =>
+      ['push', 'pull', 'fullbody'].filter((t) => short(t as 'push' | 'pull' | 'fullbody', t === 'push' ? 'A' : null).some((e) => e.key === key)).length
+    expect(count('flat_bench')).toBe(2)
+    expect(count('weighted_pullups')).toBe(2)
+    expect(count('leg_press')).toBe(2)
+  })
+
+  it('never run a station past the full count, and leave an unmarked movement alone', () => {
+    const list = [
+      { key: 'a', name: 'a', sets: 2, shortSets: 3, repMin: 8, repMax: 12, restSec: 60, group: 'g' },
+      { key: 'b', name: 'b', sets: 3, repMin: 8, repMax: 12, restSec: 60, group: 'g' },
+      { key: 'c', name: 'c', sets: 3, shortSets: 0, repMin: 8, repMax: 12, restSec: 60, group: 'g' },
+    ]
+    expect(shortExercises(list, 'short').map((e) => [e.key, e.sets])).toEqual([['a', 2], ['b', 3]])
+    expect(shortExercises(list, 'full')).toBe(list)
+    expect(shortExercises(list, undefined)).toBe(list)
   })
 })
 

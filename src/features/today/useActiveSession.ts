@@ -9,9 +9,16 @@ import { nextTargets } from '../../lib/progression'
 import { spreadSharedWeight } from '../../lib/sharedLoad'
 import { mirrorSidedEdit } from '../../lib/sidePair'
 import { carryLoggedSet, type CarriedSet } from '../../lib/carryForward'
-import { sideOrderedExercises, variantExercises, type VariantKey } from '../../config/plan'
+import {
+  shortExercises,
+  sideOrderedExercises,
+  variantExercises,
+  type SessionLength,
+  type VariantKey,
+} from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
 import { nextStartSide } from '../../lib/pushSide'
+import { expandToFull as expandSession } from '../../lib/sessionLength'
 
 /**
  * Owns the in-progress workout session, mirrored to localStorage so a mid-gym
@@ -33,8 +40,10 @@ export function useActiveSession() {
 
   const start = useCallback(
     // `variant` overrides the automatic A/B choice (Push + Core only); omit it to
-    // take whichever press the last push session didn't start with.
-    (dayType: DayType, variant?: VariantKey) => {
+    // take whichever press the last push session didn't start with. `length` is
+    // the day's short form unless asked for the whole day (see SessionLength);
+    // the checklist can open a short session up later.
+    (dayType: DayType, variant?: VariantKey, length: SessionLength = 'short') => {
       storage.saveActiveStep(0)
       storage.saveActiveStepKey(null)
       storage.saveActiveRest(null)
@@ -50,7 +59,7 @@ export function useActiveSession() {
       // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
       const startSide = nextStartSide(workouts, dayType)
       const planned = sideOrderedExercises(
-        variantExercises(plan[dayType], chosen ?? null),
+        shortExercises(variantExercises(plan[dayType], chosen ?? null), length),
         startSide,
       )
       // Read as a batch rather than one lift at a time, so the exercises that
@@ -69,6 +78,7 @@ export function useActiveSession() {
         startedAt: new Date().toISOString(),
         variant: chosen,
         startSide,
+        length,
         exercises: planned.map((e) => {
           const target = targets.get(e.key) ?? { weightLbs: null, reps: e.repMin }
           const sets: SetLog[] = Array.from({ length: e.sets }, (_, i) => ({
@@ -83,6 +93,26 @@ export function useActiveSession() {
     },
     [plan, workouts],
   )
+
+  // Open a short session up to the whole day: the movements the short form left
+  // out arrive prescribed as they would have been at the start, and the ones it
+  // cut get their missing sets back (see lib/sessionLength). Nothing logged moves.
+  const expandToFull = useCallback(() => {
+    setSession((prev) => {
+      if (!prev || prev.length !== 'short') return prev
+      const full = sideOrderedExercises(
+        variantExercises(plan[prev.dayType], prev.variant ?? null),
+        prev.startSide,
+      )
+      const have = new Set(prev.exercises.map((l) => l.exercise))
+      const targets = nextTargets(
+        workouts,
+        full.filter((e) => !have.has(e.key)),
+        { variantFor: (key) => progressionVariant(key, prev.variant) },
+      )
+      return expandSession(prev, full, targets)
+    })
+  }, [plan, workouts])
 
   const mutateExercise = useCallback((exKey: string, fn: (sets: SetLog[]) => SetLog[]) => {
     setSession((prev) =>
@@ -204,5 +234,5 @@ export function useActiveSession() {
     setSession(null)
   }, [])
 
-  return { session, start, addSet, addExercise, updateSet, carrySet, removeSet, clear }
+  return { session, start, expandToFull, addSet, addExercise, updateSet, carrySet, removeSet, clear }
 }

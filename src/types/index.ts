@@ -44,6 +44,14 @@ export type WorkoutSession = {
    * pushSide.lastStartSide).
    */
   startSide?: Side
+  /**
+   * Whether this session is running the day's SHORT form or the FULL one (see
+   * config/plan.SessionLength). Pinned at start like `variant`, and flipped to
+   * full by the checklist's expand button mid-workout (see
+   * lib/sessionLength.expandToFull). Absent on a session saved before lengths
+   * existed, which is read as full — the whole day, as it always was.
+   */
+  length?: import('../config/plan').SessionLength
 }
 
 export type BodyWeightEntry = {

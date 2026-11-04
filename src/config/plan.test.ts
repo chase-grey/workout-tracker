@@ -19,6 +19,7 @@ import {
   withCircuitRest,
   withCircuitRoundRest,
   withDayOrder,
+  shortExercises,
   withPlanDefaults,
   withRemovedFrom,
   type DayPlan,
@@ -86,28 +87,51 @@ describe('dayOrder', () => {
 })
 
 describe('withPlanDefaults', () => {
-  it('migrates pull day to cable crunches first with no other ab exercises', () => {
+  it('migrates pull day to the incline sit-up first with no other ab exercises', () => {
+    // A day stored at revision 13–15: the cable crunch opening it, the sit-up
+    // nowhere, and a pulldown the user had hung on to.
     const stored = {
       ...DEFAULT_PLAN,
       pull: {
         ...DEFAULT_PLAN.pull,
         exercises: DEFAULT_PLAN.pull.exercises
-          .filter((e) => e.key !== 'cable_crunch')
+          .filter((e) => e.key !== 'weighted_situp')
           .concat([
             { key: 'cable_pulldown', name: 'cable pull down', sets: 3, repMin: 10, repMax: 15, restSec: 90, group: 'back' },
-            DEFAULT_PLAN.push.exercises.find((e) => e.key === 'weighted_situp')!,
+            { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 45, group: 'abs' },
           ])
           .map((e) => e.key === 'leg_press' ? { ...e, sets: 5 } : e),
       },
     }
-    const merged = withPlanDefaults(stored, 12)
+    const merged = withPlanDefaults(stored, 15)
     const keys = merged.pull.exercises.map((e) => e.key)
-    expect(keys[0]).toBe('cable_crunch')
+    expect(keys[0]).toBe('weighted_situp')
     expect(keys).not.toContain('cable_pulldown')
-    expect(keys).not.toContain('weighted_situp')
+    expect(keys).not.toContain('cable_crunch')
     expect(merged.pull.exercises.filter((e) => /^(abs|core)$/i.test(e.group)).map((e) => e.key))
-      .toEqual(['cable_crunch'])
+      .toEqual(['weighted_situp'])
     expect(withPlanDefaults(merged, PLAN_REVISION)).toEqual(merged)
+  })
+
+  it('carries the short counts from the defaults onto a stored day', () => {
+    // Stored before short forms existed, and with the user's own set counts.
+    const stored = {
+      ...DEFAULT_PLAN,
+      push: {
+        ...DEFAULT_PLAN.push,
+        exercises: DEFAULT_PLAN.push.exercises.map((e) => {
+          const { shortSets: _drop, ...rest } = e
+          return e.key === 'cable_crunch' ? { ...rest, sets: 2 } : rest
+        }),
+      },
+    }
+    const merged = withPlanDefaults(stored, PLAN_REVISION)
+    const crunch = merged.push.exercises.find((e) => e.key === 'cable_crunch')!
+    expect(crunch.sets).toBe(2)
+    expect(crunch.shortSets).toBe(3)
+    expect(merged.push.exercises.find((e) => e.key === 'weighted_situp')?.shortSets).toBe(0)
+    // The short form reads the stored count as the ceiling, not the shipped one.
+    expect(shortExercises(merged.push.exercises, 'short').find((e) => e.key === 'cable_crunch')?.sets).toBe(2)
   })
 
   it('keeps only the current day types and fills any missing one from the defaults', () => {
@@ -598,7 +622,8 @@ describe('withCircuitRoundRest', () => {
 
   it('leaves the stations of other circuits alone', () => {
     const next = withCircuitRoundRest(day, 'copenhagen', 120)
-    expect(station(next, 'neck_extension')?.circuitRoundRestSec).toBeUndefined()
+    expect(station(next, 'neck_extension')?.circuitRoundRestSec).toBe(station(day, 'neck_extension')?.circuitRoundRestSec)
+    expect(station(next, 'sideways_leg_raise_l')?.circuitRoundRestSec).toBe(station(day, 'sideways_leg_raise_l')?.circuitRoundRestSec)
     expect(next.exercises.map((e) => e.key)).toEqual(day.exercises.map((e) => e.key))
   })
 

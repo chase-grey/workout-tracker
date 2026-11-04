@@ -49,8 +49,18 @@ function renderPlan(): string {
       const stack = ex.stackSetting
         ? ` [the number logged is a stack setting from 1 to ${ex.weightCapLbs}, not lbs — go up by 1 at a time and never suggest more than ${ex.weightCapLbs}; at ${ex.weightCapLbs} it progresses by reps only]`
         : ''
+      // Every day opens in a short form built to fit inside an hour, and can be
+      // opened up to the whole day mid-workout (see SessionLength). The coach
+      // reads logs with fewer sets than the day lists, and shouldn't call them
+      // a day cut short.
+      const short =
+        ex.shortSets == null
+          ? ''
+          : ex.shortSets <= 0
+            ? ' [full-length day only — left out of the short form]'
+            : ` [${ex.shortSets} sets in the short form]`
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}${ladder}${stack}`,
+        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}${ladder}${stack}${short}`,
       )
     }
   }
