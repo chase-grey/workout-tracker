@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { CHART_SURFACE, CHART_SURFACE_2, CHART_ZERO, fmtDateLabel, niceScale, timeXAxis, withTime } from '../../lib/chart'
+import { CHART_SURFACE, CHART_SURFACE_2, CHART_ZERO, fmtDateLabel, niceScale, spacedTicks, timeXAxis, withTime } from '../../lib/chart'
 import { fmtGain, gainRatioLabel, type MassPoint } from '../../lib/massSplit'
 import { fatCells, fiberPath, muscleFibers } from '../../lib/tissue'
 import { useTheme } from '../../lib/themeStore'
@@ -66,12 +66,12 @@ function MassTooltip({
   const ratio = gainRatioLabel(row.muscleGain, row.fatGain)
   return (
     <div style={tooltipStyle} className="px-3 py-2 text-xs">
-      <div className="text-neutral-400">{fmtDateLabel(row.t)}</div>
+      <div className="text-neutral-400">week of {fmtDateLabel(row.t)}</div>
       <div style={{ color: colors.muscle.edge }}>muscle {fmtGain(row.muscleGain)}</div>
       <div style={{ color: colors.fat.edge }}>fat {fmtGain(row.fatGain)}</div>
       {ratio && <div className="font-semibold">{ratio}</div>}
       <div className="text-neutral-400">
-        {row.weight} lbs · {row.bodyFat}% fat
+        {row.weight} lbs · {row.bodyFat}% fat · {row.weighIns} {row.weighIns === 1 ? 'weigh-in' : 'weigh-ins'}
       </div>
     </div>
   )
@@ -82,7 +82,9 @@ function MassTooltip({
  * fat layered on top: the two bands' thickness is pounds of each, so the shape
  * of the stack says at a glance how a bulk is going — a thick red-meat floor
  * under a thin rind is the picture you want. Both are drawn as their tissue,
- * fibres and cells, in the theme's accent rather than butcher's colours.
+ * fibres and cells, in the theme's accent rather than butcher's colours. One
+ * point a week, each the week's mean (see lib/massSplit), so the stack is a
+ * shape and not a saw-tooth.
  *
  * Fat lost while muscle went on hangs below the zero line instead of eating into
  * the muscle band, so a recomp still reads as two honest figures.
@@ -110,6 +112,8 @@ export function MassSplitChart({ points, empty }: { points: MassPoint[]; empty?:
     [rows],
   )
   const hasLoss = rows.some((r) => r.muscleGain < 0 || r.fatGain < 0)
+  // One label per week while they fit, then every other, every third… — see spacedTicks.
+  const ticks = useMemo(() => spacedTicks(rows.map((r) => r.t)), [rows])
   const last = rows[rows.length - 1]
 
   if (!last) {
@@ -166,7 +170,7 @@ export function MassSplitChart({ points, empty }: { points: MassPoint[]; empty?:
             </pattern>
           </defs>
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
-          <XAxis {...timeXAxis} tick={axisTick} />
+          <XAxis {...timeXAxis} ticks={ticks} interval={0} tick={axisTick} />
           <YAxis
             tick={axisTick}
             width={40}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bodyFatOn, fmtGain, gainRatioLabel, massPoints, MAX_READING_GAP_DAYS, smoothWeights } from './massSplit'
+import { bodyFatOn, fmtGain, gainRatioLabel, massPoints, MAX_READING_GAP_DAYS } from './massSplit'
 
 describe('bodyFatOn', () => {
   const readings = [
@@ -40,27 +40,9 @@ describe('bodyFatOn', () => {
   })
 })
 
-describe('smoothWeights', () => {
-  it('averages the weigh-ins within three days either side', () => {
-    const out = smoothWeights([
-      { date: '2026-01-01', value: 180 },
-      { date: '2026-01-02', value: 184 },
-      { date: '2026-01-03', value: 182 },
-      { date: '2026-01-20', value: 190 },
-    ])
-    expect(out.map((p) => p.value)).toEqual([182, 182, 182, 190])
-  })
-
-  it('sorts by date whatever order it was handed', () => {
-    const out = smoothWeights([
-      { date: '2026-01-10', value: 185 },
-      { date: '2026-01-01', value: 180 },
-    ])
-    expect(out.map((p) => p.date)).toEqual(['2026-01-01', '2026-01-10'])
-  })
-})
-
 describe('massPoints', () => {
+  // 2026-01-01 is a Thursday; its week starts Monday 2025-12-29. 2026-01-21 is
+  // the Wednesday of the week starting 2026-01-19.
   const bodyFat = [
     { date: '2026-01-01', value: 20 },
     { date: '2026-01-21', value: 20 },
@@ -68,10 +50,10 @@ describe('massPoints', () => {
 
   it('leaves out weigh-ins from before the first reading', () => {
     const out = massPoints([{ date: '2025-12-01', value: 170 }, { date: '2026-01-01', value: 180 }], bodyFat)
-    expect(out.map((p) => p.date)).toEqual(['2026-01-01'])
+    expect(out.map((p) => p.date)).toEqual(['2025-12-29'])
   })
 
-  it('splits each weigh-in by the body fat in force and reads gains off the first', () => {
+  it('splits each week by the body fat in force and reads gains off the first', () => {
     const out = massPoints(
       [
         { date: '2026-01-01', value: 180 },
@@ -79,8 +61,44 @@ describe('massPoints', () => {
       ],
       bodyFat,
     )
-    expect(out[0]).toMatchObject({ weight: 180, bodyFat: 20, lean: 144, fat: 36, muscleGain: 0, fatGain: 0 })
-    expect(out[1]).toMatchObject({ weight: 190, bodyFat: 20, lean: 152, fat: 38, muscleGain: 8, fatGain: 2 })
+    expect(out[0]).toMatchObject({ date: '2025-12-29', weight: 180, bodyFat: 20, lean: 144, fat: 36, muscleGain: 0, fatGain: 0 })
+    expect(out[1]).toMatchObject({ date: '2026-01-19', weight: 190, bodyFat: 20, lean: 152, fat: 38, muscleGain: 8, fatGain: 2 })
+  })
+
+  it('folds a week of mornings into one mean, whatever order they came in', () => {
+    const out = massPoints(
+      [
+        { date: '2026-01-03', value: 182 },
+        { date: '2026-01-01', value: 180 },
+        { date: '2026-01-02', value: 184 },
+        { date: '2026-01-20', value: 189 },
+        { date: '2026-01-21', value: 191 },
+      ],
+      bodyFat,
+    )
+    expect(out.map((p) => [p.date, p.weight, p.weighIns])).toEqual([
+      ['2025-12-29', 182, 3],
+      ['2026-01-19', 190, 2],
+    ])
+    expect(out[1].muscleGain).toBe(6.4)
+    expect(out[1].fatGain).toBe(1.6)
+  })
+
+  it('averages the body fat in force across the week too, not just the weight', () => {
+    // Readings 20 → 10 over ten days: 18 in force on the 3rd, 16 on the 5th.
+    const out = massPoints(
+      [
+        { date: '2026-01-03', value: 180 },
+        { date: '2026-01-05', value: 180 },
+      ],
+      [
+        { date: '2026-01-01', value: 20 },
+        { date: '2026-01-11', value: 10 },
+      ],
+    )
+    expect(out).toHaveLength(2)
+    expect(out[0].bodyFat).toBe(18)
+    expect(out[1].bodyFat).toBe(16)
   })
 
   it('shows fat lost on a recomp as a negative gain', () => {
@@ -114,7 +132,7 @@ describe('massPoints', () => {
         { date: '2026-10-14', value: 13.7 },
       ],
     )
-    expect(out.map((p) => p.date)).toEqual(['2026-09-29', '2026-10-14'])
+    expect(out.map((p) => p.date)).toEqual(['2026-09-28', '2026-10-12'])
     expect(out[0].muscleGain).toBe(0)
   })
 })

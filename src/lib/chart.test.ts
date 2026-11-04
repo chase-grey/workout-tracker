@@ -5,6 +5,7 @@ import {
   HIT_DAYS_DIM,
   LINE_PRIMARY,
   LINE_SECONDARY,
+  spacedTicks,
 } from './chart'
 
 /** Room enough for bars: a range of a few months, ~30px to the week. */
@@ -65,5 +66,17 @@ describe('calorieWeekMark', () => {
   it('does not let an over-full week outgrow a seven-day one', () => {
     // A leap in the log (say a duplicated date) must not stretch the bar past a week.
     expect(calorieWeekMark(9, ROOMY)).toEqual(calorieWeekMark(7, ROOMY))
+  })
+})
+
+describe('spacedTicks', () => {
+  it('keeps every point while they fit', () => {
+    expect(spacedTicks([1, 2, 3, 4], 6)).toEqual([1, 2, 3, 4])
+    expect(spacedTicks([], 6)).toEqual([])
+  })
+
+  it('strides evenly from the first once they would collide', () => {
+    expect(spacedTicks([1, 2, 3, 4, 5, 6, 7], 6)).toEqual([1, 3, 5, 7])
+    expect(spacedTicks(Array.from({ length: 20 }, (_, i) => i), 6)).toEqual([0, 4, 8, 12, 16])
   })
 })

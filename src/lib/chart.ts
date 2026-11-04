@@ -127,6 +127,19 @@ export const timeXAxis = {
   tickFormatter: fmtTick,
 }
 
+/**
+ * Every data point's time, thinned to at most `max` so the labels don't collide.
+ * On a horizontal chart Recharts puts a tick at every data value of a numeric x
+ * axis and trusts its own text measuring to hide the overlaps — which it does
+ * not reliably do on a phone. Pass these as `ticks` with `interval={0}` and the
+ * axis is simply told what to draw: every point when there are few, every
+ * second, third… when there are more, the first always among them.
+ */
+export function spacedTicks(ts: number[], max = 6): number[] {
+  const stride = Math.ceil(ts.length / max) || 1
+  return ts.filter((_, i) => i % stride === 0)
+}
+
 /** Days at or above the calorie goal that earn a week a bright mark, and a dim one. */
 export const HIT_DAYS_BRIGHT = 6
 export const HIT_DAYS_DIM = 5

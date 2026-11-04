@@ -4,6 +4,7 @@ import type { MassPoint } from './massSplit'
 
 const point = (date: string, weight: number, muscleGain: number, fatGain: number): MassPoint => ({
   date,
+  weighIns: 7,
   weight,
   bodyFat: 15,
   lean: weight * 0.85,

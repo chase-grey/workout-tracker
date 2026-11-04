@@ -1,5 +1,5 @@
 import type { Point } from './progress'
-import { daysBetween } from './dates'
+import { daysBetween, weekStartISO } from './dates'
 
 /**
  * Pounds of muscle and pounds of fat put on over time, estimated from the scale.
@@ -8,8 +8,14 @@ import { daysBetween } from './dates'
  * is weight × bf, and everything else — muscle, but also bone, water and the
  * glycogen a bulk carries — is lean mass, which the chart calls muscle because
  * that is what the training is putting there. Both are read as *gains* against
- * the first day the split was known, so the chart answers the question that
+ * the first week the split was known, so the chart answers the question that
  * matters on a bulk: of the weight that went on, how much was muscle?
+ *
+ * The split is taken week by week, not morning by morning. A weigh-in swings a
+ * pound or two with water and the night before, and split by body fat that
+ * pound lands wholesale on the muscle band, so a daily chart is a saw-tooth
+ * that says nothing about tissue. Each week's point is the mean of its weigh-ins
+ * and the mean body fat in force on those days — see {@link massPoints}.
  *
  * Body fat is read less often than weight, so between two readings it is taken
  * off the straight line joining them, and after the last reading it is held
@@ -23,21 +29,25 @@ import { daysBetween } from './dates'
 /** The longest stretch a body-fat reading is trusted to cover, either side. */
 export const MAX_READING_GAP_DAYS = 45
 
-/** One weigh-in, split. */
+/** One week on the scale, split. */
 export type MassPoint = {
+  /** The Monday the week starts on. */
   date: string
-  /** The weigh-in the split was taken from, smoothed — see {@link smoothWeights}. */
+  /** How many mornings on the scale went into the week's mean. */
+  weighIns: number
+  /** The week's mean weigh-in. */
   weight: number
-  /** Body fat % in force that day: a reading, a point on the line between two, or the last one held. */
+  /** The mean body fat % in force on those mornings: readings, points on the line between two, or the last one held. */
   bodyFat: number
   lean: number
   fat: number
-  /** Lean and fat mass against the first point. */
+  /** Lean and fat mass against the first week. */
   muscleGain: number
   fatGain: number
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
+const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length
 
 /**
  * Body fat on `date`, read off the readings around it. Null before the first
@@ -61,36 +71,35 @@ export function bodyFatOn(readings: Point[], date: string): number | null {
 }
 
 /**
- * Each weigh-in replaced by the mean of the weigh-ins within `halfWindowDays`
- * either side of it. A morning on the scale swings a pound or two with water
- * and the night before, and split by body fat that pound all lands on the
- * muscle band — a week's average is nearer the mass that is actually there.
- */
-export function smoothWeights(points: Point[], halfWindowDays = 3): Point[] {
-  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date))
-  return sorted.map((p) => {
-    const near = sorted.filter((q) => Math.abs(daysBetween(p.date, q.date)) <= halfWindowDays)
-    return { date: p.date, value: near.reduce((s, q) => s + q.value, 0) / near.length }
-  })
-}
-
-/**
- * The weigh-ins from the first body-fat reading on, each split into lean and
- * fat, with both measured as gains from the first. Empty until there is a
- * weigh-in on or after a reading.
+ * The weeks from the first body-fat reading on, each the mean of its weigh-ins
+ * split into lean and fat, with both measured as gains from the first week. A
+ * week with no weigh-in in a trusted stretch of readings is simply absent;
+ * the current, part-finished week is in, averaged over the mornings it has so
+ * far. Empty until there is a weigh-in on or after a reading.
  */
 export function massPoints(weights: Point[], bodyFat: Point[]): MassPoint[] {
   const readings = [...bodyFat].sort((a, b) => a.date.localeCompare(b.date))
-  const out: MassPoint[] = []
-  for (const w of smoothWeights(weights)) {
+  const weeks = new Map<string, { weights: number[]; bodyFats: number[] }>()
+  for (const w of [...weights].sort((a, b) => a.date.localeCompare(b.date))) {
     const bf = bodyFatOn(readings, w.date)
     if (bf == null) continue
-    const fat = (w.value * bf) / 100
-    const lean = w.value - fat
+    const key = weekStartISO(w.date)
+    const week = weeks.get(key) ?? { weights: [], bodyFats: [] }
+    week.weights.push(w.value)
+    week.bodyFats.push(bf)
+    weeks.set(key, week)
+  }
+  const out: MassPoint[] = []
+  for (const [date, week] of weeks) {
+    const weight = mean(week.weights)
+    const bf = mean(week.bodyFats)
+    const fat = (weight * bf) / 100
+    const lean = weight - fat
     const first = out[0]
     out.push({
-      date: w.date,
-      weight: round1(w.value),
+      date,
+      weighIns: week.weights.length,
+      weight: round1(weight),
       bodyFat: round1(bf),
       lean: round1(lean),
       fat: round1(fat),
