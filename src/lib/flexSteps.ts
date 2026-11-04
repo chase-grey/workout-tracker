@@ -70,6 +70,14 @@ export function flexRoundKey(step: FlexSetStep): string {
   return step.side ? step.stepKey.slice(0, -(step.side.length + 1)) : step.stepKey
 }
 
+/**
+ * Whether a paced set ends on its last rep's final effort rather than its
+ * trailing rest. The pike work's rest is a release inside the pose, and the set
+ * break right behind it already is one — so the last one is just dead time.
+ */
+export const skipsFinalRepRest = (s: FlexSetStep): boolean =>
+  s.exKey === 'pike_lift' || s.exKey === 'pike_block_crush'
+
 /** Assumed seconds per rep, for a stretch whose tempo says nothing usable. */
 export const SEC_PER_REP = 5
 
@@ -87,7 +95,7 @@ export const stepWorkSec = (s: FlexSetStep): number => {
   if (s.holdSec) return s.holdSec
   const phases = parseTempo(s.tempo)
   const paced = phases.reduce((sum, p) => sum + p.seconds, 0)
-  const skippedRest = s.exKey === 'pike_lift' && s.reps > 0
+  const skippedRest = skipsFinalRepRest(s) && s.reps > 0
     ? phases.slice(workPhaseCount(phases)).reduce((sum, p) => sum + p.seconds, 0)
     : 0
   return s.reps * (paced > 0 ? paced : SEC_PER_REP) - skippedRest

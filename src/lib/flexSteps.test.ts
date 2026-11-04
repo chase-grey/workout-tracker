@@ -261,6 +261,10 @@ describe('stepWorkSec', () => {
     })).toBe(95)
   })
 
+  it('skips the last rep rest for the pike block crush too', () => {
+    expect(workOf({ key: 'pike_block_crush', tempo: '10s press down · 5s rest', reps: 3 })).toBe(40)
+  })
+
   it('counts a hold as its seconds, not its reps', () => {
     expect(workOf({ tempo: '', holdSec: 90 })).toBe(90)
   })

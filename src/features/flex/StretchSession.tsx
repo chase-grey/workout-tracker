@@ -19,6 +19,7 @@ import {
   buildSessionSteps,
   buildCoreSteps,
   flexRoundKey,
+  skipsFinalRepRest,
   stepWorkSec,
   SEC_PER_REP,
   type CoreSetStep,
@@ -1037,7 +1038,7 @@ export function StretchSession({
             key={step.stepKey}
             tempo={step.tempo}
             forwardBack={step.exKey === 'sciatic_floss'}
-            skipFinalRepRest={step.exKey === 'pike_lift'}
+            skipFinalRepRest={skipsFinalRepRest(step)}
             reps={step.reps}
             variant={rhythmVariantFor(flexRoundKey(step), step.tempo, step.exKey === 'sciatic_floss')}
             running={setLive}
