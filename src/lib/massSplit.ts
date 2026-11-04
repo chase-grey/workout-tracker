@@ -11,11 +11,17 @@ import { daysBetween } from './dates'
  * the first day the split was known, so the chart answers the question that
  * matters on a bulk: of the weight that went on, how much was muscle?
  *
- * Body fat is read far less often than weight, so between two readings it is
- * taken off the straight line joining them, and after the last reading it is
- * held flat — the newest number is the best guess until the next one. Before the
- * first reading there is nothing to split by, so those weigh-ins are left out.
+ * Body fat is read less often than weight, so between two readings it is taken
+ * off the straight line joining them, and after the last reading it is held
+ * flat — the newest number is the best guess until the next one. Neither is
+ * stretched past {@link MAX_READING_GAP_DAYS}: a line drawn across most of a
+ * year between a lone old reading and the first regular one is not evidence of
+ * anything, so weigh-ins that fall in a gap that long, or before the first
+ * reading, are left out, and the chart starts where the readings really do.
  */
+
+/** The longest stretch a body-fat reading is trusted to cover, either side. */
+export const MAX_READING_GAP_DAYS = 45
 
 /** One weigh-in, split. */
 export type MassPoint = {
@@ -35,7 +41,8 @@ const round1 = (n: number): number => Math.round(n * 10) / 10
 
 /**
  * Body fat on `date`, read off the readings around it. Null before the first
- * reading; the last reading held flat after it.
+ * reading, inside a gap between readings longer than {@link MAX_READING_GAP_DAYS},
+ * or that long past the last one; the last reading held flat until then.
  */
 export function bodyFatOn(readings: Point[], date: string): number | null {
   if (readings.length === 0 || date < readings[0].date) return null
@@ -44,11 +51,13 @@ export function bodyFatOn(readings: Point[], date: string): number | null {
     const b = readings[i + 1]
     if (date < b.date) {
       const span = daysBetween(a.date, b.date)
+      if (span > MAX_READING_GAP_DAYS) return null
       if (span <= 0) return a.value
       return a.value + ((b.value - a.value) * daysBetween(a.date, date)) / span
     }
   }
-  return readings[readings.length - 1].value
+  const last = readings[readings.length - 1]
+  return daysBetween(last.date, date) > MAX_READING_GAP_DAYS ? null : last.value
 }
 
 /**

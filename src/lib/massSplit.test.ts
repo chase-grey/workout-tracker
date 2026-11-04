@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bodyFatOn, fmtGain, gainRatioLabel, massPoints, smoothWeights } from './massSplit'
+import { bodyFatOn, fmtGain, gainRatioLabel, massPoints, MAX_READING_GAP_DAYS, smoothWeights } from './massSplit'
 
 describe('bodyFatOn', () => {
   const readings = [
@@ -22,8 +22,21 @@ describe('bodyFatOn', () => {
     expect(bodyFatOn(readings, '2026-01-03')).toBe(19)
   })
 
-  it('holds the last reading flat after it', () => {
-    expect(bodyFatOn(readings, '2026-03-01')).toBe(15)
+  it('holds the last reading flat after it, but not forever', () => {
+    expect(bodyFatOn(readings, '2026-02-01')).toBe(15)
+    expect(bodyFatOn(readings, '2026-04-01')).toBeNull()
+    expect(MAX_READING_GAP_DAYS).toBe(45)
+  })
+
+  it('will not draw a line across a gap longer than it trusts', () => {
+    const sparse = [
+      { date: '2025-10-31', value: 11 },
+      { date: '2026-09-29', value: 13.6 },
+      { date: '2026-10-14', value: 13.7 },
+    ]
+    expect(bodyFatOn(sparse, '2026-03-04')).toBeNull()
+    expect(bodyFatOn(sparse, '2025-11-10')).toBeNull()
+    expect(bodyFatOn(sparse, '2026-10-01')).toBeCloseTo(13.613, 2)
   })
 })
 
@@ -86,6 +99,23 @@ describe('massPoints', () => {
 
   it('is empty with no readings at all', () => {
     expect(massPoints([{ date: '2026-01-01', value: 180 }], [])).toEqual([])
+  })
+
+  it('starts where the readings become regular, not at a lone one long before', () => {
+    const out = massPoints(
+      [
+        { date: '2026-03-04', value: 167 },
+        { date: '2026-09-29', value: 174 },
+        { date: '2026-10-14', value: 176 },
+      ],
+      [
+        { date: '2025-10-31', value: 11 },
+        { date: '2026-09-29', value: 13.6 },
+        { date: '2026-10-14', value: 13.7 },
+      ],
+    )
+    expect(out.map((p) => p.date)).toEqual(['2026-09-29', '2026-10-14'])
+    expect(out[0].muscleGain).toBe(0)
   })
 })
 
