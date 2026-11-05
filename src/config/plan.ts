@@ -325,7 +325,11 @@ export type Plan = Record<DayType, DayPlan>
 // day no longer cuts them to three, and full body goes from three to four. They
 // are the sets the pull-up ladder is read from, and a three-set day was the one
 // that didn't land on its chart.
-export const PLAN_REVISION = 18
+// 19: the leg press follows the pull-ups — four sets wherever it appears. The
+// short pull + legs day no longer cuts it to three, and full body runs four
+// rather than three. It's the lift the squat goals are read from, and the one
+// the plan should trim last.
+export const PLAN_REVISION = 19
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -612,10 +616,13 @@ export const DEFAULT_PLAN: Plan = {
       // in bigger jumps than a bar, and 5 lbs on a press this strong is inside
       // the noise of how the pad was set.
       //
-      // Three sets on the short day rather than four: full body presses the sled
-      // again three days later, so the week still has more leg press in it than
-      // the long day alone ever delivered.
-      { key: 'leg_press', name: 'leg press', sets: 4, shortSets: 3, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
+      // Four sets whichever length the day runs, and four again on full body (see
+      // revision 19). This is the lift the squat goals are read from, and the one
+      // the plan trims least willingly: the short day used to cut it to three on
+      // the grounds that full body pressed the sled again three days later, but a
+      // three-set day of the lift that matters most is the wrong place to find the
+      // short day's time. The isolation work below is where it's found instead.
+      { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
       // The leg press keeps its two minutes, as the pull-ups below do: those are the
       // sets the squat and pull-up goals are read from, and a short rest there costs
       // reps on exactly the numbers being chased. Everything isolated on this day
@@ -665,7 +672,7 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'sideways_leg_raise_l', name: 'sideways leg raise (left)', side: 'left', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
       { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
 
-      // Four sets whichever length the day runs, unlike the leg press above: the
+      // Four sets whichever length the day runs, like the leg press above: the
       // pull-up ladder is measured on four sets (see goals.PULLUP_GOAL_SETS), so a
       // short day that trained three was a day the ladder read short.
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
@@ -697,15 +704,16 @@ export const DEFAULT_PLAN: Plan = {
     type: 'fullbody',
     label: 'full body',
     required: false,
-    // The third session of the week: the three goal lifts a second time, with a
-    // little shoulder, arm and core work around them. Built so
+    // The third session of the week: the three goal lifts a second time — four
+    // sets of the leg press and the pull-ups, three of the bench — with a little
+    // shoulder, arm and core work around them. Built so
     // every big muscle is trained twice a week across the three days — the leg
     // press and the pull-ups here and on pull + legs, the bench here and on push +
     // core — rather than once on a long day.
     //
-    // The short form is twenty-two sets and the full one twenty-five; the ab block
-    // and the compounds are the same in both, and what the full day adds is a third
-    // set of the dumbbell press and a third round of the arm pair.
+    // The short form is twenty-five sets and the full one twenty-eight; the ab
+    // block and the compounds are the same in both, and what the full day adds is
+    // a third set of the dumbbell press and a third round of the arm pair.
     exercises: [
       // The ab block, as on every day (see AB_BLOCK). It replaced the hanging raise
       // here, which was the last day to train it: the same two loaded movements on
@@ -716,10 +724,10 @@ export const DEFAULT_PLAN: Plan = {
       // Two minutes between sets of the compounds rather than two and a half: this
       // is the week's second exposure to each lift, not its heaviest, and the
       // longer rests were a third of what made the old day run longer than a push
-      // day. The press and the bench at three sets; the pull-ups at four, the count
-      // they're trained at everywhere, because the pull-up ladder is read from
-      // four sets and a three-set day read short on it.
-      { key: 'leg_press', name: 'leg press', sets: 3, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
+      // day. The bench at three sets; the leg press and the pull-ups at four, the
+      // count they're trained at everywhere, because those are the two lifts the
+      // goals are read from and a three-set day read short on both.
+      { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
       { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 120, ...DUMBBELL_PAIR, group: 'chest' },
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
