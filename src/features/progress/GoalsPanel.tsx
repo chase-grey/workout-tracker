@@ -932,10 +932,11 @@ function SixPackRow({
 }
 
 /**
- * `underBodyWeight` is drawn directly beneath the body weight block, wherever
- * that block has floated to in the panel's order — the place for the body
- * composition charts, which read the same weigh-ins the weight chart does and
- * belong under it rather than a screen further down.
+ * `underBodyWeight` is drawn inside the body weight block, under its goal rows
+ * and within its outline, wherever that block has floated to in the panel's
+ * order — the place for the body composition charts, which read the same
+ * weigh-ins the weight chart does and belong in the same card rather than a
+ * screen further down.
  */
 export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode }) {
   const {
@@ -1132,6 +1133,9 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
       {/* Only the targets still being chased. A weigh-in target already met has
           left for the reached band, where it sits by the date it was met. */}
       {weightGoals.filter((g) => !isReached(g)).map((g) => goalRow(g, true))}
+      {/* The body fat charts read off the same weigh-ins, so they sit inside the
+          same box, under the weight goals, and the outline runs around both. */}
+      {underBodyWeight}
     </div>
   )
 
@@ -1241,12 +1245,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
       return {
         key: 'bodyweight',
         goals: weightGoals,
-        node: (
-          <Fragment key="bodyweight">
-            {bodyWeightBlock}
-            {underBodyWeight}
-          </Fragment>
-        ),
+        node: <Fragment key="bodyweight">{bodyWeightBlock}</Fragment>,
       }
     }
     const lift = liftLadders.find((l) => l.rungs.some((r) => r.id === g.id))
