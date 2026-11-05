@@ -314,7 +314,14 @@ export type Plan = Record<DayType, DayPlan>
 // after each round. Full body leads with the hanging raise, rests its three
 // compounds two minutes, runs its arm pair a round at a time, and ends with the
 // cable crunch.
-export const PLAN_REVISION = 16
+// 17: every lift day opens with the same ab block — the cable crunch, then the
+// incline sit-up, four sets each, short day or full. The hanging raise is retired
+// from full body (its only remaining day), and the crunch finisher at the end of
+// full body goes, since the crunch now opens it. The abs are the one muscle this
+// trains on consecutive lift days, so a session started the day after ab work
+// leaves the block out and spends its time on the rest of the day (see
+// lib/absRest).
+export const PLAN_REVISION = 17
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -383,13 +390,34 @@ export const HANGING_RAISE_KEY = 'hanging_leg_raise'
 /**
  * Sets × reps of hanging knee raises that earn the move up to full leg raises.
  *
- * The set count tracks the most any day actually prescribes, which is what makes
- * the standard reachable: it was four while push + core trained the raise, and is
- * three now that full body is the only day that trains it. Leaving it above what
- * any day asks for would make graduation impossible to earn.
+ * The set count tracked the most any day actually prescribed, which is what made
+ * the standard reachable: four while push + core trained the raise, three while
+ * full body was the only day that did. Since revision 17 no shipped day trains
+ * the raise — the ab block is the crunch and the sit-up everywhere — so this now
+ * only reads the history already logged, and would govern a raise added back by
+ * hand. Kept at the last count a day prescribed.
  */
 export const GRADUATION_SETS = 3
 export const GRADUATION_REPS = 20
+
+/**
+ * The hanging raise as it last shipped, retired from every day since revision 17
+ * (see AB_BLOCK). Kept as an entry rather than just a key so it stays a movement
+ * the app knows: its logged history keeps its name and its place in the ab
+ * aggregates, an imported log that says "leg raises" still lands on it, and the
+ * add-an-exercise sheet can still offer it to a session that wants it.
+ */
+export const HANGING_RAISE: PlannedExercise = {
+  key: HANGING_RAISE_KEY,
+  name: 'hanging knee raise',
+  sets: GRADUATION_SETS,
+  repMin: 10,
+  repMax: GRADUATION_REPS,
+  restSec: 60,
+  bodyweight: true,
+  repsOnly: true,
+  group: 'core',
+}
 
 /**
  * The Copenhagen plank: a timed hold, one side at a time, with the two sides
@@ -466,27 +494,42 @@ export const DUMBBELL_MAX_LBS = 50
  */
 export const DUMBBELL_PAIR = { increment: 10, dumbbellPair: true, weightCapLbs: DUMBBELL_MAX_LBS * 2 } as const
 
+/**
+ * The ab block every lift day opens with: the cable crunch, then the incline
+ * sit-up, four sets each — the same on the short day as on the full one, since
+ * the abs are what the days have in common rather than what a shorter day trims.
+ * One list spread into each day so the three can't drift apart; a day's own
+ * entries would otherwise each be a place for the count or the order to differ.
+ *
+ * Both loaded: the crunch off the numbered cable stack (see CABLE_STACK), the
+ * sit-up with a plate at the chest, so each has somewhere to progress once the
+ * reps are there. Both grouped `abs`, which is what makes them the block that
+ * lib/absRest leaves out of a session the day after ab work.
+ */
+export const AB_BLOCK: readonly PlannedExercise[] = [
+  { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'abs' },
+  { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+]
+
 export const DEFAULT_PLAN: Plan = {
   push: {
     type: 'push',
     label: 'push + core',
     required: true,
     exercises: [
-      // The short day trains one ab movement, fresh, and leaves the other to pull +
-      // legs — three days a week each opening with a different ab move is more
-      // ab work, better rested, than two days opening with two.
-      { key: 'cable_crunch', name: 'cable crunch', sets: 4, shortSets: 3, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'abs' },
-
-      // The day's second ab movement is loaded rather than reps-only: a plate held
-      // at the chest gives the abs somewhere to progress once the reps are there,
-      // which a hanging raise capped at 20 doesn't. The raise isn't gone — it
-      // still runs on full body. Full day only here: the short day's sit-ups are
-      // pull + legs's, where this is the ab move that opens the day.
+      // The ab block: the same two movements, in the same order, at the top of
+      // every lift day, and four sets of each whichever length the day runs. The
+      // crunch first, then the sit-up — one on the cable, one on the bench, both
+      // loaded so the abs have somewhere to progress once the reps are there, which
+      // a hanging raise capped at 20 doesn't. Opening every day with the same block
+      // is what makes resting it a clean cut: a session started the day after ab
+      // work leaves these two out and spends their time on the rest of the day
+      // (see lib/absRest).
       //
-      // Named for the incline bench with the feet strapped in, which is where it's
-      // actually done — and which is why the mat sit-up a stretch ends with is a
-      // separate movement with a separate ladder (see MAT_SITUP_KEY).
-      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, shortSets: 0, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      // The sit-up is named for the incline bench with the feet strapped in, which
+      // is where it's actually done — and which is why the mat sit-up a stretch
+      // ends with is a separate movement with a separate ladder (see MAT_SITUP_KEY).
+      ...AB_BLOCK,
 
       // Incline leads variant A (upper-chest emphasis is the aesthetic priority);
       // flat leads variant B. The non-primary press drops to 3 sets that day,
@@ -553,13 +596,10 @@ export const DEFAULT_PLAN: Plan = {
     label: 'pull + legs',
     required: false,
     exercises: [
-      // The incline sit-up opens the day, fresh — the slot it was retired from at
+      // The ab block opens the day, fresh — the slot the sit-up was retired from at
       // the END of the day (revision 12), where twenty sets of legs and pulling had
-      // already spent the trunk. The cable crunch it replaces here still opens
-      // push + core, and still closes the full-length full body, so every ab move
-      // leads exactly one day: the crunch on push, this on pull, the hanging raise
-      // on full body. Three sets whichever length the day runs.
-      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      // already spent the trunk. The same block as push + core (see AB_BLOCK).
+      ...AB_BLOCK,
 
       // The day's heavy leg movement. It's the leg press rather than a barbell
       // squat because there's no rack to squat in — the press is what's actually
@@ -658,16 +698,15 @@ export const DEFAULT_PLAN: Plan = {
     // press and the pull-ups here and on pull + legs, the bench here and on push +
     // core — rather than once on a long day.
     //
-    // The short form is eighteen sets and the full one twenty-four; the compounds
-    // and the raise are the same in both, and what the full day adds is a third set
-    // of the dumbbell press, a third round of the arm pair, and the crunch.
+    // The short form is twenty-one sets and the full one twenty-four; the ab block
+    // and the compounds are the same in both, and what the full day adds is a third
+    // set of the dumbbell press and a third round of the arm pair.
     exercises: [
-      // Abs first, as on every day — and the only day that trains the raise, so
-      // it's the day graduation has to be earned on; hence the set count comes
-      // from the standard itself rather than being written out beside it (see
-      // GRADUATION_SETS). Fresh, at the top, rather than after three compounds
-      // with the grip already spent on pull-ups.
-      { key: HANGING_RAISE_KEY, name: 'hanging knee raise', sets: GRADUATION_SETS, repMin: 10, repMax: GRADUATION_REPS, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
+      // The ab block, as on every day (see AB_BLOCK). It replaced the hanging raise
+      // here, which was the last day to train it: the same two loaded movements on
+      // every day is one ab programme instead of three, and nothing hangs from the
+      // bar before the pull-ups need the grip.
+      ...AB_BLOCK,
 
       // Two minutes between sets of the compounds rather than two and a half: at
       // three sets each this is the week's second exposure to each lift, not its
@@ -688,10 +727,6 @@ export const DEFAULT_PLAN: Plan = {
       // the week; the extension's second. Two rounds on the short day.
       { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...DUMBBELL_PAIR, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
-
-      // The full day's finisher. The raise at the top is the short day's ab work;
-      // a day with the time for it gets the crunch too.
-      { key: 'cable_crunch', name: 'cable crunch', sets: 3, shortSets: 0, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'core' },
     ],
   },
 }
@@ -808,9 +843,10 @@ export function withCircuitRoundRest(
  * fallback. Keys repeat across days (leg press and bench appear on Full Body too),
  * so the first occurrence of each key wins.
  *
- * The Stretch + Core session's mat sit-up is appended last: it's a movement no
- * training day prescribes (see STRETCH_CORE), so nothing else would give it a name
- * to chart under — and coming last is what makes an old log that just says
+ * The retired hanging raise and the Stretch + Core session's mat sit-up are
+ * appended last: neither is a movement a training day prescribes (see
+ * HANGING_RAISE, STRETCH_CORE), so nothing else would give them a name to chart
+ * under — and the sit-up coming last is what makes an old log that just says
  * "weighted sit-ups" resolve to the incline one the training days train, which is
  * what such a log meant.
  */
@@ -821,6 +857,7 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     ...DEFAULT_PLAN.push.exercises,
     ...DEFAULT_PLAN.pull.exercises,
     ...DEFAULT_PLAN.fullbody.exercises,
+    HANGING_RAISE,
     STRETCH_CORE,
   ]) {
     if (seen.has(e.key)) continue
@@ -924,11 +961,8 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     'iso_chest',
   ],
   pull: [
-    // Cable ab pulldowns use the existing cable-crunch history. The crunch itself
-    // is retired from THIS day too, since revision 16: the incline sit-up opens
-    // pull + legs now, and the crunch still ships on push + core and full body.
+    // Cable ab pulldowns use the existing cable-crunch history.
     'cable_pulldown',
-    'cable_crunch',
     // The barbell squat, replaced by the leg press on both leg days: there's no
     // rack to squat in. Retiring it rather than leaving it means a device that
     // already saved a plan doesn't end up prescribing both.
@@ -969,7 +1003,12 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     // read. Cut when the day had grown too long to want to finish.
     'calf_raise',
   ],
-  fullbody: ['barbell_squat'],
+  fullbody: [
+    'barbell_squat',
+    // The hanging raise's last day. The ab block that opens every day replaced it
+    // (see AB_BLOCK); its logged history stays, and still reads for graduation.
+    HANGING_RAISE_KEY,
+  ],
 }
 
 /**
@@ -1250,10 +1289,12 @@ function displayName(e: PlannedExercise): string {
  * added ab exercises are picked up automatically.
  */
 export function absExerciseKeys(plan: Plan): Set<string> {
-  // Neither the retired dead bug nor the Stretch + Core session's mat sit-up is on
-  // any day of the plan, so both are seeded explicitly — the reps they log are core
-  // reps, and the combined series would otherwise lose them.
-  const keys = new Set<string>([DEAD_BUG_KEY, MAT_SITUP_KEY])
+  // Neither the retired dead bug, the retired hanging raise, nor the Stretch +
+  // Core session's mat sit-up is on any day of the plan, so all three are seeded
+  // explicitly — the reps they log are core reps, and the combined series would
+  // otherwise lose them. The raise logged yesterday is also ab work the day after
+  // has to know about (see lib/absRest).
+  const keys = new Set<string>([DEAD_BUG_KEY, HANGING_RAISE_KEY, MAT_SITUP_KEY])
   for (const day of Object.values(plan)) {
     for (const e of day.exercises) {
       if (/^(abs|core)$/i.test(e.group)) keys.add(e.key)

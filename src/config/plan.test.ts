@@ -87,29 +87,28 @@ describe('dayOrder', () => {
 })
 
 describe('withPlanDefaults', () => {
-  it('migrates pull day to the incline sit-up first with no other ab exercises', () => {
-    // A day stored at revision 13–15: the cable crunch opening it, the sit-up
-    // nowhere, and a pulldown the user had hung on to.
+  it('migrates pull day to the ab block first, with no other ab exercises', () => {
+    // A day stored at revision 16: the sit-up alone opening it at three sets, the
+    // crunch retired from the day, and a pulldown the user had hung on to.
     const stored = {
       ...DEFAULT_PLAN,
       pull: {
         ...DEFAULT_PLAN.pull,
         exercises: DEFAULT_PLAN.pull.exercises
-          .filter((e) => e.key !== 'weighted_situp')
+          .filter((e) => e.key !== 'cable_crunch')
+          .map((e) => (e.key === 'weighted_situp' ? { ...e, sets: 3 } : e))
           .concat([
             { key: 'cable_pulldown', name: 'cable pull down', sets: 3, repMin: 10, repMax: 15, restSec: 90, group: 'back' },
-            { key: 'cable_crunch', name: 'cable crunch', sets: 3, repMin: 12, repMax: 15, restSec: 45, group: 'abs' },
           ])
           .map((e) => e.key === 'leg_press' ? { ...e, sets: 5 } : e),
       },
     }
-    const merged = withPlanDefaults(stored, 15)
+    const merged = withPlanDefaults(stored, 16)
     const keys = merged.pull.exercises.map((e) => e.key)
-    expect(keys[0]).toBe('weighted_situp')
+    expect(keys.slice(0, 2)).toEqual(['cable_crunch', 'weighted_situp'])
     expect(keys).not.toContain('cable_pulldown')
-    expect(keys).not.toContain('cable_crunch')
-    expect(merged.pull.exercises.filter((e) => /^(abs|core)$/i.test(e.group)).map((e) => e.key))
-      .toEqual(['weighted_situp'])
+    expect(merged.pull.exercises.filter((e) => /^(abs|core)$/i.test(e.group)).map((e) => e.sets))
+      .toEqual([4, 4])
     expect(withPlanDefaults(merged, PLAN_REVISION)).toEqual(merged)
   })
 
@@ -121,17 +120,19 @@ describe('withPlanDefaults', () => {
         ...DEFAULT_PLAN.push,
         exercises: DEFAULT_PLAN.push.exercises.map((e) => {
           const { shortSets: _drop, ...rest } = e
-          return e.key === 'cable_crunch' ? { ...rest, sets: 2 } : rest
+          return e.key === 'flat_bench' ? { ...rest, sets: 1 } : rest
         }),
       },
     }
     const merged = withPlanDefaults(stored, PLAN_REVISION)
-    const crunch = merged.push.exercises.find((e) => e.key === 'cable_crunch')!
-    expect(crunch.sets).toBe(2)
-    expect(crunch.shortSets).toBe(3)
-    expect(merged.push.exercises.find((e) => e.key === 'weighted_situp')?.shortSets).toBe(0)
+    const bench = merged.push.exercises.find((e) => e.key === 'flat_bench')!
+    expect(bench.sets).toBe(1)
+    expect(bench.shortSets).toBe(2)
+    expect(merged.push.exercises.find((e) => e.key === 'tricep_pushdown')?.shortSets).toBe(2)
+    // The ab block has no short count: four sets whichever length the day runs.
+    expect(merged.push.exercises.find((e) => e.key === 'cable_crunch')?.shortSets).toBeUndefined()
     // The short form reads the stored count as the ceiling, not the shipped one.
-    expect(shortExercises(merged.push.exercises, 'short').find((e) => e.key === 'cable_crunch')?.sets).toBe(2)
+    expect(shortExercises(merged.push.exercises, 'short').find((e) => e.key === 'flat_bench')?.sets).toBe(1)
   })
 
   it('keeps only the current day types and fills any missing one from the defaults', () => {
@@ -185,24 +186,32 @@ describe('withPlanDefaults', () => {
   })
 
   it('re-adopts a renamed default exercise a stored day still calls by its old name', () => {
-    const storedFull = {
-      ...DEFAULT_PLAN.fullbody,
-      exercises: DEFAULT_PLAN.fullbody.exercises.map((e) =>
-        e.key === 'hanging_leg_raise' ? { ...e, name: 'hanging leg raise' } : e,
+    const storedPull = {
+      ...DEFAULT_PLAN.pull,
+      exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
+        e.key === 'weighted_situp' ? { ...e, name: 'weighted sit-up' } : e,
       ),
     }
-    const merged = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: storedFull }, PLAN_REVISION)
-    expect(merged.fullbody.exercises.find((e) => e.key === 'hanging_leg_raise')?.name).toBe(
-      'hanging knee raise',
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
+    expect(merged.pull.exercises.find((e) => e.key === 'weighted_situp')?.name).toBe(
+      'incline weighted sit-up',
     )
   })
 
   it('retires a movement from one day without touching the days that keep it', () => {
-    // The hanging raise and the dumbbell press both left push + core and both still
-    // ship on full body — a retirement is per day, so a stored plan keeps them there.
-    const merged = withPlanDefaults(DEFAULT_PLAN, PLAN_REVISION)
+    // The dumbbell press left push + core and still ships on full body — a
+    // retirement is per day, so a stored plan keeps it there. The hanging raise
+    // has now left every day, and a stored full body that still has it lets it go.
+    const storedFull = {
+      ...DEFAULT_PLAN.fullbody,
+      exercises: [
+        { key: 'hanging_leg_raise', name: 'hanging knee raise', sets: 3, repMin: 10, repMax: 20, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
+        ...DEFAULT_PLAN.fullbody.exercises,
+      ],
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: storedFull }, PLAN_REVISION)
     expect(merged.push.exercises.map((e) => e.key)).not.toContain('hanging_leg_raise')
-    expect(merged.fullbody.exercises.map((e) => e.key)).toContain('hanging_leg_raise')
+    expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('hanging_leg_raise')
     expect(merged.push.exercises.map((e) => e.key)).not.toContain('db_overhead_press')
     expect(merged.fullbody.exercises.map((e) => e.key)).toContain('db_overhead_press')
   })
