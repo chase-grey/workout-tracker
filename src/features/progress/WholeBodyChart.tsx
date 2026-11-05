@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { CHART_SURFACE, CHART_SURFACE_2, fmtDateLabel, niceScale, spacedTicks, timeXAxis, withTime } from '../../lib/chart'
 import type { WholeBody, WholeBodyPoint } from '../../lib/wholeBody'
@@ -61,9 +61,11 @@ function WholeBodyTooltip({
  * Only one seam is in doubt enough to draw. The fat is read off the scale, and
  * the top is the weight trend, both sure to under a pound at this scale; the
  * line between the frame and the muscle is a population equation's guess,
- * six pounds either way, and the dashes that far either side of it say so
- * (see lib/wholeBody). As the weeks go on the split's own doubt joins it,
- * though the equation's dwarfs that.
+ * six pounds either way, and a dashed line that far either side of it says
+ * so (see lib/wholeBody). As the weeks go on the split's own doubt joins it,
+ * though the equation's dwarfs that. As on the muscle vs fat chart the dashes
+ * are off until asked for: a tap on the muscle figure in the header lays them
+ * over the stack, and a second lifts them.
  */
 export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?: string }) {
   const readout = useChartReadout()
@@ -71,6 +73,8 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
   const colors = useMemo(() => tissueColors(palette), [palette])
   const id = useId()
   const ids = useMemo(() => ({ muscle: `${id}-muscle`, fat: `${id}-fat`, frame: `${id}-frame` }), [id])
+  // Whether the seam's give-or-take is laid over the stack, toggled by the muscle figure.
+  const [showSeam, setShowSeam] = useState(false)
 
   const points = useMemo(() => body?.points ?? [], [body])
   const rows: Row[] = useMemo(() => withTime(points.map((p) => ({ ...p, seam: p.rest }))), [points])
@@ -92,7 +96,7 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
 
   // The seam's give-or-take: a dashed line either side, in the frame's edge
   // colour, each on a surface-coloured halo since one of the pair falls on the
-  // muscle and the other on the hatch.
+  // muscle and the other on the hatch. Drawn only while the muscle figure is pressed.
   const bounds = [-1, 1].flatMap((side) => {
     const common = {
       dataKey: (r: Row) => r.seam + side * r.muscleError,
@@ -129,7 +133,17 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <div className="flex items-center justify-between px-3 pt-1 text-xs">
         <span className="flex gap-3">
-          <span style={{ color: colors.muscle.edge }}>muscle {last.musclePct}%</span>
+          {/* The muscle figure is the switch for the seam's dashes; a dashed
+              underline while they're on echoes the lines it put on the chart. */}
+          <button
+            type="button"
+            aria-pressed={showSeam}
+            onClick={() => setShowSeam((on) => !on)}
+            className="border-b border-dashed"
+            style={{ color: colors.muscle.edge, borderColor: showSeam ? 'currentColor' : 'transparent' }}
+          >
+            muscle {last.musclePct}%
+          </button>
           <span style={{ color: colors.fat.edge }}>fat {last.fatPct}%</span>
           <span style={{ color: colors.frame.edge }}>rest {last.restPct}%</span>
         </span>
@@ -145,7 +159,7 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
           {band('rest', 'rest', ids.frame, colors.frame.edge)}
           {band('muscle', 'muscle', ids.muscle, colors.muscle.edge)}
           {band('fat', 'fat', ids.fat, colors.fat.edge)}
-          {bounds}
+          {showSeam && bounds}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
