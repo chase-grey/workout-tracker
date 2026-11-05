@@ -13,49 +13,18 @@ import {
 import { CHART_SURFACE, CHART_SURFACE_2, CHART_ZERO, fmtDateLabel, niceScale, spacedTicks, timeXAxis, withTime } from '../../lib/chart'
 import { bandEdges, fmtGain, gainRatioLabel, type MassTrend, type MassTrendPoint } from '../../lib/massSplit'
 import { AxisBreak } from '../../components/AxisBreak'
-import { fatCells, fiberPath, muscleFibers } from '../../lib/tissue'
 import { useTheme } from '../../lib/themeStore'
-import type { Palette } from '../../lib/theme'
 import { useChartReadout } from '../../lib/useChartReadout'
+import { tissueColors, type TissueColors } from '../../lib/tissue'
+import { TissuePatterns } from './tissuePatterns'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
-
-/** A muscle tile: wide enough to hide the repeat, taller than any plot so it never repeats downward. */
-const MUSCLE_TILE = { w: 96, h: 320 }
-const FAT_TILE = { w: 72, h: 54 }
 
 /** The dashed give-or-take either side of a band's edge, and the surface-coloured halo that keeps it legible on any fill. */
 const BOUND_DASH = '3 3'
 const BOUND_WIDTH = 1.25
 const HALO_WIDTH = 3.5
-
-/**
- * The two tissues in the accent. Muscle is the deep, saturated end of the
- * ladder with lit strands running through it; fat the pale end, cells nearly
- * white with the membrane between them a shade darker. Each has an `edge`, the
- * line along its top — the sheen on a muscle, the skin over fat — which is also
- * the colour its name is printed in.
- */
-function tissueColors({ scale, theme }: Palette) {
-  const light = theme.mode === 'light'
-  return {
-    muscle: {
-      base: scale[light ? 600 : 700],
-      light: scale[light ? 400 : 500],
-      dark: scale[light ? 800 : 900],
-      seam: light ? scale[900] : '#000000',
-      edge: scale[light ? 800 : 300],
-    },
-    fat: {
-      base: scale[300],
-      cell: scale[100],
-      wall: scale[400],
-      edge: scale[light ? 500 : 50],
-    },
-  }
-}
-type TissueColors = ReturnType<typeof tissueColors>
 
 /** A week on the chart: the trend point, plus where its two edges sit above the start. */
 type Row = MassTrendPoint & { t: number; seam: number; top: number }
@@ -127,8 +96,6 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
   const id = useId()
   const muscleId = `${id}-muscle`
   const fatId = `${id}-fat`
-  const fibers = useMemo(() => muscleFibers(MUSCLE_TILE.h), [])
-  const cells = useMemo(() => fatCells(FAT_TILE.w, FAT_TILE.h), [])
   // Which edges' give-or-take is laid over the stack: the seam's goes with the
   // muscle figure, the top's with the fat figure, each toggled by its own tap.
   const [bands, setBands] = useState({ muscle: false, fat: false })
@@ -174,7 +141,6 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
     )
   }
 
-  const toneColor = { light: colors.muscle.light, dark: colors.muscle.dark, seam: colors.muscle.seam }
   const ratio = gainRatioLabel(last.muscleGain, last.fatGain)
 
   // An edge's give-or-take: a dashed line either side of it, in the edge's own
@@ -233,32 +199,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
           margin={{ top: 8, right: 12, bottom: 0, left: -12 }}
           {...readout.chart}
         >
-          <defs>
-            <pattern id={muscleId} patternUnits="userSpaceOnUse" width={MUSCLE_TILE.w} height={MUSCLE_TILE.h}>
-              <rect width={MUSCLE_TILE.w} height={MUSCLE_TILE.h} fill={colors.muscle.base} />
-              {fibers.map((f, i) => (
-                <path
-                  key={i}
-                  d={fiberPath(f, MUSCLE_TILE.w)}
-                  fill="none"
-                  stroke={toneColor[f.tone]}
-                  strokeWidth={f.width}
-                  strokeOpacity={f.opacity}
-                  strokeLinecap="round"
-                />
-              ))}
-            </pattern>
-            <pattern id={fatId} patternUnits="userSpaceOnUse" width={FAT_TILE.w} height={FAT_TILE.h}>
-              <rect width={FAT_TILE.w} height={FAT_TILE.h} fill={colors.fat.base} />
-              {cells.map((c, i) => (
-                <g key={i} transform={`rotate(${c.tilt.toFixed(1)} ${c.cx.toFixed(2)} ${c.cy.toFixed(2)})`}>
-                  {/* A shadow under the cell's lower edge, so each one rounds up off its neighbours. */}
-                  <ellipse cx={c.cx + 0.6} cy={c.cy + 1} rx={c.rx} ry={c.ry} fill={colors.fat.wall} fillOpacity={0.5} />
-                  <ellipse cx={c.cx} cy={c.cy} rx={c.rx} ry={c.ry} fill={colors.fat.cell} stroke={colors.fat.wall} strokeWidth={0.6} />
-                </g>
-              ))}
-            </pattern>
-          </defs>
+          <TissuePatterns ids={{ muscle: muscleId, fat: fatId }} colors={colors} />
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} ticks={ticks} interval={0} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} tickFormatter={fmtLbs} />

@@ -36,11 +36,13 @@ import { ExercisePicker } from './ExercisePicker'
 import { GoalsPanel } from './GoalsPanel'
 import { MetricChart } from './MetricChart'
 import { MassSplitChart } from './MassSplitChart'
+import { WholeBodyChart } from './WholeBodyChart'
 import { BulkGradePanel } from './BulkGradePanel'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
 import { bodyFatSeries } from '../../lib/bodyComp'
 import { massTrend } from '../../lib/massSplit'
+import { wholeBody } from '../../lib/wholeBody'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
 import {
   buildReview,
@@ -186,11 +188,12 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   )
 }
 
-type BodyMetric = 'bf' | 'mass'
+type BodyMetric = 'bf' | 'mass' | 'body'
 
 const BODY_METRICS: { label: string; value: BodyMetric }[] = [
   { label: 'muscle vs fat', value: 'mass' },
   { label: 'body fat %', value: 'bf' },
+  { label: 'whole body', value: 'body' },
 ]
 
 export function ProgressTab() {
@@ -240,6 +243,9 @@ export function ProgressTab() {
     () => massTrend(bodyWeightPoints(bodyWeights), bodyFatPoints),
     [bodyWeights, bodyFatPoints],
   )
+  // The same trend read as the whole body — fat, muscle, and the rest — with
+  // the muscle estimated off height and weight; see wholeBody. Null without a height.
+  const body = useMemo(() => wholeBody(massSeries, heightIn), [massSeries, heightIn])
 
   // Weekly rather than daily, complete days only, unlogged days assumed —
   // see weeklyCalorieSurplusSeries.
@@ -321,6 +327,17 @@ export function ProgressTab() {
             />
             <BulkGradePanel trend={massSeries} />
           </>
+        ) : bodyMetric === 'body' ? (
+          <WholeBodyChart
+            body={body}
+            empty={
+              latestBf == null
+                ? 'log body fat % to split the weight'
+                : !heightIn
+                  ? 'add your height to size the rest of you'
+                  : 'not enough readings yet'
+            }
+          />
         ) : (
           <MetricChart
             data={bodyFatPoints}
@@ -332,7 +349,7 @@ export function ProgressTab() {
         )}
       </div>
     ),
-    [bodyMetric, latestBf, massSeries, bodyFatPoints, calorieSurplus, bodyFatGoalLines],
+    [bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, calorieSurplus, bodyFatGoalLines],
   )
 
   return (

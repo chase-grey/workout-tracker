@@ -1,5 +1,5 @@
 /**
- * The two tissues the body-composition chart is drawn in: muscle, as a slab of
+ * The tissues the body-composition charts are drawn in: muscle, as a slab of
  * fibres running the way the chart runs, and fat, as a pack of round cells. Both
  * are SVG pattern tiles described here as plain geometry so the component only
  * has to print them, and so the tiles can be checked to repeat without a seam.
@@ -8,6 +8,46 @@
  * they don't read as a grid, but the same jitter every render, or the texture
  * would crawl each time the chart redrew.
  */
+
+import type { Palette } from './theme'
+
+/** A muscle tile: wide enough to hide the repeat, taller than any plot so it never repeats downward. */
+export const MUSCLE_TILE = { w: 96, h: 320 }
+export const FAT_TILE = { w: 72, h: 54 }
+
+/**
+ * The tissues in the accent. Muscle is the deep, saturated end of the ladder
+ * with lit strands running through it; fat the pale end, cells nearly white
+ * with the membrane between them a shade darker; and the frame — bone, organs,
+ * everything that is neither — is no tissue at all, so it takes the ground's
+ * own neutral, hatched like a plan. Each has an `edge`, the line along its top
+ * — the sheen on a muscle, the skin over fat — which is also the colour its
+ * name is printed in.
+ */
+export function tissueColors({ scale, ground, theme }: Palette) {
+  const light = theme.mode === 'light'
+  return {
+    muscle: {
+      base: scale[light ? 600 : 700],
+      light: scale[light ? 400 : 500],
+      dark: scale[light ? 800 : 900],
+      seam: light ? scale[900] : '#000000',
+      edge: scale[light ? 800 : 300],
+    },
+    fat: {
+      base: scale[300],
+      cell: scale[100],
+      wall: scale[400],
+      edge: light ? scale[500] : scale[50],
+    },
+    frame: {
+      base: ground.bodyBase,
+      hatch: ground.zero,
+      edge: ground.tick,
+    },
+  }
+}
+export type TissueColors = ReturnType<typeof tissueColors>
 
 /** A deterministic 0–1 stream from a seed (mulberry32). */
 export function seeded(seed: number): () => number {
