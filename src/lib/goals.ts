@@ -15,7 +15,6 @@ import {
   bestSetAtCapSeries,
   bestSingleSeries,
   combinedAverage1RMSeries,
-  combinedBest1RMSeries,
   averageRepsSeries,
   type Point,
 } from './progress'
@@ -651,9 +650,12 @@ export function buildGoals({
       ? bestSingleSeries(workouts, benchKeys)
       : bestSetAtCapSeries(workouts, { [BENCH_KEY]: benchCap })
   // The squat goals, in squat pounds, off whichever leg movement was trained —
-  // the press converted, a barbell squat at face value (see SQUAT_SCALE).
+  // the press converted, a barbell squat at face value (see SQUAT_SCALE). Scored
+  // on the average set, as the bench is: a day at 225 across the board is a
+  // stronger day than one that touched 225 once at the end, and the best-set
+  // reading called them equal.
   const squatKeys = [LEG_PRESS_KEY, ...SQUAT_ALSO_KEYS]
-  const squatPoints = combinedBest1RMSeries(working, squatKeys, SQUAT_SCALE)
+  const squatPoints = combinedAverage1RMSeries(working, squatKeys, SQUAT_SCALE)
   const squatSingles = bestSingleSeries(workouts, squatKeys, SQUAT_SCALE)
   const bfPoints = bodyFatSeries(measurements)
   const { target: bfTarget } = personalSixPackTarget(measurements, heightIn)

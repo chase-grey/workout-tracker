@@ -999,6 +999,20 @@ describe('the squat goals, trained on a leg press', () => {
     expect(goal.points).toEqual([{ date: '2026-08-08', value: 172.8, from: 'leg_press' }])
   })
 
+  it('scores a day on the average of its sets, so a day at the weight throughout beats one that reached it once', () => {
+    // 210×10, 215×12, 215×12, 225×10 against three sets of 225×10: the best set
+    // is 225×10 both days, and the second day was the stronger one all through.
+    const day = (date: string, sets: [number, number][]) =>
+      sets.map(([w, r], i) => ({ ...leg(date, 'leg_press', w, r), session_id: date, set_number: i + 1 }))
+    const rows = [
+      ...day('2026-10-06', [[210, 10], [215, 12], [215, 12], [225, 10]]),
+      ...day('2026-11-04', [[225, 10], [225, 10], [225, 10]]),
+    ]
+    const [uneven, level] = squatGoal(rows).points
+    expect(level.value).toBeGreaterThan(uneven.value)
+    expect(level.value).toBe(135) // 300 estimated on the press, converted
+  })
+
   it('still counts a barbell squat at face value', () => {
     const goal = squatGoal([leg('2026-08-08', 'barbell_squat', 225, 5)])
     expect(goal.points).toEqual([{ date: '2026-08-08', value: 262.5, from: 'barbell_squat' }]) // 225×5, unconverted
