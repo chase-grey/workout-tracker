@@ -82,7 +82,7 @@ function MassTooltip({
   return (
     <div style={tooltipStyle} className="px-3 py-2 text-xs">
       <div className="text-neutral-400">week of {fmtDateLabel(row.t)}</div>
-      <div style={{ color: colors.muscle.edge }}>muscle {fmtGain(row.muscleGain)}</div>
+      <div style={{ color: colors.muscle.edge }}>muscle {fmtGainError(row.muscleGain, row.muscleError)}</div>
       <div style={{ color: colors.fat.edge }}>fat {fmtGainError(row.fatGain, row.fatError)}</div>
       {ratio && <div className="font-semibold">{ratio}</div>}
       <div className="text-neutral-400">
@@ -195,7 +195,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <div className="flex items-center justify-between px-3 pt-1 text-xs">
         <span className="flex gap-3">
-          <span style={{ color: colors.muscle.edge }}>muscle {fmtGain(last.muscleGain)}</span>
+          <span style={{ color: colors.muscle.edge }}>muscle {fmtGainError(last.muscleGain, last.muscleError)}</span>
           <span style={{ color: colors.fat.edge }}>fat {fmtGainError(last.fatGain, last.fatError)}</span>
         </span>
         {ratio && <span className="font-semibold text-neutral-400">{ratio}</span>}

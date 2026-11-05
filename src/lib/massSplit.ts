@@ -151,9 +151,12 @@ export type MassTrendPoint = {
   fatGain: number
   /**
    * Pounds either side, {@link BAND_ERROR_SE} standard errors: where the top
-   * of the stack could really be, and — given the top — where the seam could.
+   * of the stack could really be, and how far off each tissue's figure could
+   * be. The muscle's is the larger of the two — it is the rest of the weight,
+   * so it carries most of the weight's doubt and all of the split's.
    */
   weightError: number
+  muscleError: number
   fatError: number
 }
 
@@ -193,14 +196,17 @@ export type MassTrend = {
  *
  * At each week the trends are read at the mean date of that week's weigh-ins,
  * fat is weight × body fat, lean the rest, and both are gains against the
- * trends at the first week. Two give-or-takes come with them, each the error
- * on the difference between two readings of a trend — readings that share the
- * mornings they were made from, so it is nothing at the start and grows as
- * the weeks stop overlapping. The weight's is the doubt about the top of the
- * stack. The fat's is the doubt about the split, the body-fat slope's error
- * scaled by the weight and the weight's scaled by the body fat, in
- * quadrature; the lean is the rest of the weight, so the seam between the
- * bands is as unsure as the fat, no more.
+ * trends at the first week. Give-or-takes come with them, each built from the
+ * error on the difference between two readings of a trend — readings that
+ * share the mornings they were made from, so it is nothing at the start and
+ * grows as the weeks stop overlapping. The weight's is the doubt about the top
+ * of the stack. The fat's is the doubt about its own figure: the body-fat
+ * slope's error scaled by the weight and the weight's scaled by the body fat,
+ * in quadrature. The muscle's is the same sum with the weight's error scaled
+ * by the lean share instead — the lean is the rest of the weight, so it owns
+ * most of the weight's doubt, and the muscle figure is always the less sure
+ * of the two. The seam between the bands is still drawn with the fat's: given
+ * the top, that is how far the split could move it.
  */
 export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null {
   const points = massPoints(weights, bodyFat)
@@ -254,7 +260,11 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
     const bfSE = localDiffSE(fatTrend, here.b, start.b) / 100
     const bf = (here.bodyFat + start.bodyFat) / 200
     const weight = (here.weight + start.weight) / 2
-    return { weightSE, fatSE: Math.hypot(bf * weightSE, weight * bfSE) }
+    return {
+      weightSE,
+      muscleSE: Math.hypot((1 - bf) * weightSE, weight * bfSE),
+      fatSE: Math.hypot(bf * weightSE, weight * bfSE),
+    }
   }
 
   const out: MassTrendPoint[] = points.map((p) => {
@@ -268,6 +278,7 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
       muscleGain: round1(here.lean - start.lean),
       fatGain: round1(here.fat - start.fat),
       weightError: round1(BAND_ERROR_SE * se.weightSE),
+      muscleError: round1(BAND_ERROR_SE * se.muscleSE),
       fatError: round1(BAND_ERROR_SE * se.fatSE),
     }
   })

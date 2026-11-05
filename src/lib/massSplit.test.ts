@@ -171,6 +171,7 @@ describe('massTrend', () => {
     expect(last.muscleGain).toBeCloseTo(1.7, 1)
     expect(last.fatGain).toBeCloseTo(0.4, 1)
     expect(last.weightError).toBe(0)
+    expect(last.muscleError).toBe(0)
     expect(last.fatError).toBe(0)
     // The stack's top is the weight trend, give or take the tenth each band is rounded to.
     for (const p of t.points) {
@@ -193,10 +194,16 @@ describe('massTrend', () => {
     const wobble = (i: number) => (i % 2 === 0 ? 0.4 : -0.4)
     const t = massTrend(mornings(42, 0.1, (i) => wobble(i) * 2), readings(42, 2, 20, wobble))
     if (!t) throw new Error('no trend')
-    expect(t.points[0]).toMatchObject({ weightError: 0, fatError: 0 })
+    expect(t.points[0]).toMatchObject({ weightError: 0, muscleError: 0, fatError: 0 })
     for (let i = 1; i < t.points.length; i++) {
-      expect(t.points[i].fatError).toBeGreaterThan(0)
-      expect(t.points[i].weightError).toBeGreaterThan(0)
+      const p = t.points[i]
+      expect(p.fatError).toBeGreaterThan(0)
+      expect(p.muscleError).toBeGreaterThan(0)
+      expect(p.weightError).toBeGreaterThan(0)
+      // Muscle is the rest of the weight: under half body fat it carries more of
+      // the weight's doubt than the fat does, but never more than both together.
+      expect(p.muscleError).toBeGreaterThanOrEqual(p.fatError)
+      expect(p.muscleError).toBeLessThanOrEqual(p.weightError + p.fatError + 0.1)
     }
     const last = t.points[t.points.length - 1]
     expect(last.fatError).toBeGreaterThan(t.points[1].fatError)
