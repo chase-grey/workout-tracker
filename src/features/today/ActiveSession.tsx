@@ -12,13 +12,11 @@ import type { SetLog, WorkoutSession } from '../../types'
 import { useData, type SessionDurationInput } from '../../store/DataContext'
 import {
   repRangeLabel,
-  shortExercises,
-  sideOrderedExercises,
-  variantExercises,
   withCircuitRest,
   withCircuitRoundRest,
   type PlannedExercise,
 } from '../../config/plan'
+import { performedExercises } from '../../lib/performed'
 import { nextTargets, targetLabel, type Target } from '../../lib/progression'
 import { buildGoals } from '../../lib/goals'
 import { goalCueForExercise } from '../../lib/goalCue'
@@ -251,20 +249,20 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const day = plan[session.dayType]
   // The day as this session is actually performing it: the A/B variant's set
   // counts and press order, how much of the day it's running (the short form
-  // until the checklist opens it up — see SessionLength), and which arm leads the
-  // one-arm-at-a-time work — all pinned when the session started.
+  // until the checklist opens it up — see SessionLength), whether the ab block is
+  // sitting this one out (see lib/absRest), and which arm leads the
+  // one-arm-at-a-time work — all pinned when the session started (see
+  // lib/performed).
   //
   // Keyed once: a movement the short form left out can be added from the list
   // before the checklist opens the day up, and then the day prescribes what the
   // addition already carries. The day's own entry wins, since the log is one.
   const exercises = useMemo(() => {
-    const own = sideOrderedExercises(
-      shortExercises(variantExercises(day, session.variant ?? null), session.length),
-      session.startSide,
-    )
+    const own = performedExercises(day, session)
     const have = new Set(own.map((e) => e.key))
     return [...own, ...(session.adHocExercises ?? []).filter((e) => !have.has(e.key))]
-  }, [day, session.variant, session.length, session.startSide, session.adHocExercises])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [day, session.variant, session.length, session.startSide, session.restAbs, session.adHocExercises])
 
   // What the add-exercise sheet can offer (see lib/adHocExercise), grouped the
   // way the plan is: built only while it's open, since it reads the whole log.
@@ -290,11 +288,23 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const expandToFullDay = () => {
     let held = step.stepKey
     if (rest?.isLastSetOfExercise) {
-      const fullCount = variantExercises(day, session.variant ?? null).find((e) => e.key === rest.exKey)?.sets ?? 0
+      const fullCount =
+        performedExercises(day, { ...session, length: 'full' }).find((e) => e.key === rest.exKey)?.sets ?? 0
       const have = logFor(rest.exKey)?.sets.length ?? 0
       if (fullCount > have) held = `${rest.exKey}:${have}`
     }
     controls.expandToFull()
+    setPendingStepKey(held)
+  }
+
+  // Bring the ab block back into a session that started without it (see
+  // lib/absRest). The abs land at the top of the day, ahead of whatever is on
+  // screen, so the set on screen is held by key across the reshaped list the way
+  // the expansion above holds it — the workout carries on from where it was, and
+  // the abs are there in the checklist to jump to.
+  const bringAbsBack = () => {
+    const held = step.stepKey
+    controls.restoreAbs()
     setPendingStepKey(held)
   }
 
@@ -1123,6 +1133,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       : []),
     { label: roundMode ? 'add a round' : 'add a set', onClick: addSet },
     { label: 'add an exercise', onClick: () => setShowAddExercise(true) },
+    // Only while the abs are sitting the session out — a block that's in the day
+    // has nothing to bring back.
+    ...(session.restAbs ? [{ label: 'bring abs back', onClick: bringAbsBack }] : []),
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'finish and log', onClick: finish },
     {

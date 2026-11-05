@@ -52,6 +52,13 @@ export type WorkoutSession = {
    * existed, which is read as full — the whole day, as it always was.
    */
   length?: import('../config/plan').SessionLength
+  /**
+   * Whether this session leaves its ab block out because the abs were trained
+   * the day before (or earlier today) — see lib/absRest. Pinned at start like
+   * `length`, and cleared by the kebab's bring-abs-back action, which puts the
+   * block into the log (lib/absRest.restoreAbs). Absent means the abs are in.
+   */
+  restAbs?: boolean
 }
 
 export type BodyWeightEntry = {

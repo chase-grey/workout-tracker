@@ -9,16 +9,12 @@ import { nextTargets } from '../../lib/progression'
 import { spreadSharedWeight } from '../../lib/sharedLoad'
 import { mirrorSidedEdit } from '../../lib/sidePair'
 import { carryLoggedSet, type CarriedSet } from '../../lib/carryForward'
-import {
-  shortExercises,
-  sideOrderedExercises,
-  variantExercises,
-  type SessionLength,
-  type VariantKey,
-} from '../../config/plan'
+import type { SessionLength, VariantKey } from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
 import { nextStartSide } from '../../lib/pushSide'
 import { expandToFull as expandSession } from '../../lib/sessionLength'
+import { restoreAbs as restoreSessionAbs, restsAbs } from '../../lib/absRest'
+import { performedExercises } from '../../lib/performed'
 
 /**
  * Owns the in-progress workout session, mirrored to localStorage so a mid-gym
@@ -58,10 +54,12 @@ export function useActiveSession() {
       const chosen = variant ?? nextVariant(workouts, dayType) ?? undefined
       // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
       const startSide = nextStartSide(workouts, dayType)
-      const planned = sideOrderedExercises(
-        shortExercises(variantExercises(plan[dayType], chosen ?? null), length),
-        startSide,
-      )
+      const date = toISODate(new Date())
+      // Abs trained yesterday (or already today) sit this one out, and the time
+      // they'd have taken goes to the rest of the day (see lib/absRest). The kebab
+      // can bring them back.
+      const restAbs = restsAbs(workouts, plan, date)
+      const planned = performedExercises(plan[dayType], { variant: chosen, length, startSide, restAbs })
       // Read as a batch rather than one lift at a time, so the exercises that
       // share a load (the tricep pair) prefill with one weight between them.
       const targets = nextTargets(workouts, planned, {
@@ -72,13 +70,14 @@ export function useActiveSession() {
       })
       setSession({
         sessionId: uuid(),
-        date: toISODate(new Date()),
+        date,
         dayType,
         isHistorical: false,
         startedAt: new Date().toISOString(),
         variant: chosen,
         startSide,
         length,
+        restAbs,
         exercises: planned.map((e) => {
           const target = targets.get(e.key) ?? { weightLbs: null, reps: e.repMin }
           const sets: SetLog[] = Array.from({ length: e.sets }, (_, i) => ({
@@ -100,10 +99,9 @@ export function useActiveSession() {
   const expandToFull = useCallback(() => {
     setSession((prev) => {
       if (!prev || prev.length !== 'short') return prev
-      const full = sideOrderedExercises(
-        variantExercises(plan[prev.dayType], prev.variant ?? null),
-        prev.startSide,
-      )
+      // The full day under the same flags — a session resting its abs opens up to
+      // the full day without them, and with the full day's own fill.
+      const full = performedExercises(plan[prev.dayType], { ...prev, length: 'full' })
       const have = new Set(prev.exercises.map((l) => l.exercise))
       const targets = nextTargets(
         workouts,
@@ -111,6 +109,24 @@ export function useActiveSession() {
         { variantFor: (key) => progressionVariant(key, prev.variant) },
       )
       return expandSession(prev, full, targets)
+    })
+  }, [plan, workouts])
+
+  // Put the ab block back into a session that started without it: the abs arrive
+  // at the top prescribed as they would have been at the start, and the sets and
+  // movements that were filling their time go unless they're already logged (see
+  // lib/absRest.restoreAbs).
+  const restoreAbs = useCallback(() => {
+    setSession((prev) => {
+      if (!prev || !prev.restAbs) return prev
+      const withAbs = performedExercises(plan[prev.dayType], { ...prev, restAbs: false })
+      const have = new Set(prev.exercises.map((l) => l.exercise))
+      const targets = nextTargets(
+        workouts,
+        withAbs.filter((e) => !have.has(e.key)),
+        { variantFor: (key) => progressionVariant(key, prev.variant) },
+      )
+      return restoreSessionAbs(prev, withAbs, targets)
     })
   }, [plan, workouts])
 
@@ -224,5 +240,5 @@ export function useActiveSession() {
     setSession(null)
   }, [])
 
-  return { session, start, expandToFull, addSet, addExercise, updateSet, carrySet, removeSet, clear }
+  return { session, start, expandToFull, restoreAbs, addSet, addExercise, updateSet, carrySet, removeSet, clear }
 }
