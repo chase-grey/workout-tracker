@@ -18,6 +18,11 @@ export type WeeklySummary = {
    * before this week. `null` if not computable.
    */
   weightTrend: number | null
+  /**
+   * Mean of this week's weigh-ins (lbs), the same figure each completed week
+   * is listed by in {@link weeklyWeightChanges}. `null` with no weigh-in yet.
+   */
+  weightAverage: number | null
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
@@ -110,10 +115,14 @@ export function weeklySummary(
   let weightTrend: number | null = null
   let thisWeekLatest: BodyWeightEntry | null = null
   let priorLatest: BodyWeightEntry | null = null
+  let thisWeekSum = 0
+  let thisWeekCount = 0
   for (const e of bodyWeights) {
     const week = weekStartISO(e.date)
     if (week === thisWeekStart) {
       if (!thisWeekLatest || e.date > thisWeekLatest.date) thisWeekLatest = e
+      thisWeekSum += e.weightLbs
+      thisWeekCount += 1
     } else if (week < thisWeekStart) {
       if (!priorLatest || e.date > priorLatest.date) priorLatest = e
     }
@@ -121,6 +130,7 @@ export function weeklySummary(
   if (thisWeekLatest && priorLatest) {
     weightTrend = round1(thisWeekLatest.weightLbs - priorLatest.weightLbs)
   }
+  const weightAverage = thisWeekCount > 0 ? round1(thisWeekSum / thisWeekCount) : null
 
-  return { workoutCount, prs, weightTrend }
+  return { workoutCount, prs, weightTrend, weightAverage }
 }

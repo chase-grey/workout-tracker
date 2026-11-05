@@ -178,6 +178,12 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
             className="flex min-h-11 w-full items-center gap-1 text-left active:opacity-70"
           >
           weight{' '}
+          {summary.weightAverage !== null && (
+            <>
+              <span className="font-semibold tabular-nums text-accent">{summary.weightAverage}</span>
+              {' · '}
+            </>
+          )}
           <span className="font-semibold tabular-nums text-accent">
             {summary.weightTrend > 0 ? '+' : ''}
             {summary.weightTrend}
@@ -194,16 +200,18 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
                 <p>No previous weeks yet.</p>
               ) : (
                 <ul className="max-h-64 space-y-3 overflow-y-auto">
-                  {shownWeightChanges.map(({ week, changeLbs }) => (
+                  {shownWeightChanges.map(({ week, averageLbs, changeLbs }) => (
                     <li key={week} className="flex items-center justify-between gap-3">
                       <span>week of {parseISODate(week).toLocaleDateString(undefined, {
                         month: 'short', day: 'numeric', year: 'numeric',
                       })}</span>
-                      <span
-                        className={`shrink-0 font-semibold tabular-nums ${changeLbs > 0 ? 'text-accent' : 'text-neutral-300'}`}
-                      >
-                        {changeLbs > 0 ? '+' : ''}
-                        {changeLbs} lbs
+                      <span className="shrink-0 tabular-nums">
+                        <span className="font-semibold text-neutral-300">{averageLbs}</span>
+                        {' · '}
+                        <span className={`font-semibold ${changeLbs > 0 ? 'text-accent' : 'text-neutral-300'}`}>
+                          {changeLbs > 0 ? '+' : ''}
+                          {changeLbs} lbs
+                        </span>
                       </span>
                     </li>
                   ))}

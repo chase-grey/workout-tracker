@@ -158,6 +158,22 @@ describe('weeklySummary', () => {
     expect(s.weightTrend).toBe(-1.8)
   })
 
+  it('averages the weigh-ins of this week, to one decimal, ignoring prior weeks', () => {
+    const bodyWeights: BodyWeightEntry[] = [
+      bw('2026-06-30', 190), // prior week: left out
+      bw('2026-07-06', 182.1),
+      bw('2026-07-07', 181.9),
+      bw('2026-07-08', 181.4),
+    ]
+    // (182.1 + 181.9 + 181.4) / 3 = 181.8
+    expect(weeklySummary([], bodyWeights, TODAY).weightAverage).toBe(181.8)
+  })
+
+  it('returns null weightAverage when there is no this-week weigh-in', () => {
+    expect(weeklySummary([], [bw('2026-06-30', 183)], TODAY).weightAverage).toBeNull()
+    expect(weeklySummary([], [], TODAY).weightAverage).toBeNull()
+  })
+
   it('returns null weightTrend when there is no prior weigh-in', () => {
     const s = weeklySummary([], [bw('2026-07-06', 182)], TODAY)
     expect(s.weightTrend).toBeNull()
