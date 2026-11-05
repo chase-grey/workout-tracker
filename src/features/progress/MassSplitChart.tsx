@@ -11,7 +11,8 @@ import {
   YAxis,
 } from 'recharts'
 import { CHART_SURFACE, CHART_SURFACE_2, CHART_ZERO, fmtDateLabel, niceScale, spacedTicks, timeXAxis, withTime } from '../../lib/chart'
-import { fmtGain, gainRatioLabel, type MassTrend, type MassTrendPoint } from '../../lib/massSplit'
+import { bandEdges, fmtGain, gainRatioLabel, type MassTrend, type MassTrendPoint } from '../../lib/massSplit'
+import { AxisBreak } from '../../components/AxisBreak'
 import { fatCells, fiberPath, muscleFibers } from '../../lib/tissue'
 import { useTheme } from '../../lib/themeStore'
 import type { Palette } from '../../lib/theme'
@@ -24,9 +25,10 @@ const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid va
 const MUSCLE_TILE = { w: 96, h: 320 }
 const FAT_TILE = { w: 72, h: 54 }
 
-/** The seam's haze, and the weekly dots: both in a neutral so neither reads as a third tissue. */
-const HAZE = '#a3a3a3'
-const DOT_RADIUS = 2.5
+/** The dashed give-or-take either side of a band's edge, and the surface-coloured halo that keeps it legible on any fill. */
+const BOUND_DASH = '3 3'
+const BOUND_WIDTH = 1.25
+const HALO_WIDTH = 3.5
 
 /**
  * The two tissues in the accent. Muscle is the deep, saturated end of the
@@ -55,7 +57,15 @@ function tissueColors({ scale, theme }: Palette) {
 }
 type TissueColors = ReturnType<typeof tissueColors>
 
-type Row = MassTrendPoint & { t: number }
+/** A week on the chart: the trend point, plus where its two edges sit above the start. */
+type Row = MassTrendPoint & { t: number; seam: number; top: number }
+
+/** A signed pound figure with its give-or-take: "+4.2 ± 0.6 lbs". */
+function fmtGainError(lbs: number, error: number): string {
+  if (error <= 0) return fmtGain(lbs)
+  const sign = lbs > 0 ? '+' : lbs < 0 ? '−' : ''
+  return `${sign}${Math.abs(lbs)} ± ${error} lbs`
+}
 
 function MassTooltip({
   active,
@@ -73,13 +83,12 @@ function MassTooltip({
     <div style={tooltipStyle} className="px-3 py-2 text-xs">
       <div className="text-neutral-400">week of {fmtDateLabel(row.t)}</div>
       <div style={{ color: colors.muscle.edge }}>muscle {fmtGain(row.muscleGain)}</div>
-      <div style={{ color: colors.fat.edge }}>
-        fat {fmtGain(row.fatGain)}
-        {row.seamError > 0 && <span className="text-neutral-400"> ± {row.seamError}</span>}
-      </div>
+      <div style={{ color: colors.fat.edge }}>fat {fmtGainError(row.fatGain, row.fatError)}</div>
       {ratio && <div className="font-semibold">{ratio}</div>}
       <div className="text-neutral-400">
-        {row.weight} lbs · {row.bodyFat}% fat · {row.weighIns} {row.weighIns === 1 ? 'weigh-in' : 'weigh-ins'}
+        {row.weight}
+        {row.weightError > 0 && ` ± ${row.weightError}`} lbs · {row.bodyFat}% fat · {row.weighIns}{' '}
+        {row.weighIns === 1 ? 'weigh-in' : 'weigh-ins'}
       </div>
     </div>
   )
@@ -92,18 +101,22 @@ function MassTooltip({
  * under a thin rind is the picture you want. Both are drawn as their tissue,
  * fibres and cells, in the theme's accent rather than butcher's colours.
  *
- * The bands are the trend, not the weeks: two straight lines fitted through the
- * weigh-ins and the body-fat readings (see lib/massSplit.massTrend), so the
- * stack is a shape and not a saw-tooth. The weeks' own means stay on as faint
- * dots — one at the top of the stack for the week's weight, one at the seam for
- * its lean — so the evidence the trend was read from is still there to see.
- * Over the seam sits a haze, the band where the seam could really be: nothing
- * at the start, widening with the weeks, narrowing again as readings pile up.
- * While the haze is most of the stack the split is not yet a reading, and the
+ * The axis is body weight. The stack stands on the weight the trend started
+ * at, and its top is the weight trend itself — so the scale reads in pounds
+ * on the scale, and the top of the stack ends where the latest weigh-ins are
+ * (see lib/massSplit.massTrend, which follows the mornings rather than ruling
+ * one line across them). Inside, the bands are still gains: the axis is
+ * stretched over the few pounds that moved, with a break at its foot.
+ *
+ * Each edge has a dashed line either side, as far off as it could really be:
+ * the top as far as the mornings' scatter allows, the seam as far as the
+ * readings' allows. Both are nothing at the start, where every band is zero by
+ * definition, and fan out as the weeks move away from it. While the seam's
+ * dashes span most of the fat band the split is not yet a reading, and the
  * chart says so without a caption.
  *
- * Fat lost while muscle went on hangs below the zero line instead of eating into
- * the muscle band, so a recomp still reads as two honest figures.
+ * Fat lost while muscle went on hangs below the start line instead of eating
+ * into the muscle band, so a recomp still reads as two honest figures.
  */
 export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empty?: string }) {
   const readout = useChartReadout()
@@ -116,23 +129,30 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
   const cells = useMemo(() => fatCells(FAT_TILE.w, FAT_TILE.h), [])
 
   const points = useMemo(() => trend?.points ?? [], [trend])
-  const rows: Row[] = useMemo(() => withTime(points), [points])
-  // The axis frames the stack: everything gained piled above zero, anything lost
-  // hung below it, the haze and the weekly dots inside it, and zero itself
-  // always on the chart.
-  const yScale = useMemo(
-    () =>
-      niceScale([
-        0,
-        ...rows.map((r) => Math.max(0, r.muscleGain) + Math.max(0, r.fatGain)),
-        ...rows.map((r) => Math.min(0, r.muscleGain) + Math.min(0, r.fatGain)),
-        ...rows.map((r) => r.muscleGain + r.seamError),
-        ...rows.map((r) => r.muscleGain - r.seamError),
-        ...rows.map((r) => r.weekTotalGain),
-        ...rows.map((r) => r.weekMuscleGain),
-      ]),
-    [rows],
-  )
+  const rows: Row[] = useMemo(() => withTime(points.map((p) => ({ ...p, ...bandEdges(p) }))), [points])
+  // The bands are drawn as gains from the start, but the axis is printed in body
+  // weight: nice round pounds are picked over the weights the stack reaches,
+  // dashes included, and each is set back on the gain scale to place it.
+  const base = trend?.startWeight ?? 0
+  const yScale = useMemo(() => {
+    const reach = rows.flatMap((r) => [
+      0,
+      r.seam + r.fatError,
+      r.seam - r.fatError,
+      r.top + r.weightError,
+      r.top - r.weightError,
+      Math.min(0, r.muscleGain) + Math.min(0, r.fatGain),
+    ])
+    // Six ticks rather than four, so a stack under five pounds gets a step of
+    // one: the coarser step framed four pounds of stack in eight of axis.
+    const lbs = niceScale(reach.map((g) => base + g), 6)
+    return {
+      domain: lbs.domain.map((v) => v - base) as [number, number],
+      ticks: lbs.ticks.map((v) => v - base),
+      broken: lbs.broken,
+    }
+  }, [rows, base])
+  const fmtLbs = (gain: number) => String(Math.round((base + gain) * 10) / 10)
   const hasLoss = rows.some((r) => r.muscleGain < 0 || r.fatGain < 0)
   // One label per week while they fit, then every other, every third… — see spacedTicks.
   const ticks = useMemo(() => spacedTicks(rows.map((r) => r.t)), [rows])
@@ -148,17 +168,35 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
 
   const toneColor = { light: colors.muscle.light, dark: colors.muscle.dark, seam: colors.muscle.seam }
   const ratio = gainRatioLabel(last.muscleGain, last.fatGain)
-  const dotStyle = (fill: string) => ({ r: DOT_RADIUS, fill, fillOpacity: 0.55, stroke: CHART_SURFACE, strokeWidth: 0.75 })
+
+  // An edge's give-or-take: a dashed line either side of it, in the edge's own
+  // colour so each pair reads as that edge, give or take. Each sits on a
+  // surface-coloured halo dashed the same way, since one of the pair always
+  // falls on the other tissue's fill.
+  const bounds = (name: string, color: string, edge: (r: Row) => number, error: (r: Row) => number) =>
+    [-1, 1].flatMap((side) => {
+      const at = (r: Row) => edge(r) + side * error(r)
+      const common = {
+        dataKey: at,
+        strokeDasharray: BOUND_DASH,
+        dot: false,
+        activeDot: false,
+        isAnimationActive: false,
+        legendType: 'none' as const,
+        tooltipType: 'none' as const,
+      }
+      return [
+        <Line key={`${name}-${side}-halo`} name={`${name} halo`} stroke={CHART_SURFACE} strokeWidth={HALO_WIDTH} strokeOpacity={0.8} {...common} />,
+        <Line key={`${name}-${side}`} name={name} stroke={color} strokeWidth={BOUND_WIDTH} {...common} />,
+      ]
+    })
 
   return (
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <div className="flex items-center justify-between px-3 pt-1 text-xs">
         <span className="flex gap-3">
           <span style={{ color: colors.muscle.edge }}>muscle {fmtGain(last.muscleGain)}</span>
-          <span style={{ color: colors.fat.edge }}>
-            fat {fmtGain(last.fatGain)}
-            {last.seamError > 0 && <span className="text-neutral-500"> ± {last.seamError}</span>}
-          </span>
+          <span style={{ color: colors.fat.edge }}>fat {fmtGainError(last.fatGain, last.fatError)}</span>
         </span>
         {ratio && <span className="font-semibold text-neutral-400">{ratio}</span>}
       </div>
@@ -197,13 +235,8 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
           </defs>
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} ticks={ticks} interval={0} tick={axisTick} />
-          <YAxis
-            tick={axisTick}
-            width={40}
-            domain={yScale.domain}
-            ticks={yScale.ticks}
-            tickFormatter={(v) => (v > 0 ? `+${v}` : String(v))}
-          />
+          <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} tickFormatter={fmtLbs} />
+          <AxisBreak broken={yScale.broken} bg={CHART_SURFACE} />
           {hasLoss && <ReferenceLine y={0} stroke={CHART_ZERO} />}
           <Tooltip {...readout.tooltip} content={<MassTooltip colors={colors} />} />
           <Area
@@ -232,41 +265,8 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
             activeDot={{ r: 3, fill: colors.fat.edge, stroke: CHART_SURFACE }}
             isAnimationActive={false}
           />
-          {/* Where the seam could really sit: a haze over the muscle band's edge, two standard errors each way. */}
-          <Area
-            type="monotone"
-            dataKey={(r: Row) => [r.muscleGain - r.seamError, r.muscleGain + r.seamError]}
-            name="seam"
-            stroke="none"
-            fill={HAZE}
-            fillOpacity={0.28}
-            dot={false}
-            activeDot={false}
-            isAnimationActive={false}
-            legendType="none"
-            tooltipType="none"
-          />
-          {/* The weeks themselves: each week's mean weight at the top of the stack, its mean lean at the seam. */}
-          <Line
-            dataKey="weekTotalGain"
-            name="week"
-            stroke="none"
-            dot={dotStyle(colors.fat.edge)}
-            activeDot={false}
-            isAnimationActive={false}
-            legendType="none"
-            tooltipType="none"
-          />
-          <Line
-            dataKey="weekMuscleGain"
-            name="week lean"
-            stroke="none"
-            dot={dotStyle(colors.muscle.edge)}
-            activeDot={false}
-            isAnimationActive={false}
-            legendType="none"
-            tooltipType="none"
-          />
+          {bounds('seam', colors.muscle.edge, (r) => r.seam, (r) => r.fatError)}
+          {bounds('top', colors.fat.edge, (r) => r.top, (r) => r.weightError)}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

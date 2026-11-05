@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bodyFatOn, fmtGain, gainRatioLabel, massPoints, massTrend, MAX_READING_GAP_DAYS, SEAM_ERROR_SE } from './massSplit'
+import { bandEdges, bodyFatOn, fmtGain, gainRatioLabel, massPoints, massTrend, MAX_READING_GAP_DAYS, BAND_ERROR_SE } from './massSplit'
 
 describe('bodyFatOn', () => {
   const readings = [
@@ -150,7 +150,7 @@ describe('massTrend', () => {
   const readings = (days: number, every: number, pct: number, wobble = (_: number) => 0) =>
     Array.from({ length: Math.ceil(days / every) }, (_, i) => ({ date: day(i * every), value: pct + wobble(i) }))
 
-  it('reads the bands off straight lines, with no doubt when the data is a line', () => {
+  it('reads the bands off the trends, with no doubt when the data is a line', () => {
     // 0.1 lb a day at a steady 20 % fat: each pound is 0.2 fat and 0.8 lean.
     const t = massTrend(mornings(28, 0.1), readings(28, 7, 20))
     expect(t).not.toBeNull()
@@ -166,33 +166,48 @@ describe('massTrend', () => {
     expect(t.leanPerWeek).toBeCloseTo(0.56, 1)
     expect(t.fatPerWeekSE).toBeCloseTo(0)
     const last = t.points[3]
+    expect(last.weight).toBeCloseTo(182.4, 1)
+    expect(last.bodyFat).toBe(20)
     expect(last.muscleGain).toBeCloseTo(1.7, 1)
     expect(last.fatGain).toBeCloseTo(0.4, 1)
-    expect(last.seamError).toBe(0)
-    // The weeks' own means sit on the lines, give or take the tenth they are rounded to.
+    expect(last.weightError).toBe(0)
+    expect(last.fatError).toBe(0)
+    // The stack's top is the weight trend, give or take the tenth each band is rounded to.
     for (const p of t.points) {
-      expect(Math.abs(p.weekTotalGain - (p.muscleGain + p.fatGain))).toBeLessThanOrEqual(0.15)
-      expect(Math.abs(p.weekMuscleGain - p.muscleGain)).toBeLessThanOrEqual(0.15)
+      expect(Math.abs(t.startWeight + p.muscleGain + p.fatGain - p.weight)).toBeLessThanOrEqual(0.15)
     }
   })
 
-  it('widens the give-or-take on the seam with the span when the readings scatter', () => {
-    const wobble = (i: number) => (i % 2 === 0 ? 0.4 : -0.4)
-    const t = massTrend(mornings(42, 0.1), readings(42, 2, 20, wobble))
+  it('ends where the latest mornings are, not where a line over the whole span would', () => {
+    // Four flat weeks, then two pounds on in the last ten days.
+    const t = massTrend(mornings(38, 0, (i) => (i >= 28 ? 0.2 * (i - 28) : 0)), readings(38, 2, 20))
     if (!t) throw new Error('no trend')
-    expect(t.points[0].seamError).toBe(0)
-    for (let i = 1; i < t.points.length; i++) {
-      expect(t.points[i].seamError).toBeGreaterThan(t.points[i - 1].seamError)
-    }
-    expect(t.fatPerWeekSE).toBeGreaterThan(0)
-    // The haze is SEAM_ERROR_SE errors wide, grown over the days since the start.
     const last = t.points[t.points.length - 1]
-    const weeksAcross = (t.points.length - 1) * 1
-    expect(last.seamError).toBeCloseTo(SEAM_ERROR_SE * t.fatPerWeekSE * weeksAcross, 0)
-    expect(SEAM_ERROR_SE).toBe(2)
+    // The last week's mornings run 180 → 181.8; a line over the whole span ends near 180.9.
+    expect(last.weight).toBeGreaterThan(181.3)
+    expect(t.points[1].weight).toBeCloseTo(180, 0)
+    expect(last.muscleGain + last.fatGain).toBeCloseTo(last.weight - t.startWeight, 0)
   })
 
-  it('is surer of the seam the more readings it has', () => {
+  it('widens the give-or-take on each band as the weeks move away from the start', () => {
+    const wobble = (i: number) => (i % 2 === 0 ? 0.4 : -0.4)
+    const t = massTrend(mornings(42, 0.1, (i) => wobble(i) * 2), readings(42, 2, 20, wobble))
+    if (!t) throw new Error('no trend')
+    expect(t.points[0]).toMatchObject({ weightError: 0, fatError: 0 })
+    for (let i = 1; i < t.points.length; i++) {
+      expect(t.points[i].fatError).toBeGreaterThan(0)
+      expect(t.points[i].weightError).toBeGreaterThan(0)
+    }
+    const last = t.points[t.points.length - 1]
+    expect(last.fatError).toBeGreaterThan(t.points[1].fatError)
+    expect(t.fatPerWeekSE).toBeGreaterThan(0)
+    // The dashes are BAND_ERROR_SE errors wide, grown over the weeks since the start.
+    const weeksAcross = t.points.length - 1
+    expect(last.fatError).toBeCloseTo(BAND_ERROR_SE * t.fatPerWeekSE * weeksAcross, 0)
+    expect(BAND_ERROR_SE).toBe(1)
+  })
+
+  it('is surer of the fat the more readings it has', () => {
     const wobble = (i: number) => (i % 2 === 0 ? 0.4 : -0.4)
     const sparse = massTrend(mornings(42, 0.1), readings(42, 7, 20, wobble))
     const dense = massTrend(mornings(42, 0.1), readings(42, 1, 20, wobble))
@@ -200,12 +215,12 @@ describe('massTrend', () => {
     expect(dense.fatPerWeekSE).toBeLessThan(sparse.fatPerWeekSE)
   })
 
-  it('keeps the weeks\' own means as dots that stray from the lines', () => {
+  it('lets one heavy morning move the trend a little, not a pound', () => {
     const t = massTrend(mornings(28, 0.1, (i) => (i === 10 ? 3 : 0)), readings(28, 7, 20))
     if (!t) throw new Error('no trend')
-    // The week with the heavy morning sits above the line; the trend barely moves.
     const heavy = t.points[1]
-    expect(heavy.weekTotalGain).toBeGreaterThan(heavy.muscleGain + heavy.fatGain + 0.2)
+    expect(heavy.weight - 181).toBeGreaterThan(0)
+    expect(heavy.weight - 181).toBeLessThan(0.5)
     expect(t.weightPerWeek).toBeCloseTo(0.7, 0)
   })
 
@@ -223,6 +238,19 @@ describe('massTrend', () => {
     expect(massTrend(mornings(28, 0.1), readings(28, 14, 20))).toBeNull()
     expect(massTrend([{ date: day(0), value: 180 }, { date: day(8), value: 181 }], readings(14, 3, 20))).toBeNull()
     expect(massTrend([], [])).toBeNull()
+  })
+})
+
+describe('bandEdges', () => {
+  it('stacks gains up from the start, muscle first, and hangs losses below it', () => {
+    expect(bandEdges({ muscleGain: 3, fatGain: 1 })).toEqual({ seam: 3, top: 4 })
+    expect(bandEdges({ muscleGain: -2, fatGain: -1 })).toEqual({ seam: -2, top: -3 })
+  })
+
+  it('keeps each band on its own side of the start on a recomp', () => {
+    expect(bandEdges({ muscleGain: 3, fatGain: -1 })).toEqual({ seam: 3, top: -1 })
+    expect(bandEdges({ muscleGain: -1, fatGain: 2 })).toEqual({ seam: -1, top: 2 })
+    expect(bandEdges({ muscleGain: 0, fatGain: 0 })).toEqual({ seam: 0, top: 0 })
   })
 })
 
