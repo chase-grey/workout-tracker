@@ -232,11 +232,18 @@ describe('the short forms', () => {
   it('cut every day, with the ab block the eight sets the short days have in common', () => {
     expect(total(short('push', 'A'))).toBe(25)
     expect(total(short('push', 'B'))).toBe(25)
-    expect(total(short('pull'))).toBe(23)
-    expect(total(short('fullbody'))).toBe(23)
+    expect(total(short('pull'))).toBe(24)
+    expect(total(short('fullbody'))).toBe(24)
     expect(total(variantExercises(DEFAULT_PLAN.push, 'A'))).toBe(30)
     expect(total(DEFAULT_PLAN.pull.exercises)).toBe(43)
-    expect(total(DEFAULT_PLAN.fullbody.exercises)).toBe(26)
+    expect(total(DEFAULT_PLAN.fullbody.exercises)).toBe(27)
+  })
+
+  it('train the pull-ups at four sets on every day, short or full', () => {
+    for (const type of ['pull', 'fullbody'] as const) {
+      expect(short(type).find((e) => e.key === 'weighted_pullups')?.sets).toBe(4)
+      expect(DEFAULT_PLAN[type].exercises.find((e) => e.key === 'weighted_pullups')?.sets).toBe(4)
+    }
   })
 
   it('keep the lead press whole and cut the second to two, whichever press leads', () => {

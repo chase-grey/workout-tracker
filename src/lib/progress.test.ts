@@ -75,9 +75,14 @@ describe('averageRepsSeries', () => {
     expect(s[0].value).toBe(8.5)
   })
 
-  it('leaves out a session short of the set count rather than scoring it zero', () => {
+  it('averages a session short of the set count over the sets it logged', () => {
+    // Three sets of ten read as ten, not as 7.5 with a phantom zero, and the day
+    // stays on the line rather than vanishing from it.
     const rows = [...pullup('a', '2026-01-05', [10, 10, 10]), ...pullup('b', '2026-01-12', [9, 9, 9, 9])]
-    expect(averageRepsSeries(rows, 'weighted_pullups', 4)).toEqual([{ date: '2026-01-12', value: 9 }])
+    expect(averageRepsSeries(rows, 'weighted_pullups', 4)).toEqual([
+      { date: '2026-01-05', value: 10 },
+      { date: '2026-01-12', value: 9 },
+    ])
   })
 
   it('sorts oldest → newest and ignores other exercises', () => {

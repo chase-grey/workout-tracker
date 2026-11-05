@@ -171,8 +171,8 @@ describe('the pull-up ladder', () => {
     expect(isReached(goals[1])).toBe(false) // 4×10
   })
 
-  it('ignores a session that stopped short of four sets', () => {
-    expect(ladder(pullups('2026-02-01', [20, 20, 20]))[0].points).toEqual([])
+  it('reads a session that stopped short of four sets on the sets it logged', () => {
+    expect(ladder(pullups('2026-02-01', [20, 20, 20]))[0].points).toEqual([{ date: '2026-02-01', value: 20 }])
   })
 
   it('counts a rung done with added weight', () => {

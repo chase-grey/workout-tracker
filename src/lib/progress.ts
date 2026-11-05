@@ -145,11 +145,15 @@ export function offSlotSeries(rows: WorkoutRow[], exerciseKey: string, metric: M
  * it reads 5.3. Only the best `sets` sets count when more were logged, so a
  * back-off set tacked on the end can't drag the reading down either.
  *
- * Sessions that logged fewer than `sets` sets are left out rather than scored
- * zero. A three-set day doesn't say the four-set standard was missed, it says it
- * wasn't attempted, and a zero in the series would read as a collapse and drag
- * the fitted pace down with it. The same reason `topreps` exists: a rep figure
- * shouldn't move because the day prescribed three sets instead of four.
+ * A session that logged fewer than `sets` sets is averaged over the sets it did
+ * log, so a day that stopped at three still lands on the line at what those
+ * three were. Scoring the missing set as a zero would read a 10, 10, 10 day as
+ * 7.5 — a collapse that never happened — and leaving the day out, as this once
+ * did, made it vanish from the chart altogether, which read as a workout that
+ * hadn't been done. The price: a short day can clear a four-set rung on three
+ * sets at the number. The plan prescribes the full count on every day now, so a
+ * short day is an early stop rather than a lighter prescription, and the tooltip
+ * lists the sets as they were logged (see goalSets) for anyone who wants to know.
  */
 export function averageRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets: number): Point[] {
   const bySession = new Map<string, { date: string; reps: number[] }>()
@@ -161,10 +165,10 @@ export function averageRepsSeries(rows: WorkoutRow[], exerciseKey: string, sets:
     bySession.set(key, g)
   }
   return [...bySession.values()]
-    .filter((g) => g.reps.length >= sets)
+    .filter((g) => g.reps.length > 0)
     .map((g) => {
       const best = [...g.reps].sort((a, b) => b - a).slice(0, sets)
-      const avg = best.reduce((sum, n) => sum + n, 0) / sets
+      const avg = best.reduce((sum, n) => sum + n, 0) / best.length
       return { date: g.date, value: Math.round(avg * 10) / 10 }
     })
     .sort((a, b) => (a.date < b.date ? -1 : 1))

@@ -321,7 +321,11 @@ export type Plan = Record<DayType, DayPlan>
 // trains on consecutive lift days, so a session started the day after ab work
 // leaves the block out and spends its time on the rest of the day (see
 // lib/absRest).
-export const PLAN_REVISION = 17
+// 18: the pull-ups are four sets wherever they're trained — the short pull + legs
+// day no longer cuts them to three, and full body goes from three to four. They
+// are the sets the pull-up ladder is read from, and a three-set day was the one
+// that didn't land on its chart.
+export const PLAN_REVISION = 18
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -661,9 +665,10 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'sideways_leg_raise_l', name: 'sideways leg raise (left)', side: 'left', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
       { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
 
-      // Three sets on the short day, like the leg press and for the same reason:
-      // full body pulls again later in the week.
-      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, shortSets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+      // Four sets whichever length the day runs, unlike the leg press above: the
+      // pull-up ladder is measured on four sets (see goals.PULLUP_GOAL_SETS), so a
+      // short day that trained three was a day the ladder read short.
+      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
       // Both are a dumbbell in each hand, so both step in 10s and top out at the
       // rack's heaviest pair (see DUMBBELL_PAIR).
@@ -692,13 +697,13 @@ export const DEFAULT_PLAN: Plan = {
     type: 'fullbody',
     label: 'full body',
     required: false,
-    // The third session of the week: the three goal lifts a second time, three
-    // sets each, with a little shoulder, arm and core work around them. Built so
+    // The third session of the week: the three goal lifts a second time, with a
+    // little shoulder, arm and core work around them. Built so
     // every big muscle is trained twice a week across the three days — the leg
     // press and the pull-ups here and on pull + legs, the bench here and on push +
     // core — rather than once on a long day.
     //
-    // The short form is twenty-one sets and the full one twenty-four; the ab block
+    // The short form is twenty-two sets and the full one twenty-five; the ab block
     // and the compounds are the same in both, and what the full day adds is a third
     // set of the dumbbell press and a third round of the arm pair.
     exercises: [
@@ -708,13 +713,15 @@ export const DEFAULT_PLAN: Plan = {
       // bar before the pull-ups need the grip.
       ...AB_BLOCK,
 
-      // Two minutes between sets of the compounds rather than two and a half: at
-      // three sets each this is the week's second exposure to each lift, not its
-      // heaviest, and the longer rests were a third of what made the old day run
-      // longer than a push day.
+      // Two minutes between sets of the compounds rather than two and a half: this
+      // is the week's second exposure to each lift, not its heaviest, and the
+      // longer rests were a third of what made the old day run longer than a push
+      // day. The press and the bench at three sets; the pull-ups at four, the count
+      // they're trained at everywhere, because the pull-up ladder is read from
+      // four sets and a three-set day read short on it.
       { key: 'leg_press', name: 'leg press', sets: 3, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
       { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 120, ...DUMBBELL_PAIR, group: 'chest' },
-      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 3, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
       // The dumbbell press keeps its place here, pressed fresh — push + core has
       // the machine. Two sets on the short day.

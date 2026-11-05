@@ -725,7 +725,8 @@ export function buildGoals({
   // reps rather than the whole session. The price: 12, 12, 12, 4 clears 4×10
   // without a fourth set of ten. Milestones, like the flexibility rungs: a day
   // that hit 4×10 doesn't stop having happened because the next session came in
-  // tired.
+  // tired. A session that stopped short of four sets is read on the sets it did
+  // log rather than dropped from the line (see progress.averageRepsSeries).
   //
   // Any pull-up set counts, added weight or not. A rung done with a belt on is
   // the harder version of the same thing, and refusing it would mean the ladder
