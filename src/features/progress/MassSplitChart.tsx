@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import {
   Area,
   CartesianGrid,
@@ -108,12 +108,14 @@ function MassTooltip({
  * one line across them). Inside, the bands are still gains: the axis is
  * stretched over the few pounds that moved, with a break at its foot.
  *
- * Each edge has a dashed line either side, as far off as it could really be:
- * the top as far as the mornings' scatter allows, the seam as far as the
+ * Each edge can show a dashed line either side, as far off as it could really
+ * be: the top as far as the mornings' scatter allows, the seam as far as the
  * readings' allows. Both are nothing at the start, where every band is zero by
  * definition, and fan out as the weeks move away from it. While the seam's
  * dashes span most of the fat band the split is not yet a reading, and the
- * chart says so without a caption.
+ * chart says so without a caption. The dashes are off until asked for: a tap
+ * on a tissue's figure in the header lays its pair over the stack, and a
+ * second tap lifts them, so the stack is normally just the stack.
  *
  * Fat lost while muscle went on hangs below the start line instead of eating
  * into the muscle band, so a recomp still reads as two honest figures.
@@ -127,20 +129,26 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
   const fatId = `${id}-fat`
   const fibers = useMemo(() => muscleFibers(MUSCLE_TILE.h), [])
   const cells = useMemo(() => fatCells(FAT_TILE.w, FAT_TILE.h), [])
+  // Which edges' give-or-take is laid over the stack: the seam's goes with the
+  // muscle figure, the top's with the fat figure, each toggled by its own tap.
+  const [bands, setBands] = useState({ muscle: false, fat: false })
+  const toggle = (tissue: 'muscle' | 'fat') => setBands((b) => ({ ...b, [tissue]: !b[tissue] }))
 
   const points = useMemo(() => trend?.points ?? [], [trend])
   const rows: Row[] = useMemo(() => withTime(points.map((p) => ({ ...p, ...bandEdges(p) }))), [points])
   // The bands are drawn as gains from the start, but the axis is printed in body
   // weight: nice round pounds are picked over the weights the stack reaches,
-  // dashes included, and each is set back on the gain scale to place it.
+  // any shown dashes included, and each is set back on the gain scale to place it.
   const base = trend?.startWeight ?? 0
   const yScale = useMemo(() => {
+    const seamError = (r: Row) => (bands.muscle ? r.fatError : 0)
+    const topError = (r: Row) => (bands.fat ? r.weightError : 0)
     const reach = rows.flatMap((r) => [
       0,
-      r.seam + r.fatError,
-      r.seam - r.fatError,
-      r.top + r.weightError,
-      r.top - r.weightError,
+      r.seam + seamError(r),
+      r.seam - seamError(r),
+      r.top + topError(r),
+      r.top - topError(r),
       Math.min(0, r.muscleGain) + Math.min(0, r.fatGain),
     ])
     // Six ticks rather than four, so a stack under five pounds gets a step of
@@ -151,7 +159,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
       ticks: lbs.ticks.map((v) => v - base),
       broken: lbs.broken,
     }
-  }, [rows, base])
+  }, [rows, base, bands])
   const fmtLbs = (gain: number) => String(Math.round((base + gain) * 10) / 10)
   const hasLoss = rows.some((r) => r.muscleGain < 0 || r.fatGain < 0)
   // One label per week while they fit, then every other, every third… — see spacedTicks.
@@ -172,7 +180,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
   // An edge's give-or-take: a dashed line either side of it, in the edge's own
   // colour so each pair reads as that edge, give or take. Each sits on a
   // surface-coloured halo dashed the same way, since one of the pair always
-  // falls on the other tissue's fill.
+  // falls on the other tissue's fill. Drawn only while its figure is pressed.
   const bounds = (name: string, color: string, edge: (r: Row) => number, error: (r: Row) => number) =>
     [-1, 1].flatMap((side) => {
       const at = (r: Row) => edge(r) + side * error(r)
@@ -195,8 +203,26 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <div className="flex items-center justify-between px-3 pt-1 text-xs">
         <span className="flex gap-3">
-          <span style={{ color: colors.muscle.edge }}>muscle {fmtGainError(last.muscleGain, last.muscleError)}</span>
-          <span style={{ color: colors.fat.edge }}>fat {fmtGainError(last.fatGain, last.fatError)}</span>
+          {/* Each figure is the switch for its own dashes; a dashed underline
+              while they're on echoes the lines it put on the chart. */}
+          <button
+            type="button"
+            aria-pressed={bands.muscle}
+            onClick={() => toggle('muscle')}
+            className="border-b border-dashed"
+            style={{ color: colors.muscle.edge, borderColor: bands.muscle ? 'currentColor' : 'transparent' }}
+          >
+            muscle {fmtGainError(last.muscleGain, last.muscleError)}
+          </button>
+          <button
+            type="button"
+            aria-pressed={bands.fat}
+            onClick={() => toggle('fat')}
+            className="border-b border-dashed"
+            style={{ color: colors.fat.edge, borderColor: bands.fat ? 'currentColor' : 'transparent' }}
+          >
+            fat {fmtGainError(last.fatGain, last.fatError)}
+          </button>
         </span>
         {ratio && <span className="font-semibold text-neutral-400">{ratio}</span>}
       </div>
@@ -265,8 +291,8 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
             activeDot={{ r: 3, fill: colors.fat.edge, stroke: CHART_SURFACE }}
             isAnimationActive={false}
           />
-          {bounds('seam', colors.muscle.edge, (r) => r.seam, (r) => r.fatError)}
-          {bounds('top', colors.fat.edge, (r) => r.top, (r) => r.weightError)}
+          {bands.muscle && bounds('seam', colors.muscle.edge, (r) => r.seam, (r) => r.fatError)}
+          {bands.fat && bounds('top', colors.fat.edge, (r) => r.top, (r) => r.weightError)}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
