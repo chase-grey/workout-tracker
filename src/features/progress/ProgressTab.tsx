@@ -39,7 +39,7 @@ import { MassSplitChart } from './MassSplitChart'
 import { BulkGradePanel } from './BulkGradePanel'
 import { MuscleAvatar } from './MuscleAvatar'
 import { TimeSpent } from './TimeSpent'
-import { bodyFatSeries, waistSeries, latestMeasurement } from '../../lib/bodyComp'
+import { bodyFatSeries } from '../../lib/bodyComp'
 import { massTrend } from '../../lib/massSplit'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
 import {
@@ -186,12 +186,11 @@ function BenchChart({ data, unit }: { data: ReturnType<typeof mergeSeries>; unit
   )
 }
 
-type BodyMetric = 'bf' | 'waist' | 'mass'
+type BodyMetric = 'bf' | 'mass'
 
 const BODY_METRICS: { label: string; value: BodyMetric }[] = [
   { label: 'muscle vs fat', value: 'mass' },
   { label: 'body fat %', value: 'bf' },
-  { label: 'waist', value: 'waist' },
 ]
 
 export function ProgressTab() {
@@ -232,18 +231,14 @@ export function ProgressTab() {
   }
 
   const heightIn = settings.heightIn ?? 0
-  const lastMeasure = latestMeasurement(measurements)
-  const latestBf = bodyFatSeries(measurements).at(-1)?.value ?? null
-  const bodySeries = useMemo(
-    () => (bodyMetric === 'bf' ? bodyFatSeries(measurements) : waistSeries(measurements)),
-    [measurements, bodyMetric],
-  )
+  const bodyFatPoints = useMemo(() => bodyFatSeries(measurements), [measurements])
+  const latestBf = bodyFatPoints.at(-1)?.value ?? null
   // The weight put on since body fat was first read, split into muscle and fat
   // by trends through the weigh-ins and the readings since — see massTrend.
   // Null until there are two weeks and three of each to fit a line through.
   const massSeries = useMemo(
-    () => massTrend(bodyWeightPoints(bodyWeights), bodyFatSeries(measurements)),
-    [bodyWeights, measurements],
+    () => massTrend(bodyWeightPoints(bodyWeights), bodyFatPoints),
+    [bodyWeights, bodyFatPoints],
   )
 
   // Weekly rather than daily, complete days only, unlogged days assumed —
@@ -307,41 +302,37 @@ export function ProgressTab() {
 
   const unit = metric === 'volume' ? 'vol' : metric === 'reps' ? 'reps' : 'lbs'
 
-  // The body-composition block: the split of the weight put on, body fat and
-  // waist, under one header. Drawn by the goals panel directly beneath the body
-  // weight chart, which plots the same weigh-ins these read off — see
-  // GoalsPanel's underBodyWeight.
-  const bodySection = (
-    <div className="flex flex-col gap-3">
-      <div>
-        <h4 className="px-1 font-semibold">
-          body fat
-          {latestBf != null
-            ? ` · ${latestBf}%`
-            : lastMeasure?.waistIn != null
-              ? ` · ${lastMeasure.waistIn}" waist`
-              : ''}
-        </h4>
-      </div>
-      <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
-      {bodyMetric === 'mass' ? (
-        <>
-          <MassSplitChart
-            trend={massSeries}
-            empty={latestBf == null ? 'log body fat % to split the weight' : 'not enough readings yet'}
+  // The body-composition block: the split of the weight put on, and the body
+  // fat readings on their own, under one header. Drawn by the goals panel inside
+  // the body weight card, under its goals and within its outline, since the
+  // weight chart plots the same weigh-ins these read off — see GoalsPanel's
+  // underBodyWeight. Memoized because the panel
+  // folds it into a memoized block list and keys off this node's identity.
+  const bodySection = useMemo(
+    () => (
+      <div className="flex flex-col gap-3">
+        <h4 className="px-1 font-semibold">body fat{latestBf != null ? ` · ${latestBf}%` : ''}</h4>
+        <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
+        {bodyMetric === 'mass' ? (
+          <>
+            <MassSplitChart
+              trend={massSeries}
+              empty={latestBf == null ? 'log body fat % to split the weight' : 'not enough readings yet'}
+            />
+            <BulkGradePanel trend={massSeries} />
+          </>
+        ) : (
+          <MetricChart
+            data={bodyFatPoints}
+            unit="%"
+            label="body fat"
+            calories={calorieSurplus}
+            goalLines={bodyFatGoalLines}
           />
-          <BulkGradePanel trend={massSeries} />
-        </>
-      ) : (
-        <MetricChart
-          data={bodySeries}
-          unit={bodyMetric === 'bf' ? '%' : 'in'}
-          label={bodyMetric === 'bf' ? 'body fat' : 'waist'}
-          calories={calorieSurplus}
-          goalLines={bodyMetric === 'bf' ? bodyFatGoalLines : undefined}
-        />
-      )}
-    </div>
+        )}
+      </div>
+    ),
+    [bodyMetric, latestBf, massSeries, bodyFatPoints, calorieSurplus, bodyFatGoalLines],
   )
 
   return (

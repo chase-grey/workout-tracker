@@ -1340,7 +1340,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, locked, projections, settings, ladders, liftLadders])
+  }, [goals, locked, projections, settings, ladders, liftLadders, underBodyWeight])
 
   const ordered = useMemo(() => orderGoalUnits(units).map((u) => u.node), [units])
 
