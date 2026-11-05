@@ -273,7 +273,7 @@ export function BodyWeightChart({
             contentStyle={tooltipStyle}
             labelStyle={{ color: 'var(--color-neutral-400)' }}
             labelFormatter={(ms) => labelWithWeek(Number(ms))}
-            formatter={(v, n) => [`${v} lbs`, n]}
+            formatter={(v, n) => [`${Math.round(Number(v) * 10) / 10} lbs`, n]}
           />
           {/* The targets themselves. Both climb away from the data, so the tags
               hang under their lines, on the side the weigh-ins have already left —

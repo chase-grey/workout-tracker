@@ -372,19 +372,25 @@ export function lockProjectionByDate(
  * goal projects without decay. A long commitment therefore straightens out in
  * its back half rather than flattening off, because that's where the pace it was
  * quoted at has bottomed out rather than run to nothing.
+ *
+ * The value is exact, not rounded. The charts sample this on every logged day,
+ * and a line that moves a few hundredths a day rounded to tenths is a staircase
+ * — which the chart's curve smoothing then rides up and down, so a straight
+ * bodyweight line drew wavy and a pull-up curve drew jittery. Round where a
+ * number is shown (see {@link paceAgainstLock}, GoalTooltip), not on the line.
  */
 export function expectedAt(lock: LockedProjection, date: string): number {
   const span = daysBetween(lock.lockedAt, lock.etaDate)
-  if (span <= 0) return round1(lock.target)
+  if (span <= 0) return lock.target
   const elapsed = daysBetween(lock.lockedAt, date)
-  if (elapsed <= 0) return round1(lock.startValue)
-  if (elapsed >= span) return round1(lock.target)
+  if (elapsed <= 0) return lock.startValue
+  if (elapsed >= span) return lock.target
 
   const r = decayOf(lock)
   const floor = floorOf(lock)
   const fraction =
     cumulativeGain(elapsed / 7, r, floor) / cumulativeGain(span / 7, r, floor)
-  return round1(lock.startValue + (lock.target - lock.startValue) * fraction)
+  return lock.startValue + (lock.target - lock.startValue) * fraction
 }
 
 /**
@@ -403,7 +409,7 @@ export function projectedSeries(lock: LockedProjection): { date: string; value: 
   // Always land exactly on the target at the ETA, even when the span isn't a
   // whole number of weeks.
   if (out.length === 0 || out[out.length - 1].date !== lock.etaDate) {
-    out.push({ date: lock.etaDate, value: round1(lock.target) })
+    out.push({ date: lock.etaDate, value: lock.target })
   }
   return out
 }
@@ -506,6 +512,9 @@ export function paceAgainstLock(
   today: Date = new Date(),
   liveProjection?: Projection,
 ): Pace {
+  // Read off the exact line (see expectedAt) and rounded here, once, where the
+  // figures are reported — rounding the line first and the gap after could put a
+  // reading a tenth from the line a whole tenth "ahead" of it.
   const expected = expectedAt(lock, actualDate)
   // Sign so that "ahead" is always progress toward the target.
   const toward = Math.sign(lock.target - lock.startValue) || 1
@@ -538,5 +547,5 @@ export function paceAgainstLock(
   }
 
   if (liveProjection?.targetSlopePerWeek != null) revisedEta = liveProjection.etaDate
-  return { aheadBy, expected, actual, status, revisedEta }
+  return { aheadBy, expected: round1(expected), actual, status, revisedEta }
 }

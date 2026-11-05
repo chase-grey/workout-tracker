@@ -339,6 +339,41 @@ describe('expectedAt', () => {
     expect(expectedAt(CLIMB, '2025-06-01')).toBe(100)
     expect(expectedAt(CLIMB, '2027-01-01')).toBe(200)
   })
+
+  it('draws a slow straight line straight when sampled every day', () => {
+    // A bodyweight goal moves a few hundredths a day. The charts read the line
+    // on every logged day, and a value rounded to tenths at each one is a
+    // staircase the curve smoothing turns into a wobble — so the daily samples
+    // have to be exactly collinear: every day's step is the same as the last.
+    const slow: LockedProjection = {
+      goalId: 'bodyweight', lockedAt: '2026-01-01', startValue: 170, target: 180,
+      etaDate: '2027-01-01', slopePerWeek: 0.19,
+    }
+    const step = expectedAt(slow, '2026-01-02') - expectedAt(slow, '2026-01-01')
+    expect(step).toBeGreaterThan(0)
+    for (let day = 1; day < 365; day++) {
+      const a = expectedAt(slow, addDays('2026-01-01', day))
+      const b = expectedAt(slow, addDays('2026-01-01', day + 1))
+      expect(b - a).toBeCloseTo(step, 9)
+    }
+  })
+
+  it('draws a tapering line with steps that only ever shrink', () => {
+    // The same on a pull-up curve: rounded daily samples jitter between a 0 and
+    // a 0.1 step; the exact ones ease off smoothly, each day's gain no bigger
+    // than the one before.
+    const pullups: LockedProjection = {
+      goalId: 'pullups', lockedAt: '2026-01-01', startValue: 8, target: 15,
+      etaDate: '2026-10-01', slopePerWeek: 0.3, decayPerWeek: 0.98,
+    }
+    let prev = expectedAt(pullups, '2026-01-02') - expectedAt(pullups, '2026-01-01')
+    for (let day = 1; day < 270; day++) {
+      const gain = expectedAt(pullups, addDays('2026-01-01', day + 1)) - expectedAt(pullups, addDays('2026-01-01', day))
+      expect(gain).toBeGreaterThan(0)
+      expect(gain).toBeLessThanOrEqual(prev + 1e-9)
+      prev = gain
+    }
+  })
 })
 
 describe('projectedSeries', () => {
