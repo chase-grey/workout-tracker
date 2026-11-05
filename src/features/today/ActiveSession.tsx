@@ -74,6 +74,7 @@ import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { SetCheer } from '../../components/SetCheer'
 import { useSessionFade } from '../../lib/useSessionFade'
+import { adHocExercise, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
 
 type Props = {
   session: WorkoutSession
@@ -172,6 +173,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const [pendingStepKey, setPendingStepKey] = useState<string | null>(null)
   const [showList, setShowList] = useState(false)
   const [showAddExercise, setShowAddExercise] = useState(false)
+  // The movement picked from the list, by key — '' is the blank name field.
+  const [newExercisePick, setNewExercisePick] = useState('')
   const [newExerciseName, setNewExerciseName] = useState('')
   const [newExerciseSets, setNewExerciseSets] = useState('1')
   const [newExerciseReps, setNewExerciseReps] = useState('10')
@@ -250,16 +253,30 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // counts and press order, how much of the day it's running (the short form
   // until the checklist opens it up — see SessionLength), and which arm leads the
   // one-arm-at-a-time work — all pinned when the session started.
-  const exercises = useMemo(
-    () => [
-      ...sideOrderedExercises(
-        shortExercises(variantExercises(day, session.variant ?? null), session.length),
-        session.startSide,
-      ),
-      ...(session.adHocExercises ?? []),
-    ],
-    [day, session.variant, session.length, session.startSide, session.adHocExercises],
+  //
+  // Keyed once: a movement the short form left out can be added from the list
+  // before the checklist opens the day up, and then the day prescribes what the
+  // addition already carries. The day's own entry wins, since the log is one.
+  const exercises = useMemo(() => {
+    const own = sideOrderedExercises(
+      shortExercises(variantExercises(day, session.variant ?? null), session.length),
+      session.startSide,
+    )
+    const have = new Set(own.map((e) => e.key))
+    return [...own, ...(session.adHocExercises ?? []).filter((e) => !have.has(e.key))]
+  }, [day, session.variant, session.length, session.startSide, session.adHocExercises])
+
+  // What the add-exercise sheet can offer (see lib/adHocExercise), grouped the
+  // way the plan is: built only while it's open, since it reads the whole log.
+  const addable = useMemo(
+    () => (showAddExercise ? exerciseOptions(plan, workouts, exercises) : []),
+    [showAddExercise, plan, workouts, exercises],
   )
+  const addableGroups = useMemo(() => {
+    const groups = new Map<string, typeof addable>()
+    for (const o of addable) groups.set(o.group, [...(groups.get(o.group) ?? []), o])
+    return [...groups]
+  }, [addable])
 
   // Open the short session up to the whole day (see lib/sessionLength). The set on
   // screen is held by key across the reshaped step list, the way a skip holds it:
@@ -861,20 +878,39 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     }
   }
 
+  // Prefill the form for a movement picked from the list the way the day would
+  // prescribe it: its own set count, and the weight and reps that beat the last
+  // time it was done — whether that was on a plan day or as an earlier addition.
+  const pickNewExercise = (key: string) => {
+    setNewExercisePick(key)
+    const option = addable.find((o) => o.key === key)
+    if (!option) return
+    const base = option.base ?? { key: option.key, repMin: 1, repMax: 999 }
+    const target = nextTargets(workouts, [base], {
+      variantFor: (k) => progressionVariant(k, session.variant),
+    }).get(option.key)
+    setNewExerciseSets(String(option.base?.sets ?? 3))
+    setNewExerciseReps(String(target?.reps ?? option.base?.repMin ?? 10))
+    setNewExerciseWeight(target?.weightLbs == null ? '' : String(target.weightLbs))
+  }
+
   const addAdHocExercise = () => {
-    const name = newExerciseName.trim()
-    const sets = Math.max(1, Math.min(20, Number(newExerciseSets) || 1))
-    const reps = Math.max(1, Math.min(999, Number(newExerciseReps) || 1))
-    if (!name) return
-    const key = controls.addExercise({
-      name,
-      sets,
-      reps,
+    // A name typed in that the list already has is that movement, so its sets
+    // go onto the history it has rather than opening a second one.
+    const option = addable.find((o) => o.key === newExercisePick) ?? matchTypedName(newExerciseName, addable)
+    if (!option && !newExerciseName.trim()) return
+    const exercise = adHocExercise(
+      { name: newExerciseName, sets: Number(newExerciseSets), reps: Number(newExerciseReps) },
+      option,
+    )
+    controls.addExercise(exercise, {
       weightLbs: newExerciseWeight === '' ? null : toWeight(newExerciseWeight),
+      reps: exercise.repMin,
     })
-    setPendingStepKey(`${key}:0`)
+    setPendingStepKey(`${exercise.key}:0`)
     activeStartRef.current = Date.now()
     if (rest) closeRest()
+    setNewExercisePick('')
     setNewExerciseName('')
     setNewExerciseSets('1')
     setNewExerciseReps('10')
@@ -1086,6 +1122,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       ? [{ label: roundMode ? 'rest between rounds' : 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
     { label: roundMode ? 'add a round' : 'add a set', onClick: addSet },
+    { label: 'add an exercise', onClick: () => setShowAddExercise(true) },
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'finish and log', onClick: finish },
     {
@@ -1455,25 +1492,20 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               left={sumTiming(remainingRows)}
             />
             {/* A short session's way up to the whole day — there when the time
-                turns out to be there, gone once it's been taken. Beside the add
-                button rather than in the kebab: it's a decision about what today's
-                workout is, made while reading what's left of it. */}
-            <div className="mb-3 flex gap-2">
-              {session.length === 'short' && (
+                turns out to be there, gone once it's been taken. Here rather than
+                in the kebab: it's a decision about what today's workout is, made
+                while reading what's left of it. Adding a single movement is in
+                the kebab with adding a set, both rare. */}
+            {session.length === 'short' && (
+              <div className="mb-3 flex gap-2">
                 <button
                   onClick={expandToFullDay}
                   className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-surface-2 px-3 font-semibold active:opacity-80"
                 >
                   do the full workout
                 </button>
-              )}
-              <button
-                onClick={() => setShowAddExercise(true)}
-                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
-              >
-                + add exercise
-              </button>
-            </div>
+              </div>
+            )}
             <div className="flex flex-col gap-1">
               {exercises.map((e) => {
                 const isSkipped = skipped.has(e.key)
@@ -1626,19 +1658,40 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             }}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
-            <h3 id="add-exercise-title" className="mb-1 text-lg font-bold">add exercise</h3>
-            <p className="mb-3 text-sm text-neutral-400">Add an extra exercise for this workout only.</p>
+            <h3 id="add-exercise-title" className="mb-3 text-lg font-bold">add an exercise</h3>
             <div className="flex flex-col gap-3">
+              {/* A native select: the OS picker is the one list control that's
+                  one thumb's work with a bar in the other hand. Grouped the way
+                  the plan is, with everything logged but never planned last. */}
               <label className="flex flex-col gap-1">
-                <span className="text-xs tracking-wide text-neutral-500">name</span>
-                <input
-                  autoFocus
-                  value={newExerciseName}
-                  onChange={(event) => setNewExerciseName(event.target.value)}
-                  placeholder="e.g. farmer carry"
+                <span className="text-xs tracking-wide text-neutral-500">exercise</span>
+                <select
+                  value={newExercisePick}
+                  onChange={(event) => pickNewExercise(event.target.value)}
                   className="min-h-[48px] rounded-xl bg-surface-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent"
-                />
+                >
+                  <option value="">type my own</option>
+                  {addableGroups.map(([group, options]) => (
+                    <optgroup key={group} label={group}>
+                      {options.map((o) => (
+                        <option key={o.key} value={o.key}>{o.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
               </label>
+              {newExercisePick === '' && (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs tracking-wide text-neutral-500">name</span>
+                  <input
+                    autoFocus
+                    value={newExerciseName}
+                    onChange={(event) => setNewExerciseName(event.target.value)}
+                    placeholder="e.g. farmer carry"
+                    className="min-h-[48px] rounded-xl bg-surface-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                </label>
+              )}
               <div className="grid grid-cols-3 gap-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-xs tracking-wide text-neutral-500">sets</span>
@@ -1655,7 +1708,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               </div>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setShowAddExercise(false)} className="min-h-[48px] flex-1 rounded-xl bg-surface-2 font-semibold active:opacity-70">cancel</button>
-                <button type="submit" disabled={!newExerciseName.trim()} className="min-h-[48px] flex-1 rounded-xl bg-accent font-semibold text-on-accent disabled:opacity-40">add to workout</button>
+                <button type="submit" disabled={newExercisePick === '' && !newExerciseName.trim()} className="min-h-[48px] flex-1 rounded-xl bg-accent font-semibold text-on-accent disabled:opacity-40">add to workout</button>
               </div>
             </div>
           </form>

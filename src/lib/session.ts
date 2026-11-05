@@ -2,6 +2,7 @@ import type { DayType, WorkoutRow, WorkoutSession } from '../types'
 import { DEAD_BUG_KEY, MAT_SITUP_KEY } from '../config/plan'
 import { noteSegments } from './discomfort'
 import { isMaxAttempt } from './maxAttempt'
+import { isAdHocKey } from './adHocExercise'
 
 /**
  * The note written on the core rows a Stretch + Core session logs, marking them as
@@ -82,9 +83,14 @@ export function trainingDates(rows: WorkoutRow[]): string[] {
 /** Flatten a session into the per-set rows stored in the sheet. */
 export function sessionToRows(s: WorkoutSession): WorkoutRow[] {
   const rows: WorkoutRow[] = []
-  // Ad-hoc keys only exist for the duration of the active session. Store their
-  // entered name in the flat history row so later screens do not show a UUID.
-  const adHocNames = new Map((s.adHocExercises ?? []).map((e) => [e.key, e.name]))
+  // A key minted for a typed-in movement only exists for the duration of the
+  // active session. Store the entered name in the flat history row so later
+  // screens do not show a UUID. Only minted keys: a plan movement added to a
+  // workout it wasn't prescribed for is carried the same way but keeps its real
+  // key, so its sets land on the history every other screen reads it by.
+  const adHocNames = new Map(
+    (s.adHocExercises ?? []).filter((e) => isAdHocKey(e.key)).map((e) => [e.key, e.name]),
+  )
   for (const ex of s.exercises) {
     for (const set of ex.sets) {
       rows.push({

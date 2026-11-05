@@ -146,42 +146,32 @@ export function useActiveSession() {
     [mutateExercise],
   )
 
-  const addExercise = useCallback(
-    (input: { name: string; sets: number; reps: number; weightLbs: number | null }) => {
-      const key = `adhoc:${uuid()}`
-      const exercise: PlannedExercise = {
-        key,
-        name: input.name,
-        sets: input.sets,
-        repMin: input.reps,
-        repMax: input.reps,
-        restSec: 60,
-        group: 'ad hoc',
-      }
-      setSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              adHocExercises: [...(prev.adHocExercises ?? []), exercise],
-              exercises: [
-                ...prev.exercises,
-                {
-                  exercise: key,
-                  sets: Array.from({ length: input.sets }, (_, i) => ({
-                    setNumber: i + 1,
-                    weightLbs: input.weightLbs,
-                    reps: input.reps,
-                    done: false,
-                  })),
-                },
-              ],
-            }
-          : prev,
-      )
-      return key
-    },
-    [],
-  )
+  // Add a movement to this workout only (see lib/adHocExercise): the plan's
+  // across any day, one known from the log, or one typed in. The movement
+  // arrives shaped already; this just gives it its sets, prefilled with one
+  // weight and rep count across the board.
+  const addExercise = useCallback((exercise: PlannedExercise, target: { weightLbs: number | null; reps: number }) => {
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            adHocExercises: [...(prev.adHocExercises ?? []), exercise],
+            exercises: [
+              ...prev.exercises,
+              {
+                exercise: exercise.key,
+                sets: Array.from({ length: exercise.sets }, (_, i) => ({
+                  setNumber: i + 1,
+                  weightLbs: target.weightLbs,
+                  reps: target.reps,
+                  done: false,
+                })),
+              },
+            ],
+          }
+        : prev,
+    )
+  }, [])
 
   const updateSet = useCallback(
     (exKey: string, index: number, patch: Partial<SetLog>) => {
