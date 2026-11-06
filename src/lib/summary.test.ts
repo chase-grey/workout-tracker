@@ -146,16 +146,40 @@ describe('weeklySummary', () => {
     expect(s.workoutCount).toBe(1)
   })
 
-  it('computes weightTrend vs the last pre-week weigh-in', () => {
+  it("computes weightTrend as this week's average vs the previous week's average", () => {
     const bodyWeights: BodyWeightEntry[] = [
-      bw('2026-06-20', 185),
-      bw('2026-06-30', 183.4), // latest before this week
+      bw('2026-06-20', 185), // two weeks back: not the previous week, ignored
+      bw('2026-06-29', 184.0), // previous week
+      bw('2026-07-03', 182.8), // previous week, average 183.4
       bw('2026-07-06', 182.1), // this week
-      bw('2026-07-08', 181.6), // latest this week
+      bw('2026-07-08', 181.3), // this week, average 181.7
     ]
     const s = weeklySummary([], bodyWeights, TODAY)
-    // 181.6 - 183.4 = -1.8
-    expect(s.weightTrend).toBe(-1.8)
+    // 181.7 - 183.4 = -1.7, not latest-vs-latest (181.3 - 182.8 = -1.5)
+    expect(s.weightTrend).toBe(-1.7)
+    expect(s.weightAverage).toBe(181.7)
+  })
+
+  it('compares against the last prior week that had weigh-ins when the week before was empty', () => {
+    const bodyWeights: BodyWeightEntry[] = [
+      bw('2026-06-22', 184.0), // two weeks back
+      bw('2026-06-24', 183.0), // two weeks back, average 183.5
+      bw('2026-07-07', 181.5), // this week; 2026-06-29..07-05 has none
+    ]
+    expect(weeklySummary([], bodyWeights, TODAY).weightTrend).toBe(-2)
+  })
+
+  it('agrees with weeklyWeightChanges once the week is over', () => {
+    const bodyWeights: BodyWeightEntry[] = [
+      bw('2026-06-29', 184.0),
+      bw('2026-07-03', 182.8),
+      bw('2026-07-06', 182.1),
+      bw('2026-07-08', 181.3),
+    ]
+    const live = weeklySummary([], bodyWeights, TODAY)
+    const [closed] = weeklyWeightChanges(bodyWeights, new Date(2026, 6, 15))
+    expect(closed.changeLbs).toBe(live.weightTrend)
+    expect(closed.averageLbs).toBe(live.weightAverage)
   })
 
   it('averages the weigh-ins of this week, to one decimal, ignoring prior weeks', () => {

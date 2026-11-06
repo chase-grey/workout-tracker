@@ -14,8 +14,9 @@ export type WeeklySummary = {
    */
   prs: { exercise: string; est1RM: number; weightLbs: number; reps: number }[]
   /**
-   * Change in body weight (lbs) — latest this-week entry vs the latest entry
-   * before this week. `null` if not computable.
+   * Change in body weight (lbs) — the mean of this week's weigh-ins vs the mean
+   * of the last week before it that had any, the same comparison each completed
+   * week gets in {@link weeklyWeightChanges}. `null` if not computable.
    */
   weightTrend: number | null
   /**
@@ -111,26 +112,36 @@ export function weeklySummary(
     }
   }
 
-  // --- Weight trend: latest this-week entry vs latest entry before this week. ---
-  let weightTrend: number | null = null
-  let thisWeekLatest: BodyWeightEntry | null = null
-  let priorLatest: BodyWeightEntry | null = null
+  // --- Weight trend: this week's average vs the last prior week's average. ---
+  // A single weigh-in swings a pound or two with water and the hour of day, so
+  // "down 2.3 this week" off one morning against one older morning disagreed
+  // with the week averages shown right beside it. Compare mean to mean, as the
+  // history list does, skipping any prior week with no weigh-ins.
   let thisWeekSum = 0
   let thisWeekCount = 0
+  let priorWeek: string | null = null
+  let priorSum = 0
+  let priorCount = 0
   for (const e of bodyWeights) {
     const week = weekStartISO(e.date)
     if (week === thisWeekStart) {
-      if (!thisWeekLatest || e.date > thisWeekLatest.date) thisWeekLatest = e
       thisWeekSum += e.weightLbs
       thisWeekCount += 1
     } else if (week < thisWeekStart) {
-      if (!priorLatest || e.date > priorLatest.date) priorLatest = e
+      if (priorWeek === null || week > priorWeek) {
+        priorWeek = week
+        priorSum = 0
+        priorCount = 0
+      }
+      if (week === priorWeek) {
+        priorSum += e.weightLbs
+        priorCount += 1
+      }
     }
   }
-  if (thisWeekLatest && priorLatest) {
-    weightTrend = round1(thisWeekLatest.weightLbs - priorLatest.weightLbs)
-  }
   const weightAverage = thisWeekCount > 0 ? round1(thisWeekSum / thisWeekCount) : null
+  const weightTrend =
+    thisWeekCount > 0 && priorCount > 0 ? round1(thisWeekSum / thisWeekCount - priorSum / priorCount) : null
 
   return { workoutCount, prs, weightTrend, weightAverage }
 }
