@@ -91,11 +91,12 @@ describe('wholeBody', () => {
     expect(b.muscle + b.fat + b.rest).toBeCloseTo(186, 0)
   })
 
-  it('carries the equation error on the seam from the first week, and the split error on top of it later', () => {
+  it("gives the muscle the equation error and the fat's added, the span from least fat and rest to most", () => {
     const body = wholeBody(trend([start, later]), 70)!
     const see = SKELETAL_MUSCLE_SEE_KG * LB_PER_KG
     expect(body.points[0].muscleError).toBe(round1(see))
-    expect(body.points[1].muscleError).toBe(round1(Math.hypot(see, 1.1)))
+    expect(body.points[1].muscleError).toBe(round1(see + 0.4))
+    expect(body.points[1].muscleError).toBe(round1(body.points[1].restError + body.points[1].fatError))
     expect(body.points[1].weightError).toBe(0.8)
   })
 
@@ -113,7 +114,7 @@ describe('wholeBody', () => {
     expect(a.restPctError).toBe(round1((100 * see) / 180))
     expect(a.musclePctError).toBe(a.restPctError)
     expect(a.fatPctError).toBe(0)
-    expect(b.musclePctError).toBe(round1((100 * Math.hypot(see, 1.1)) / 186))
+    expect(b.musclePctError).toBe(round1((100 * (see + 0.4)) / 186))
     expect(b.fatPctError).toBe(round1((100 * 0.4) / 186))
   })
 

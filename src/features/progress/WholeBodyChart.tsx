@@ -20,9 +20,6 @@ const HALO_WIDTH = 3.5
 /** A week on the chart: the body's three parts, and its two seams — where the muscle starts above the floor, and where the fat starts above the muscle. */
 type Row = WholeBodyPoint & { t: number; seam: number; lean: number }
 
-/** The four figures in the header, each the switch for its own dashes. */
-type Figure = 'muscle' | 'fat' | 'rest' | 'weight'
-
 function WholeBodyTooltip({
   active,
   payload,
@@ -62,20 +59,24 @@ function WholeBodyTooltip({
  * zero, so the bands' thickness is the body's proportions and a week's gain is
  * a hair's width: it answers what you are made of, not what went on.
  *
- * Every figure in the header carries its give-or-take, and each is the switch
- * for a pair of dashed lines that lay that give-or-take on the stack, where
- * it lives (see lib/wholeBody). The rest's is the population equation's guess
- * at where the frame ends, six pounds either way, the same every week, drawn
- * either side of the lower seam. The muscle's is that same doubt with the
- * split's own joined to it as the weeks go on, on the same seam and a little
- * wider: the muscle is whatever the equation left of the fat-free mass, so it
- * owns the equation's error and the trend's. The fat's is the split's alone,
- * drawn either side of the upper seam, and the weight's the mornings' scatter,
- * either side of the top — both under a pound at this scale, so their pairs
- * sit nearly on the line, which is the point: next to the lower seam's wide
- * fan they say which of the three bands is measured and which is guessed. As
- * on the muscle vs fat chart the dashes are off until asked for; a tap on a
- * figure lays its pair over the stack, and a second lifts them.
+ * Every figure in the header carries its give-or-take, and a tap on any of
+ * them lays the lot on the stack at once as two more stacks, dashed: the best
+ * body the readings allow and the worst. The parts are not in doubt
+ * separately — the weight is one number, so a pound more fat is a pound less
+ * of something else, and the muscle is whatever is left once the fat and the
+ * frame are taken out. So the best case is the least fat over the least frame,
+ * which is the most muscle, and the worst the most of both over the least
+ * muscle, and the body is somewhere between the two. Each dashed pair sits
+ * either side of the seam it moves, in that seam's colour: the frame's, the
+ * population equation's six pounds either way, the same every week, around
+ * the lower seam; the fat's, the split's own doubt, around the upper; and the
+ * weight's, the mornings' scatter, around the top. The last two are under a
+ * pound at this scale and sit nearly on their lines, which is the point: next
+ * to the lower seam's wide fan they say which of the bands is measured and
+ * which is guessed. The muscle has no seam of its own — it is the band between
+ * the two — so its figure's give-or-take is the other two's added, the far
+ * side of the one pair to the far side of the other (see lib/wholeBody). A
+ * second tap lifts the dashes.
  */
 export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?: string }) {
   const readout = useChartReadout()
@@ -83,9 +84,10 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
   const colors = useMemo(() => tissueColors(palette), [palette])
   const id = useId()
   const ids = useMemo(() => ({ muscle: `${id}-muscle`, fat: `${id}-fat`, frame: `${id}-frame` }), [id])
-  // Which figures' give-or-take is laid over the stack, each toggled by its own tap.
-  const [shown, setShown] = useState<Record<Figure, boolean>>({ muscle: false, fat: false, rest: false, weight: false })
-  const toggle = (figure: Figure) => setShown((s) => ({ ...s, [figure]: !s[figure] }))
+  // Whether the best and worst stacks are laid over the measured one: one
+  // switch, since the parts' give-or-takes are one body's, not four.
+  const [shown, setShown] = useState(false)
+  const toggle = () => setShown((s) => !s)
 
   const points = useMemo(() => body?.points ?? [], [body])
   const rows: Row[] = useMemo(
@@ -108,10 +110,10 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
     )
   }
 
-  // A figure's give-or-take: a dashed line either side of the edge it moves,
-  // in the figure's own colour so each pair reads as that figure, give or
-  // take. Each sits on a surface-coloured halo dashed the same way, since one
-  // of the pair always falls on another band's fill. Drawn only while pressed.
+  // A seam's give-or-take: a dashed line either side of it, in the colour of
+  // the band it is the floor of, so each pair reads as where that band might
+  // start. Each sits on a surface-coloured halo dashed the same way, since one
+  // of the pair always falls on another band's fill. Drawn only while shown.
   const bounds = (name: string, color: string, edge: (r: Row) => number, error: (r: Row) => number) =>
     [-1, 1].flatMap((side) => {
       const common = {
@@ -145,15 +147,16 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
     />
   )
 
-  // A header figure: the switch for its own dashes, with a dashed underline
-  // while they're on that echoes the lines it put on the chart.
-  const figure = (key: Figure, color: string, label: string, className?: string) => (
+  // A header figure: a switch for the dashes, with a dashed underline while
+  // they're on that echoes the lines on the chart. Every figure underlines
+  // together, since the one tap moves them all.
+  const figure = (color: string, label: string, className?: string) => (
     <button
       type="button"
-      aria-pressed={shown[key]}
-      onClick={() => toggle(key)}
+      aria-pressed={shown}
+      onClick={toggle}
       className={`border-b border-dashed ${className ?? ''}`}
-      style={{ color, borderColor: shown[key] ? 'currentColor' : 'transparent' }}
+      style={{ color, borderColor: shown ? 'currentColor' : 'transparent' }}
     >
       {label}
     </button>
@@ -163,11 +166,11 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
       <div className="flex items-center justify-between px-3 pt-1 text-xs">
         <span className="flex gap-3">
-          {figure('muscle', colors.muscle.edge, `muscle ${fmtPctError(last.musclePct, last.musclePctError)}`)}
-          {figure('fat', colors.fat.edge, `fat ${fmtPctError(last.fatPct, last.fatPctError)}`)}
-          {figure('rest', colors.frame.edge, `rest ${fmtPctError(last.restPct, last.restPctError)}`)}
+          {figure(colors.muscle.edge, `muscle ${fmtPctError(last.musclePct, last.musclePctError)}`)}
+          {figure(colors.fat.edge, `fat ${fmtPctError(last.fatPct, last.fatPctError)}`)}
+          {figure(colors.frame.edge, `rest ${fmtPctError(last.restPct, last.restPctError)}`)}
         </span>
-        {figure('weight', WEIGHT_COLOR, fmtLbsError(last.weight, last.weightError), 'font-semibold')}
+        {figure(WEIGHT_COLOR, fmtLbsError(last.weight, last.weightError), 'font-semibold')}
       </div>
       <ResponsiveContainer width="100%" height={240}>
         <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -12 }} {...readout.chart}>
@@ -179,10 +182,9 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
           {band('rest', 'rest', ids.frame, colors.frame.edge)}
           {band('muscle', 'muscle', ids.muscle, colors.muscle.edge)}
           {band('fat', 'fat', ids.fat, colors.fat.edge)}
-          {shown.rest && bounds('rest', colors.frame.edge, (r) => r.seam, (r) => r.restError)}
-          {shown.muscle && bounds('muscle', colors.muscle.edge, (r) => r.seam, (r) => r.muscleError)}
-          {shown.fat && bounds('fat', colors.fat.edge, (r) => r.lean, (r) => r.fatError)}
-          {shown.weight && bounds('weight', WEIGHT_COLOR, (r) => r.weight, (r) => r.weightError)}
+          {shown && bounds('rest', colors.frame.edge, (r) => r.seam, (r) => r.restError)}
+          {shown && bounds('fat', colors.fat.edge, (r) => r.lean, (r) => r.fatError)}
+          {shown && bounds('weight', WEIGHT_COLOR, (r) => r.weight, (r) => r.weightError)}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

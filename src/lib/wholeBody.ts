@@ -63,10 +63,13 @@ export type WholeBodyPoint = {
   fatPct: number
   restPct: number
   /**
-   * Pounds either side of each part's figure, one standard error. The rest's
-   * is the equation's alone, the same every week; the muscle's is that and
-   * the split's doubt about the week in quadrature, since the muscle is what
-   * the equation left of the fat-free mass; the fat's is the split's alone.
+   * Pounds either side of each part's figure. The rest's is the equation's
+   * standard error alone, the same every week; the fat's is the split's
+   * alone. The muscle's is the two added, not joined in quadrature: the
+   * muscle is what is left of the weight once the fat and the rest are taken
+   * out, so its best case is the least fat with the least rest and its worst
+   * the most of both, and the chart draws exactly that span — the body is
+   * somewhere between the two stacks, and this is how far apart they are.
    */
   muscleError: number
   fatError: number
@@ -117,7 +120,7 @@ export function wholeBody(
     const muscle = lean - rest
     const pct = (n: number) => Math.round((100 * n) / p.weight)
     const pctError = (lbs: number) => round1((100 * lbs) / p.weight)
-    const muscleError = Math.hypot(see, p.muscleError)
+    const muscleError = see + p.fatError
     return {
       date: p.date,
       weighIns: p.weighIns,
