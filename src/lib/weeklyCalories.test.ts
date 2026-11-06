@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { ASSUMED_UNLOGGED_CALORIES, weeklyCalorieSurplusSeries, type CalorieEntry } from './calories'
+import {
+  ASSUMED_UNLOGGED_CALORIES,
+  weeklyCalorieIntakeSeries,
+  weeklyCalorieSurplusSeries,
+  type CalorieEntry,
+} from './calories'
 
 const GOAL = 4000
 // Week of Mon 2026-01-05 … Sun 2026-01-11.
@@ -76,5 +81,38 @@ describe('weeklyCalorieSurplusSeries', () => {
   it('is empty when every logged day is still in the future', () => {
     const today = new Date(2026, 0, 1)
     expect(weeklyCalorieSurplusSeries([entry('2026-01-05', 4500)], { goal: GOAL, today })).toEqual([])
+  })
+})
+
+describe('weeklyCalorieIntakeSeries', () => {
+  it('averages the calories themselves, with no goal in the picture', () => {
+    // Mon 4500, Tue 3500; today is Wednesday. The surplus series would read
+    // this week against whatever goal was in force; the intake series just
+    // says what was eaten.
+    const today = new Date(2026, 0, 7)
+    const rows = weeklyCalorieIntakeSeries(
+      [entry('2026-01-05', 4500), entry('2026-01-06', 3500)],
+      { today },
+    )
+    expect(rows).toEqual([{ date: MONDAY, value: 4000 }])
+  })
+
+  it('counts an unlogged day at the assumed intake, like the surplus series', () => {
+    const today = new Date(2026, 0, 7)
+    const rows = weeklyCalorieIntakeSeries([entry('2026-01-05', 4500)], { today })
+    expect(rows).toEqual([{ date: MONDAY, value: Math.round((4500 + ASSUMED_UNLOGGED_CALORIES) / 2) }])
+  })
+
+  it('excludes today and keys each week to its Monday', () => {
+    const today = new Date(2026, 0, 20)
+    const rows = weeklyCalorieIntakeSeries(
+      [entry('2026-01-05', 4000), entry('2026-01-12', 4000), entry('2026-01-20', 9000)],
+      { today, assumedUnlogged: 4000 },
+    )
+    expect(rows).toEqual([
+      { date: '2026-01-05', value: 4000 },
+      { date: '2026-01-12', value: 4000 },
+      { date: '2026-01-19', value: 4000 },
+    ])
   })
 })

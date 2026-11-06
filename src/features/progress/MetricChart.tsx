@@ -14,7 +14,6 @@ import type { Point } from '../../lib/progress'
 import {
   CHART_SURFACE,
   CHART_SURFACE_2,
-  CHART_ZERO,
   LINE_GOAL,
   LINE_GOAL_LABEL,
   LINE_PRIMARY,
@@ -34,7 +33,7 @@ import { ChartTag } from '../../components/ChartTag'
 const axisTick = { fill: '#737373', fontSize: 11 }
 const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
 
-/** Legend that follows the axes: the left-axis series sits left, cal surplus right. */
+/** Legend that follows the axes: the left-axis series sits left, calories right. */
 export function SplitLegend({ payload }: { payload?: { value?: unknown; dataKey?: unknown; color?: string }[] }) {
   const items = [...(payload ?? [])].sort((a, b) => Number(a.dataKey === 'cal') - Number(b.dataKey === 'cal'))
   return (
@@ -77,7 +76,7 @@ export function MetricChart({
   unit: string
   /** Series name for the legend/tooltip, wherever a second series makes one appear. */
   label?: string
-  /** Optional weekly-avg calorie surplus (intake − goal) to overlay on a right axis. */
+  /** Optional weekly-avg daily calories to overlay on a right axis. */
   calories?: Point[]
   /**
    * Sessions the line deliberately doesn't read — the day's second press (see
@@ -146,7 +145,6 @@ export function MetricChart({
               width={44}
               domain={calScale.domain}
               ticks={calScale.ticks}
-              tickFormatter={(v) => (v > 0 ? `+${v}` : String(v))}
             />
           )}
           <Tooltip
@@ -156,7 +154,7 @@ export function MetricChart({
             labelFormatter={(ms) => fmtDateLabel(Number(ms))}
             formatter={(v, n) =>
               n === 'cal'
-                ? [`${Number(v) > 0 ? '+' : ''}${v} cal/day`, 'vs goal (weekly avg)']
+                ? [`${v} cal/day`, 'calories (weekly avg)']
                 : [`${v} ${unit}`, n === OFF_SLOT_NAME ? OFF_SLOT_NAME : (label ?? '')]
             }
           />
@@ -175,12 +173,11 @@ export function MetricChart({
           {overlay && (
             <>
               <Legend content={<SplitLegend />} />
-              <ReferenceLine yAxisId="cal" y={0} stroke={CHART_ZERO} strokeDasharray="3 3" />
               <Line
                 yAxisId="cal"
                 type="monotone"
                 dataKey="cal"
-                name="cal surplus"
+                name="calories"
                 stroke={LINE_SECONDARY}
                 strokeWidth={2}
                 dot={false}

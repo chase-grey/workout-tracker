@@ -18,7 +18,7 @@ import {
   type Metric,
   type Point,
 } from '../../lib/progress'
-import { weeklyCalorieSurplusSeries } from '../../lib/calories'
+import { weeklyCalorieIntakeSeries } from '../../lib/calories'
 import { bodyWeightPoints, buildGoals, GOAL_IDS } from '../../lib/goals'
 import {
   CHART_SURFACE,
@@ -248,9 +248,10 @@ export function ProgressTab() {
   const body = useMemo(() => wholeBody(massSeries, heightIn), [massSeries, heightIn])
 
   // Weekly rather than daily, complete days only, unlogged days assumed —
-  // see weeklyCalorieSurplusSeries.
-  const calorieSurplus = useMemo(
-    () => weeklyCalorieSurplusSeries(calorieEntries),
+  // see weeklyCalorieIntakeSeries. The calories themselves, not the surplus
+  // over a goal that has moved since the first weigh-in.
+  const weeklyCalories = useMemo(
+    () => weeklyCalorieIntakeSeries(calorieEntries),
     [calorieEntries],
   )
 
@@ -343,13 +344,13 @@ export function ProgressTab() {
             data={bodyFatPoints}
             unit="%"
             label="body fat"
-            calories={calorieSurplus}
+            calories={weeklyCalories}
             goalLines={bodyFatGoalLines}
           />
         )}
       </div>
     ),
-    [bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, calorieSurplus, bodyFatGoalLines],
+    [bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, weeklyCalories, bodyFatGoalLines],
   )
 
   return (

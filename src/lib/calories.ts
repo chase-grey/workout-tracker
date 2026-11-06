@@ -426,9 +426,12 @@ export function calorieSurplusSeries(
  */
 export const ASSUMED_UNLOGGED_CALORIES = 2500
 
+type WeeklyOpts = { assumedUnlogged?: number; today?: Date }
+
 /**
- * Average daily surplus (intake − goal) per WEEK, one point per Mon–Sun week
- * keyed by its Monday, sorted oldest → newest.
+ * Average of some per-day figure per WEEK, one point per Mon–Sun week keyed by
+ * its Monday, sorted oldest → newest. The shared walk under the two weekly
+ * series below; `perDay` turns a day's intake into the figure being averaged.
  *
  * Two deliberate differences from the daily series above:
  *
@@ -442,9 +445,10 @@ export const ASSUMED_UNLOGGED_CALORIES = 2500
  * Weekly rather than daily because day-to-day intake is far too spiky to read
  * anything from against a body-weight trend that moves over weeks.
  */
-export function weeklyCalorieSurplusSeries(
+function weeklyAverage(
   entries: CalorieEntry[],
-  opts: { goal?: number; assumedUnlogged?: number; today?: Date } = {},
+  opts: WeeklyOpts,
+  perDay: (intake: number, iso: string) => number,
 ): { date: string; value: number }[] {
   const assumed = opts.assumedUnlogged ?? ASSUMED_UNLOGGED_CALORIES
   const today = opts.today ?? new Date()
@@ -465,7 +469,7 @@ export function weeklyCalorieSurplusSeries(
     const intake = totals.get(iso) ?? assumed
     const wk = weekStartISO(iso)
     const bucket = weeks.get(wk) ?? { sum: 0, days: 0 }
-    bucket.sum += intake - (opts.goal ?? calorieGoalOn(iso))
+    bucket.sum += perDay(intake, iso)
     bucket.days += 1
     weeks.set(wk, bucket)
   }
@@ -473,4 +477,29 @@ export function weeklyCalorieSurplusSeries(
   return [...weeks.entries()]
     .map(([date, { sum, days }]) => ({ date, value: Math.round(sum / days) }))
     .sort((a, b) => (a.date < b.date ? -1 : 1))
+}
+
+/**
+ * Average daily surplus (intake − goal) per week — see {@link weeklyAverage}
+ * for what counts as a day and a week.
+ */
+export function weeklyCalorieSurplusSeries(
+  entries: CalorieEntry[],
+  opts: WeeklyOpts & { goal?: number } = {},
+): { date: string; value: number }[] {
+  return weeklyAverage(entries, opts, (intake, iso) => intake - (opts.goal ?? calorieGoalOn(iso)))
+}
+
+/**
+ * Average daily intake per week, the calories themselves rather than their
+ * distance from the goal — see {@link weeklyAverage} for what counts as a day
+ * and a week. This is what the body-fat chart overlays: the goal has moved
+ * over the months, so a surplus line reads differently from one week to the
+ * next, while the raw intake is the same thing everywhere along the axis.
+ */
+export function weeklyCalorieIntakeSeries(
+  entries: CalorieEntry[],
+  opts: WeeklyOpts = {},
+): { date: string; value: number }[] {
+  return weeklyAverage(entries, opts, (intake) => intake)
 }
