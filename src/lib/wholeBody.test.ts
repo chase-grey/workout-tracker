@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import type { MassTrend, MassTrendPoint } from './massSplit'
-import { ASSUMED_AGE_YEARS, LB_PER_KG, leeSkeletalMuscleKg, SKELETAL_MUSCLE_SEE_KG, wholeBody } from './wholeBody'
+import {
+  ASSUMED_AGE_YEARS,
+  fmtLbsError,
+  fmtPctError,
+  LB_PER_KG,
+  leeSkeletalMuscleKg,
+  SKELETAL_MUSCLE_SEE_KG,
+  wholeBody,
+} from './wholeBody'
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
 
@@ -51,6 +59,7 @@ describe('wholeBody', () => {
     muscleGain: 4.2,
     fatGain: 1.8,
     muscleError: 1.1,
+    fatError: 0.4,
     weightError: 0.8,
   })
 
@@ -90,6 +99,24 @@ describe('wholeBody', () => {
     expect(body.points[1].weightError).toBe(0.8)
   })
 
+  it('gives the rest the equation error alone, every week, and the fat the split error alone', () => {
+    const body = wholeBody(trend([start, later]), 70)!
+    const see = round1(SKELETAL_MUSCLE_SEE_KG * LB_PER_KG)
+    expect(body.points.map((p) => p.restError)).toEqual([see, see])
+    expect(body.points.map((p) => p.fatError)).toEqual([0, 0.4])
+  })
+
+  it("reads each give-or-take as points of that week's weight", () => {
+    const body = wholeBody(trend([start, later]), 70)!
+    const [a, b] = body.points
+    const see = SKELETAL_MUSCLE_SEE_KG * LB_PER_KG
+    expect(a.restPctError).toBe(round1((100 * see) / 180))
+    expect(a.musclePctError).toBe(a.restPctError)
+    expect(a.fatPctError).toBe(0)
+    expect(b.musclePctError).toBe(round1((100 * Math.hypot(see, 1.1)) / 186))
+    expect(b.fatPctError).toBe(round1((100 * 0.4) / 186))
+  })
+
   it('reads the equation at the assumed age unless told another', () => {
     const young = wholeBody(trend([start]), 70, ASSUMED_AGE_YEARS - 10)!
     const old = wholeBody(trend([start]), 70, ASSUMED_AGE_YEARS + 10)!
@@ -98,5 +125,17 @@ describe('wholeBody', () => {
 
   it('refuses a body the equation cannot fit inside', () => {
     expect(wholeBody(trend([point({ weight: 60, bodyFat: 50 })]), 78)).toBeNull()
+  })
+})
+
+describe('fmtPctError / fmtLbsError', () => {
+  it('writes the give-or-take in points before the percent sign, and drops it when there is none', () => {
+    expect(fmtPctError(38, 3.4)).toBe('38 ± 3.4%')
+    expect(fmtPctError(15, 0)).toBe('15%')
+  })
+
+  it('writes pounds the same way', () => {
+    expect(fmtLbsError(186, 0.8)).toBe('186 ± 0.8 lbs')
+    expect(fmtLbsError(180, 0)).toBe('180 lbs')
   })
 })

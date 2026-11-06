@@ -63,10 +63,18 @@ export type WholeBodyPoint = {
   fatPct: number
   restPct: number
   /**
-   * Pounds either side of the seam between the rest and the muscle: the
-   * equation's own error and the split's doubt about that week, in quadrature.
+   * Pounds either side of each part's figure, one standard error. The rest's
+   * is the equation's alone, the same every week; the muscle's is that and
+   * the split's doubt about the week in quadrature, since the muscle is what
+   * the equation left of the fat-free mass; the fat's is the split's alone.
    */
   muscleError: number
+  fatError: number
+  restError: number
+  /** The same give-or-takes as points of body weight, to a tenth. */
+  musclePctError: number
+  fatPctError: number
+  restPctError: number
   /** Pounds either side of the top of the stack. */
   weightError: number
 }
@@ -108,6 +116,8 @@ export function wholeBody(
     const { fat, lean } = split(p.weight, p.bodyFat)
     const muscle = lean - rest
     const pct = (n: number) => Math.round((100 * n) / p.weight)
+    const pctError = (lbs: number) => round1((100 * lbs) / p.weight)
+    const muscleError = Math.hypot(see, p.muscleError)
     return {
       date: p.date,
       weighIns: p.weighIns,
@@ -119,7 +129,12 @@ export function wholeBody(
       musclePct: pct(muscle),
       fatPct: pct(fat),
       restPct: pct(rest),
-      muscleError: round1(Math.hypot(see, p.muscleError)),
+      muscleError: round1(muscleError),
+      fatError: p.fatError,
+      restError: round1(see),
+      musclePctError: pctError(muscleError),
+      fatPctError: pctError(p.fatError),
+      restPctError: pctError(see),
       weightError: p.weightError,
     }
   })
@@ -129,4 +144,14 @@ export function wholeBody(
     startMuscle: round1(startMuscle),
     startMuscleShareOfLean: round1((100 * startMuscle) / startSplit.lean),
   }
+}
+
+/** A whole percentage with its give-or-take in points: "38 ± 3.4%", or just "15%" when there is none to speak of. */
+export function fmtPctError(pct: number, error: number): string {
+  return error > 0 ? `${pct} ± ${error}%` : `${pct}%`
+}
+
+/** A pound figure with its give-or-take: "186 ± 0.8 lbs", or "186 lbs" when the figure is sure. */
+export function fmtLbsError(lbs: number, error: number): string {
+  return error > 0 ? `${lbs} ± ${error} lbs` : `${lbs} lbs`
 }
