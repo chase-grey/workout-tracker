@@ -1,5 +1,5 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react'
-import { type Gesture, gestureFrom } from './chartReadout'
+import { type Gesture, gestureFrom, type Mark, nearestMark } from './chartReadout'
 
 /** Share Recharts' selection between the dot and popup, including touch scrubs. */
 export function useChartReadout() {
@@ -28,17 +28,23 @@ export function useChartReadout() {
   // Recharts updates its hover selection on mousemove and touchmove, but not
   // touchstart/end. Feed taps through that same coordinate resolver. Counting
   // visible dots cannot yield a data index: merged rows may have no visible dot.
+  // Recharts reads by x alone, so a tap aimed at a peak that fell a little to one
+  // side would read the point next to it. A tap goes to the plotted point nearest
+  // it on both axes instead (see nearestMark); a scrub keeps following x, which
+  // is the axis the finger is running along.
   const selectTouch = (e: { clientX: number; clientY: number }, onlyIfClamped = false) => {
     const chart = card.current?.querySelector('.recharts-wrapper')
     const plot = chart?.querySelector('.recharts-cartesian-grid')?.getBoundingClientRect()
+    const scrubbing = touch.current?.gesture === 'scrub'
+    const aim = (!scrubbing && chart && nearestMark(marksIn(chart), e.clientX, e.clientY)) || null
+    const at = aim ? { clientX: aim.x, clientY: aim.y } : e
     // Edge dots straddle the plot boundary. Keep rounding of touch coordinates
     // from pushing a tap just outside the selectable area; scrubs may drift.
-    const scrubbing = touch.current?.gesture === 'scrub'
-    const nearPlot = plot && e.clientX >= plot.left - 24 && e.clientX <= plot.right + 24
-      && e.clientY >= plot.top - 24 && e.clientY <= plot.bottom + 24
+    const nearPlot = plot && at.clientX >= plot.left - 24 && at.clientX <= plot.right + 24
+      && at.clientY >= plot.top - 24 && at.clientY <= plot.bottom + 24
     const clamp = (value: number, lo: number, hi: number) => Math.max(lo + 1, Math.min(hi - 1, value))
-    const clientX = plot && (nearPlot || scrubbing) ? clamp(e.clientX, plot.left, plot.right) : e.clientX
-    const clientY = plot && (nearPlot || scrubbing) ? clamp(e.clientY, plot.top, plot.bottom) : e.clientY
+    const clientX = plot && (nearPlot || scrubbing) ? clamp(at.clientX, plot.left, plot.right) : at.clientX
+    const clientY = plot && (nearPlot || scrubbing) ? clamp(at.clientY, plot.top, plot.bottom) : at.clientY
     if (onlyIfClamped && clientX === e.clientX && clientY === e.clientY) return false
     if (resolving.current) return false
     resolving.current = true
@@ -105,4 +111,17 @@ export function useChartReadout() {
       },
     },
   }
+}
+
+/**
+ * Where this chart's plotted points are on screen, read off the dots Recharts
+ * drew for them — the one place their positions are already worked out. Every
+ * circle in a series' dot layer counts, since a `dot` renderer of our own (the
+ * lift marks) draws a bare circle without Recharts' class on it.
+ */
+function marksIn(chart: Element): Mark[] {
+  return [...chart.querySelectorAll('.recharts-line-dots circle, .recharts-area-dots circle')].map((dot) => {
+    const box = dot.getBoundingClientRect()
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  })
 }

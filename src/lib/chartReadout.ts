@@ -33,6 +33,40 @@ export function withinReach(marks: Mark[], x: number, y: number, reach = READOUT
   return marks.some((m) => Math.hypot(m.x - x, m.y - y) <= reach)
 }
 
+/**
+ * How far from a plotted point a tap may land and still be taken as aimed at it.
+ *
+ * Wider than {@link READOUT_REACH}: that asked whether a touch was reading the
+ * chart at all, this asks which point it meant, and a fingertip is a broad
+ * thing to put on a two-pixel dot.
+ */
+export const SNAP_REACH = 40
+
+/**
+ * The one of `marks` a tap at (`x`, `y`) was reaching for, or null if none is
+ * within `reach` of it.
+ *
+ * Recharts picks the reading by x alone, so a tap aimed at a peak that fell a
+ * little to one side read the point next to it, however far down the slope that
+ * one sat. Distance on both axes is what a finger is actually judging: a local
+ * maximum or minimum stands apart from its neighbours in y, and that is the
+ * difference a tap near it is trying to use. The nearest point in the plane wins,
+ * and only x is handed back to Recharts, which goes on reading every series at
+ * that x as before.
+ */
+export function nearestMark(marks: Mark[], x: number, y: number, reach = SNAP_REACH): Mark | null {
+  let best: Mark | null = null
+  let bestDistance = reach
+  for (const m of marks) {
+    const d = Math.hypot(m.x - x, m.y - y)
+    if (d <= bestDistance) {
+      best = m
+      bestDistance = d
+    }
+  }
+  return best
+}
+
 /** What a finger on a chart turned out to be doing. */
 export type Gesture = 'tap' | 'scrub' | 'scroll'
 

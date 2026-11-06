@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gestureFrom, READOUT_REACH, TAP_SLOP, withinReach } from './chartReadout'
+import { gestureFrom, nearestMark, READOUT_REACH, SNAP_REACH, TAP_SLOP, withinReach } from './chartReadout'
 
 describe('withinReach', () => {
   const marks = [
@@ -32,6 +32,43 @@ describe('withinReach', () => {
 
   it('leaves a chart with no plotted points answering anywhere', () => {
     expect(withinReach([], 0, 0)).toBe(true)
+  })
+})
+
+describe('nearestMark', () => {
+  // A peak at x=130 between two low neighbours, a month of weekly readings apart.
+  const marks = [
+    { x: 100, y: 150 },
+    { x: 130, y: 40 },
+    { x: 160, y: 150 },
+  ]
+
+  it('finds the point under a tap', () => {
+    expect(nearestMark(marks, 130, 40)).toEqual(marks[1])
+  })
+
+  it('gives a tap that fell to one side of a peak to the peak, not its x neighbour', () => {
+    // Nearer the third point's x than the peak's own, but level with the peak.
+    expect(nearestMark(marks, 147, 55)).toEqual(marks[1])
+  })
+
+  it('gives a tap on the slope to the point it sits on', () => {
+    expect(nearestMark(marks, 110, 160)).toEqual(marks[0])
+  })
+
+  it('answers nothing for a tap out in the open', () => {
+    expect(nearestMark(marks, 130, 300)).toBeNull()
+    expect(nearestMark([], 0, 0)).toBeNull()
+  })
+
+  it('measures as a radius, not a box', () => {
+    const corner = SNAP_REACH * 0.9
+    expect(nearestMark([{ x: 0, y: 0 }], corner, corner)).toBeNull()
+    expect(nearestMark([{ x: 0, y: 0 }], SNAP_REACH, 0)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('reaches further than the readout needs to open', () => {
+    expect(SNAP_REACH).toBeGreaterThan(READOUT_REACH)
   })
 })
 
