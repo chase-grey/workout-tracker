@@ -54,6 +54,10 @@ export function useChartReadout() {
 
   const onPointerDown = (e: ReactPointerEvent) => {
     if (e.pointerType === 'mouse') return
+    // A tap on one of the card's own controls — a header figure that switches
+    // its dashes on — is for the control, not the week beneath it: the header
+    // sits close enough over the plot that the clamp below would select one.
+    if ((e.target as Element).closest('button')) return
     touch.current = { x: e.clientX, y: e.clientY, gesture: 'tap' }
     selectTouch(e)
   }
