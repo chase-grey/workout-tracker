@@ -1,9 +1,11 @@
 # Workout Tracker
 
 A mobile-first PWA for the gym and the stretch mat: quick one-handed workout
-logging, strength progress, flexibility measurement from a photo, body weight and
-composition, and the daily habits around a bulk. Data lives in a Google Sheet via
-a Google Apps Script backend. Deployed as a static site on GitHub Pages.
+logging, strength progress, flexibility measurement from a photo, cardio, body
+weight and composition, and a daily calorie target. It tracks four things —
+strength, flexibility, cardio and diet — and each person chooses which. Data
+lives in a Google Sheet via a Google Apps Script backend. Deployed as a static
+site on GitHub Pages.
 
 **Live app, and where you install it from:**
 **https://chase-grey.github.io/workout-tracker/**
@@ -11,6 +13,37 @@ a Google Apps Script backend. Deployed as a static site on GitHub Pages.
 > Full product spec: Obsidian vault → `20 Projects/Personal/Workout Tracker.md`.
 > Working notes for agents: [CLAUDE.md](./CLAUDE.md). Second stretch routine's
 > spec: [HEAD-TO-TOE.md](./HEAD-TO-TOE.md).
+
+## Who can use it
+
+The app began as one person's, with his plan and targets written into the
+source. It now takes other people too:
+
+- **A new phone opens on a welcome flow** (`src/features/setup`): a name, which
+  of the four pillars to track, height and weight, a starter lifting plan for
+  the equipment they have, a calorie target worked out from their numbers, weekly
+  goals, a theme colour, and optionally an AI key for the coach. With a key, setup
+  ends in the coach chat with "plan my week" already typed.
+- **What they chose is their profile** (`src/lib/profile.ts`), synced with the
+  rest of Settings and editable there under **tracking**. A pillar that's off
+  disappears from Today, Progress, the weekly goals and the streak.
+- **Their data is hosted on the owner's backend**, in their own tabs of the same
+  sheet. Joining takes a one-time invite code, minted from **Settings → account →
+  invite someone** on the owner's phone and shared as a code or a link. What
+  comes back is an account key the phone keeps; **copy account key** in Settings
+  is how a second phone signs in. See [BACKEND.md](./BACKEND.md) "Accounts".
+- **Or nothing leaves the phone.** "this phone" at the end of the welcome flow
+  keeps everything in local storage; an invite code entered later in Settings
+  uploads it.
+
+A phone with no profile is the owner's, and behaves exactly as it did: the
+shipped plan (`src/config/plan.ts`), weekly goals, calorie target and long-run
+goals are his, and so are a few things nobody else is shown — the bulk charts,
+the six-pack goal, the core block, the issue tooling.
+
+Not done yet: everything is in pounds and inches, and the strength standards
+behind the ladders and the muscle avatar are adult male tables, so those are
+hidden for a profile that says female rather than shown wrong.
 
 ## Stack
 
@@ -33,8 +66,9 @@ up to the whole day when the time is there. Guided sessions advance on a
 tap anywhere: rest timer with animated shapes, get-into-position counts, paced-rep
 and hold timers, pause curtain, per-set grading, a recap when you finish. Plus this
 week at a glance, streak with freeze credits, body weight, the daily habits
-(food log against an on-pace calorie target), and a progress
-photo nudge when one is due.
+(food log against an on-pace calorie target), a cardio log (kind, minutes,
+distance — entered after the fact, there is no guided cardio session), and a
+progress photo nudge when one is due.
 
 **Progress** — per-exercise charts (est. 1RM, top set, volume), body weight, body
 fat and waist, weekly calorie surplus, time spent, a muscle-coverage avatar, lift
@@ -64,9 +98,11 @@ npm run build      # typecheck + production build
 ```
 
 The Apps Script `/exec` URL is baked in as `DEFAULT_API_URL`
-(`src/config/backend.ts`), so a fresh install connects with nothing to paste. A
-`VITE_API_URL` in `.env`, or an `apiUrl` in saved settings, overrides it — point
-those at your own deployment. Copy `.env` from `.env.example` for the keys the dev
+(`src/config/backend.ts`), but an address is no longer enough to sync: a fresh
+install sends nothing until it has joined with an invite code or signed in with
+an account key (`src/lib/account.ts`). A `VITE_API_URL` in `.env`, or an `apiUrl`
+in saved settings, overrides the address — point those at your own deployment,
+where you are the owner and no key is needed. Copy `.env` from `.env.example` for the keys the dev
 server needs (coach, auto-fixer); it's gitignored.
 
 ## Install on your phone
@@ -337,8 +373,9 @@ src/
     flex/               # StretchSession, CameraMeasure, AngleEditor, PhotoStep
     progress/           # ProgressTab, charts, GoalsPanel, ladders, MuscleAvatar
     chat/               # ChatTab (coach, plan edits, issue reporting)
-    settings/           # SettingsTab, PlanEditor, PhoneLink
-    setup/              # first-run HeightSetup
+    settings/           # SettingsTab, PlanEditor, PhoneLink, the account,
+                        #   tracking and feedback sections
+    setup/              # the first-run welcome flow and the account it sets up
 scripts/
   autofix.mjs           # the issue → claude → commit fixer
   dev-phone.mjs         # dev server bound to the LAN + the fixer

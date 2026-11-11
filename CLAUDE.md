@@ -49,6 +49,39 @@ So: any change to how a session is paced, advanced, rested, or ended goes into
 **both** files, or the commit body says why it belongs to only one. When touching
 either file, check the other before you finish.
 
+## Other people use this now
+
+The app has more than one user. Each has a **profile** (`src/lib/profile.ts`,
+saved in Settings and synced): the pillars they track (strength, flexibility,
+cardio, diet), their weekly goals and calorie target as dated histories, and
+which way the calorie target points. Their plan is a starter template
+(`src/config/planTemplates.ts`) whose days are marked `custom`, so
+`withPlanDefaults` never merges the shipped plan into it.
+
+**A device with no profile is the owner's**, and so is a profile with
+`owner: true` — `ownerFlavour(profile)` is the test. Everything written around
+one person stays behind it: `DEFAULT_PLAN` and its revisions, the 180/190 lb,
+bench-200 and six-pack goals, the bulk charts, `MEASUREMENT_HISTORY`, the core
+block, the issue tooling. So:
+
+- **A new constant that is really the owner's target is a bug for everyone
+  else.** Weekly goals come from `weeklyGoalsFor` / `currentWeeklyGoals`, the
+  calorie target from `calorieGoalOn`, the long-run goals from
+  `lib/profileGoals.goalsFor` — all of which read the profile. Don't read
+  `DEFAULT_WEEKLY_GOALS`, `CALORIE_GOALS` or `buildGoals` directly in UI code.
+- **A goal of 0 is a pillar that's off**, not a goal that's met. Anything that
+  averages, paces or celebrates weekly goals skips it (`lib/weekPace`,
+  `lib/celebration`).
+- **Gate a feature by pillar with `hasPillar(profile, …)`** and an owner-only
+  one with `ownerFlavour(profile)`; pure lib code reads the same through
+  `lib/profileStore`.
+- **A `PLAN_REVISION` bump reaches only the owner.** A change every template
+  should get goes in `planTemplates.ts`, and existing accounts keep the plan
+  they have.
+- **Requests carry an account key** (`lib/account`, `services/api`). A device
+  that hasn't joined or signed in sends nothing at all; never add a fetch that
+  bypasses `api.isConfigured()`.
+
 ## Testing
 
 `npm test` is pure logic (`src/lib/*.test.ts`) — there are no component or flow
