@@ -18,7 +18,7 @@ import {
 } from '../../config/plan'
 import { performedExercises } from '../../lib/performed'
 import { nextTargets, targetLabel, type Target } from '../../lib/progression'
-import { buildGoals } from '../../lib/goals'
+import { goalsFor } from '../../lib/profileGoals'
 import { goalCueForExercise } from '../../lib/goalCue'
 import { isChallenge } from '../../lib/challenge'
 import { gradeSet, type SetGrade } from '../../lib/setGrade'
@@ -504,8 +504,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // the exception of a goal waiting on a single, which is surfaced precisely
   // because the readings are already there (see goalCue's `ready`).
   const goals = useMemo(
-    () => buildGoals({ workouts, bodyWeights, measurements, heightIn: settings.heightIn ?? 0 }),
-    [workouts, bodyWeights, measurements, settings.heightIn],
+    () => goalsFor(settings.profile, { workouts, bodyWeights, measurements, heightIn: settings.heightIn ?? 0 }),
+    [workouts, bodyWeights, measurements, settings.heightIn, settings.profile],
   )
   const goalCue = useMemo(() => {
     const reps = target?.reps ?? planned.repMin

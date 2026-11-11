@@ -13,6 +13,9 @@ import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../con
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
+import { hasPillar, ownerFlavour } from '../../lib/profile'
+import { lastStretchRoutine } from '../../lib/stretchRotation'
+import { CardioCard } from './CardioCard'
 
 const sessionButton =
   'min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2'
@@ -24,8 +27,14 @@ type Props = {
 }
 
 export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
-  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan } =
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries, cardioEntries, goals, logCardio, deleteCardio } =
     useData()
+  // What this person tracks decides what the page offers (see lib/profile). The
+  // owner's own extras — the photo history, the core block — stay his.
+  const profile = settings.profile
+  const owner = ownerFlavour(profile)
+  const strength = hasPillar(profile, 'strength')
+  const flexibility = hasPillar(profile, 'flexibility')
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
   const [habitWeek, setHabitWeek] = useState<string | null>(null)
@@ -37,13 +46,13 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   }
 
   const lastPhoto =
-    [settings.lastProgressPhoto, ...PROGRESS_PHOTO_HISTORY]
+    [settings.lastProgressPhoto, ...(owner ? PROGRESS_PHOTO_HISTORY : [])]
       .filter((d): d is string => !!d)
       .sort()
       .at(-1) ?? null
   const reminder = photoReminder({ lastPhoto, bodyWeights, workouts, plan })
   const snoozed = !!settings.photoSnoozeUntil && toISODate(new Date()) < settings.photoSnoozeUntil
-  const photoDue = !photoDismissed && !snoozed && reminder.due
+  const photoDue = !photoDismissed && !snoozed && reminder.due && (owner || strength)
 
   const snoozePhotoAWeek = () => {
     const d = new Date()
@@ -71,7 +80,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   // toe always reads as up next. Dimming is only a hint; the side split still
   // starts. To go back to alternating, read `lastStretchRoutine` from
   // lib/stretchRotation off `flexEntries` here instead of the constant.
-  const dimmedStretch: FlexRoutineKey = 'side_split'
+  // That pin is the owner's focus; anyone else's two routines take turns.
+  const dimmedStretch: FlexRoutineKey | null = owner ? 'side_split' : lastStretchRoutine(flexEntries)
   const abDays = weeklyAbsDays(workouts, plan, toISODate(new Date()))
   const absRemaining = Math.max(0, WEEKLY_ABS_GOAL - abDays.length)
 
@@ -87,13 +97,22 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   // ordered — it sits at bottom right whatever Settings says — so the order
   // chosen there applies to the two days that alternate. A full-body day just
   // done dims its own button and leaves this pair's order alone.
-  const liftDays = nextUpFirst(
-    dayOrder(plan).filter((t) => t !== 'fullbody'),
-    dimmedDay,
-  )
+  // A day with no exercises is a slot the plan doesn't use — a two-day starter
+  // plan leaves its third empty — so it gets no button.
+  const liftDays = strength
+    ? nextUpFirst(
+        dayOrder(plan).filter((t) => t !== 'fullbody' && plan[t].exercises.length > 0),
+        dimmedDay,
+      )
+    : []
+  const showFullBody = strength && plan.fullbody.exercises.length > 0
 
   // The right column: the same two routines, rotated the same way.
-  const stretchRoutines = nextUpFirst(FLEX_ROUTINE_KEYS, dimmedStretch)
+  const stretchRoutines = flexibility ? nextUpFirst(FLEX_ROUTINE_KEYS, dimmedStretch) : []
+  const showCore = owner && strength
+  // With only one of the two columns in use, its buttons run across both rather
+  // than down one side of an empty half.
+  const paired = liftDays.length > 0 && stretchRoutines.length > 0
 
   return (
     // No bottom padding of its own: `main` already pads below the scroll area, and
@@ -133,9 +152,20 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
 
       <ThisWeek onSelectWeek={showHabitWeek} />
 
-      <div ref={habitsRef}>
-        <DailyHabits weekStart={habitWeek} onShowCurrentWeek={() => setHabitWeek(null)} />
-      </div>
+      {hasPillar(profile, 'diet') && (
+        <div ref={habitsRef}>
+          <DailyHabits weekStart={habitWeek} onShowCurrentWeek={() => setHabitWeek(null)} />
+        </div>
+      )}
+
+      {hasPillar(profile, 'cardio') && (
+        <CardioCard
+          entries={cardioEntries}
+          goal={goals.cardio ?? 0}
+          onLog={(entry) => void logCardio(entry)}
+          onDelete={(id) => void deleteCardio(id)}
+        />
+      )}
 
       <WeightCard />
 
@@ -155,7 +185,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
                   {plan[t].label}
                 </button>
               ) : (
-                <div />
+                paired && <div />
               )}
               {r ? (
                 <button
@@ -165,20 +195,26 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
                   {FLEX_ROUTINES[r].label}
                 </button>
               ) : (
-                <div />
+                paired && <div />
               )}
             </Fragment>
           )
         })}
-        <button onClick={onStartAbs} className={`${sessionButton} ${absRemaining === 0 ? 'opacity-50' : ''}`}>
-          core
-        </button>
-        <button
-          onClick={() => onStart('fullbody')}
-          className={`${sessionButton} ${dimmedDay === 'fullbody' ? 'opacity-50' : ''}`}
-        >
-          {plan.fullbody.label}
-        </button>
+        {showCore ? (
+          <button onClick={onStartAbs} className={`${sessionButton} ${absRemaining === 0 ? 'opacity-50' : ''}`}>
+            core
+          </button>
+        ) : (
+          showFullBody && paired && <div />
+        )}
+        {showFullBody && (
+          <button
+            onClick={() => onStart('fullbody')}
+            className={`${sessionButton} ${dimmedDay === 'fullbody' ? 'opacity-50' : ''}`}
+          >
+            {plan.fullbody.label}
+          </button>
+        )}
       </div>
     </div>
   )

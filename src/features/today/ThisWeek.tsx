@@ -13,10 +13,12 @@ import { useData } from '../../store/DataContext'
 import { weeklySummary, weeklyWeightChanges } from '../../lib/summary'
 import { parseISODate } from '../../lib/dates'
 import { caloriePR } from '../../lib/calories'
-import { buildGoals, goalsHitInWeek } from '../../lib/goals'
-import { weekPace, type MetricPace } from '../../lib/weekPace'
+import { goalsHitInWeek } from '../../lib/goals'
+import { goalsFor } from '../../lib/profileGoals'
+import { weekPace, type MetricKey, type MetricPace } from '../../lib/weekPace'
 import { overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
+import { hasPillar, ownerFlavour } from '../../lib/profile'
 import { Collapse } from '../../components/Collapse'
 
 /**
@@ -62,6 +64,13 @@ function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | '
   )
 }
 
+const METRIC_LABELS: Record<MetricKey, string> = {
+  workouts: 'workouts',
+  flex: 'stretch sessions',
+  calDays: 'calorie days',
+  cardio: 'cardio days',
+}
+
 /** Weeks of weight history listed before the rest fold behind a ⋯. */
 const WEIGHT_WEEKS_SHOWN = 15
 
@@ -81,7 +90,10 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
   const weightChanges = weeklyWeightChanges(bodyWeights)
   const shownWeightChanges = showAllWeightWeeks ? weightChanges : weightChanges.slice(0, WEIGHT_WEEKS_SHOWN)
-  const calPR = caloriePR(calorieEntries)
+  // A record day of eating is only a win for someone eating to gain.
+  const calPR = (settings.profile?.dietDirection ?? 'gain') === 'gain' && hasPillar(settings.profile, 'diet')
+    ? caloriePR(calorieEntries)
+    : null
   const hasPRs = summary.prs.length > 0 || calPR != null
 
   // The long-run goals that landed this week, above the week's PRs: a goal
@@ -89,8 +101,8 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   // the Goals panel, on whichever row had quietly turned over.
   const heightIn = settings.heightIn ?? 0
   const goalsHit = useMemo(
-    () => goalsHitInWeek(buildGoals({ workouts, bodyWeights, measurements, heightIn, flexEntries })),
-    [workouts, bodyWeights, measurements, heightIn, flexEntries],
+    () => goalsHitInWeek(goalsFor(settings.profile, { workouts, bodyWeights, measurements, heightIn, flexEntries })),
+    [workouts, bodyWeights, measurements, heightIn, flexEntries, settings.profile],
   )
 
   // Read from the same two functions the cheers are judged by, rather than
@@ -113,7 +125,6 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
     }
   }, [])
   const pace = weekPace(wp, goals, now)
-  const byKey = new Map(pace.metrics.map((m) => [m.key, m]))
 
   return (
     <div className="rounded-2xl bg-surface p-3">
@@ -163,9 +174,9 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
-        <MetricBar label="workouts" m={byKey.get('workouts')!} />
-        <MetricBar label="stretch sessions" m={byKey.get('flex')!} />
-        <MetricBar label="calorie days" m={byKey.get('calDays')!} />
+        {pace.metrics.map((m) => (
+          <MetricBar key={m.key} label={METRIC_LABELS[m.key]} m={m} />
+        ))}
       </div>
 
       {summary.weightTrend !== null && (
@@ -256,7 +267,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
           {calPR && (
             <li className="text-accent-2">
               <MdEmojiEvents className="inline align-text-bottom mr-1" aria-hidden />
-              calories — {calPR.calories} cal (best bulk day!)
+              calories — {calPR.calories} cal ({ownerFlavour(settings.profile) ? 'best bulk day!' : 'best day yet!'})
             </li>
           )}
         </ul>

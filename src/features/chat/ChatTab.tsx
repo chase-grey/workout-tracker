@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { clearCoachKickoff, peekCoachKickoff } from '../../lib/coachKickoff'
 import { useData } from '../../store/DataContext'
 import { buildSystemPrompt, type CoachSkills } from '../../lib/chatPrompt'
 import type { RawMessage, Tool } from '../../services/openai'
 import { coachTurn } from '../../services/coach'
+import { hasPillar, ownerFlavour, type Profile } from '../../lib/profile'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
 import { applyFlexPlanEdits, type FlexEdit } from '../../lib/flexTools'
 import {
@@ -287,7 +289,9 @@ function planSnapshot(
   plan: Plan,
   flexPlans: Record<FlexRoutineKey, FlexBlock[]>,
   planEdits: boolean,
+  profile?: Profile | null,
 ): string {
+  const owner = ownerFlavour(profile)
   const lines = [
     `CURRENT WORKOUT PLAN (use these exact keys${planEdits ? ' with update_plan' : ''}):`,
   ]
@@ -296,6 +300,7 @@ function planSnapshot(
   const days = dayOrder(plan)
   lines.push(`day order: ${days.map((d, i) => `${i + 1}. ${d}`).join(', ')}`)
   for (const d of days) {
+    if (plan[d].exercises.length === 0) continue
     lines.push(`${plan[d].label} (${d}), listed in the order it is performed:`)
     plan[d].exercises.forEach((e, i) => {
       lines.push(
@@ -303,12 +308,19 @@ function planSnapshot(
       )
     })
   }
+  // Someone who doesn't track flexibility has no use for the routines.
+  if (!hasPillar(profile, 'flexibility')) return lines.join('\n')
+  // The sit-up it is told apart from is the owner's push day; no one else's
+  // plan has it.
+  const apart = owner
+    ? ', which is a different movement from the incline weighted sit-up the push day trains and keeps its own history and its own weight'
+    : ' and keeps its own history and its own weight'
   lines.push(
     '',
     planEdits
       ? 'CURRENT STRETCH ROUTINES (use routine key + block label + stretch key with update_flex_routine):'
       : 'CURRENT STRETCH ROUTINES:',
-    `The two alternate: whichever was done last, the app offers the other next. Both end with the same four sets of key=${STRETCH_CORE.key} — ${STRETCH_CORE.name}, done flat on the mat, which is a different movement from the incline weighted sit-up the push day trains and keeps its own history and its own weight. The second stretch of a day skips them, because the first one already did them.`,
+    `The two alternate: whichever was done last, the app offers the other next. Both end with the same four sets of key=${STRETCH_CORE.key} — ${STRETCH_CORE.name}, done flat on the mat${apart}. The second stretch of a day skips them, because the first one already did them.`,
   )
   for (const r of FLEX_ROUTINE_KEYS) {
     lines.push('', `routine=${r} — the ${FLEX_ROUTINES[r].label} routine:`)
@@ -378,12 +390,26 @@ export function ChatTab({
     bodyWeights,
     streaks,
     settings,
+    cardioEntries,
     plan,
     updatePlan,
     flexPlans,
     updateFlexPlan,
     flagDiscomfort,
   } = useData()
+  // Straight out of the welcome flow with a key: the composer opens holding the
+  // request to plan the week, with the two switches that conversation needs
+  // already on — the coach asks questions first, so the thread has to be kept,
+  // and its answer is a plan edit (see lib/coachKickoff).
+  const [kickoff] = useState(() => {
+    const text = peekCoachKickoff()
+    if (text) {
+      session.keepContext = true
+      session.skills = { ...session.skills, planEdits: true }
+    }
+    return text
+  })
+  useEffect(clearCoachKickoff, [])
   // Only a kept thread comes back: with the toggle off, what's on screen has to
   // match what the coach was given, which is nothing yet.
   const [turns, setTurnsState] = useState<Turn[]>(() => {
@@ -394,7 +420,7 @@ export function ChatTab({
     session.turns = next
     setTurnsState(next)
   }
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(kickoff ?? '')
   const [loading, setLoading] = useState(false)
   // The reply as it streams in, before it becomes a turn.
   const [pending, setPending] = useState('')
@@ -535,9 +561,22 @@ export function ChatTab({
     const messages: RawMessage[] = [
       {
         role: 'system',
-        content: buildSystemPrompt({ today: new Date(), workouts, bodyWeights, streaks, skills }),
+        content: buildSystemPrompt({
+          today: new Date(),
+          plan,
+          workouts,
+          bodyWeights,
+          streaks,
+          skills,
+          profile: settings.profile,
+          cardio: cardioEntries,
+          heightIn: settings.heightIn,
+        }),
       },
-      { role: 'system', content: planSnapshot(plan, flexPlans, skills.planEdits) },
+      {
+        role: 'system',
+        content: planSnapshot(plan, flexPlans, skills.planEdits, settings.profile),
+      },
       ...priorTurns
         .filter((t) => t.role !== 'system')
         .map((t) => ({ role: t.role, content: t.content }) as RawMessage),

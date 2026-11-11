@@ -17,6 +17,8 @@ export function useBackendVersion(): { live: number | null; required: number } {
   const { lastSync } = useData()
   const [live, setLive] = useState<number | null>(() => storage.loadBackendVersion())
   useEffect(() => {
+    // A device keeping its data to itself has no backend to be behind.
+    if (!api.isConfigured()) return
     let current = true
     api.fetchBackendVersion().then((v) => {
       if (!current) return

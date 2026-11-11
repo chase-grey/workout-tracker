@@ -11,6 +11,7 @@
 
 import type { BodyWeightEntry, WorkoutRow } from '../types'
 import { defaultWeightCap } from '../config/plan'
+import { activeOwnerFlavour } from './profileStore'
 import {
   bestSetAtCapSeries,
   bestSingleSeries,
@@ -644,7 +645,7 @@ export function buildGoals({
   // would settle a bench goal can't be loaded, so what settles it is a set at the
   // heaviest pair there is — on flat bench alone, at face value, the same way the
   // singles are: the flat bench is right there to do it on (see GoalSpec.capLbs).
-  const benchCap = defaultWeightCap(BENCH_KEY)
+  const benchCap = activeOwnerFlavour() ? defaultWeightCap(BENCH_KEY) : undefined
   const benchSingles =
     benchCap == null
       ? bestSingleSeries(workouts, benchKeys)

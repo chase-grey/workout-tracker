@@ -11,6 +11,10 @@ import {
 } from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
 import { PoseCheck } from './PoseCheck'
+import { AccountSection } from './AccountSection'
+import { ProfileSection } from './ProfileSection'
+import { FeedbackSection } from './FeedbackSection'
+import { ownerFlavour } from '../../lib/profile'
 import { PlanEditor } from './PlanEditor'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { stashResumeTab } from '../../lib/resumeTab'
@@ -154,6 +158,7 @@ export function SettingsTab({
   // what you came here for. Opening them lasts only as long as the visit.
   const [showClosed, setShowClosed] = useState(false)
 
+  const owner = ownerFlavour(settings.profile)
   const { active, closed } = partitionIssues(issues ?? [])
 
   const saveKey = () => {
@@ -189,6 +194,10 @@ export function SettingsTab({
 
       <ThemePicker />
 
+      <AccountSection />
+
+      <ProfileSection />
+
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">build</label>
         <p className="text-xs text-neutral-500">
@@ -212,9 +221,9 @@ export function SettingsTab({
         </button>
       </section>
 
-      <PoseCheck />
+      {owner && <PoseCheck />}
 
-      {settings.chatToken.trim() && (
+      {owner && settings.chatToken.trim() && (
         <section className="flex flex-col gap-2">
           <label className="text-sm font-medium text-neutral-300">reported issues</label>
           {/* A failed refresh still shows the cached list, but it says so: an issue
@@ -260,6 +269,7 @@ export function SettingsTab({
         </section>
       )}
 
+      {settings.accountMode !== 'local' && (
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">sync</label>
         <p className="text-xs text-neutral-500">
@@ -277,6 +287,9 @@ export function SettingsTab({
           {sync === 'syncing' ? 'syncing…' : 'sync now'}
         </button>
       </section>
+      )}
+
+      <FeedbackSection />
 
       <PlanEditor />
 
@@ -305,6 +318,7 @@ export function SettingsTab({
 
       <PhoneLink />
 
+      {owner && (
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">issue token</label>
         <input
@@ -322,6 +336,7 @@ export function SettingsTab({
           {chatTokenSaved ? 'saved ✓' : 'save token'}
         </button>
       </section>
+      )}
 
       {/* Flipping the switch on is what brings the key field up underneath,
           and the tab appears in the nav at the same moment. */}

@@ -71,9 +71,14 @@ function Row({ row, onSelectWeek }: { row: WeekResult; onSelectWeek: (week: stri
           {row.inProgress ? 'this week' : weekLabel(row.week)}
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
-          <Count label="workouts" value={row.counts.workouts} goal={goals.workouts} />
-          <Count label="stretch" value={row.counts.flex} goal={goals.flex} />
-          <Count label="cal days" value={row.counts.calDays} goal={goals.calDays} />
+          {/* A goal of 0 wasn't being judged that week — a pillar that's off, or a
+              habit the week predates — so it has no count to report. */}
+          {goals.workouts > 0 && <Count label="workouts" value={row.counts.workouts} goal={goals.workouts} />}
+          {goals.flex > 0 && <Count label="stretch" value={row.counts.flex} goal={goals.flex} />}
+          {goals.calDays > 0 && <Count label="cal days" value={row.counts.calDays} goal={goals.calDays} />}
+          {(goals.cardio ?? 0) > 0 && (
+            <Count label="cardio" value={row.counts.cardio ?? 0} goal={goals.cardio ?? 0} />
+          )}
         </div>
       </div>
       <span className="flex shrink-0 items-center gap-1">

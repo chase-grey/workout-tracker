@@ -19,7 +19,9 @@ import {
   type Point,
 } from '../../lib/progress'
 import { weeklyCalorieIntakeSeries } from '../../lib/calories'
-import { bodyWeightPoints, buildGoals, GOAL_IDS } from '../../lib/goals'
+import { bodyWeightPoints, GOAL_IDS } from '../../lib/goals'
+import { goalsFor } from '../../lib/profileGoals'
+import { hasPillar, ownerFlavour } from '../../lib/profile'
 import {
   CHART_SURFACE,
   CHART_SURFACE_2,
@@ -39,6 +41,7 @@ import { MassSplitChart } from './MassSplitChart'
 import { WholeBodyChart } from './WholeBodyChart'
 import { BulkGradePanel } from './BulkGradePanel'
 import { MuscleAvatar } from './MuscleAvatar'
+import { CardioChart } from './CardioChart'
 import { TimeSpent } from './TimeSpent'
 import { bodyFatSeries } from '../../lib/bodyComp'
 import { massTrend } from '../../lib/massSplit'
@@ -197,8 +200,15 @@ const BODY_METRICS: { label: string; value: BodyMetric }[] = [
 ]
 
 export function ProgressTab() {
-  const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries } = useData()
-  const [exercise, setExercise] = useState(BENCH_COMBO)
+  const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries, cardioEntries } = useData()
+  const profile = settings.profile
+  // What was built around the owner — the bulk charts, the bench as the lift to
+  // watch — stays his; everyone else sees the pillars they asked for.
+  const owner = ownerFlavour(profile)
+  const strengthOn = hasPillar(profile, 'strength')
+  const dietOn = hasPillar(profile, 'diet')
+  const cardioOn = hasPillar(profile, 'cardio')
+  const [picked, setPicked] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [bodyMetric, setBodyMetric] = useState<BodyMetric>('mass')
   const [recap, setRecap] = useState<Review | null>(null)
@@ -251,8 +261,8 @@ export function ProgressTab() {
   // see weeklyCalorieIntakeSeries. The calories themselves, not the surplus
   // over a goal that has moved since the first weigh-in.
   const weeklyCalories = useMemo(
-    () => weeklyCalorieIntakeSeries(calorieEntries),
-    [calorieEntries],
+    () => (dietOn ? weeklyCalorieIntakeSeries(calorieEntries) : undefined),
+    [calorieEntries, dietOn],
   )
 
   // The 6-pack target, once its projection has been locked in (ETA within six
@@ -260,10 +270,10 @@ export function ProgressTab() {
   // panel measures pace against, so the chart line and the panel agree.
   const bodyFatGoalLines = useMemo(() => {
     const locked = settings.lockedGoals ?? {}
-    return buildGoals({ workouts, bodyWeights, measurements, heightIn })
+    return goalsFor(profile, { workouts, bodyWeights, measurements, heightIn })
       .filter((g) => g.id === GOAL_IDS.sixPack && locked[g.id] != null)
       .map((g) => ({ value: locked[g.id]!.target, label: '6-pack' }))
-  }, [workouts, bodyWeights, measurements, heightIn, settings.lockedGoals])
+  }, [workouts, bodyWeights, measurements, heightIn, settings.lockedGoals, profile])
 
   // Most-trained first, so the picker leads with the lifts actually in rotation.
   // The bench combo counts the sessions of both presses, which lands it wherever
@@ -275,8 +285,20 @@ export function ProgressTab() {
       name: 'bench press (flat + incline)',
       sessions: sessionCount(workouts, ['flat_bench', 'incline_bench']),
     }
-    return [combo, ...exercisesByFrequency(workouts)].sort((a, b) => b.sessions - a.sessions)
-  }, [workouts])
+    const all = exercisesByFrequency(workouts)
+    // That list is every lift the shipped plan knows, logged or not — the owner's
+    // own library. Anyone else is offered only what they have actually logged,
+    // gets the combo only once they have pressed both ways, and otherwise starts
+    // on whatever they train most.
+    const logged = owner ? all : all.filter((e) => e.sessions > 0)
+    const bothPresses = ['flat_bench', 'incline_bench'].every((k) => logged.some((e) => e.key === k))
+    if (!owner) return bothPresses ? [combo, ...logged].sort((a, b) => b.sessions - a.sessions) : logged
+    return [combo, ...logged].sort((a, b) => b.sessions - a.sessions)
+  }, [workouts, owner])
+  // The owner's picker always lists the combo he opens on. When the pick isn't on
+  // offer (a new account opens on the bench combo they don't have), fall to the
+  // first option; with none, there's no chart to draw.
+  const exercise = exerciseOptions.some((o) => o.key === picked) ? picked : (exerciseOptions[0]?.key ?? '')
 
   const series = useMemo(
     () => exerciseSeries(workouts, exercise, metric),
@@ -315,8 +337,19 @@ export function ProgressTab() {
   // weight chart plots the same weigh-ins these read off — see GoalsPanel's
   // underBodyWeight. Memoized because the panel
   // folds it into a memoized block list and keys off this node's identity.
-  const bodySection = useMemo(
-    () => (
+  const bodySection = useMemo(() => {
+    // Without the owner's bulk charts the block is the body fat chart alone, and
+    // there is nothing to show until a reading exists.
+    if (!owner) {
+      if (bodyFatPoints.length === 0) return null
+      return (
+        <div className="flex flex-col gap-3">
+          <h4 className="px-1 font-semibold">body fat · {latestBf}%</h4>
+          <MetricChart data={bodyFatPoints} unit="%" label="body fat" calories={weeklyCalories} />
+        </div>
+      )
+    }
+    return (
       <div className="flex flex-col gap-3">
         <h4 className="px-1 font-semibold">body fat{latestBf != null ? ` · ${latestBf}%` : ''}</h4>
         <Pills options={BODY_METRICS} value={bodyMetric} onChange={setBodyMetric} />
@@ -349,9 +382,8 @@ export function ProgressTab() {
           />
         )}
       </div>
-    ),
-    [bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, weeklyCalories, bodyFatGoalLines],
-  )
+    )
+  }, [owner, bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, weeklyCalories, bodyFatGoalLines])
 
   return (
     <div className="flex flex-col gap-4 pb-4">
@@ -380,16 +412,30 @@ export function ProgressTab() {
 
       <GoalsPanel underBodyWeight={bodySection} />
 
-      <MuscleAvatar />
+      {strengthOn && <MuscleAvatar />}
 
-      <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
-      <ExercisePicker options={exerciseOptions} value={exercise} onChange={setExercise} />
-      <Pills options={METRICS} value={metric} onChange={setMetric} />
-      {exercise === BENCH_COMBO ? (
-        <BenchChart data={benchSeries} unit={unit} />
-      ) : (
-        <MetricChart data={series} unit={unit} label={exerciseLabel} offSlot={offSeries} />
+      {strengthOn && (
+        <>
+          <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
+          {exercise === '' ? (
+            <div className="flex h-24 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
+              no lifts logged yet
+            </div>
+          ) : (
+            <>
+              <ExercisePicker options={exerciseOptions} value={exercise} onChange={setPicked} />
+              <Pills options={METRICS} value={metric} onChange={setMetric} />
+              {exercise === BENCH_COMBO ? (
+                <BenchChart data={benchSeries} unit={unit} />
+              ) : (
+                <MetricChart data={series} unit={unit} label={exerciseLabel} offSlot={offSeries} />
+              )}
+            </>
+          )}
+        </>
       )}
+
+      {cardioOn && <CardioChart entries={cardioEntries} />}
 
       <TimeSpent />
 

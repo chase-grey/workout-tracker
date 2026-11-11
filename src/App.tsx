@@ -30,15 +30,40 @@ import { nextStretchSide } from './lib/stretchSide'
 import type { FlexRoutineKey } from './config/flexRoutines'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
+import { WelcomeGate } from './features/setup/WelcomeGate'
+import { accountModeOf } from './lib/account'
+
+// A device in use before accounts existed never chose how to store its data.
+// Settle it as the owner's before anything renders, so it goes on syncing as it
+// always has; a device with nothing on it is left unset and gets the welcome
+// flow instead (see lib/account).
+{
+  const s = storage.loadSettings()
+  if (!s.accountMode) {
+    const mode = accountModeOf(s, {
+      workouts: storage.loadWorkouts().length,
+      bodyWeights: storage.loadBodyWeights().length,
+      calories: storage.loadCalories().length,
+      flex: storage.loadFlex().length,
+    })
+    if (mode) storage.saveSettings({ ...s, accountMode: mode })
+  }
+}
 
 export default function App() {
   return (
     <CelebrationProvider>
       <DataProvider>
-        <AppShell />
+        <Gate />
       </DataProvider>
     </CelebrationProvider>
   )
+}
+
+/** The welcome flow until this device has an account mode, the app after. */
+function Gate() {
+  const { settings } = useData()
+  return settings.accountMode ? <AppShell /> : <WelcomeGate />
 }
 
 function AppShell() {
@@ -140,9 +165,6 @@ function AppShell() {
     updateSettings(next)
     setReview(null)
   }
-
-  // First-run: capture height once before showing the app. Existing users who
-  // already set a height are never prompted.
 
   const startStretch = (routine: FlexRoutineKey, officeAbs = false) => {
     if (controls.session) {

@@ -335,12 +335,18 @@ export function MuscleAvatar() {
 
   const latestWeight = bodyWeights.filter((b) => b.weightLbs >= 50).slice(-1)[0]
   const bodyweightLb = latestWeight?.weightLbs ?? 0
+  // The population standards are adult male tables (see strengthStandards), and
+  // there is no female table to swap in. Without them the map is read off the
+  // personal ladders and what was trained alone — nobody's rank, just their own
+  // climb — and the lift bands and the bodyweight they need drop away.
+  const standards = settings.profile?.sex !== 'female'
 
   const logs = useMemo(() => {
     const out: Record<string, ExerciseLog> = {}
     for (const key of AVATAR_EXERCISE_KEYS) {
       // Reps ladders grow by reps, not load — a bodyweight hanging raise has no
       // est-1RM to read at all.
+      if (!standards && EXERCISE_SOURCES[key].lift != null) continue
       const metric = EXERCISE_SOURCES[key].ladder === 'reps' ? 'topreps' : '1rm'
       // Every session, not just the slot that trains the lift freshest (see
       // progress.SlotScope). The lead-slot read exists to stop a chart line
@@ -354,10 +360,13 @@ export function MuscleAvatar() {
       }
     }
     return out
-  }, [workouts])
+  }, [workouts, standards])
 
   const scores = useMemo(() => muscleDevelopment(logs, bodyweightLb), [logs, bodyweightLb])
-  const lifts = useMemo(() => liftReadouts(logs, bodyweightLb), [logs, bodyweightLb])
+  const lifts = useMemo(
+    () => (standards ? liftReadouts(logs, bodyweightLb) : []),
+    [logs, bodyweightLb, standards],
+  )
   const ladders = useMemo(() => ladderReadouts(logs), [logs])
 
   const hasAnyData = MUSCLES.some((m) => scores[m].hasData)
@@ -365,10 +374,10 @@ export function MuscleAvatar() {
   return (
     <div className="flex flex-col gap-3">
       <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">
-        strength map{bodyweightLb ? ` · ${bodyweightLb} lbs` : ''}
+        strength map{standards && bodyweightLb ? ` · ${bodyweightLb} lbs` : ''}
       </h3>
 
-      {!bodyweightLb ? (
+      {standards && !bodyweightLb ? (
         <div className="flex min-h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
           log a body weight to compare my lifts to other men.
         </div>
@@ -388,7 +397,7 @@ export function MuscleAvatar() {
             </div>
 
             <div className="flex flex-1 flex-col gap-4">
-              {lifts.length > 0 ? (
+              {!standards ? null : lifts.length > 0 ? (
                 <ul className="flex flex-col gap-2">
                   {lifts.map((r) => (
                     <Row

@@ -18,7 +18,6 @@ import {
   attemptReps,
   attemptWeight,
   bodyWeightPoints,
-  buildGoals,
   GOAL_IDS,
   goalCapLbs,
   isReached,
@@ -32,6 +31,8 @@ import { setsByDate, type DaySets } from '../../lib/goalSets'
 import { repsForE1RM } from '../../lib/epley'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import { isLiftLadder } from '../../lib/liftLadder'
+import { goalsFor, TARGET_WEIGHT_GOAL_ID } from '../../lib/profileGoals'
+import { hasPillar } from '../../lib/profile'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptModel,
@@ -880,8 +881,13 @@ function GoalRow({
  * flexibility ladder is its own, and the bodyweight pair (already one block) is
  * another — everything else stands alone.
  */
+/** The goals that read off the shared body weight chart: the owner's two, or a profile's own target. */
+function isWeightGoal(g: GoalSpec): boolean {
+  return g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190 || g.id === TARGET_WEIGHT_GOAL_ID
+}
+
 function goalFamily(g: GoalSpec): string {
-  if (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) return 'bodyweight'
+  if (isWeightGoal(g)) return 'bodyweight'
   if (g.exerciseKey) return `lift:${g.exerciseKey}`
   return `flex:${g.id.split('_')[0]}`
 }
@@ -950,10 +956,11 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     logMaxAttempt,
   } = useData()
   const heightIn = settings.heightIn ?? 0
+  const dietOn = hasPillar(settings.profile, 'diet')
 
   const goals = useMemo(
-    () => buildGoals({ workouts, bodyWeights, measurements, heightIn, flexEntries }),
-    [workouts, bodyWeights, measurements, heightIn, flexEntries],
+    () => goalsFor(settings.profile, { workouts, bodyWeights, measurements, heightIn, flexEntries }),
+    [workouts, bodyWeights, measurements, heightIn, flexEntries, settings.profile],
   )
 
   const projections = useMemo(() => new Map(goals.map((g) => [g.id, projectGoal(g)])), [goals])
@@ -1022,12 +1029,15 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
 
   // The eating behind the curve, one number per week: how many days hit the
   // calorie goal. It lights up the Mondays on the weigh-in chart's axis.
-  const calorieWeeks = useMemo(() => calorieHitsByWeek(calorieEntries), [calorieEntries])
+  const calorieWeeks = useMemo(
+    () => (dietOn ? calorieHitsByWeek(calorieEntries) : undefined),
+    [calorieEntries, dietOn],
+  )
 
   // The two bodyweight goals, which share one chart instead of drawing the same
   // weigh-in history over again apiece.
   const weightGoals = useMemo(
-    () => goals.filter((g) => g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190),
+    () => goals.filter(isWeightGoal),
     [goals],
   )
 
@@ -1040,7 +1050,8 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
       weightGoals.map((g) => {
         const lock = isReached(g) ? undefined : locked[g.id]
         return {
-          label: g.title.replace('bodyweight → ', 'goal '),
+          label:
+            g.id === TARGET_WEIGHT_GOAL_ID ? `goal ${g.target}` : g.title.replace('bodyweight → ', 'goal '),
           target: lock ? lock.target : g.target,
           lock,
           currentPace: currentPaceSeries(lock, projections.get(g.id)!, g.points.at(-1)?.date),
@@ -1241,7 +1252,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
   // these doesn't draw its own row where the panel would otherwise put it — the
   // block carries it, and the block moves as a unit.
   const blockOf = (g: GoalSpec): { key: string; goals: GoalSpec[]; node: React.ReactNode } | null => {
-    if (g.id === GOAL_IDS.weight180 || g.id === GOAL_IDS.weight190) {
+    if (isWeightGoal(g)) {
       return {
         key: 'bodyweight',
         goals: weightGoals,
@@ -1336,6 +1347,21 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
           node: goalRow(g),
         })
       }
+    }
+    // Someone with no weight target still has their weigh-ins and body fat to
+    // see: the block draws with no goal rows, and ranks as the open, undated
+    // thing it is.
+    if (!drawn.has('bodyweight')) {
+      out.push({
+        done: false,
+        doneDate: null,
+        eta: null,
+        projEta: null,
+        lockable: false,
+        ready: false,
+        family: 'bodyweight',
+        node: <Fragment key="bodyweight">{bodyWeightBlock}</Fragment>,
+      })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps

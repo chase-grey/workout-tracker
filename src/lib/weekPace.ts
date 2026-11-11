@@ -87,6 +87,7 @@ export const METRIC_WINDOW: Record<MetricKey, number> = {
   workouts: DAYS_IN_WEEK,
   flex: 6,
   calDays: DAYS_IN_WEEK,
+  cardio: DAYS_IN_WEEK,
 }
 
 /** One metric's standing against both the schedule and the days left. */
@@ -141,6 +142,7 @@ export const METRIC_KEYS: MetricKey[] = [
   'workouts',
   'flex',
   'calDays',
+  'cardio',
 ]
 
 /**
@@ -150,6 +152,9 @@ export const METRIC_KEYS: MetricKey[] = [
  * The buffer is a MINIMUM rather than an average because the week isn't finished
  * until every goal is, so the tightest metric is the one that decides whether
  * it's still on time.
+ *
+ * A metric whose goal is 0 belongs to a pillar that's switched off (see
+ * lib/profile); it isn't paced, and it isn't in `metrics` at all.
  */
 export function weekPace(
   counts: WeekCounts,
@@ -158,9 +163,9 @@ export function weekPace(
 ): WeekPace {
   const daysCompleted = weekDaysCompleted(now)
   const daysLeft = DAYS_IN_WEEK - daysCompleted
-  const metrics = METRIC_KEYS.map<MetricPace>((key) => {
-    const goal = goals[key]
-    const done = counts[key]
+  const metrics = METRIC_KEYS.filter((key) => (goals[key] ?? 0) > 0).map<MetricPace>((key) => {
+    const goal = goals[key] ?? 0
+    const done = counts[key] ?? 0
     const remaining = Math.max(0, goal - done)
     const windowDays = METRIC_WINDOW[key]
     const windowLeft = Math.max(0, windowDays - daysCompleted)
@@ -179,7 +184,9 @@ export function weekPace(
   })
 
   const requiredFraction =
-    metrics.reduce((sum, m) => sum + (m.goal > 0 ? m.required / m.goal : 0), 0) / metrics.length
+    metrics.length === 0
+      ? 1
+      : metrics.reduce((sum, m) => sum + m.required / m.goal, 0) / metrics.length
 
   // Only an unmet metric can bind: a met one owes nothing, and its window may
   // have closed, which would otherwise make it look like the tightest of the

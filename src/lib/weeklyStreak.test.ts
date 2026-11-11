@@ -391,7 +391,7 @@ describe('weeklyStreakHistory', () => {
       today: TODAY,
     })
     expect(wk1.week).toBe(WK1)
-    expect(wk1.counts).toEqual({ workouts: 2, flex: 2, calDays: 6 })
+    expect(wk1.counts).toEqual({ workouts: 2, flex: 2, calDays: 6, cardio: 0 })
     expect(wk1.tier).toBe('full')
     expect(wk1.outcome).toBe('advanced')
     expect(wk1.streakAfter).toBe(1)
@@ -406,7 +406,7 @@ describe('weeklyStreakHistory', () => {
       calorieHitDates: daysInWeek(WK1, 6),
       today: TODAY,
     })
-    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6 })
+    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6, cardio: 0 })
     expect(wk1.tier).toBe('short')
   })
 

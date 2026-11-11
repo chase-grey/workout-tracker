@@ -44,7 +44,7 @@ import { sessionChallenges, metBaselines, type ChallengeOpts } from '../lib/chal
 import { MEASUREMENT_HISTORY } from '../config/body'
 import {
   weeklyStreakHistory,
-  DEFAULT_WEEKLY_GOALS,
+  currentWeeklyGoals,
   type WeeklyGoalConfig,
   type WeekResult,
 } from '../lib/weeklyStreak'
@@ -72,11 +72,15 @@ import { newRecords, type RecordSnapshot } from '../lib/records'
 import { goalPaceNotes, type GoalPaceNote } from '../lib/goalPace'
 import { graduationNote } from '../lib/graduation'
 import { applyNotesEdit, type NotesEdit } from '../lib/discomfort'
+import { cardioDates, mergeCardio, type CardioEntry } from '../lib/cardio'
+import { activeDietDirection, setActiveProfile } from '../lib/profileStore'
+import { ownerFlavour } from '../lib/profile'
 
 export type WeekProgress = {
   workouts: number
   flex: number
   calDays: number
+  cardio: number
 }
 
 /**
@@ -204,6 +208,7 @@ type DataContextValue = {
   calorieEntries: CalorieEntry[]
   measurements: MeasurementEntry[]
   durations: SessionDuration[]
+  cardioEntries: CardioEntry[]
   exerciseAverages: ExerciseAverages
   settings: Settings
   plan: Plan
@@ -229,6 +234,8 @@ type DataContextValue = {
    */
   logFlex: (measurement: FlexMeasurement, opts?: { quiet?: boolean }) => Promise<Celebration | null>
   logCalories: (calories: number, date?: string) => Promise<void>
+  logCardio: (entry: Omit<CardioEntry, 'id'>) => Promise<void>
+  deleteCardio: (id: string) => Promise<void>
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
   logExerciseTimes: (samples: SessionTimeSamples) => Promise<void>
@@ -248,6 +255,11 @@ type DataContextValue = {
   logProgressPhoto: () => void
   importData: (rows: WorkoutRow[], bodyWeights: BodyWeightEntry[]) => Promise<void>
   updateSettings: (s: Settings) => void
+  /**
+   * Sign this device in to an account that already exists, then pull it down.
+   * See the implementation for why this is not `updateSettings`.
+   */
+  signInToAccount: (fields: Partial<Settings>) => Promise<void>
   updatePlan: (p: Plan) => void
   updateFlexPlan: (routine: FlexRoutineKey, blocks: FlexBlock[]) => void
   refresh: () => Promise<void>
@@ -257,6 +269,10 @@ type DataContextValue = {
 const PULL_COOLDOWN_MS = 5 * 60_000
 
 const Ctx = createContext<DataContextValue | null>(null)
+
+// Before the first render, so the goals the very first frame computes are the
+// profile's own rather than the shipped ones (see lib/profileStore).
+setActiveProfile(storage.loadSettings().profile)
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>(() => storage.loadWorkouts())
@@ -268,7 +284,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [exerciseAverages, setExerciseAverages] = useState<ExerciseAverages>(() =>
     storage.loadExerciseAverages(),
   )
+  const [cardioEntries, setCardioEntries] = useState<CardioEntry[]>(() => storage.loadCardio())
   const [settings, setSettings] = useState<Settings>(() => storage.loadSettings())
+  // Kept in step on every render rather than in an effect: the memos below read
+  // the profile through pure lib functions, and an effect would run after them.
+  setActiveProfile(settings.profile)
+  const profile = settings.profile
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [flexPlans, setFlexPlans] = useState<Record<FlexRoutineKey, FlexBlock[]>>(() =>
     storage.loadFlexPlans(),
@@ -283,9 +304,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Weekly-goal celebrations earned when this-week counts move before → after.
   const weeklyCelebrations = useCallback((before: WeekCounts, after: WeekCounts): Celebration[] => {
-    return newlyEarned(before, after, DEFAULT_WEEKLY_GOALS).map((key) =>
-      achievementCelebration(key, after, DEFAULT_WEEKLY_GOALS),
-    )
+    const goals = currentWeeklyGoals()
+    return newlyEarned(before, after, goals).map((key) => achievementCelebration(key, after, goals))
   }, [])
 
   const workoutRevision = useRef(0)
@@ -357,6 +377,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         else if (w.type === 'exerciseTimes') await api.postExerciseTimes(w.samples)
         else if (w.type === 'plan') await api.postPlan(w.plan)
         else if (w.type === 'settings') await api.postSettings(w.settings)
+        else if (w.type === 'cardio') await api.postCardio(w.entry)
+        else if (w.type === 'cardioDelete') await api.deleteCardio(w.id)
         else throw new Error('This saved entry needs a newer app version. Update the app and retry.')
         setQueue(storage.updateQueue((q) => dequeued(q, w.id)))
       } catch (error) {
@@ -500,6 +522,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       /* ignore */
+    }
+    try {
+      const c = await api.fetchCardio()
+      // The account's list is the list, deletions included, apart from what this
+      // device still has waiting to go: a pending entry is kept, a pending
+      // delete stays deleted.
+      if (Array.isArray(c)) {
+        const pending = storage.loadQueue()
+        const gone = new Set(pending.flatMap((w) => (w.type === 'cardioDelete' ? [w.id] : [])))
+        const waiting = pending.flatMap((w) => (w.type === 'cardio' ? [w.entry] : []))
+        const next = mergeCardio(c.filter((e) => !gone.has(e.id)), waiting)
+        setCardioEntries(next)
+        storage.saveCardio(next)
+      }
+    } catch {
+      /* ignore — an older backend won't have this route */
     }
     try {
       const d = await api.fetchDurations()
@@ -832,7 +870,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // Cheer: this date's total just crossed the goal + any weekly calorie-day goal.
       try {
         const dayGoal = calorieGoalOn(entry.date)
+        // Only someone eating to gain is cheered for passing the number; for
+        // anyone else the target is a ceiling, and going through it isn't a win.
         const crossed =
+          activeDietDirection() === 'gain' &&
           totalForDate(prevCals, entry.date) < dayGoal && totalForDate(nextCals, entry.date) >= dayGoal
         const workoutsNow = storage.loadWorkouts()
         const flexDates = storage.loadFlex().map((f) => f.date)
@@ -852,6 +893,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
     },
     [celebrate, deliver, enqueue, persistCalories, weeklyCelebrations],
+  )
+
+  const logCardio = useCallback(
+    async (input: Omit<CardioEntry, 'id'>) => {
+      const entry: CardioEntry = { ...input, id: uuid() }
+      const prev = storage.loadCardio()
+      const next = mergeCardio(prev, [entry])
+      setCardioEntries(next)
+      storage.saveCardio(next)
+      await deliver(enqueue({ type: 'cardio', entry }))
+      try {
+        const workoutsNow = storage.loadWorkouts()
+        const flexDates = storage.loadFlex().map((f) => f.date)
+        const cals = storage.loadCalories()
+        const now = new Date()
+        celebrate(
+          composeCelebration(
+            weeklyCelebrations(
+              currentWeekCounts(workoutsNow, flexDates, cals, now, cardioDates(prev)),
+              currentWeekCounts(workoutsNow, flexDates, cals, now, cardioDates(next)),
+            ),
+          ),
+        )
+      } catch {
+        /* a missed cheer must never break a save */
+      }
+    },
+    [celebrate, deliver, enqueue, weeklyCelebrations],
+  )
+
+  const deleteCardio = useCallback(
+    async (id: string) => {
+      const next = storage.loadCardio().filter((e) => e.id !== id)
+      setCardioEntries(next)
+      storage.saveCardio(next)
+      await deliver(enqueue({ type: 'cardioDelete', id }))
+    },
+    [deliver, enqueue],
   )
 
   const logMeasurement = useCallback(
@@ -1033,6 +1112,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = useCallback((s: Settings) => persistSettings(s), [persistSettings])
 
+  /**
+   * Sign in to an existing account: save the key on this device and pull the
+   * account down, without pushing anything of this device's first.
+   *
+   * `updateSettings` would be wrong here in the worst way. It stamps the
+   * settings as written just now and queues them, and the backend takes a
+   * newer copy over an older one — so a blank phone signing in would replace
+   * the account's profile, goals and commitments with its own emptiness before
+   * ever reading them. So the account fields are saved straight to the device
+   * (they're device-local, there is nothing to sync), this device's settings
+   * lose their stamp so the account's copy wins the merge, and any settings or
+   * plan write still waiting in the outbox is dropped: those describe this
+   * device as it was before it belonged to the account. Logged data in the
+   * outbox stays and uploads — a workout is a workout whoever's phone it was on.
+   */
+  const signInToAccount = useCallback(
+    async (fields: Partial<Settings>) => {
+      const next: Settings = { ...storage.loadSettings(), ...fields }
+      delete next.updatedAt
+      setQueue(storage.updateQueue((q) => q.filter((w) => w.type !== 'settings' && w.type !== 'plan')))
+      setSettings(next)
+      storage.saveSettings(next)
+      await refresh()
+    },
+    [refresh],
+  )
+
   const updatePlan = useCallback(
     (p: Plan) => {
       setPlan(p)
@@ -1056,7 +1162,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // inflates the weekly workout goal.
   const workoutDates = useMemo(() => trainingDates(workouts), [workouts])
   const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
-  const calHitDates = useMemo(() => calorieHitDates(calorieEntries), [calorieEntries])
+  // `profile` is a dependency of each of these though none names it: the hit
+  // rule and the goals are read through lib/profileStore.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const calHitDates = useMemo(() => calorieHitDates(calorieEntries), [calorieEntries, profile])
+  const cardioDays = useMemo(() => cardioDates(cardioEntries), [cardioEntries])
   // Every completed week replayed, oldest first. The flame is this list's last
   // row rather than a second calculation, so the Progress breakdown always
   // explains the number the Today tab shows.
@@ -1066,8 +1176,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         workoutDates,
         flexDates,
         calorieHitDates: calHitDates,
+        cardioDates: cardioDays,
       }),
-    [workoutDates, flexDates, calHitDates],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workoutDates, flexDates, calHitDates, cardioDays, profile],
   )
 
   const streaks = useMemo<StreakState>(() => {
@@ -1082,14 +1194,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       workouts: workoutDates.filter(inWeek).length,
       flex: new Set(flexDates.filter(inWeek)).size,
       calDays: calHitDates.filter(inWeek).length,
+      cardio: cardioDays.filter(inWeek).length,
     }
-  }, [workoutDates, flexDates, calHitDates])
+  }, [workoutDates, flexDates, calHitDates, cardioDays])
 
   // Merge read-only historical anchors (e.g. the 2025-10-31 baseline) with logged
   // measurements. Logged entries win on a shared date; history is never re-synced.
   const allMeasurements = useMemo(
-    () => dedupeMeasurementsByDate([...MEASUREMENT_HISTORY, ...measurements]),
-    [measurements],
+    // The anchors are the owner's own body, so nobody else gets them.
+    () => dedupeMeasurementsByDate([...(ownerFlavour(profile) ? MEASUREMENT_HISTORY : []), ...measurements]),
+    [measurements, profile],
   )
 
   const value: DataContextValue = {
@@ -1099,6 +1213,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     calorieEntries,
     measurements: allMeasurements,
     durations,
+    cardioEntries,
     exerciseAverages,
     settings,
     plan,
@@ -1110,12 +1225,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     streaks,
     streakHistory,
     weekProgress,
-    goals: DEFAULT_WEEKLY_GOALS,
+    goals: currentWeeklyGoals(),
     saveSession,
     flagDiscomfort,
     logBodyWeight,
     logFlex,
     logCalories,
+    logCardio,
+    deleteCardio,
     logMeasurement,
     logSessionDuration,
     logExerciseTimes,
@@ -1125,6 +1242,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     logProgressPhoto,
     importData,
     updateSettings,
+    signInToAccount,
     updatePlan,
     updateFlexPlan,
     refresh,

@@ -134,6 +134,7 @@ export type WeekCounts = {
   workouts: number
   flex: number
   calDays: number
+  cardio?: number
 }
 
 /**
@@ -146,6 +147,7 @@ export function currentWeekCounts(
   flexDates: string[],
   calorieEntries: CalorieEntry[],
   today: Date = new Date(),
+  cardioDates: string[] = [],
 ): WeekCounts {
   const wk = weekStartISO(toISODate(today))
   const inWeek = (d: string) => weekStartISO(d) === wk
@@ -154,23 +156,32 @@ export function currentWeekCounts(
     workouts: trainingDates(workouts).filter(inWeek).length,
     flex: new Set(flexDates.filter(inWeek)).size,
     calDays: calorieHitDates(calorieEntries).filter(inWeek).length,
+    cardio: new Set(cardioDates.filter(inWeek)).size,
   }
 }
 
-/** Overall fraction toward the weekly goal (mean of the capped ratios). */
+/**
+ * Overall fraction toward the weekly goal: the mean of the capped ratios, over
+ * the goals actually being judged. A goal of 0 belongs to a pillar that's
+ * switched off, and takes no part; with none at all the week has nothing to fill.
+ */
 export function overallProgress(c: WeekCounts, g: WeeklyGoalConfig): number {
-  return (
-    (Math.min(c.workouts, g.workouts) / g.workouts +
-      Math.min(c.flex, g.flex) / g.flex +
-      Math.min(c.calDays, g.calDays) / g.calDays) /
-    3
-  )
+  const pairs: [number, number][] = [
+    [c.workouts, g.workouts],
+    [c.flex, g.flex],
+    [c.calDays, g.calDays],
+    [c.cardio ?? 0, g.cardio ?? 0],
+  ]
+  const judged = pairs.filter(([, want]) => want > 0)
+  if (judged.length === 0) return 0
+  return judged.reduce((sum, [have, want]) => sum + Math.min(have, want) / want, 0) / judged.length
 }
 
 export type WeekAchievements = {
   workoutGoal: boolean
   flexGoal: boolean
   calGoal: boolean
+  cardioGoal: boolean
   fullGoal: boolean
   exceeded: boolean
 }
@@ -179,6 +190,7 @@ const ACHIEVEMENT_KEYS: (keyof WeekAchievements)[] = [
   'workoutGoal',
   'flexGoal',
   'calGoal',
+  'cardioGoal',
   'fullGoal',
   'exceeded',
 ]
@@ -188,15 +200,20 @@ export function weekAchievements(c: WeekCounts, g: WeeklyGoalConfig): WeekAchiev
   const workoutGoal = c.workouts >= g.workouts
   const flexGoal = c.flex >= g.flex
   const calGoal = c.calDays >= g.calDays
-  const fullGoal = workoutGoal && flexGoal && calGoal
+  const cardioGoal = (c.cardio ?? 0) >= (g.cardio ?? 0)
+  const fullGoal = workoutGoal && flexGoal && calGoal && cardioGoal
+  // A goal of 0 isn't being judged, so nothing counts as going over it.
+  const over = (have: number, want: number) => want > 0 && have > want
   const overAny =
-    c.workouts > g.workouts ||
-    c.flex > g.flex ||
-    c.calDays > g.calDays
+    over(c.workouts, g.workouts) ||
+    over(c.flex, g.flex) ||
+    over(c.calDays, g.calDays) ||
+    over(c.cardio ?? 0, g.cardio ?? 0)
   return {
     workoutGoal,
     flexGoal,
     calGoal,
+    cardioGoal,
     fullGoal,
     exceeded: fullGoal && overAny,
   }
@@ -235,6 +252,13 @@ export function achievementCelebration(
         tier: 'medium',
         title: 'weekly calorie days done',
         subtitle: `${counts.calDays} of ${goals.calDays} days this week.`,
+        icon: 'medal',
+      }
+    case 'cardioGoal':
+      return {
+        tier: 'medium',
+        title: 'weekly cardio done',
+        subtitle: `${counts.cardio ?? 0} of ${goals.cardio ?? 0} days this week.`,
         icon: 'medal',
       }
     case 'fullGoal':

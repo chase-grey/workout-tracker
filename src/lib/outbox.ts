@@ -6,6 +6,7 @@ import type { MeasurementEntry } from './bodyComp'
 import type { SessionDuration, SessionTimeSamples } from './estimate'
 import type { SyncedSettings } from './settingsSync'
 import type { NotesEdit } from './discomfort'
+import type { CardioEntry } from './cardio'
 
 /**
  * The durable outbox: writes recorded on disk *before* the network is touched,
@@ -30,6 +31,8 @@ export type WritePayload =
   | { type: 'exerciseTimes'; samples: SessionTimeSamples }
   | { type: 'plan'; plan: Plan }
   | { type: 'settings'; settings: SyncedSettings }
+  | { type: 'cardio'; entry: CardioEntry }
+  | { type: 'cardioDelete'; id: string }
 
 /**
  * A queued write. The id is what lets a delivery remove *its own* entry from
@@ -58,6 +61,10 @@ export function supersedes(w: WritePayload): string | null {
   if (w.type === 'notes') return `notes:${w.edit.session}:${w.edit.exercise}`
   if (w.type === 'plan') return 'plan'
   if (w.type === 'settings') return 'settings'
+  // A cardio entry is stored whole under its id, so a later edit or a delete of
+  // the same entry replaces whatever is still waiting to go.
+  if (w.type === 'cardio') return `cardio:${w.entry.id}`
+  if (w.type === 'cardioDelete') return `cardio:${w.id}`
   return null
 }
 

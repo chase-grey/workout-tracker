@@ -16,6 +16,8 @@ import type { SetClock } from '../lib/setClock'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
 import { toFastMode, type FastMode } from '../lib/fastMode'
 import type { SkippedExercises } from '../lib/skipped'
+import type { Profile } from '../lib/profile'
+import type { CardioEntry } from '../lib/cardio'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -26,6 +28,8 @@ const KEYS = {
   cacheCalories: 'wt.cache.calories',
   cacheMeasurements: 'wt.cache.measurements',
   cacheDurations: 'wt.cache.durations',
+  cacheCardio: 'wt.cache.cardio',
+  joinClaim: 'wt.joinClaim',
   cacheIssues: 'wt.cache.issues',
   // v2 dropped the pooled rest average (seconds) for a prescribed-rest ratio.
   // A fresh key rather than a migration: the v1 number is a duration, and there
@@ -213,7 +217,30 @@ export type Settings = {
    * avatar's ab lines. Unset means not yet.
    */
   sixPackStatus?: SixPackStatus
+  /**
+   * Who is using the app and what they asked it to track (see lib/profile).
+   * Absent on the original owner's devices, which is what keeps every shipped
+   * target applying to them unchanged. Synced: it's the account's, not the phone's.
+   */
+  profile?: Profile
+  /**
+   * How this device stores its data (see lib/account). Device-local with the
+   * token: the mode says how THIS phone reaches the backend, and a second phone
+   * signs in for itself.
+   */
+  accountMode?: AccountMode
+  /** The key this device proves its account to the hosted backend with. */
+  accountToken?: string
+  /** The name the account was created under, for the Settings card. */
+  accountName?: string
 }
+
+/**
+ * `legacy` is a device from before accounts: it talks to the backend with no
+ * key and is the owner there. `hosted` holds an account key. `local` keeps
+ * everything on the phone and never touches the network.
+ */
+export type AccountMode = 'legacy' | 'hosted' | 'local'
 
 /** The three answers the six-pack goal accepts. */
 export type SixPackStatus = 'none' | 'close' | 'have'
@@ -270,6 +297,23 @@ export const storage = {
   markCaloriesRepaired: () => write(KEYS.caloriesRepaired, true),
 
   loadMeasurements: (): MeasurementEntry[] => read(KEYS.cacheMeasurements, []),
+
+  /**
+   * This device's id for its attempt at an invite code: minted once per code
+   * and kept, so a retry (after a timeout, a reload, a second tap) is
+   * recognised by the backend as the same join rather than a second one.
+   */
+  joinClaim: (code: string): string => {
+    const key = `${KEYS.joinClaim}.${code.trim().toUpperCase()}`
+    const held = read<string | null>(key, null)
+    if (held) return held
+    const claim = uuid()
+    write(key, claim)
+    return claim
+  },
+
+  loadCardio: (): CardioEntry[] => read(KEYS.cacheCardio, []),
+  saveCardio: (entries: CardioEntry[]) => write(KEYS.cacheCardio, entries),
   saveMeasurements: (entries: MeasurementEntry[]) => write(KEYS.cacheMeasurements, entries),
 
   loadDurations: (): SessionDuration[] => read(KEYS.cacheDurations, []),

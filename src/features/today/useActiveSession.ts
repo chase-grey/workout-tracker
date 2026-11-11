@@ -40,6 +40,8 @@ export function useActiveSession() {
     // the day's short form unless asked for the whole day (see SessionLength);
     // the checklist can open a short session up later.
     (dayType: DayType, variant?: VariantKey, length: SessionLength = 'short') => {
+      // A day with nothing in it has no first set to open on.
+      if (plan[dayType].exercises.length === 0) return
       storage.saveActiveStep(0)
       storage.saveActiveStepKey(null)
       storage.saveActiveRest(null)
@@ -51,7 +53,11 @@ export function useActiveSession() {
       // knee isn't next week's.
       storage.saveFastMode('off')
       storage.saveSkipped(null)
-      const chosen = variant ?? nextVariant(workouts, dayType) ?? undefined
+      // Variants belong to a day that declares them. A day with none — every
+      // starter template's — would otherwise be stamped A and B in turn and have
+      // its progression read from every other session.
+      const hasVariants = plan[dayType].exercises.some((e) => e.byVariant)
+      const chosen = hasVariants ? variant ?? nextVariant(workouts, dayType) ?? undefined : undefined
       // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
       const startSide = nextStartSide(workouts, dayType)
       const date = toISODate(new Date())

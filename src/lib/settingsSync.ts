@@ -35,6 +35,11 @@ import { unionHidden } from './hiddenAnimations'
  * promise to type a key into this phone; synced, it would switch on a coach
  * tab on every other phone with nothing behind it. The provider and its base
  * URL say what the key is for, so they stay with it too.
+ *
+ * The account fields are how this device signs in to the hosted backend. The
+ * token is a credential like the others, and the mode describes this phone
+ * rather than the person: one of theirs can be signed in while another keeps
+ * its data to itself.
  */
 export const DEVICE_LOCAL_KEYS = [
   'apiUrl',
@@ -43,6 +48,9 @@ export const DEVICE_LOCAL_KEYS = [
   'coachEnabled',
   'aiProvider',
   'aiBaseUrl',
+  'accountMode',
+  'accountToken',
+  'accountName',
 ] as const
 
 type DeviceLocalKey = (typeof DEVICE_LOCAL_KEYS)[number]

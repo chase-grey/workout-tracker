@@ -125,6 +125,7 @@ describe('currentWeekCounts', () => {
       workouts: 2,
       flex: 1,
       calDays: 1,
+      cardio: 0,
     })
   })
 
@@ -150,6 +151,7 @@ describe('weekAchievements', () => {
       workoutGoal: true,
       flexGoal: true,
       calGoal: true,
+      cardioGoal: true,
       fullGoal: true,
       exceeded: false,
     })

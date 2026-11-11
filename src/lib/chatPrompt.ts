@@ -1,9 +1,20 @@
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types'
-import { PLAN, DAY_TYPES, DUMBBELL_MAX_LBS, exerciseName, repRangeLabel } from '../config/plan'
-import { toISODate, parseISODate } from './dates'
+import { DAY_TYPES, DUMBBELL_MAX_LBS, exerciseName, repRangeLabel, type Plan } from '../config/plan'
+import { starterPlan } from '../config/planTemplates'
+import { toISODate, parseISODate, weekStartISO } from './dates'
 import { parseDiscomfort } from './discomfort'
-import { CALORIE_GOAL } from './calories'
-import { DEFAULT_WEEKLY_GOALS } from './weeklyStreak'
+import { calorieGoalOn } from './calories'
+import { currentWeeklyGoals } from './weeklyStreak'
+import {
+  ACTIVITY_LABELS,
+  DIET_LABELS,
+  EQUIPMENT_LABELS,
+  ageOf,
+  hasPillar,
+  ownerFlavour,
+  type Profile,
+} from './profile'
+import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
 
 /** Format one set as "weightxreps" (e.g. "135x8"), or "BWxreps" when weight is blank. */
 function formatSet(row: WorkoutRow): string {
@@ -11,11 +22,15 @@ function formatSet(row: WorkoutRow): string {
   return `${weight}x${row.reps}`
 }
 
-/** Render the full hardcoded plan as a compact text block. */
-function renderPlan(): string {
+/**
+ * Render the user's live plan as a compact text block. A day with no exercises
+ * (the third slot of a two-day week) is skipped.
+ */
+function renderPlan(plan: Plan, owner: boolean): string {
   const lines: string[] = []
   for (const dayType of DAY_TYPES) {
-    const day = PLAN[dayType]
+    const day = plan[dayType]
+    if (!day || day.exercises.length === 0) continue
     lines.push(`${day.label} (${day.type}):`)
     for (const ex of day.exercises) {
       const optional = ex.optional ? ' [optional]' : ''
@@ -27,8 +42,11 @@ function renderPlan(): string {
       // exercises, so the rule belongs where it can read it.
       // The rack also ends, and the coach has to know where: a weight it can't
       // actually hand you is worse than no suggestion (see DUMBBELL_MAX_LBS).
+      // That ceiling is the owner's gym's; anyone else's rack is unknown.
       const paired = ex.dumbbellPair
-        ? ` [a dumbbell in each hand, so the weight logged is the pair total and only moves in 10s; the heaviest dumbbell is ${DUMBBELL_MAX_LBS} lbs, so never suggest more than ${DUMBBELL_MAX_LBS * 2} total — at ${DUMBBELL_MAX_LBS * 2} it progresses by reps only]`
+        ? owner
+          ? ` [a dumbbell in each hand, so the weight logged is the pair total and only moves in 10s; the heaviest dumbbell is ${DUMBBELL_MAX_LBS} lbs, so never suggest more than ${DUMBBELL_MAX_LBS * 2} total — at ${DUMBBELL_MAX_LBS * 2} it progresses by reps only]`
+          : ' [a dumbbell in each hand, so the weight logged is the pair total and only moves in 10s]'
         : ''
       // Circuit stations rotate rather than running their sets back to back, and
       // each one sets the rest that follows it, so both belong on the line.
@@ -136,7 +154,7 @@ function andList(items: string[]): string {
  * still on its belt, so a request it can no longer serve has to come back as
  * "that button is off", never as a near-miss from another tool.
  */
-function renderTools(skills: CoachSkills): string[] {
+function renderTools(skills: CoachSkills, owner: boolean): string[] {
   const uses: string[] = []
   if (skills.planEdits) {
     uses.push(
@@ -163,10 +181,17 @@ function renderTools(skills: CoachSkills): string[] {
     lines.push(
       `Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. ${elsewhere}`,
       ``,
-      `A movement done with a dumbbell in each hand logs the pair's total, so its weight step is 10 lbs and never 5: the rack moves in 5s and both hands change at once. The heaviest dumbbell available is ${DUMBBELL_MAX_LBS} lbs, so no paired movement can ever be given more than ${DUMBBELL_MAX_LBS * 2} lbs total — never suggest more; once a lift is there, the only way up is reps, and a strength goal on it is reached by reps at that weight rather than by a heavier single. Give any such exercise you add \`increment: 10\` and \`weightCapLbs: ${DUMBBELL_MAX_LBS * 2}\`, and never talk about a 5-lb jump on one of the paired movements marked in the plan below.`,
-      ``,
-      `The cable pulldown machine's stack is numbered 1 to 15 rather than weighed. Every movement marked as a stack setting in the plan below logs that number, not pounds: talk about it as a setting, move it one at a time, and never suggest a setting above 15 — once a lift is at 15 the only way up is reps. Give any exercise you add on that machine \`increment: 1\`.`,
-      ``,
+      ...(owner
+        ? [
+            `A movement done with a dumbbell in each hand logs the pair's total, so its weight step is 10 lbs and never 5: the rack moves in 5s and both hands change at once. The heaviest dumbbell available is ${DUMBBELL_MAX_LBS} lbs, so no paired movement can ever be given more than ${DUMBBELL_MAX_LBS * 2} lbs total — never suggest more; once a lift is there, the only way up is reps, and a strength goal on it is reached by reps at that weight rather than by a heavier single. Give any such exercise you add \`increment: 10\` and \`weightCapLbs: ${DUMBBELL_MAX_LBS * 2}\`, and never talk about a 5-lb jump on one of the paired movements marked in the plan below.`,
+            ``,
+            `The cable pulldown machine's stack is numbered 1 to 15 rather than weighed. Every movement marked as a stack setting in the plan below logs that number, not pounds: talk about it as a setting, move it one at a time, and never suggest a setting above 15 — once a lift is at 15 the only way up is reps. Give any exercise you add on that machine \`increment: 1\`.`,
+            ``,
+          ]
+        : [
+            `A movement done with a dumbbell in each hand logs the pair's total, so its weight step is 10 lbs and never 5: both hands change at once. Give any such exercise you add \`increment: 10\`. A movement marked as a stack setting in the plan below logs a pin position, not pounds: talk about it as a setting and move it one at a time.`,
+            ``,
+          ]),
     )
   } else {
     lines.push(
@@ -211,20 +236,104 @@ function renderBodyWeights(entries: BodyWeightEntry[]): string {
     .join('\n')
 }
 
+/** The "about this person" block, for anyone who isn't the owner. */
+function renderAboutPerson(profile: Profile, today: Date, heightIn: number | undefined): string[] {
+  const lines = [`## About this person`]
+  if (profile.name.trim()) lines.push(`Name: ${profile.name.trim()}`)
+  lines.push(`Tracks: ${profile.pillars.join(', ') || 'nothing yet'}`)
+  const body: string[] = []
+  if (profile.sex) body.push(profile.sex)
+  const age = ageOf(profile, today)
+  if (age != null) body.push(`${age} years old`)
+  if (heightIn) body.push(`${Math.floor(heightIn / 12)}'${Math.round(heightIn % 12)}" tall`)
+  if (profile.activity) body.push(`day to day: ${ACTIVITY_LABELS[profile.activity]}`)
+  if (body.length > 0) lines.push(`Body: ${body.join(', ')}`)
+  if (hasPillar(profile, 'diet')) {
+    const diet: string[] = []
+    if (profile.dietDirection) diet.push(`wants to ${DIET_LABELS[profile.dietDirection]}`)
+    const kcal = calorieGoalOn(toISODate(today))
+    if (kcal > 0) diet.push(`calorie target ${kcal} a day`)
+    if (diet.length > 0) lines.push(`Diet: ${diet.join(', ')}`)
+  }
+  if (profile.targetWeightLbs) lines.push(`Target weight: ${profile.targetWeightLbs} lbs`)
+  if (hasPillar(profile, 'strength') && profile.strength) {
+    lines.push(
+      `Strength: ${profile.strength.daysPerWeek} days a week, ${EQUIPMENT_LABELS[profile.strength.equipment]}`,
+    )
+  }
+  return lines
+}
+
+/**
+ * The weekly goals that are on, said the way the streak line says them. A goal
+ * of 0 means that pillar is off, so it isn't mentioned at all.
+ */
+function goalParts(today: Date): string[] {
+  const goals = currentWeeklyGoals(today)
+  const parts: string[] = []
+  if (goals.workouts > 0) parts.push(`${goals.workouts} workouts`)
+  if (goals.flex > 0) parts.push(`${goals.flex} stretch sessions`)
+  if (goals.calDays > 0) parts.push(`calories ${goals.calDays}/7 at ${calorieGoalOn(toISODate(today))}`)
+  if ((goals.cardio ?? 0) > 0) parts.push(`${goals.cardio} cardio days`)
+  return parts
+}
+
+/** Per-week minutes for the last four weeks, then the last few sessions. */
+function renderCardio(entries: CardioEntry[], today: Date): string[] {
+  const thisWeek = weekStartISO(toISODate(today))
+  const minutes = cardioMinutesByWeek(entries)
+  const lines: string[] = []
+  for (let i = 3; i >= 0; i--) {
+    const monday = parseISODate(thisWeek)
+    monday.setDate(monday.getDate() - 7 * i)
+    const key = toISODate(monday)
+    lines.push(`week of ${key}: ${Math.round(minutes.get(key) ?? 0)} min`)
+  }
+  const cutoff = parseISODate(thisWeek)
+  cutoff.setDate(cutoff.getDate() - 21)
+  const recent = entries
+    .filter((e) => parseISODate(e.date) >= cutoff)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 6)
+    .map((e) => `${e.date}: ${e.kind}, ${cardioSummary(e)}`)
+  return recent.length > 0 ? [...lines, 'Latest sessions:', ...recent] : lines
+}
+
+/**
+ * Whether the plan is still the starter template the welcome flow wrote for this
+ * profile: every day holds exactly the template's exercises, in order.
+ */
+function isFreshStarter(plan: Plan, profile: Profile): boolean {
+  if (!profile.strength) return false
+  const starter = starterPlan(profile.strength)
+  const keys = (p: Plan, d: DayType) => (p[d]?.exercises ?? []).map((e) => e.key).join(',')
+  return DAY_TYPES.every((d) => keys(plan, d) === keys(starter, d))
+}
+
 /**
  * Build the system prompt that gives the assistant the user's training context.
- * Pure — no I/O. Includes the plan, last 90 days of workouts and body weight,
- * and current streaks.
+ * Pure — no I/O. Includes the user's live plan, last 90 days of workouts and
+ * body weight, and current streaks. With no profile it is the original owner's
+ * prompt; anyone else's drops what is only true of him, gains a short block
+ * about themselves, and leaves out the pillars they don't track.
  */
 export function buildSystemPrompt(input: {
   today: Date
+  /** The live plan, not the shipped default. */
+  plan: Plan
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
   streaks: StreakState
   skills: CoachSkills
+  profile?: Profile | null
+  cardio?: CardioEntry[]
+  heightIn?: number
 }): string {
-  const { today, workouts, bodyWeights, streaks, skills } = input
+  const { today, plan, workouts, bodyWeights, streaks, skills, profile } = input
   const todayISO = toISODate(today)
+  const owner = ownerFlavour(profile)
+  const strengthOn = hasPillar(profile, 'strength')
+  const cardioOn = profile != null && hasPillar(profile, 'cardio')
 
   const cutoff = new Date(today)
   cutoff.setDate(cutoff.getDate() - 90)
@@ -233,25 +342,49 @@ export function buildSystemPrompt(input: {
   const recentWorkouts = workouts.filter((w) => inWindow(w.date))
   const recentWeights = bodyWeights.filter((b) => inWindow(b.date))
 
+  const goals = goalParts(today)
+  const streakLine =
+    goals.length > 0
+      ? `Weekly-goal streak (weeks hitting ${goals.join(' + ')}): ${streaks.streak}`
+      : `Weekly-goal streak (no weekly goals are set): ${streaks.streak}`
+
+  // Someone still on the template, with next to no training behind them, hasn't
+  // told the coach anything yet: it should ask before it sketches a week.
+  const sessions = new Set(recentWorkouts.map((w) => w.session_id)).size
+  const newcomer =
+    !owner && profile != null && strengthOn && sessions <= 2 && isFreshStarter(plan, profile)
+      ? [
+          `Their plan is still the starter template and they have barely trained yet. When they ask you to plan their week or set up their programme, ask about their goals, schedule, equipment and any injuries first, then propose plan edits with the tools rather than describing a plan in prose.`,
+          ``,
+        ]
+      : []
+
   return [
     "You are a fitness assistant for a single user. Answer using the user's actual training data below. Be concise, practical, and specific — reference their real numbers, exercises, and trends. If the data does not cover a question, say so briefly.",
     ``,
     'Your replies are rendered as Markdown on a phone, so short bullet lists, bold, and inline code all display properly. Keep the formatting light — no tables, and no heading above a two-line answer.',
     ``,
-    ...renderTools(skills),
+    ...renderTools(skills, owner),
+    ...newcomer,
     `Current date: ${todayISO}`,
     ``,
-    `## Workout plan`,
-    renderPlan(),
-    ``,
-    `## Logged workouts (last 90 days)`,
-    renderWorkouts(recentWorkouts),
-    ``,
+    ...(owner || !profile ? [] : [...renderAboutPerson(profile, today, input.heightIn), ``]),
+    ...(strengthOn
+      ? [
+          `## Workout plan`,
+          renderPlan(plan, owner),
+          ``,
+          `## Logged workouts (last 90 days)`,
+          renderWorkouts(recentWorkouts),
+          ``,
+        ]
+      : []),
     `## Body weight (last 90 days)`,
     renderBodyWeights(recentWeights),
     ``,
+    ...(cardioOn ? [`## Cardio (last 4 weeks)`, ...renderCardio(input.cardio ?? [], today), ``] : []),
     `## Streaks`,
-    `Weekly-goal streak (weeks hitting 2 workouts + 2 stretch sessions + calories ${DEFAULT_WEEKLY_GOALS.calDays}/7 at ${CALORIE_GOAL}): ${streaks.streak}`,
+    streakLine,
     `Streak freezes available: ${streaks.freezes}`,
   ].join('\n')
 }

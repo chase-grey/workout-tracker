@@ -1,11 +1,15 @@
 /** Pure weekly-goal streak engine. */
 
 import { weekStartISO, toISODate, enumerateWeeks } from './dates'
+import { profileWeeklyGoals } from './profile'
+import { activeProfile } from './profileStore'
 
 export type WeeklyGoalConfig = {
   workouts: number
   flex: number
   calDays: number
+  /** Days with any cardio logged. Absent on a config from before cardio, which reads as 0: not judged. */
+  cardio?: number
 }
 
 /**
@@ -27,8 +31,13 @@ export const WEEKLY_GOAL_HISTORY: readonly { from: string; goals: WeeklyGoalConf
 export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig =
   WEEKLY_GOAL_HISTORY[WEEKLY_GOAL_HISTORY.length - 1].goals
 
-/** The goals in force for the week starting on Monday `week`. */
+/**
+ * The goals in force for the week starting on Monday `week`: the profile's own
+ * where this device has one (see lib/profile), the shipped history otherwise.
+ */
 export function weeklyGoalsFor(week: string): WeeklyGoalConfig {
+  const profile = activeProfile()
+  if (profile) return profileWeeklyGoals(profile, week)
   let goals = WEEKLY_GOAL_HISTORY[0].goals
   for (const g of WEEKLY_GOAL_HISTORY) if (g.from <= week) goals = g.goals
   return goals
@@ -36,10 +45,16 @@ export function weeklyGoalsFor(week: string): WeeklyGoalConfig {
 
 export type WeekTier = 'full' | 'short'
 
+/** The goals this week is being held to. */
+export function currentWeeklyGoals(today: Date = new Date()): WeeklyGoalConfig {
+  return weeklyGoalsFor(weekStartISO(toISODate(today)))
+}
+
 export type WeekCounts = {
   workouts: number
   flex: number
   calDays: number
+  cardio?: number
 }
 
 /**
@@ -71,11 +86,13 @@ export function classifyWeek(
   const shortfall =
     under(counts.workouts, config.workouts) +
     under(counts.flex, config.flex) +
-    under(counts.calDays, config.calDays)
+    under(counts.calDays, config.calDays) +
+    under(counts.cardio ?? 0, config.cardio ?? 0)
   const surplus =
     over(counts.workouts, config.workouts) +
     over(counts.flex, config.flex) +
-    over(counts.calDays, config.calDays)
+    over(counts.calDays, config.calDays) +
+    over(counts.cardio ?? 0, config.cardio ?? 0)
 
   if (shortfall === 0) return { tier: 'full', exceeded: surplus > 0, earned: surplus, cost: 0 }
   return { tier: 'short', exceeded: false, earned: 0, cost: Math.max(1, shortfall - surplus) }
@@ -128,6 +145,7 @@ export type StreakInput = {
   workoutDates: string[]
   flexDates: string[]
   calorieHitDates: string[]
+  cardioDates?: string[]
   today?: Date
   config?: WeeklyGoalConfig
 }
@@ -145,18 +163,21 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   const workoutByWeek = bucketByWeek(input.workoutDates)
   const flexByWeek = bucketByWeek(input.flexDates)
   const calByWeek = bucketByWeek(input.calorieHitDates)
+  const cardioByWeek = bucketByWeek(input.cardioDates ?? [])
 
   const currentWeekStart = weekStartISO(toISODate(today))
   const countsFor = (week: string): WeekCounts => ({
     workouts: workoutByWeek.get(week) ?? 0,
     flex: flexByWeek.get(week) ?? 0,
     calDays: calByWeek.get(week) ?? 0,
+    cardio: cardioByWeek.get(week) ?? 0,
   })
 
   const allWeeks = [
     ...workoutByWeek.keys(),
     ...flexByWeek.keys(),
     ...calByWeek.keys(),
+    ...cardioByWeek.keys(),
   ]
   if (allWeeks.length === 0) return []
   const earliestWeek = allWeeks.reduce((min, w) => (w < min ? w : min), allWeeks[0])

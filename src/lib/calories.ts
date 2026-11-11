@@ -1,4 +1,6 @@
 import { parseISODate, toISODate, weekStartISO } from './dates'
+import { calorieDayHit, profileCalorieGoal } from './profile'
+import { activeDietDirection, activeProfile } from './profileStore'
 
 export type CalorieEntry = {
   date: string /* YYYY-MM-DD */
@@ -35,8 +37,14 @@ export const CALORIE_GOALS: readonly { from: string; goal: number }[] = [
 /** Today's target — the newest entry in {@link CALORIE_GOALS}. */
 export const CALORIE_GOAL = CALORIE_GOALS[CALORIE_GOALS.length - 1].goal
 
-/** The target in force on the given YYYY-MM-DD date. */
+/**
+ * The target in force on the given YYYY-MM-DD date: the profile's own where this
+ * device has one that set a target (see lib/profile), the shipped history otherwise.
+ */
 export function calorieGoalOn(date: string): number {
+  const profile = activeProfile()
+  const own = profile ? profileCalorieGoal(profile, date) : null
+  if (own != null) return own
   let goal = CALORIE_GOALS[0].goal
   for (const g of CALORIE_GOALS) if (g.from <= date) goal = g.goal
   return goal
@@ -323,13 +331,16 @@ export function mergeCaloriesByDate(
 }
 
 /**
- * Distinct dates whose summed total meets or exceeds `goal`, sorted ascending.
- * Without one, each date is held to the target in force that day.
+ * Distinct dates whose summed total hits `goal`, sorted ascending. Without one,
+ * each date is held to the target in force that day. "Hits" is at least the
+ * goal when eating to gain and at most it when eating to lose (see
+ * lib/profile.calorieDayHit); a device with no profile is always gaining.
  */
 export function calorieHitDates(entries: CalorieEntry[], goal?: number): string[] {
   const hits: string[] = []
+  const direction = activeDietDirection()
   for (const [date, total] of dayTotals(entries)) {
-    if (total >= (goal ?? calorieGoalOn(date))) hits.push(date)
+    if (calorieDayHit(total, goal ?? calorieGoalOn(date), direction)) hits.push(date)
   }
   return hits.sort()
 }

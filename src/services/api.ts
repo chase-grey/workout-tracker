@@ -11,6 +11,8 @@ import type { SaveErrorReport } from '../lib/saveErrorReport'
 import { storage } from './storage'
 import { DEFAULT_API_URL } from '../config/backend'
 import { liveBackendVersion } from '../lib/backendVersion'
+import { accountKey, mayReachBackend } from '../lib/account'
+import type { CardioEntry } from '../lib/cardio'
 
 /**
  * Thin client for the Google Apps Script web app that proxies the Sheet.
@@ -25,8 +27,20 @@ function baseUrl(): string {
   return (storage.loadSettings().apiUrl || import.meta.env.VITE_API_URL || DEFAULT_API_URL).trim()
 }
 
+/**
+ * Whether this device syncs at all. An address alone isn't enough any more: the
+ * default one is the owner's hosted backend, and a device that hasn't signed in
+ * to it keeps its data to itself (see lib/account).
+ */
 export function isConfigured(): boolean {
-  return baseUrl().length > 0
+  return baseUrl().length > 0 && mayReachBackend(storage.loadSettings())
+}
+
+/** Stamp the account key on a request, so the backend opens the right person's tabs. */
+function withAccount(url: URL): URL {
+  const key = accountKey(storage.loadSettings())
+  if (key) url.searchParams.set('user', key)
+  return url
 }
 
 /**
@@ -50,6 +64,7 @@ async function get<T>(route: string, params: Record<string, string> = {}): Promi
   const url = new URL(base)
   url.searchParams.set('route', route)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
+  if (!('user' in params)) withAccount(url)
   const res = await fetch(url.toString(), { signal: AbortSignal.timeout(30_000) })
   if (!res.ok) throw new Error(`GET ${route} failed: ${res.status}`)
   return assertOk(`GET ${route}`, (await res.json()) as T)
@@ -60,6 +75,7 @@ async function post<T>(route: string, body: unknown): Promise<T> {
   if (!base) throw new Error('api not configured')
   const url = new URL(base)
   url.searchParams.set('route', route)
+  if (route !== 'join') withAccount(url)
   const res = await fetch(url.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -131,6 +147,27 @@ export const api = {
   answerIssue: (body: { secret: string; number: number; answer: string }) =>
     post<{ answered: number }>('answer_issue', body),
   reportSaveError: (report: SaveErrorReport) => post<{ saved: number }>('save_error', report),
+  fetchCardio: (since?: string) => get<CardioEntry[]>('cardio', since ? { since } : {}),
+  postCardio: (entry: CardioEntry) => post<{ saved: number }>('cardio', entry),
+  deleteCardio: (id: string) => post<{ saved: number }>('cardio', { id, deleted: true }),
+  postFeedback: (message: string, build: string) =>
+    post<{ saved: number }>('feedback', { message, build }),
+  /**
+   * Spend an invite code on a new account. Goes out before this device has a
+   * key or a mode, so it's the one request that doesn't wait on isConfigured.
+   */
+  join: (invite: string, name: string) =>
+    post<{ saved: number; token: string; name: string }>('join', {
+      invite,
+      name,
+      // The same claim on every attempt at this code from this phone, so a join
+      // whose reply was lost is answered again rather than refused as spent.
+      claim: storage.joinClaim(invite),
+    }),
+  /** Who the backend says `key` is. Throws `Unknown account` for a key it doesn't hold. */
+  account: (key: string) => get<{ name: string; owner: boolean }>('account', { user: key }),
+  /** Mint a one-time invite code. Owner only: gated on the issue token. */
+  invite: (secret: string) => post<{ saved: number; code: string }>('invite', { secret }),
   /**
    * The deployed backend's BACKEND_VERSION: 0 for one too old to have the route
    * (it answers `{error}`, which is why this doesn't go through `get`). Throws
