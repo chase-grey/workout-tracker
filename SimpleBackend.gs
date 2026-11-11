@@ -11,7 +11,14 @@
  *     Script can't set a status code, so a cheerful zero is indistinguishable
  *     from a real save: the client marks the row synced and drops it forever.
  *
- * Tabs (created automatically on first write):
+ * One spreadsheet hosts several people. The manifest scope is
+ * `spreadsheets.currentonly`, so a second spreadsheet per person is out; instead
+ * each account's data tabs carry a prefix (`u<id>_workouts`) in this same book.
+ * The owner's tabs keep their bare names, so the owner's data never moved. Every
+ * request carries `?user=<token>` (blank = the owner); see resolveAccount.
+ *
+ * Tabs (created automatically on first write; per-account, so each is prefixed
+ * `u<id>_` for a joined user):
  *   workouts:     session_id, date, day_type, exercise, set_number,
  *                 weight_lbs, reps, notes, is_historical, variant
  *                 (variant = which A/B slot of a Push + Core day the set was
@@ -27,19 +34,33 @@
  *                 legacy "__rest__" row holds pooled rest seconds — still written
  *                 for older clients, no longer served)
  *   config:       key, value  (one JSON blob per key: "plan", "settings")
- *   save_errors:  at, build, route, write_id, message, pending, payload  (a
- *                 phone's own report of a write it couldn't deliver; see
+ *   cardio:       id, date, kind, minutes, distance_mi  (one row per session; upsert by id)
+ *
+ * Owner-level tabs, never prefixed:
+ *   users:        token, id, name, created_at  (who may sign in; see joinAccount)
+ *   invites:      code, created_at, used_at, used_by, claim, user_id  (one-time codes; see mintInvite)
+ *   save_errors:  at, build, route, write_id, message, pending, payload, user  (any
+ *                 account's report of a write it couldn't deliver; see
  *                 appendSaveError)
+ *   feedback:     at, user, build, message  (what a hosted user typed into the app)
  *
  * Routes:
- *   GET  ?route=version          -> { version: BACKEND_VERSION } (see the constant)
+ *   GET  ?route=version          -> { version: BACKEND_VERSION } (see the constant; no account)
+ *   GET  ?route=account          -> { name, owner } for the `user` token sent
+ *   POST ?route=join          body: { invite, name, claim } -> { saved: 1, token, name }
+ *                 (spends an invite code and mints an account; no account needed)
+ *   POST ?route=invite        body: { secret } -> { saved: 1, code }  (owner only, by secret)
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
  *   GET  ?route=bodyweight[&since=YYYY-MM-DD]
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
  *   GET  ?route=durations[&since=YYYY-MM-DD]
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
  *   GET  ?route=settings         -> the account's settings blob, or null (see getSettings)
- *   GET  ?route=save_errors[&limit=N] -> failed-save reports, newest first (see getSaveErrors)
+ *   GET  ?route=cardio[&since=YYYY-MM-DD] -> [{ id, date, kind, minutes, distanceMi? }]
+ *   POST ?route=cardio        body: { id, date, kind, minutes, distanceMi? } (upsert by id)
+ *                 or { id, deleted: true } (removes it; fine if already gone)
+ *   POST ?route=feedback      body: { message, build } (lands in the owner's feedback tab)
+ *   GET  ?route=save_errors[&limit=N] -> failed-save reports, newest first (owner only; see getSaveErrors)
  *   POST ?route=save_error    body: { build, route, writeId, message, pending, payload }
  *                 (a write the outbox couldn't deliver, reported by the device; see appendSaveError)
  *   POST ?route=settings      body: { settings: {…} }  (whole; declines a stale copy)
@@ -114,14 +135,18 @@ const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note', 'body_fat_pc
 // sheet() helper fills a missing header cell in on its own, so no migration.
 const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec', 'routine']
 const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
-const SAVE_ERROR_HEADERS = ['at', 'build', 'route', 'write_id', 'message', 'pending', 'payload']
+const SAVE_ERROR_HEADERS = ['at', 'build', 'route', 'write_id', 'message', 'pending', 'payload', 'user']
+const CARDIO_HEADERS = ['id', 'date', 'kind', 'minutes', 'distance_mi']
+const USER_HEADERS = ['token', 'id', 'name', 'created_at']
+const INVITE_HEADERS = ['code', 'created_at', 'used_at', 'used_by', 'claim', 'user_id']
+const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 
 // What this file answers at ?route=version. `npm run backend:stamp` bumps it on
 // every change to this file and records the matching fingerprint for the app,
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 2
+const BACKEND_VERSION = 5
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -132,11 +157,26 @@ const REST_KEY = '__rest__'
 // can be priced against its own prescribed rest.
 const REST_RATIO_KEY = '__rest_ratio__'
 
+// Who this request is for. Each request runs in a fresh global scope, so these
+// are set once at the top of doGet/doPost and never leak into the next caller.
+let TAB_PREFIX = ''
+let ACCOUNT = null
+// Routes that carry their own `secret` and always act as the owner, with no
+// `user` token involved. `version` and `join` skip account resolution too, but
+// for the opposite reason: there's nobody signed in yet.
+const OWNER_SECRET_ROUTES = { issues: true, report_issue: true, issue_thread: true, answer_issue: true, invite: true }
+
 function doGet(e) {
   try {
-    switch (e.parameter.route) {
+    const route = e.parameter.route
+    if (route !== 'version' && !OWNER_SECRET_ROUTES[route]) useAccount(e.parameter.user)
+    switch (route) {
       case 'version':
         return json({ version: BACKEND_VERSION })
+      case 'account':
+        return json({ name: ACCOUNT.name, owner: ACCOUNT.owner })
+      case 'cardio':
+        return json(getCardio(e.parameter.since))
       case 'workouts':
         return json(getWorkouts(e.parameter.since))
       case 'bodyweight':
@@ -195,7 +235,18 @@ function withLock(fn) {
 function doPost(e) {
   try {
     const body = e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {}
-    switch (e.parameter.route) {
+    const route = e.parameter.route
+    if (route !== 'join' && !OWNER_SECRET_ROUTES[route]) useAccount(e.parameter.user)
+    switch (route) {
+      case 'join':
+        return json(withLock(function () { return joinAccount(body) }))
+      case 'invite':
+        return json(withLock(function () { return mintInvite(body) }))
+      case 'cardio':
+        return json(withLock(function () { return saveCardio(body) }))
+      case 'feedback':
+        // Append only, so no lock - same reasoning as save_error below.
+        return json(appendFeedback(body))
       case 'session':
       case 'import':
         return json(withLock(function () { return appendWorkoutRows(body.rows) }))
@@ -391,9 +442,9 @@ function appendBodyWeight(body) {
 // The legacy split_deg and tailors_*_deg columns are preserved: older untagged
 // readings count as warm.
 function flexSheet() {
-  let sh = ss.getSheetByName('flexibility')
+  let sh = ss.getSheetByName(TAB_PREFIX + 'flexibility')
   if (!sh) {
-    sh = ss.insertSheet('flexibility')
+    sh = ss.insertSheet(TAB_PREFIX + 'flexibility')
     sh.getRange(1, 1, 1, FLEX_HEADERS.length).setValues([FLEX_HEADERS])
     return sh
   }
@@ -1014,7 +1065,7 @@ function appendSaveError(report) {
   if (!report || typeof report !== 'object' || !report.message) {
     throw new Error('No save error provided')
   }
-  const sh = sheet('save_errors', SAVE_ERROR_HEADERS)
+  const sh = ownerSheet('save_errors', SAVE_ERROR_HEADERS)
   let payload = report.payload === undefined ? '' : JSON.stringify(report.payload)
   if (payload.length > SAVE_ERROR_PAYLOAD_MAX) payload = payload.slice(0, SAVE_ERROR_PAYLOAD_MAX)
   sh.appendRow([
@@ -1025,6 +1076,7 @@ function appendSaveError(report) {
     String(report.message).slice(0, 2000),
     Number(report.pending) || 0,
     payload,
+    ACCOUNT ? ACCOUNT.name : '',
   ])
   const extra = sh.getLastRow() - 1 - SAVE_ERROR_KEEP
   if (extra >= 50) sh.deleteRows(2, extra)
@@ -1032,7 +1084,8 @@ function appendSaveError(report) {
 }
 
 function getSaveErrors(limit) {
-  const sh = sheet('save_errors', SAVE_ERROR_HEADERS)
+  if (ACCOUNT && !ACCOUNT.owner) throw new Error('Owner only')
+  const sh = ownerSheet('save_errors', SAVE_ERROR_HEADERS)
   const rows = sh.getDataRange().getValues()
   const n = Math.max(1, Math.min(Number(limit) || 50, SAVE_ERROR_KEEP))
   const out = []
@@ -1052,9 +1105,195 @@ function getSaveErrors(limit) {
       message: String(r[4]),
       pending: Number(r[5]) || 0,
       payload: payload,
+      user: String(r[7] || ''),
     })
   }
   return out
+}
+
+/* ---------------------------------------------------------------- accounts */
+
+// Script properties, read defensively: a property that can't be read is the same
+// as one that isn't set.
+function scriptProp(key) {
+  if (typeof PropertiesService === 'undefined') return ''
+  return PropertiesService.getScriptProperties().getProperty(key) || ''
+}
+
+/**
+ * Work out whose request this is and point the tab prefix at their tabs.
+ *
+ * `user` is the account token the app was given at join. Blank is the owner -
+ * every request the app made before hosting existed - unless REQUIRE_ACCOUNT is
+ * set, which shuts that open door once the owner's own phone has a key. The
+ * owner's CHAT_SHARED_SECRET also passes as the owner, so a script can reach the
+ * owner's tabs without being a joined user. A token that is neither throws
+ * rather than falling back to the owner: a mistyped key must not read, or write,
+ * somebody else's data.
+ */
+function resolveAccount(token) {
+  const t = String(token || '').trim()
+  if (!t) {
+    if (scriptProp('REQUIRE_ACCOUNT')) throw new Error('Sign in required')
+    return { owner: true, name: '', id: '', prefix: '' }
+  }
+  const secret = scriptProp('CHAT_SHARED_SECRET')
+  if (secret && t === secret) return { owner: true, name: '', id: '', prefix: '' }
+  const rows = ownerSheet('users', USER_HEADERS).getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] && String(rows[i][0]) === t) {
+      const id = String(rows[i][1])
+      return { owner: false, name: String(rows[i][2]), id: id, prefix: 'u' + id + '_' }
+    }
+  }
+  throw new Error('Unknown account')
+}
+
+function useAccount(token) {
+  ACCOUNT = resolveAccount(token)
+  TAB_PREFIX = ACCOUNT.prefix
+}
+
+const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+const ID_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
+
+// Text a person typed, made safe to put in a cell. Sheets reads a value that
+// opens with = + - or @ as a formula, and these tabs are the owner's own book:
+// a name or a message must never be able to run there.
+function plainText(value) {
+  const s = String(value == null ? '' : value)
+  return /^[=+\-@]/.test(s) ? "'" + s : s
+}
+
+function randomFrom(alphabet, length) {
+  let out = ''
+  for (let i = 0; i < length; i++) out += alphabet.charAt(Math.floor(Math.random() * alphabet.length))
+  return out
+}
+
+/** Mint a one-time invite code. Owner only, by the shared secret. */
+function mintInvite(body) {
+  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
+  const sh = ownerSheet('invites', INVITE_HEADERS)
+  const taken = {}
+  sh.getDataRange().getValues().slice(1).forEach(function (r) { taken[String(r[0])] = true })
+  // A code that reads as a number (all digits, or digits around a lone E) would
+  // be stored as one and never match what was typed back.
+  let code = randomFrom(INVITE_ALPHABET, 8)
+  while (taken[code] || /^\d+(E\d+)?$/.test(code)) code = randomFrom(INVITE_ALPHABET, 8)
+  sh.appendRow([code, new Date().toISOString(), '', ''])
+  return { saved: 1, code: code }
+}
+
+/**
+ * Spend an invite and make an account. The token it returns is the only
+ * credential the person will ever have, so it is two UUIDs long and the app
+ * stores it as their account key.
+ */
+function joinAccount(body) {
+  const invite = String((body && body.invite) || '').trim().toUpperCase()
+  // A name can't open with a formula character: it is written to the owner's
+  // book, and read back out of it as the account's name.
+  const name = String((body && body.name) || '').trim().replace(/^[=+\-@\s]+/, '').slice(0, 40)
+  // The phone's own id for this attempt. The answer to a join is the only copy
+  // of the token there will ever be, so a reply lost on the way back can't be
+  // allowed to spend the invite for nothing: the same phone asking again with
+  // the same claim is handed the account it already made.
+  const claim = String((body && body.claim) || '').trim()
+  const invites = ownerSheet('invites', INVITE_HEADERS)
+  const rows = invites.getDataRange().getValues()
+  const users = ownerSheet('users', USER_HEADERS)
+  const userRows = users.getDataRange().getValues()
+  let at = -1
+  for (let i = 1; i < rows.length; i++) {
+    if (!invite || String(rows[i][0]).toUpperCase() !== invite) continue
+    if (!rows[i][2]) {
+      at = i
+      break
+    }
+    if (claim && String(rows[i][4] || '') === claim) {
+      for (let u = 1; u < userRows.length; u++) {
+        if (String(userRows[u][1]) === String(rows[i][5])) {
+          return { saved: 1, token: String(userRows[u][0]), name: String(userRows[u][2]) }
+        }
+      }
+    }
+  }
+  if (at === -1) throw new Error("That invite code isn't valid")
+  if (!name) throw new Error('A name is required')
+  const taken = {}
+  userRows.slice(1).forEach(function (r) { taken[String(r[1])] = true })
+  // Same trap as the invite code: "12e345" in a cell is a number.
+  let id = randomFrom(ID_ALPHABET, 6)
+  while (taken[id] || /^\d/.test(id)) id = randomFrom(ID_ALPHABET, 6)
+  const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '')
+  const now = new Date().toISOString()
+  users.appendRow([token, id, name, now])
+  invites.getRange(at + 1, 3, 1, 4).setValues([[now, name, claim, id]])
+  return { saved: 1, token: token, name: name }
+}
+
+/* ------------------------------------------------------------------ cardio */
+
+function getCardio(since) {
+  const rows = sheet('cardio', CARDIO_HEADERS).getDataRange().getValues()
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r[0]) continue
+    const date = isoDate(r[1])
+    if (since && date < since) continue
+    const entry = { id: String(r[0]), date: date, kind: String(r[2] || ''), minutes: Number(r[3]) || 0 }
+    if (r[4] !== '' && r[4] !== null && r[4] !== undefined && isFinite(Number(r[4]))) {
+      entry.distanceMi = Number(r[4])
+    }
+    out.push(entry)
+  }
+  return out
+}
+
+// Upsert by id, or remove by id. A delete of a row already gone still answers
+// saved: 1 - the client retries a lost response, and the second try must land.
+function saveCardio(body) {
+  if (!body || !body.id) throw new Error('A cardio id is required')
+  const id = String(body.id)
+  const sh = sheet('cardio', CARDIO_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  let at = -1
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === id) {
+      at = i + 1
+      break
+    }
+  }
+  if (body.deleted === true) {
+    if (at !== -1) sh.deleteRow(at)
+    return { saved: 1 }
+  }
+  const minutes = Number(body.minutes)
+  if (!body.date) throw new Error('A cardio date is required')
+  if (!isFinite(minutes) || minutes <= 0) throw new Error('Invalid cardio minutes')
+  const distance = body.distanceMi === null || body.distanceMi === undefined || body.distanceMi === '' ||
+    !isFinite(Number(body.distanceMi)) ? '' : Number(body.distanceMi)
+  const row = [id, body.date, plainText(body.kind || ''), minutes, distance]
+  if (at === -1) sh.appendRow(row)
+  else sh.getRange(at, 1, 1, CARDIO_HEADERS.length).setValues([row])
+  return { saved: 1 }
+}
+
+/* ---------------------------------------------------------------- feedback */
+
+function appendFeedback(body) {
+  const message = String((body && body.message) || '').trim()
+  if (!message) throw new Error('A message is required')
+  if (message.length > 4000) throw new Error('That message is too long')
+  ownerSheet('feedback', FEEDBACK_HEADERS).appendRow([
+    new Date().toISOString(),
+    ACCOUNT ? ACCOUNT.name : '',
+    plainText((body && body.build) || ''),
+    plainText(message),
+  ])
+  return { saved: 1 }
 }
 
 /* -------------------------------------------------------------- shared token */
@@ -1306,16 +1545,20 @@ function listIssues(secret) {
 
 /* ---------------------------------------------------------------- helpers */
 
-function sheet(name, headers) {
-  let sh = ss.getSheetByName(name)
+// A tab by name, made on first touch. Per-account data tabs go through the
+// request's prefix; `owner` is for the few tabs that belong to the book rather
+// than to anyone in it (see ownerSheet).
+function sheet(name, headers, owner) {
+  const tab = owner ? name : TAB_PREFIX + name
+  let sh = ss.getSheetByName(tab)
   if (!sh) {
     // A read isn't lock-held, so it can race a write to create the same tab.
     // insertSheet throws on a name that now exists — whoever won made it, so
     // take theirs rather than failing the request.
     try {
-      sh = ss.insertSheet(name)
+      sh = ss.insertSheet(tab)
     } catch (err) {
-      sh = ss.getSheetByName(name)
+      sh = ss.getSheetByName(tab)
       if (!sh) throw err
       return sh
     }
@@ -1332,6 +1575,10 @@ function sheet(name, headers) {
     sh.getRange(1, width + 1, 1, missing.length).setValues([missing])
   }
   return sh
+}
+
+function ownerSheet(name, headers) {
+  return sheet(name, headers, true)
 }
 
 function isoDate(value) {

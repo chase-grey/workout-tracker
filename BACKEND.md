@@ -110,12 +110,65 @@ the backend separately using the deployment instructions above.
 | POST | `?route=import` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=notes` | `{ session, exercise, notes }` | `{ saved }` |
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
+| GET | `?route=account` | `user` | `{ name, owner }` (see Accounts) |
+| POST | `?route=join` | `{ invite, name, claim }` | `{ saved, token, name }` |
+| POST | `?route=invite` | `{ secret }` | `{ saved, code }` |
+| GET | `?route=cardio&since=YYYY-MM-DD` | — | `{id, date, kind, minutes, distanceMi?}[]` |
+| POST | `?route=cardio` | `{ id, date, kind, minutes, distanceMi? }` or `{ id, deleted: true }` | `{ saved }` |
+| POST | `?route=feedback` | `{ message, build }` | `{ saved }` |
+| GET | `?route=save_errors&limit=N` | — | failed-save reports (owner only) |
 | GET | `?route=settings` | — | settings blob, or `null` |
 | POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
 | GET | `?route=issues&secret=…` | — | `TrackedIssue[]` |
 | POST | `?route=report_issue` | `{ secret, title, body, area, context }` | `{ number, url }` |
 | GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |
 | POST | `?route=answer_issue` | `{ secret, number, answer }` | `{ answered }` |
+
+Every route except `version`, `join` and the four issue routes (and `invite`)
+takes a `user` query parameter, the account key (see Accounts).
+
+### Accounts
+
+One deployment can host friends as well as the owner. The manifest scope is
+`spreadsheets.currentonly`, so the script can only ever see the sheet it is bound
+to; everyone's data therefore lives in that one spreadsheet, in tabs carrying a
+per-user prefix. A user whose id is `ab12cd` has `uab12cd_workouts`,
+`uab12cd_body_weight`, `uab12cd_cardio` and so on. The owner's tabs keep their
+bare names, so nothing the owner already logged moved.
+
+Four tabs belong to the book rather than to anyone in it and are never prefixed:
+`users` (`token, id, name, created_at`), `invites` (`code, created_at, used_at,
+used_by, claim, user_id`), `save_errors` and `feedback`. Failed-save reports from every account
+land in `save_errors` with the account's name in a last `user` column, and
+`save_errors` can only be read by the owner. `feedback` (`at, user, build,
+message`) is where the app's feedback box writes.
+
+Each request names its account with `?user=<key>`, on GET and POST alike:
+
+- Blank or missing is the owner, which is what every request was before hosting.
+- The `CHAT_SHARED_SECRET` script property is also the owner.
+- A key found in the `users` tab is that user.
+- Anything else throws `Unknown account`. It never falls back to the owner, so a
+  mistyped key cannot read or write someone else's data.
+
+Setting a `REQUIRE_ACCOUNT` script property to anything non-empty makes a blank
+`user` throw `Sign in required` instead. Set it once the owner's own phone has
+the owner key, so the open door is shut. `version` and `join` need no account;
+the issue routes and `invite` carry their own `secret` and always act as the owner.
+
+To add someone, the owner calls `POST ?route=invite` with `{ secret }` and gets an
+eight-character code, good once. The friend sends `POST ?route=join` with
+`{ invite, name, claim }` (the code is case-insensitive, the name up to 40 characters)
+and gets back `{ saved, token, name }`; the token is their account key and the
+only copy that exists to give them. `claim` is an id the phone mints for its
+attempt and repeats on every retry: a join whose reply was lost is answered
+again with the same token for the same claim, rather than refused as spent.
+`GET ?route=account` returns `{ name, owner }`
+for a key, which is how the app checks one that was pasted in.
+
+Each user takes about a dozen tabs of their own, and one spreadsheet can only
+hold so many, so the tab limit of the book is the ceiling on how many people it
+can host.
 
 ### Notes
 
@@ -184,12 +237,11 @@ arrives, so an older backend cannot silently discard the new field.
 When the outbox fails to deliver a write, the app posts `save_error` with the
 error, its build, the queue depth and the queued write itself. It sends at most
 one report per write and error every six hours (`src/lib/saveErrorReport.ts`).
-Rows land in a `save_errors` tab, trimmed to the newest 300.
+Rows land in the owner's `save_errors` tab, trimmed to the newest 300.
 `GET ?route=save_errors&limit=N` reads them back newest first, and
 `npm run save-errors` prints them. The route takes no lock, because a busy lock
-is one of the failures it reports. Like the other read routes it is
-unauthenticated; the payloads are workout data the `workouts` route already
-serves. An older backend answers `Unknown route`, which the app ignores.
+is one of the failures it reports. It is owner-only: a joined user's key
+gets `Owner only`, and a blank `user` is the owner. An older backend answers `Unknown route`, which the app ignores.
 
 To ship a backend change without changing the `/exec` URL every device uses,
 paste `SimpleBackend.gs` into the Apps Script editor, then **Deploy → Manage

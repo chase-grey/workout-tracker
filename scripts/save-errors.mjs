@@ -56,7 +56,8 @@ if (asJson) {
   for (const r of reports) {
     const p = r.payload && typeof r.payload === 'object' ? r.payload : null
     const size = p && Array.isArray(p.rows) ? ` (${p.rows.length} rows)` : ''
-    console.log(`${r.at}  build ${r.build}  ${r.route}${size}  write ${r.writeId}  ${r.pending} queued`)
+    const who = r.user && String(r.user).trim() ? `  user ${r.user}` : ''
+    console.log(`${r.at}  build ${r.build}  ${r.route}${size}  write ${r.writeId}  ${r.pending} queued${who}`)
     console.log(`  ${r.message}`)
   }
   console.log('\nPayloads: npm run save-errors -- --json')
