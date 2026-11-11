@@ -235,6 +235,14 @@ export type DayPlan = {
    * contradicts the exercises alongside it.
    */
   removed?: string[]
+  /**
+   * A day that is not derived from the shipped plan, and is left exactly as
+   * stored: no default is spliced in, no deletion record is kept, and a
+   * {@link PLAN_REVISION} bump does not re-adopt the shipped shape. The days a
+   * starter template writes (see config/planTemplates) carry it, so the original
+   * programme's exercises can't leak into anyone else's plan.
+   */
+  custom?: boolean
 }
 
 export type Plan = Record<DayType, DayPlan>
@@ -1154,6 +1162,10 @@ export function withPlanDefaults(
   const merged = {} as Plan
   for (const type of DAY_TYPES) {
     const storedDay = stored[type]
+    if (storedDay?.custom) {
+      merged[type] = storedDay
+      continue
+    }
     const day = storedDay ?? DEFAULT_PLAN[type]
     // Deletions are pruned to the keys the defaults still ship, since those are
     // the only ones anything would put back — a movement the defaults have since
