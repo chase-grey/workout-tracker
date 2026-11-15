@@ -124,7 +124,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         <div className="rounded-2xl bg-accent/15 p-3">
           <p className="text-sm text-accent">
             <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
-            progress-photo time — {reminder.reason}.
+            {reminder.reason}.
           </p>
           <div className="mt-2 flex gap-2">
             <button

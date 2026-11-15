@@ -29,7 +29,7 @@ export function photoReminder(input: {
   const strengthLbs = input.cfg?.strengthLbs ?? 10
   const lastPhoto = input.lastPhoto
 
-  if (!lastPhoto) return { due: true, reason: 'no progress photos yet — take your first!' }
+  if (!lastPhoto) return { due: true, reason: 'time for your first progress photo' }
 
   const daysSince = Math.floor((today.getTime() - parseISODate(lastPhoto).getTime()) / 86400000)
   if (daysSince >= days) return { due: true, reason: `it's been ${daysSince} days since your last photo` }
@@ -41,7 +41,7 @@ export function photoReminder(input: {
   if (baselineBw != null && currentBw != null) {
     const delta = Math.round((currentBw - baselineBw) * 10) / 10
     if (Math.abs(delta) >= bwLbs) {
-      return { due: true, reason: `body weight ${delta > 0 ? '+' : ''}${delta} lbs since your last photo` }
+      return { due: true, reason: `you're ${delta > 0 ? 'up' : 'down'} ${Math.abs(delta)} lbs since your last photo` }
     }
   }
 
@@ -68,7 +68,7 @@ export function photoReminder(input: {
   if (bestDelta >= strengthLbs) {
     return {
       due: true,
-      reason: `${exerciseName(bestKey)} est. 1rm up ${Math.round(bestDelta)} lbs since your last photo`,
+      reason: `your ${exerciseName(bestKey)} is up ${Math.round(bestDelta)} lbs since your last photo`,
     }
   }
 

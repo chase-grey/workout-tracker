@@ -39,7 +39,7 @@ describe('photoReminder', () => {
       today: TODAY,
     })
     expect(r.due).toBe(true)
-    expect(r.reason).toMatch(/body weight \+5/)
+    expect(r.reason).toMatch(/you're up 5 lbs/)
   })
 
   it('is due on a big strength gain within the month', () => {
@@ -50,7 +50,7 @@ describe('photoReminder', () => {
       today: TODAY,
     })
     expect(r.due).toBe(true)
-    expect(r.reason).toMatch(/est\. 1rm up/)
+    expect(r.reason).toMatch(/is up \d+ lbs/)
   })
 
   it('ignores a big leg-strength gain', () => {
@@ -79,7 +79,7 @@ describe('photoReminder', () => {
       today: TODAY,
     })
     expect(r.due).toBe(true)
-    expect(r.reason).toMatch(/cable crunch est\. 1rm up/)
+    expect(r.reason).toMatch(/your cable crunch is up/)
   })
 
   it('excludes a leg exercise the user added to the plan', () => {
