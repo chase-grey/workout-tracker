@@ -13,6 +13,8 @@ import {
   ageOf,
   hasPillar,
   ownerFlavour,
+  readsBodyFat,
+  weighsIn,
   type Profile,
 } from './profile'
 import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
@@ -278,7 +280,11 @@ function renderAboutPerson(profile: Profile, today: Date, heightIn: number | und
     if (kcal > 0) diet.push(`calorie target ${kcal} a day`)
     if (diet.length > 0) lines.push(`Diet: ${diet.join(', ')}`)
   }
-  if (profile.targetWeightLbs) lines.push(`Target weight: ${profile.targetWeightLbs} lbs`)
+  if (profile.targetWeightLbs && weighsIn(profile)) lines.push(`Target weight: ${profile.targetWeightLbs} lbs`)
+  // So the coach doesn't ask for a weigh-in or a body fat reading they can't take.
+  lines.push(
+    `Measures: ${weighsIn(profile) ? 'has a scale' : 'no scale'}, ${readsBodyFat(profile) ? 'can read body fat %' : 'no way to read body fat %'}`,
+  )
   if (hasPillar(profile, 'strength') && profile.strength) {
     lines.push(
       `Strength: ${profile.strength.daysPerWeek} days a week, ${EQUIPMENT_LABELS[profile.strength.equipment]}`,

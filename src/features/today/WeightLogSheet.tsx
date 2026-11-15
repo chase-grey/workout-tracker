@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
 
-export function WeightLogSheet({ onClose }: { onClose: () => void }) {
+/** `scale` and `bodyFat` say which of the two fields this person can fill in (see lib/profile). */
+export function WeightLogSheet({
+  scale,
+  bodyFat: showBodyFat,
+  onClose,
+}: {
+  scale: boolean
+  bodyFat: boolean
+  onClose: () => void
+}) {
   const { logBodyWeight, logMeasurement } = useData()
   const [value, setValue] = useState('')
   const [bodyFat, setBodyFat] = useState('')
@@ -28,34 +37,39 @@ export function WeightLogSheet({ onClose }: { onClose: () => void }) {
         style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
       >
         <h2 className="mb-4 text-lg font-bold">log body measurement</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="min-w-0 text-xs text-neutral-400">
-            weight (lbs)
-            <input
-              autoFocus
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="any"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className="mt-1 min-h-[52px] w-full rounded-xl bg-surface-2 px-3 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </label>
-          <label className="min-w-0 text-xs text-neutral-400">
-            body fat %
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0.1"
-              max="99.9"
-              step="any"
-              value={bodyFat}
-              onChange={(e) => setBodyFat(e.target.value)}
-              aria-invalid={!bfValid}
-              className="mt-1 min-h-[52px] w-full rounded-xl bg-surface-2 px-3 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </label>
+        <div className={`grid gap-3 ${scale && showBodyFat ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {scale && (
+            <label className="min-w-0 text-xs text-neutral-400">
+              weight (lbs)
+              <input
+                autoFocus
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="mt-1 min-h-[52px] w-full rounded-xl bg-surface-2 px-3 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </label>
+          )}
+          {showBodyFat && (
+            <label className="min-w-0 text-xs text-neutral-400">
+              body fat %
+              <input
+                autoFocus={!scale}
+                type="number"
+                inputMode="decimal"
+                min="0.1"
+                max="99.9"
+                step="any"
+                value={bodyFat}
+                onChange={(e) => setBodyFat(e.target.value)}
+                aria-invalid={!bfValid}
+                className="mt-1 min-h-[52px] w-full rounded-xl bg-surface-2 px-3 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </label>
+          )}
         </div>
         {!bfValid && <p className="mt-2 text-sm text-red-400">enter a body fat percentage between 0 and 100.</p>}
         <button

@@ -32,7 +32,7 @@ import { repsForE1RM } from '../../lib/epley'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import { isLiftLadder } from '../../lib/liftLadder'
 import { goalsFor, TARGET_WEIGHT_GOAL_ID } from '../../lib/profileGoals'
-import { hasPillar } from '../../lib/profile'
+import { hasPillar, weighsIn } from '../../lib/profile'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptModel,
@@ -957,6 +957,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
   } = useData()
   const heightIn = settings.heightIn ?? 0
   const dietOn = hasPillar(settings.profile, 'diet')
+  const scale = weighsIn(settings.profile)
 
   const goals = useMemo(
     () => goalsFor(settings.profile, { workouts, bodyWeights, measurements, heightIn, flexEntries }),
@@ -1132,15 +1133,20 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     <div className={`flex flex-col gap-3 ${weightRing ? `rounded-2xl p-2 ${weightRing}` : ''}`}>
       {/* The header names the group the box is drawn around, so it sits inside
           that box, at the same weight as the goal titles under it. */}
-      <h4 className="px-1 font-semibold">
-        body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
-      </h4>
-      <BodyWeightChart
-        points={weightPoints}
-        calorieWeeks={calorieWeeks}
-        goals={weightGoalLines}
-        empty="log my weight to project these goals"
-      />
+      {/* Without a scale the box holds the body fat charts alone. */}
+      {scale && (
+        <>
+          <h4 className="px-1 font-semibold">
+            body weight{latestWeight != null ? ` · ${latestWeight} lbs` : ''}
+          </h4>
+          <BodyWeightChart
+            points={weightPoints}
+            calorieWeeks={calorieWeeks}
+            goals={weightGoalLines}
+            empty="log my weight to project these goals"
+          />
+        </>
+      )}
       {/* Only the targets still being chased. A weigh-in target already met has
           left for the reached band, where it sits by the date it was met. */}
       {weightGoals.filter((g) => !isReached(g)).map((g) => goalRow(g, true))}
@@ -1350,8 +1356,9 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     }
     // Someone with no weight target still has their weigh-ins and body fat to
     // see: the block draws with no goal rows, and ranks as the open, undated
-    // thing it is.
-    if (!drawn.has('bodyweight')) {
+    // thing it is. Someone with neither a scale nor a body fat reading has
+    // nothing in it to see.
+    if (!drawn.has('bodyweight') && (scale || underBodyWeight)) {
       out.push({
         done: false,
         doneDate: null,
@@ -1365,7 +1372,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, locked, projections, settings, ladders, liftLadders, underBodyWeight])
+  }, [goals, locked, projections, settings, ladders, liftLadders, underBodyWeight, scale])
 
   const ordered = useMemo(() => orderGoalUnits(units).map((u) => u.node), [units])
 

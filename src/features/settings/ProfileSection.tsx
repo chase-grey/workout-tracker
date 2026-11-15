@@ -9,6 +9,8 @@ import {
   maskGoals,
   ownerFlavour,
   profileCalorieGoal,
+  readsBodyFat,
+  weighsIn,
   withCalorieGoal,
   withWeeklyGoals,
   type DietDirection,
@@ -51,12 +53,16 @@ export function ProfileSection() {
   const [goalsDraft, setGoals] = useState<WeeklyGoalConfig | null>(null)
   const [caloriesDraft, setCalories] = useState<string | null>(null)
   const [directionDraft, setDirection] = useState<DietDirection | null>(null)
+  const [scaleDraft, setScale] = useState<boolean | null>(null)
+  const [bodyFatDraft, setBodyFat] = useState<boolean | null>(null)
   const [editing, setEditing] = useState(false)
 
   const pillars = pillarsDraft ?? profile.pillars
   const goals = goalsDraft ?? goalsInForce(profile)
   const caloriesText = caloriesDraft ?? (baseCalories ? String(baseCalories) : '')
   const direction = directionDraft ?? baseDirection
+  const scale = scaleDraft ?? weighsIn(profile)
+  const bodyFat = bodyFatDraft ?? readsBodyFat(profile)
   const on = (p: Pillar) => pillars.includes(p)
 
   const calories = Number(caloriesText)
@@ -66,7 +72,8 @@ export function ProfileSection() {
   const goalsChanged = !sameGoals(maskGoals(goals, pillars), baseGoals)
   const caloriesChanged = on('diet') && caloriesValid && Math.round(calories) !== baseCalories
   const directionChanged = on('diet') && !ownerFlavour(profile) && direction !== baseDirection
-  const changed = pillarsChanged || goalsChanged || caloriesChanged || directionChanged
+  const measuresChanged = scale !== weighsIn(profile) || bodyFat !== readsBodyFat(profile)
+  const changed = pillarsChanged || goalsChanged || caloriesChanged || directionChanged || measuresChanged
 
   const togglePillar = (p: Pillar) => {
     if (!on(p)) {
@@ -84,7 +91,7 @@ export function ProfileSection() {
     setGoals({ ...goals, [key]: Math.min(7, Math.max(1, (goals[key] ?? 0) + by)) })
 
   const save = () => {
-    let next: Profile = { ...profile, pillars }
+    let next: Profile = { ...profile, pillars, scale, bodyFatReading: bodyFat }
     if (goalsChanged) next = withWeeklyGoals(next, maskGoals(goals, pillars), weekStartISO(today))
     if (caloriesChanged) next = withCalorieGoal(next, Math.round(calories), today)
     if (on('diet') && !ownerFlavour(profile)) next = { ...next, dietDirection: direction }
@@ -97,6 +104,8 @@ export function ProfileSection() {
     setGoals(null)
     setCalories(null)
     setDirection(null)
+    setScale(null)
+    setBodyFat(null)
     setEditing(false)
   }
 
@@ -106,9 +115,11 @@ export function ProfileSection() {
         <label className={SETTINGS_LABEL}>tracking</label>
         <div className="flex min-h-[56px] items-center gap-3 rounded-xl bg-surface pl-3 pr-1">
           <span className="flex-1 text-base font-semibold">
-            {PILLARS.filter((p) => profile.pillars.includes(p))
-              .map((p) => PILLAR_LABELS[p])
-              .join(' · ')}
+            {[
+              ...PILLARS.filter((p) => profile.pillars.includes(p)).map((p) => PILLAR_LABELS[p]),
+              ...(weighsIn(profile) ? ['scale'] : []),
+              ...(readsBodyFat(profile) ? ['body fat %'] : []),
+            ].join(' · ')}
           </span>
           <PressButton
             onPress={() => setEditing(true)}
@@ -194,6 +205,25 @@ export function ProfileSection() {
           )}
         </>
       )}
+
+      <label className={SETTINGS_LABEL}>measuring</label>
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          { label: 'scale', on: scale, toggle: () => setScale(!scale) },
+          { label: 'body fat %', on: bodyFat, toggle: () => setBodyFat(!bodyFat) },
+        ].map((m) => (
+          <PressButton
+            key={m.label}
+            onPress={m.toggle}
+            pressed={m.on}
+            className={`min-h-[56px] rounded-xl text-base font-semibold ${
+              m.on ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-400'
+            }`}
+          >
+            {m.label}
+          </PressButton>
+        ))}
+      </div>
 
       <div className="flex gap-2">
         <PressButton onPress={close} className={`${SETTINGS_BUTTON} flex-1`}>

@@ -13,7 +13,7 @@ import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../con
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
-import { hasPillar, ownerFlavour } from '../../lib/profile'
+import { hasPillar, ownerFlavour, readsBodyFat, weighsIn } from '../../lib/profile'
 import { lastStretchRoutine } from '../../lib/stretchRotation'
 import { CardioCard } from './CardioCard'
 
@@ -167,7 +167,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         />
       )}
 
-      <WeightCard />
+      {(weighsIn(profile) || readsBodyFat(profile)) && <WeightCard />}
 
       {/* Lift days and stretches alternate within their columns; core sits at
           the bottom left beside full body. */}

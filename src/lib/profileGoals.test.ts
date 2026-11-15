@@ -116,4 +116,14 @@ describe('goalsFor', () => {
     expect(got.some((id) => id.startsWith('split_'))).toBe(true)
     expect(got.some((id) => id.startsWith('toeTouch_'))).toBe(false)
   })
+
+  it('drops every weight goal without a scale, and keeps the lifts pegged to bodyweight', () => {
+    const own = ids(goalsFor(profile({ targetWeightLbs: 180, scale: false }), active))
+    expect(own).not.toContain(TARGET_WEIGHT_GOAL_ID)
+    expect(own).toContain(GOAL_IDS.benchBodyweight)
+    const owner = ids(goalsFor(profile({ owner: true, scale: false }), inputs))
+    expect(owner).not.toContain(GOAL_IDS.weight180)
+    expect(owner).not.toContain(GOAL_IDS.weight190)
+    expect(ids(goalsFor(profile({ targetWeightLbs: 180 }), active))).toContain(TARGET_WEIGHT_GOAL_ID)
+  })
 })

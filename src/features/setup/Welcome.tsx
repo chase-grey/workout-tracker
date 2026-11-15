@@ -89,7 +89,7 @@ function PressButton({
   )
 }
 
-function Segmented<T extends string | number>({
+function Segmented<T extends string | number | boolean>({
   label,
   value,
   options,
@@ -106,7 +106,7 @@ function Segmented<T extends string | number>({
       <div className="flex gap-1 rounded-xl bg-surface p-1">
         {options.map((o) => (
           <PressButton
-            key={o.value}
+            key={String(o.value)}
             onPress={() => onChange(o.value)}
             pressed={value === o.value}
             className={`min-h-[44px] flex-1 rounded-lg px-2 text-sm font-medium ${
@@ -164,6 +164,11 @@ function inRange(n: number | null, lo: number, hi: number): n is number {
 const THIS_YEAR = new Date().getFullYear()
 const BIRTH_LO = 1920
 const BIRTH_HI = THIS_YEAR - 10
+
+const YES_NO: { value: boolean; label: string }[] = [
+  { value: true, label: 'yes' },
+  { value: false, label: 'no' },
+]
 
 const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[] = [
   { pillar: 'strength', key: 'workouts', label: 'workouts' },
@@ -229,6 +234,8 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
   const [feet, setFeet] = useState('')
   const [inches, setInches] = useState('')
   const [weight, setWeight] = useState('')
+  const [scale, setScale] = useState<boolean | null>(null)
+  const [bodyFatReading, setBodyFatReading] = useState<boolean | null>(null)
 
   // 3 - plan
   const [days, setDays] = useState<2 | 3>(3)
@@ -298,7 +305,10 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
     })
 
   const heightOk = heightIn === null ? feet.trim() === '' : inRange(heightFt, 3, 8) && inRange(num(inches) ?? 0, 0, 11)
-  const aboutOk = dietOn
+  const measuresOk = scale !== null && bodyFatReading !== null
+  const aboutOk = !measuresOk
+    ? false
+    : dietOn
     ? sex !== null &&
       inRange(birth, BIRTH_LO, BIRTH_HI) &&
       heightOk &&
@@ -308,7 +318,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
 
   const calorieNum = num(calories)
   const planOk =
-    !dietOn || (inRange(calorieNum, 800, 6000) && (targetWeight.trim() === '' || inRange(num(targetWeight), 50, 700)))
+    !dietOn || (inRange(calorieNum, 800, 6000) && (!scale || targetWeight.trim() === '' || inRange(num(targetWeight), 50, 700)))
 
   const pastedLink = /^https?:\/\//i.test(email.trim())
   const accountOk =
@@ -326,7 +336,9 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
       ...(sex ? { sex } : {}),
       ...(inRange(birth, BIRTH_LO, BIRTH_HI) ? { birthYear: birth } : {}),
       ...(dietOn ? { activity, dietDirection: direction } : {}),
-      ...(dietOn && inRange(num(targetWeight), 50, 700) ? { targetWeightLbs: num(targetWeight)! } : {}),
+      ...(dietOn && scale && inRange(num(targetWeight), 50, 700) ? { targetWeightLbs: num(targetWeight)! } : {}),
+      scale: scale ?? true,
+      bodyFatReading: bodyFatReading ?? true,
       ...(strengthOn ? { strength: { daysPerWeek: days, equipment } } : {}),
       weeklyGoals: [{ from: weekStartISO(toISODate(now)), goals }],
       calorieGoals: dietOn && calorieNum !== null ? [{ from: toISODate(now), goal: calorieNum }] : [],
@@ -445,6 +457,18 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
             <div className="flex gap-3">
               <NumberField label="weight (lbs)" value={weight} onChange={setWeight} decimal />
             </div>
+            <Segmented
+              label="do you have a scale?"
+              value={scale}
+              options={YES_NO}
+              onChange={setScale}
+            />
+            <Segmented
+              label="can you measure body fat %, like with a smart scale?"
+              value={bodyFatReading}
+              options={YES_NO}
+              onChange={setBodyFatReading}
+            />
           </>
         )}
 
@@ -493,7 +517,9 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
                   onChange={setActivity}
                 />
                 <div className="flex gap-3">
-                  <NumberField label="target weight (lbs)" value={targetWeight} onChange={setTargetWeight} decimal />
+                  {scale && (
+                    <NumberField label="target weight (lbs)" value={targetWeight} onChange={setTargetWeight} decimal />
+                  )}
                   <NumberField
                     label="target calories"
                     value={calories}

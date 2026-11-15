@@ -21,7 +21,7 @@ import {
 import { weeklyCalorieIntakeSeries } from '../../lib/calories'
 import { bodyWeightPoints, GOAL_IDS } from '../../lib/goals'
 import { goalsFor } from '../../lib/profileGoals'
-import { hasPillar, ownerFlavour } from '../../lib/profile'
+import { hasPillar, ownerFlavour, readsBodyFat } from '../../lib/profile'
 import {
   CHART_SURFACE,
   CHART_SURFACE_2,
@@ -208,6 +208,7 @@ export function ProgressTab() {
   const strengthOn = hasPillar(profile, 'strength')
   const dietOn = hasPillar(profile, 'diet')
   const cardioOn = hasPillar(profile, 'cardio')
+  const bodyFatOn = readsBodyFat(profile)
   const [picked, setPicked] = useState(BENCH_COMBO)
   const [metric, setMetric] = useState<Metric>('1rm')
   const [bodyMetric, setBodyMetric] = useState<BodyMetric>('mass')
@@ -338,6 +339,8 @@ export function ProgressTab() {
   // underBodyWeight. Memoized because the panel
   // folds it into a memoized block list and keys off this node's identity.
   const bodySection = useMemo(() => {
+    // Nothing to read body fat with, so nothing here to chart (see lib/profile).
+    if (!bodyFatOn) return null
     // Without the owner's bulk charts the block is the body fat chart alone, and
     // there is nothing to show until a reading exists.
     if (!owner) {
@@ -383,7 +386,7 @@ export function ProgressTab() {
         )}
       </div>
     )
-  }, [owner, bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, weeklyCalories, bodyFatGoalLines])
+  }, [bodyFatOn, owner, bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, weeklyCalories, bodyFatGoalLines])
 
   return (
     <div className="flex flex-col gap-4 pb-4">

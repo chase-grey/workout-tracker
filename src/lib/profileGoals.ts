@@ -8,9 +8,11 @@
  */
 
 import { bodyWeightPoints, BODYWEIGHT_GAIN_CAP, BODYWEIGHT_TREND_WINDOW, buildGoals, GOAL_IDS, type GoalInputs, type GoalSpec } from './goals'
-import { hasPillar, ownerFlavour, type Profile } from './profile'
+import { hasPillar, ownerFlavour, weighsIn, type Profile } from './profile'
 
 export const TARGET_WEIGHT_GOAL_ID = 'bodyweight_target'
+
+const WEIGHT_IDS: string[] = [GOAL_IDS.weight180, GOAL_IDS.weight190]
 
 const OWNER_ONLY: string[] = [GOAL_IDS.weight180, GOAL_IDS.weight190, GOAL_IDS.benchTwoHundred, GOAL_IDS.sixPack]
 
@@ -47,7 +49,10 @@ function targetWeightGoal(profile: Profile, inputs: GoalInputs): GoalSpec | null
 
 /** `buildGoals` for the person using the app: the owner's list untouched, anyone else's trimmed to their profile. */
 export function goalsFor(profile: Profile | null | undefined, inputs: GoalInputs): GoalSpec[] {
-  const all = buildGoals(inputs)
+  // Without a scale there is nothing to weigh a weight goal against. The lifts
+  // pegged to bodyweight stay: they read the last weight known, setup's included.
+  const scale = weighsIn(profile)
+  const all = buildGoals(inputs).filter((g) => scale || !WEIGHT_IDS.includes(g.id))
   if (ownerFlavour(profile) || !profile) return all
   const strength = hasPillar(profile, 'strength')
   const flex = hasPillar(profile, 'flexibility')
@@ -64,6 +69,6 @@ export function goalsFor(profile: Profile | null | undefined, inputs: GoalInputs
     if (FLEX_ID.test(g.id)) return flex && g.points.length > 0
     return true
   })
-  const own = targetWeightGoal(profile, inputs)
+  const own = scale ? targetWeightGoal(profile, inputs) : null
   return own ? [own, ...kept] : kept
 }

@@ -86,6 +86,14 @@ export type Profile = {
   targetWeightLbs?: number
   strength?: StrengthSetup
   /**
+   * Whether they can weigh themselves, and whether they can read their body fat
+   * (a smart scale, calipers, a DEXA). Asked at setup and changed in Settings.
+   * Unset is yes: a profile from before the question keeps the weigh-ins and
+   * body fat charts it always had. See weighsIn and readsBodyFat.
+   */
+  scale?: boolean
+  bodyFatReading?: boolean
+  /**
    * The weekly goals and the Monday each set took effect, oldest first — the
    * same shape as WEEKLY_GOAL_HISTORY, and for the same reason: a changed goal
    * holds the weeks ahead to it without re-scoring the weeks already lived.
@@ -107,6 +115,19 @@ export function ownerFlavour(profile: Profile | null | undefined): boolean {
 
 export function hasPillar(profile: Profile | null | undefined, pillar: Pillar): boolean {
   return (profile ? profile.pillars : LEGACY_PILLARS).includes(pillar)
+}
+
+/**
+ * Whether to offer weigh-ins: the weight on Today, its log field, the body
+ * weight chart and any target weight goal. Only an explicit no turns it off.
+ */
+export function weighsIn(profile: Profile | null | undefined): boolean {
+  return profile?.scale !== false
+}
+
+/** Whether to offer body fat: its log field, its reading on Today, and its charts. */
+export function readsBodyFat(profile: Profile | null | undefined): boolean {
+  return profile?.bodyFatReading !== false
 }
 
 /** Age in whole years on `today`, or null when the birth year isn't known. */

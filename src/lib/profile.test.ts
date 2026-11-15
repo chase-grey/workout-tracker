@@ -5,6 +5,8 @@ import {
   hasPillar,
   maskGoals,
   ownerFlavour,
+  readsBodyFat,
+  weighsIn,
   profileCalorieGoal,
   profileWeeklyGoals,
   withCalorieGoal,
@@ -225,5 +227,21 @@ describe('calorieDayHit', () => {
 
   it('maintain: an unlogged zero day is not a hit', () => {
     expect(calorieDayHit(0, 0, 'maintain')).toBe(false)
+  })
+})
+
+describe('weighsIn / readsBodyFat', () => {
+  it('is yes for no profile and for one that was never asked', () => {
+    expect(weighsIn(null)).toBe(true)
+    expect(readsBodyFat(null)).toBe(true)
+    expect(weighsIn(makeProfile())).toBe(true)
+    expect(readsBodyFat(makeProfile())).toBe(true)
+  })
+
+  it('is no only when the profile says no, each on its own', () => {
+    const p = makeProfile({ scale: true, bodyFatReading: false })
+    expect(weighsIn(p)).toBe(true)
+    expect(readsBodyFat(p)).toBe(false)
+    expect(weighsIn(makeProfile({ scale: false }))).toBe(false)
   })
 })
