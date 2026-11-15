@@ -16,7 +16,7 @@
  * Pure module — no React/DOM.
  */
 
-export type Accent = 'green' | 'purple' | 'blue' | 'rose'
+export type Accent = 'green' | 'purple' | 'blue' | 'rose' | 'amber' | 'teal'
 export type Mode = 'dark' | 'light'
 
 export interface Theme {
@@ -26,7 +26,7 @@ export interface Theme {
 
 export const DEFAULT_THEME: Theme = { accent: 'green', mode: 'dark' }
 
-export const ACCENTS: Accent[] = ['green', 'purple', 'blue', 'rose']
+export const ACCENTS: Accent[] = ['green', 'teal', 'blue', 'purple', 'rose', 'amber']
 export const MODES: Mode[] = ['dark', 'light']
 
 /**
@@ -70,6 +70,7 @@ interface AccentDef {
 const SKY = '#38bdf8'
 const VIOLET = '#a78bfa'
 const TEAL = '#2dd4bf'
+const BLUE = '#60a5fa'
 
 const ACCENT_DEFS: Record<Accent, AccentDef> = {
   green: {
@@ -106,6 +107,24 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
     },
     onAccent: '#ffffff',
     cold: SKY,
+    cold2: VIOLET,
+  },
+  amber: {
+    scale: {
+      50: '#fffbeb', 100: '#fef3c7', 200: '#fde68a', 300: '#fcd34d', 400: '#fbbf24',
+      500: '#f59e0b', 600: '#d97706', 700: '#b45309', 800: '#92400e', 900: '#78350f',
+    },
+    onAccent: '#000000',
+    cold: SKY,
+    cold2: VIOLET,
+  },
+  teal: {
+    scale: {
+      50: '#f0fdfa', 100: '#ccfbf1', 200: '#99f6e4', 300: '#5eead4', 400: '#2dd4bf',
+      500: '#14b8a6', 600: '#0d9488', 700: '#0f766e', 800: '#115e59', 900: '#134e4a',
+    },
+    onAccent: '#000000',
+    cold: BLUE,
     cold2: VIOLET,
   },
 }
