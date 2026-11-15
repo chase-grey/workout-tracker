@@ -111,6 +111,14 @@ Then rule out a stale build: "I don't see X" on the phone usually means the
 Pages deploy didn't land (`gh run list`), or a later commit from another
 session reverted it (`git log -- <file>`).
 
+## Settings order follows usage
+
+Settings is ordered most-likely-to-change first. Each section is wrapped in
+`Tracked` (`SettingsTab.tsx`), which counts `settings.<feature>` once per visit
+it was used in, against `settings.visit`; `npm run usage -- settings` reads the
+totals off the backend's `usage` tab. Reorder from that, not from a guess, and
+wrap any new section so it gets counted too.
+
 ## UI copy
 
 No explanatory subtext, hint captions, or "how to use this" sentences under

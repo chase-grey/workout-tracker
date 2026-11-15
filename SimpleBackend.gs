@@ -43,6 +43,8 @@
  *                 account's report of a write it couldn't deliver; see
  *                 appendSaveError)
  *   feedback:     at, user, build, message  (what a hosted user typed into the app)
+ *   usage:        feature, count, first_at, last_at  (how often each feature is
+ *                 used, folded from the phones' tallies; see foldUsage)
  *
  * Routes:
  *   GET  ?route=version          -> { version: BACKEND_VERSION } (see the constant; no account)
@@ -63,6 +65,8 @@
  *   GET  ?route=save_errors[&limit=N] -> failed-save reports, newest first (owner only; see getSaveErrors)
  *   POST ?route=save_error    body: { build, route, writeId, message, pending, payload }
  *                 (a write the outbox couldn't deliver, reported by the device; see appendSaveError)
+ *   GET  ?route=usage            -> [{ feature, count, firstAt, lastAt }], most used first
+ *   POST ?route=usage         body: { build, counts: { feature: n } }  (see foldUsage)
  *   POST ?route=settings      body: { settings: {…} }  (whole; declines a stale copy)
  *   GET  ?route=issues&secret=…  -> [{ number, title, url, state, area, createdAt, closedAt }]
  *                 (the app-filed GitHub issues + their open/closed state; see listIssues)
@@ -153,13 +157,14 @@ const U_OWNER = 7
 const U_SEEN = 8
 const INVITE_HEADERS = ['code', 'created_at', 'used_at', 'used_by', 'claim', 'user_id']
 const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
+const USAGE_HEADERS = ['feature', 'count', 'first_at', 'last_at']
 
 // What this file answers at ?route=version. `npm run backend:stamp` bumps it on
 // every change to this file and records the matching fingerprint for the app,
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 6
+const BACKEND_VERSION = 7
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -215,6 +220,8 @@ function doGet(e) {
         return json(getSettings())
       case 'save_errors':
         return json(getSaveErrors(e.parameter.limit))
+      case 'usage':
+        return json(getUsage())
       case 'issues':
         return json(listIssues(e.parameter.secret))
       case 'issue_thread':
@@ -298,6 +305,8 @@ function doPost(e) {
         // Not under withLock: "Backend busy" is one of the failures this exists
         // to report, and queueing on the same lock would lose exactly that one.
         return json(appendSaveError(body))
+      case 'usage':
+        return json(withLock(function () { return foldUsage(body) }))
       case 'report_issue':
         // Not under withLock: GitHub is the store of record, not a sheet, and two
         // reports racing just make two issues — no row to clobber.
@@ -1542,6 +1551,62 @@ function appendFeedback(body) {
     plainText(message),
   ])
   return { saved: 1 }
+}
+
+/* --------------------------------------------------------------------- usage */
+
+// A feature name is a dotted id the app picks ("settings.theme"); anything
+// longer is not one of ours.
+const USAGE_FEATURE_MAX = 100
+
+/**
+ * Add a phone's tally of feature uses to the running totals, one row per
+ * feature, across every account: the tab answers what people reach for, so it
+ * is the book's rather than anyone's in it. Folded rather than appended: the question asked of this tab is only
+ * "how often, relative to the rest", and a row per tap would grow without bound.
+ */
+function foldUsage(body) {
+  const counts = body && body.counts
+  if (!counts || typeof counts !== 'object') throw new Error('No usage provided')
+  const sh = ownerSheet('usage', USAGE_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  const rowByFeature = {}
+  for (let i = 1; i < rows.length; i++) {
+    const key = String(rows[i][0] || '')
+    if (key && !(key in rowByFeature)) rowByFeature[key] = i
+  }
+  const now = new Date().toISOString()
+  let saved = 0
+  Object.keys(counts).forEach(function (feature) {
+    const n = Math.floor(Number(counts[feature]))
+    if (!feature || feature.length > USAGE_FEATURE_MAX || !(n > 0)) return
+    const i = rowByFeature[feature]
+    if (i === undefined) {
+      sh.appendRow([feature, n, now, now])
+      rows.push([feature, n, now, now])
+      rowByFeature[feature] = rows.length - 1
+    } else {
+      rows[i][1] = (Number(rows[i][1]) || 0) + n
+      rows[i][3] = now
+      sh.getRange(i + 1, 1, 1, USAGE_HEADERS.length).setValues([rows[i].slice(0, USAGE_HEADERS.length)])
+    }
+    saved++
+  })
+  if (saved === 0) throw new Error('No usage provided')
+  return { saved: saved }
+}
+
+function getUsage() {
+  if (ACCOUNT && !ACCOUNT.owner) throw new Error('Owner only')
+  const rows = ownerSheet('usage', USAGE_HEADERS).getDataRange().getValues()
+  const iso = function (v) { return v instanceof Date ? v.toISOString() : String(v) }
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue
+    out.push({ feature: String(rows[i][0]), count: Number(rows[i][1]) || 0, firstAt: iso(rows[i][2]), lastAt: iso(rows[i][3]) })
+  }
+  out.sort(function (a, b) { return b.count - a.count })
+  return out
 }
 
 /* -------------------------------------------------------------- shared token */

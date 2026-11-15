@@ -274,6 +274,16 @@ Rows land in the owner's `save_errors` tab, trimmed to the newest 300.
 is one of the failures it reports. It is owner-only: a joined user's key
 gets `Owner only`, and a blank `user` is the owner. An older backend answers `Unknown route`, which the app ignores.
 
+### Feature usage
+
+The app tallies feature uses on the device (`src/services/usage.ts`) and posts
+`usage` with `{build, counts: {feature: n}}` every twenty seconds of activity
+and when it goes to the background. `foldUsage` adds each count to one running
+row per feature in a `usage` tab (`feature, count, first_at, last_at`), under
+the write lock since it is a read-modify-write. `GET ?route=usage` returns the
+totals most used first and `npm run usage` prints them. The device keeps a
+tally until a post is confirmed, so an older backend only delays the counts.
+
 To ship a backend change without changing the `/exec` URL every device uses,
 paste `SimpleBackend.gs` into the Apps Script editor, then **Deploy → Manage
 deployments → (pencil) → Version: New version → Deploy**.

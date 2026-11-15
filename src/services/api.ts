@@ -197,6 +197,9 @@ export const api = {
   },
   /** Mint a one-time invite code. Owner only: gated on the issue token. */
   invite: (secret: string) => post<{ saved: number; code: string }>('invite', { secret }),
+  /** Fold a tally of feature uses into the backend's usage tab (see services/usage). */
+  postUsage: (tally: { build: string; counts: Record<string, number> }) =>
+    post<{ saved: number }>('usage', tally),
   /**
    * The deployed backend's BACKEND_VERSION: 0 for one too old to have the route
    * (it answers `{error}`, which is why this doesn't go through `get`). Throws
