@@ -233,6 +233,11 @@ export type Settings = {
   accountToken?: string
   /** The name the account was created under, for the Settings card. */
   accountName?: string
+  /**
+   * Whether the signed-in account is the owner's, as the backend last said.
+   * Unset until asked; see lib/accountProfile for the one thing that asks.
+   */
+  accountOwner?: boolean
 }
 
 /**

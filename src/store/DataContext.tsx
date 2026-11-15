@@ -5,6 +5,7 @@ import type { BodyWeightEntry, StreakState, WorkoutRow, WorkoutSession } from '.
 import { storage, type QueuedWrite, type Settings } from '../services/storage'
 import { dequeued, enqueued, newWrite, type WritePayload } from '../lib/outbox'
 import { mergeSettings, sameSyncedSettings, syncablePart } from '../lib/settingsSync'
+import { needsOwnerCheck, repairedOwnerProfile, settingsForSignIn } from '../lib/accountProfile'
 import { api } from '../services/api'
 import { reportSaveFailures } from '../services/saveErrors'
 import { reconcileBodyWeights } from '../lib/bodyWeightSync'
@@ -577,10 +578,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const stored = await api.fetchSettings()
       const remote = stored && typeof stored === 'object' ? stored : null
       const local = storage.loadSettings()
-      const merged = mergeSettings(local, remote)
+      let merged = mergeSettings(local, remote)
+      // A profile carried in from a phone set up as someone else can't stand on
+      // the owner's account (see lib/accountProfile). Asking who owns the account
+      // costs a request, so it happens once, and only when there is such a
+      // profile to judge.
+      if (needsOwnerCheck(merged)) {
+        try {
+          const who = await api.account(merged.accountToken!.trim())
+          merged = { ...merged, accountOwner: who.owner === true }
+        } catch {
+          /* asked again next refresh */
+        }
+      }
+      const repaired = repairedOwnerProfile(merged)
+      if (repaired) merged = { ...merged, profile: repaired }
       if (!sameSyncedSettings(syncablePart(merged), remote)) {
         persistSettings(merged)
-      } else if (!sameSyncedSettings(syncablePart(local), syncablePart(merged))) {
+      } else if (
+        !sameSyncedSettings(syncablePart(local), syncablePart(merged)) ||
+        local.accountOwner !== merged.accountOwner
+      ) {
         // The account only told this device things it didn't know; save them, but
         // don't push a copy identical to the one already up there.
         setSettings(merged)
@@ -1122,15 +1140,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
    * the account's profile, goals and commitments with its own emptiness before
    * ever reading them. So the account fields are saved straight to the device
    * (they're device-local, there is nothing to sync), this device's settings
-   * lose their stamp so the account's copy wins the merge, and any settings or
+   * lose their stamp so the account's copy wins the merge and their profile so
+   * the account's own (or its having none) stands (see lib/accountProfile), and any settings or
    * plan write still waiting in the outbox is dropped: those describe this
    * device as it was before it belonged to the account. Logged data in the
    * outbox stays and uploads — a workout is a workout whoever's phone it was on.
    */
   const signInToAccount = useCallback(
     async (fields: Partial<Settings>) => {
-      const next: Settings = { ...storage.loadSettings(), ...fields }
-      delete next.updatedAt
+      const next = settingsForSignIn(storage.loadSettings(), fields)
       setQueue(storage.updateQueue((q) => q.filter((w) => w.type !== 'settings' && w.type !== 'plan')))
       setSettings(next)
       storage.saveSettings(next)

@@ -51,6 +51,7 @@ export const DEVICE_LOCAL_KEYS = [
   'accountMode',
   'accountToken',
   'accountName',
+  'accountOwner',
 ] as const
 
 type DeviceLocalKey = (typeof DEVICE_LOCAL_KEYS)[number]
