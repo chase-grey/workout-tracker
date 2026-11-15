@@ -1,4 +1,13 @@
 import { useState, type ReactNode } from 'react'
+import type { IconType } from 'react-icons'
+import {
+  MdDarkMode,
+  MdDirectionsRun,
+  MdFitnessCenter,
+  MdLightMode,
+  MdRestaurant,
+  MdSelfImprovement,
+} from 'react-icons/md'
 import {
   ACTIVITY_LABELS,
   DIET_LABELS,
@@ -153,6 +162,18 @@ const THIS_YEAR = new Date().getFullYear()
 const BIRTH_LO = 1920
 const BIRTH_HI = THIS_YEAR - 10
 
+const PILLAR_ICONS: Record<Pillar, IconType> = {
+  strength: MdFitnessCenter,
+  flexibility: MdSelfImprovement,
+  cardio: MdDirectionsRun,
+  diet: MdRestaurant,
+}
+
+const MODE_ICONS: Record<(typeof MODES)[number], IconType> = {
+  dark: MdDarkMode,
+  light: MdLightMode,
+}
+
 const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[] = [
   { pillar: 'strength', key: 'workouts', label: 'workouts' },
   { pillar: 'flexibility', key: 'flex', label: 'stretches' },
@@ -163,38 +184,48 @@ const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[
 function ThemeStep() {
   const { theme } = useTheme()
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex gap-3">
-        {ACCENTS.map((a) => (
-          <PressButton
-            key={a}
-            onPress={() => setTheme({ ...theme, accent: a })}
-            label={a}
-            pressed={theme.accent === a}
-            className={`h-11 w-11 rounded-full ring-offset-2 ring-offset-bg ${
-              theme.accent === a ? 'ring-2 ring-neutral-100' : ''
-            }`}
-          >
-            <span
-              className="block h-full w-full rounded-full"
-              style={{ background: palette({ ...theme, accent: a }).scale[600] }}
-            />
-          </PressButton>
-        ))}
+    <div className="flex flex-col gap-5">
+      <div role="group" aria-label="color" className="flex flex-col gap-2">
+        <span className={LABEL}>color</span>
+        <div className="flex gap-3">
+          {ACCENTS.map((a) => (
+            <PressButton
+              key={a}
+              onPress={() => setTheme({ ...theme, accent: a })}
+              label={a}
+              pressed={theme.accent === a}
+              className={`h-11 w-11 rounded-full ring-offset-2 ring-offset-bg ${
+                theme.accent === a ? 'ring-2 ring-neutral-100' : ''
+              }`}
+            >
+              <span
+                className="block h-full w-full rounded-full"
+                style={{ background: palette({ ...theme, accent: a }).scale[600] }}
+              />
+            </PressButton>
+          ))}
+        </div>
       </div>
-      <div className="flex gap-1 rounded-xl bg-surface p-1">
-        {MODES.map((m) => (
-          <PressButton
-            key={m}
-            onPress={() => setTheme({ ...theme, mode: m })}
-            pressed={theme.mode === m}
-            className={`min-h-[44px] flex-1 rounded-lg px-2 text-sm font-medium ${
-              theme.mode === m ? 'bg-accent text-on-accent' : 'text-neutral-400'
-            }`}
-          >
-            {m}
-          </PressButton>
-        ))}
+      <div role="group" aria-label="mode" className="flex flex-col gap-2">
+        <span className={LABEL}>mode</span>
+        <div className="flex gap-1 rounded-xl bg-surface p-1">
+          {MODES.map((m) => {
+            const Icon = MODE_ICONS[m]
+            return (
+              <PressButton
+                key={m}
+                onPress={() => setTheme({ ...theme, mode: m })}
+                pressed={theme.mode === m}
+                className={`flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium ${
+                  theme.mode === m ? 'bg-accent text-on-accent' : 'text-neutral-400'
+                }`}
+              >
+                <Icon className="text-lg" aria-hidden />
+                {m}
+              </PressButton>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -211,7 +242,7 @@ export function Welcome({
   // Set when the account step was reached straight from the first one.
   const [skipped, setSkipped] = useState(false)
 
-  // 1 - you and what to track
+  // 1 - your name and what to track
   const [name, setName] = useState('')
   const [pillars, setPillars] = useState<Pillar[]>([...PILLARS])
 
@@ -304,7 +335,7 @@ export function Welcome({
   const accountOk =
     mode === 'local' || (mode === 'invite' ? code.trim() !== '' : token.trim() !== '')
 
-  const valid = [name.trim() !== '', aboutOk, planOk, true, true, accountOk][step]
+  const valid = [true, name.trim() !== '', aboutOk, planOk, true, accountOk][step]
 
   const finish = async () => {
     const now = new Date()
@@ -350,9 +381,17 @@ export function Welcome({
     if (last) void finish()
     else setStep(step + 1)
   }
-  const nextLabel = last ? (pending ? 'starting…' : 'start') : step === 4 && !aiKey.trim() ? 'skip' : 'next'
+  const nextLabel = last
+    ? pending
+      ? 'starting…'
+      : 'start'
+    : step === 0
+      ? 'get started'
+      : step === 4 && !aiKey.trim()
+        ? 'skip'
+        : 'next'
 
-  const heading = ['welcome', 'about you', 'your plan', 'theme', 'coach', 'account'][step]
+  const heading = ['welcome', 'getting started', 'about you', 'your plan', 'coach', 'account'][step]
 
   return (
     <div className={`flex min-h-full flex-col bg-bg ${SHELL_WIDTH} w-full ${SHELL_PAD_X} ${SHELL_PAD_TOP}`}>
@@ -388,8 +427,18 @@ export function Welcome({
       <div className="flex flex-1 flex-col gap-5">
         {step === 0 && (
           <>
+            <p className="text-base leading-relaxed text-neutral-300">
+              A workout log made for the gym floor. It walks you through your lifts and stretches one set
+              at a time, keeps tabs on your cardio and what you eat, and shows you how each week is going.
+            </p>
+            <ThemeStep />
+          </>
+        )}
+
+        {step === 1 && (
+          <>
             <label className="flex flex-col gap-2">
-              <span className={LABEL}>name</span>
+              <span className={LABEL}>what should we call you?</span>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -397,27 +446,31 @@ export function Welcome({
                 className={FIELD}
               />
             </label>
-            <div role="group" aria-label="track" className="flex flex-col gap-2">
-              <span className={LABEL}>track</span>
+            <div role="group" aria-label="what are you interested in tracking?" className="flex flex-col gap-2">
+              <span className={LABEL}>what are you interested in tracking?</span>
               <div className="grid grid-cols-2 gap-2">
-                {PILLARS.map((p) => (
-                  <PressButton
-                    key={p}
-                    onPress={() => togglePillar(p)}
-                    pressed={on(p)}
-                    className={`min-h-[72px] rounded-xl text-base font-semibold ${
-                      on(p) ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-400'
-                    }`}
-                  >
-                    {PILLAR_LABELS[p]}
-                  </PressButton>
-                ))}
+                {PILLARS.map((p) => {
+                  const Icon = PILLAR_ICONS[p]
+                  return (
+                    <PressButton
+                      key={p}
+                      onPress={() => togglePillar(p)}
+                      pressed={on(p)}
+                      className={`flex min-h-[88px] flex-col items-center justify-center gap-1.5 rounded-xl text-base font-semibold ${
+                        on(p) ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-400'
+                      }`}
+                    >
+                      <Icon className="text-3xl" aria-hidden />
+                      {PILLAR_LABELS[p]}
+                    </PressButton>
+                  )
+                })}
               </div>
             </div>
           </>
         )}
 
-        {step === 1 && (
+        {step === 2 && (
           <>
             <Segmented
               label="sex"
@@ -441,7 +494,7 @@ export function Welcome({
           </>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <>
             {strengthOn && (
               <>
@@ -522,8 +575,6 @@ export function Welcome({
             </div>
           </>
         )}
-
-        {step === 3 && <ThemeStep />}
 
         {step === 4 && (
           <>
