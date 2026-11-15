@@ -229,6 +229,18 @@ describe('buildSystemPrompt for someone other than the owner', () => {
     }
   })
 
+  // Only the owner's reports become GitHub issues; anyone else's coach passes
+  // them on as feedback, and must not promise an issue number it can't give.
+  it('sends app reports as feedback, not GitHub issues', () => {
+    const p = build()
+    expect(p).toContain('send_feedback')
+    expect(p).not.toContain('report_issue')
+    expect(p).not.toContain('GitHub')
+    const off = build({ skills: { planEdits: true, issues: false } })
+    expect(off).not.toContain('send_feedback')
+    expect(off).toContain('"send feedback" button')
+  })
+
   it('describes the person from their profile', () => {
     const p = build()
     expect(p).toContain('## About this person')

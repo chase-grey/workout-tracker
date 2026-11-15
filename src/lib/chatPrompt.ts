@@ -136,8 +136,27 @@ function renderWorkouts(rows: WorkoutRow[]): string {
 export type CoachSkills = {
   /** update_plan and update_flex_routine. Off by default — the plan rarely changes. */
   planEdits: boolean
-  /** report_issue. On by default: anything the app can't do has to reach the developer. */
+  /**
+   * report_issue for the owner, send_feedback for everyone else (see
+   * reportToolName). On by default: anything the app can't do has to reach the
+   * developer.
+   */
   issues: boolean
+}
+
+/**
+ * The tool that carries an app report to the developer. The owner's files a
+ * GitHub issue the auto-fixer picks up; anyone else's is saved as a row in the
+ * owner's feedback tab instead (lib/coachFeedback), since only the owner holds
+ * the issue token and only the owner's reports should start a fix on their own.
+ */
+export function reportToolName(owner: boolean): 'report_issue' | 'send_feedback' {
+  return owner ? 'report_issue' : 'send_feedback'
+}
+
+/** The chat switch that turns the report tool on and off. */
+export function reportToggleLabel(owner: boolean): string {
+  return owner ? 'report issues' : 'send feedback'
 }
 
 /** Join a list as "a, b and c". */
@@ -163,9 +182,12 @@ function renderTools(skills: CoachSkills, owner: boolean): string[] {
     )
   }
   uses.push('flag_discomfort to note that a joint felt off during a logged exercise')
+  const report = reportToolName(owner)
   if (skills.issues) {
     uses.push(
-      'report_issue to file a bug or feature request about the app as a GitHub issue (call it whenever the user reports a problem or asks to file something, including test reports, then confirm the issue number back to them)',
+      owner
+        ? 'report_issue to file a bug or feature request about the app as a GitHub issue (call it whenever the user reports a problem or asks to file something, including test reports, then confirm the issue number back to them)'
+        : 'send_feedback to pass a bug report or feature request about the app on to its developer (call it whenever the user reports a problem or asks for a change to the app, then tell them it was sent — there is no issue number or link to give)',
     )
   }
 
@@ -176,7 +198,7 @@ function renderTools(skills: CoachSkills, owner: boolean): string[] {
 
   if (skills.planEdits) {
     const elsewhere = skills.issues
-      ? 'When the user asks for one of those, call report_issue so it reaches the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, file it rather than doing something adjacent.'
+      ? `When the user asks for one of those, call ${report} so it reaches the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, pass it on rather than doing something adjacent.`
       : 'When the user asks for one of those, say plainly that it needs the developer — never approximate it with a plan or stretch-routine edit. Adding a goal is not adding an exercise: if you cannot do exactly what was asked, say so rather than doing something adjacent.'
     lines.push(
       `Each editing tool changes only the thing it names, and nothing else in the app is editable from this chat. Goals and their target angles or weights, charts, streaks, screens, and app behaviour all live in the code. ${elsewhere}`,
@@ -202,7 +224,7 @@ function renderTools(skills: CoachSkills, owner: boolean): string[] {
 
   if (!skills.issues) {
     lines.push(
-      'Issue filing is switched off in this conversation, so nothing about the app itself can be written up from here. If the user reports a problem with the app or asks for a change the code would have to make, tell them to turn on the "report issues" button above the message box.',
+      `Issue filing is switched off in this conversation, so nothing about the app itself can be written up from here. If the user reports a problem with the app or asks for a change the code would have to make, tell them to turn on the "${reportToggleLabel(owner)}" button above the message box.`,
       ``,
     )
   }

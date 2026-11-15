@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { clearCoachKickoff, peekCoachKickoff } from '../../lib/coachKickoff'
 import { useData } from '../../store/DataContext'
-import { buildSystemPrompt, type CoachSkills } from '../../lib/chatPrompt'
+import { buildSystemPrompt, reportToggleLabel, type CoachSkills } from '../../lib/chatPrompt'
+import { coachFeedbackMessage } from '../../lib/coachFeedback'
+import { APP_COMMIT } from '../../lib/version'
+import { api } from '../../services/api'
 import type { RawMessage, Tool } from '../../services/openai'
 import { coachTurn } from '../../services/coach'
 import { hasPillar, ownerFlavour, type Profile } from '../../lib/profile'
@@ -82,7 +85,7 @@ const UPDATE_PLAN_TOOL: Tool = {
   function: {
     name: 'update_plan',
     description:
-      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, reorder the exercises in a day, reorder the days themselves, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — use report_issue for those. " +
+      "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, reorder the exercises in a day, reorder the days themselves, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — pass those to the developer with report_issue or send_feedback, whichever you have. " +
       'The order of a day is the order it is performed in, and you can change it: moveExercise puts one exercise before/after another (or at toIndex, the 1-based positions shown in the snapshot minus one), and reorderDay takes the whole day as a list of keys front to back. Reordering is never a reason to remove and re-add an exercise — that would lose its history. ' +
       'The days have an order of their own — the order the app offers them in, shown in the snapshot — and reorderDays sets it, listing the day types front to back. It takes `days` and no `day`; every other op needs `day`. ' +
       'Exercises marked circuit=<id> in the snapshot are performed as a rotation, one set at each station in turn, and their rest is per station: circuitRestSec on an exercise is the rest taken AFTER each of its sets in the rotation, where 0 rolls straight on to the next station and null hands the station back to the default timing. restSec is not what the user feels inside a circuit — to rest only after one station, set circuitRestSec on every station of that circuit, 0 on the ones to roll through.',
@@ -152,7 +155,7 @@ const UPDATE_FLEX_TOOL: Tool = {
   function: {
     name: 'update_flex_routine',
     description:
-      "Propose an edit to one of the user's two stretch routines: change/add/remove a stretch, add/remove a block, or set a block note. Every edit must name the routine it applies to — 'side_split' or 'head_to_toe' — and blocks are matched by label within that routine. Only call when the user asks to change which stretches they do. Nothing is saved until the user approves the proposal in the app. This tool does not create flexibility goals or change their target angles — a request for a goal at some number of degrees is not a request for a new stretch, so file it with report_issue instead.",
+      "Propose an edit to one of the user's two stretch routines: change/add/remove a stretch, add/remove a block, or set a block note. Every edit must name the routine it applies to — 'side_split' or 'head_to_toe' — and blocks are matched by label within that routine. Only call when the user asks to change which stretches they do. Nothing is saved until the user approves the proposal in the app. This tool does not create flexibility goals or change their target angles — a request for a goal at some number of degrees is not a request for a new stretch, so pass it to the developer with report_issue or send_feedback, whichever you have.",
     parameters: {
       type: 'object',
       properties: {
@@ -246,6 +249,25 @@ const REPORT_ISSUE_TOOL: Tool = {
       },
       required: ['title'],
     },
+  },
+}
+
+/**
+ * report_issue for everyone but the owner: the same report, saved as a row in
+ * the owner's feedback tab rather than filed on GitHub (see lib/coachFeedback).
+ */
+const SEND_FEEDBACK_TOOL: Tool = {
+  type: 'function',
+  function: {
+    name: 'send_feedback',
+    description:
+      'Pass a bug report or feature request about the workout app itself on to its developer. ' +
+      'Call when the user asks to report a problem, says something is broken, or ' +
+      'wants a change made — and also whenever they ask for an app change the other ' +
+      'tools cannot make, such as a new or changed goal, a chart, a screen, or ' +
+      'different app behaviour. Not for questions about their training. Tell the ' +
+      'user it was sent; there is no issue number or link.',
+    parameters: REPORT_ISSUE_TOOL.function.parameters,
   },
 }
 
@@ -537,6 +559,8 @@ export function ChatTab({
   }, [turns, pending, loading])
 
   // Two ways to be able to send (see services/coach): the dev proxy holds an
+  // Only the owner's reports become GitHub issues; anyone else's are feedback.
+  const owner = ownerFlavour(settings.profile)
   // Epic key locally, or a key of your own goes straight to its service.
   const hasKey = import.meta.env.DEV || settings.openAiKey.trim().length > 0
 
@@ -588,7 +612,7 @@ export function ChatTab({
     const tools: Tool[] = [
       ...(skills.planEdits ? [UPDATE_PLAN_TOOL, UPDATE_FLEX_TOOL] : []),
       FLAG_DISCOMFORT_TOOL,
-      ...(skills.issues ? [REPORT_ISSUE_TOOL] : []),
+      ...(skills.issues ? [owner ? REPORT_ISSUE_TOOL : SEND_FEEDBACK_TOOL] : []),
     ]
 
     let workingPlan = plan
@@ -692,21 +716,29 @@ export function ChatTab({
                   note: 'Nothing has been saved. The user must tap approve. Tell them what you proposed and that it is waiting on them.',
                 })
               }
-            } else if (call.name === 'report_issue') {
+            } else if (call.name === 'report_issue' || call.name === 'send_feedback') {
               const parsed = JSON.parse(call.arguments) as {
                 title: string
                 body?: string
                 area?: IssueArea
               }
-              // Attach the recent conversation so the issue carries its own context.
+              // Attach the recent conversation so the report carries its own context.
               const chatTail = base
                 .filter((t) => t.role !== 'system')
                 .slice(-6)
                 .map((t) => `${t.role}: ${t.content}`)
                 .join('\n')
-              const issue = await reportIssue(parsed, chatTail)
-              newTurns.push({ role: 'system', content: `filed #${issue.number} — ${parsed.title}` })
-              resultMsg = JSON.stringify({ filed: true, number: issue.number, url: issue.url })
+              // Decided by who is asking, not by which tool the model named:
+              // only the owner's reports go to GitHub.
+              if (owner) {
+                const issue = await reportIssue(parsed, chatTail)
+                newTurns.push({ role: 'system', content: `filed #${issue.number} — ${parsed.title}` })
+                resultMsg = JSON.stringify({ filed: true, number: issue.number, url: issue.url })
+              } else {
+                await api.postFeedback(coachFeedbackMessage(parsed, chatTail), APP_COMMIT)
+                newTurns.push({ role: 'system', content: `sent feedback — ${parsed.title}` })
+                resultMsg = JSON.stringify({ sent: true })
+              }
             } else {
               resultMsg = JSON.stringify({ error: `unknown tool ${call.name}` })
             }
@@ -755,7 +787,7 @@ export function ChatTab({
           keep context
         </Toggle>
         <Toggle on={skills.issues} onClick={() => toggleSkill('issues')}>
-          report issues
+          {reportToggleLabel(owner)}
         </Toggle>
       </div>
 
