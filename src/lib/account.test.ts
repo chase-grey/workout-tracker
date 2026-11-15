@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { accountKey, accountModeOf, isLegacyDevice, mayReachBackend, type DeviceEvidence } from './account'
+import { accountKey, accountModeOf, isLegacyDevice, mayReachBackend, needsAccount, type DeviceEvidence } from './account'
 import type { Settings } from '../services/storage'
 
 // The minimum a Settings object needs; everything else is optional.
@@ -85,5 +85,25 @@ describe('accountKey', () => {
   it('is empty when there is no token', () => {
     expect(accountKey(settings())).toBe('')
     expect(accountKey(settings({ accountToken: '   ' }))).toBe('')
+  })
+})
+
+describe('needsAccount', () => {
+  it('stops a local device and a keyless legacy one', () => {
+    expect(needsAccount(settings({ accountMode: 'local' }))).toBe(true)
+    expect(needsAccount(settings({ accountMode: 'legacy' }))).toBe(true)
+  })
+
+  it('lets a device with a key through', () => {
+    expect(needsAccount(settings({ accountMode: 'hosted', accountToken: 'tok' }))).toBe(false)
+    expect(needsAccount(settings({ accountMode: 'legacy', accountToken: 'tok' }))).toBe(false)
+  })
+
+  it('leaves a device on its own backend alone', () => {
+    expect(needsAccount(settings({ accountMode: 'local', apiUrl: 'https://example.test/api' }))).toBe(false)
+  })
+
+  it('leaves a device with no mode to the welcome flow', () => {
+    expect(needsAccount(settings())).toBe(false)
   })
 })

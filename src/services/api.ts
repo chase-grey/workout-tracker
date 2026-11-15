@@ -75,7 +75,7 @@ async function post<T>(route: string, body: unknown): Promise<T> {
   if (!base) throw new Error('api not configured')
   const url = new URL(base)
   url.searchParams.set('route', route)
-  if (route !== 'join') withAccount(url)
+  if (route !== 'join' && route !== 'register' && route !== 'login' && route !== 'claim_owner') withAccount(url)
   const res = await fetch(url.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -100,6 +100,12 @@ async function post<T>(route: string, body: unknown): Promise<T> {
   }
   return result
 }
+
+/** What signing in or making an account hands back. */
+export type SignedIn = { saved: number; token: string; name: string; owner: boolean }
+
+/** One account, as the owner sees it in Settings. */
+export type Person = { name: string; email: string; createdAt: string; lastSeen: string; owner: boolean }
 
 export const api = {
   isConfigured,
@@ -165,7 +171,23 @@ export const api = {
       claim: storage.joinClaim(invite),
     }),
   /** Who the backend says `key` is. Throws `Unknown account` for a key it doesn't hold. */
-  account: (key: string) => get<{ name: string; owner: boolean }>('account', { user: key }),
+  account: (key: string) => get<{ name: string; owner: boolean; email?: string }>('account', { user: key }),
+  /** Make an account from an email and a password. Like `join`, needs no key yet. */
+  register: (email: string, password: string, name: string) =>
+    post<SignedIn>('register', { email, password, name }),
+  /** Trade an email and password for the account's key. */
+  login: (email: string, password: string) => post<SignedIn>('login', { email, password }),
+  /**
+   * Give the owner's account an email and password, by the issue token. The
+   * first time makes the owner's key, and from then on the backend refuses a
+   * request that carries none.
+   */
+  claimOwner: (secret: string, email: string, password: string) =>
+    post<SignedIn>('claim_owner', { secret, email, password }),
+  /** Set or change the signed-in account's email and password. */
+  setLogin: (email: string, password: string) => post<{ saved: number }>('set_login', { email, password }),
+  /** Everyone with an account, with when they last used the app. Owner only. */
+  people: () => get<Person[]>('people'),
   /**
    * Whether `secret` is the owner's issue token. Asks an owner-only route,
    * which sends no account key and so works on a device not yet signed in.

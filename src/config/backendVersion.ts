@@ -5,7 +5,7 @@
  * its own at ?route=version; when that is lower, the app shows a banner and
  * the deploy workflow fails (see BACKEND.md "Versioning").
  */
-export const REQUIRED_BACKEND_VERSION = 5
+export const REQUIRED_BACKEND_VERSION = 6
 
 /** sha256 of SimpleBackend.gs at that version, so a change without a bump fails the tests. */
-export const BACKEND_FINGERPRINT = '82f2ec4bce427b7366865e61761838ef68e6e39b0adb723a544b737fbb492dcc'
+export const BACKEND_FINGERPRINT = '8811276db0980dadbe3e79da265c3b62bb34377eca082c1704171afa705733d4'

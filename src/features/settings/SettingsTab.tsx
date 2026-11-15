@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MdKeyboardArrowDown } from 'react-icons/md'
+import { MdArrowBack, MdKeyboardArrowDown, MdMoreHoriz } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { SaveStatus } from '../../components/SaveStatus'
 import { BackendBanner } from '../../components/BackendBanner'
@@ -15,6 +15,7 @@ import { PoseCheck } from './PoseCheck'
 import { AccountSection } from './AccountSection'
 import { ProfileSection } from './ProfileSection'
 import { FeedbackSection } from './FeedbackSection'
+import { PeopleSection } from './PeopleSection'
 import { ownerFlavour } from '../../lib/profile'
 import { PlanEditor } from './PlanEditor'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
@@ -158,6 +159,10 @@ export function SettingsTab({
   // Closed issues fold away by default — they're history, and the live ones are
   // what you came here for. Opening them lasts only as long as the visit.
   const [showClosed, setShowClosed] = useState(false)
+  // The ⋯ page: what most people never need, or need once — the build and its
+  // update check, sync detail, the plan editor, restoring a routine, the coach's
+  // model — and the owner's own plumbing.
+  const [advanced, setAdvanced] = useState(false)
 
   const owner = ownerFlavour(settings.profile)
   const { active, closed } = partitionIssues(issues ?? [])
@@ -187,17 +192,19 @@ export function SettingsTab({
     setTimeout(() => setChatTokenSaved(false), 1500)
   }
 
-  return (
-    <div className="flex flex-col gap-6 pb-4">
-      <h2 className="text-xl font-bold">settings</h2>
-      <BackendBanner />
-      <SaveStatus />
-
-      <ThemePicker />
-
-      <AccountSection />
-
-      <ProfileSection />
+  if (advanced) {
+    return (
+      <div className="flex flex-col gap-6 pb-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAdvanced(false)}
+            aria-label="back"
+            className="-ml-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-xl text-neutral-300 active:opacity-60"
+          >
+            <MdArrowBack aria-hidden />
+          </button>
+          <h2 className="text-xl font-bold">more</h2>
+        </div>
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-300">build</label>
@@ -222,9 +229,125 @@ export function SettingsTab({
         </button>
       </section>
 
-      <InstallLink />
+
+      <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">sync</label>
+        <p className="text-xs text-neutral-500">
+          status: {SYNC_LABEL[sync] ?? sync}
+          {pendingWrites > 0 && ` · ${pendingWrites} write${pendingWrites === 1 ? '' : 's'} queued`}
+        </p>
+        <p className="text-xs text-neutral-500">
+          last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
+        </p>
+        <button
+          onClick={() => void refresh()}
+          disabled={sync === 'syncing'}
+          className="min-h-[44px] rounded-xl bg-surface text-sm font-semibold active:bg-surface-2 disabled:text-neutral-600"
+        >
+          {sync === 'syncing' ? 'syncing…' : 'sync now'}
+        </button>
+      </section>
+
+      <PlanEditor />
+
+      <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">stretch routines</label>
+        {FLEX_ROUTINE_KEYS.map((r) => (
+          <button
+            key={r}
+            onClick={() => {
+              if (confirmRestore !== r) {
+                setConfirmRestore(r)
+                return
+              }
+              updateFlexPlan(r, FLEX_ROUTINES[r].blocks)
+              setConfirmRestore(null)
+            }}
+            onBlur={() => setConfirmRestore(null)}
+            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+          >
+            {confirmRestore === r
+              ? 'tap again to restore'
+              : `restore default ${FLEX_ROUTINES[r].label} routine`}
+          </button>
+        ))}
+      </section>
+
+
+      {settings.coachEnabled && (
+        <section className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-neutral-300">coach model</label>
+          {/* Free text with the provider's models as suggestions: a service
+              adds models faster than a list here would follow, and OpenRouter
+              alone has hundreds. */}
+          <input
+            list="coach-models"
+            value={modelDraft}
+            onChange={(e) => setModelDraft(e.target.value)}
+            placeholder={provider.defaultModel || 'model'}
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            className={FIELD}
+          />
+          <datalist id="coach-models">
+            {provider.models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+          <button
+            onClick={saveKey}
+            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+          >
+            {keySaved ? 'saved ✓' : 'save'}
+          </button>
+        </section>
+      )}
+
+      {owner && (
+      <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-300">issue token</label>
+        <input
+          type="password"
+          value={chatTokenDraft}
+          onChange={(e) => setChatTokenDraft(e.target.value)}
+          placeholder="the CHAT_SHARED_SECRET script property"
+          autoComplete="off"
+          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+        <button
+          onClick={saveChatToken}
+          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+        >
+          {chatTokenSaved ? 'saved ✓' : 'save token'}
+        </button>
+      </section>
+      )}
+
 
       {owner && <PoseCheck />}
+
+      <PhoneLink />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6 pb-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">settings</h2>
+        <button
+          onClick={() => setAdvanced(true)}
+          aria-label="more settings"
+          className="-mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl text-neutral-300 active:opacity-60"
+        >
+          <MdMoreHoriz aria-hidden />
+        </button>
+      </div>
+      <BackendBanner />
+      <SaveStatus />
+
+      {owner && <PeopleSection />}
 
       {owner && settings.chatToken.trim() && (
         <section className="flex flex-col gap-2">
@@ -272,74 +395,14 @@ export function SettingsTab({
         </section>
       )}
 
-      {settings.accountMode !== 'local' && (
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">sync</label>
-        <p className="text-xs text-neutral-500">
-          status: {SYNC_LABEL[sync] ?? sync}
-          {pendingWrites > 0 && ` · ${pendingWrites} write${pendingWrites === 1 ? '' : 's'} queued`}
-        </p>
-        <p className="text-xs text-neutral-500">
-          last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
-        </p>
-        <button
-          onClick={() => void refresh()}
-          disabled={sync === 'syncing'}
-          className="min-h-[44px] rounded-xl bg-surface text-sm font-semibold active:bg-surface-2 disabled:text-neutral-600"
-        >
-          {sync === 'syncing' ? 'syncing…' : 'sync now'}
-        </button>
-      </section>
-      )}
 
-      <FeedbackSection />
+      <ThemePicker />
 
-      <PlanEditor />
+      <AccountSection />
 
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">stretch routines</label>
-        {FLEX_ROUTINE_KEYS.map((r) => (
-          <button
-            key={r}
-            onClick={() => {
-              if (confirmRestore !== r) {
-                setConfirmRestore(r)
-                return
-              }
-              updateFlexPlan(r, FLEX_ROUTINES[r].blocks)
-              setConfirmRestore(null)
-            }}
-            onBlur={() => setConfirmRestore(null)}
-            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-          >
-            {confirmRestore === r
-              ? 'tap again to restore'
-              : `restore default ${FLEX_ROUTINES[r].label} routine`}
-          </button>
-        ))}
-      </section>
+      <ProfileSection />
 
-      <PhoneLink />
-
-      {owner && (
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">issue token</label>
-        <input
-          type="password"
-          value={chatTokenDraft}
-          onChange={(e) => setChatTokenDraft(e.target.value)}
-          placeholder="the CHAT_SHARED_SECRET script property"
-          autoComplete="off"
-          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-        <button
-          onClick={saveChatToken}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          {chatTokenSaved ? 'saved ✓' : 'save token'}
-        </button>
-      </section>
-      )}
+      <InstallLink />
 
       {/* Flipping the switch on is what brings the key field up underneath,
           and the tab appears in the nav at the same moment. */}
@@ -393,24 +456,6 @@ export function SettingsTab({
             autoComplete="off"
             className={FIELD}
           />
-          {/* Free text with the provider's models as suggestions: a service
-              adds models faster than a list here would follow, and OpenRouter
-              alone has hundreds. */}
-          <input
-            list="coach-models"
-            value={modelDraft}
-            onChange={(e) => setModelDraft(e.target.value)}
-            placeholder={provider.defaultModel || 'model'}
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            className={FIELD}
-          />
-          <datalist id="coach-models">
-            {provider.models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
           <button
             onClick={saveKey}
             className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
@@ -419,6 +464,8 @@ export function SettingsTab({
           </button>
         </section>
       )}
+
+      {!owner && <FeedbackSection />}
     </div>
   )
 }

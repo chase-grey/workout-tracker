@@ -91,14 +91,14 @@ it('serves a tokenless request from the owner tabs, unprefixed', () => {
   expect(w.post({ route: 'bodyweight' }, bw)).toEqual({ saved: 1 })
   expect(w.book.tab('body_weight')).toHaveLength(2)
   expect(w.get({ route: 'bodyweight' })).toEqual([{ date: '2026-11-01', weightLbs: 180 }])
-  expect(w.get({ route: 'account' })).toEqual({ name: '', owner: true })
+  expect(w.get({ route: 'account' })).toEqual({ name: '', owner: true, email: '' })
 })
 
 it('keeps a joined user in prefixed tabs, invisible to the owner and to another user', () => {
   const w = world({ CHAT_SHARED_SECRET: SECRET })
   const ann = w.join('Ann')
   const bob = w.join('Bob')
-  expect(w.get({ route: 'account', user: ann })).toEqual({ name: 'Ann', owner: false })
+  expect(w.get({ route: 'account', user: ann })).toEqual({ name: 'Ann', owner: false, email: '' })
 
   w.post({ route: 'bodyweight', user: ann }, bw)
   const annId = w.book.tab('users').find((r) => r[0] === ann)[1]
@@ -143,7 +143,7 @@ it('treats the shared secret as the owner', () => {
   const w = world({ CHAT_SHARED_SECRET: SECRET, REQUIRE_ACCOUNT: '1' })
   expect(w.post({ route: 'bodyweight', user: SECRET }, bw)).toEqual({ saved: 1 })
   expect(w.book.tab('body_weight')).toHaveLength(2)
-  expect(w.get({ route: 'account', user: SECRET })).toEqual({ name: '', owner: true })
+  expect(w.get({ route: 'account', user: SECRET })).toEqual({ name: '', owner: true, email: '' })
 })
 
 it('spends an invite once, in any case, and checks the name', () => {

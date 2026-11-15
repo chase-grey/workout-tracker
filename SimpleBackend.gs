@@ -137,7 +137,20 @@ const DURATION_HEADERS = ['date', 'kind', 'day_type', 'total_sec', 'rest_sec', '
 const EXERCISE_TIME_HEADERS = ['exercise', 'avg_active_sec', 'n']
 const SAVE_ERROR_HEADERS = ['at', 'build', 'route', 'write_id', 'message', 'pending', 'payload', 'user']
 const CARDIO_HEADERS = ['id', 'date', 'kind', 'minutes', 'distance_mi']
-const USER_HEADERS = ['token', 'id', 'name', 'created_at']
+// `email` and the password columns are blank for an account made by invite
+// before sign-in by email existed, until it sets them (set_login). `owner` is
+// 'yes' on the one row that is the owner's (`last_seen` is when the account
+// last reached the backend, to the hour): its token reaches the unprefixed
+// tabs, and once it exists a request with no token at all is refused.
+const USER_HEADERS = ['token', 'id', 'name', 'created_at', 'email', 'pass_salt', 'pass_hash', 'owner', 'last_seen']
+const U_TOKEN = 0
+const U_ID = 1
+const U_NAME = 2
+const U_EMAIL = 4
+const U_SALT = 5
+const U_HASH = 6
+const U_OWNER = 7
+const U_SEEN = 8
 const INVITE_HEADERS = ['code', 'created_at', 'used_at', 'used_by', 'claim', 'user_id']
 const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 
@@ -146,7 +159,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 5
+const BACKEND_VERSION = 6
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -164,7 +177,10 @@ let ACCOUNT = null
 // Routes that carry their own `secret` and always act as the owner, with no
 // `user` token involved. `version` and `join` skip account resolution too, but
 // for the opposite reason: there's nobody signed in yet.
-const OWNER_SECRET_ROUTES = { issues: true, report_issue: true, issue_thread: true, answer_issue: true, invite: true }
+const OWNER_SECRET_ROUTES = { issues: true, report_issue: true, issue_thread: true, answer_issue: true, invite: true, claim_owner: true }
+// Routes for someone who isn't signed in yet: they hand out a token rather than
+// needing one.
+const SIGN_IN_ROUTES = { join: true, register: true, login: true }
 
 function doGet(e) {
   try {
@@ -174,7 +190,9 @@ function doGet(e) {
       case 'version':
         return json({ version: BACKEND_VERSION })
       case 'account':
-        return json({ name: ACCOUNT.name, owner: ACCOUNT.owner })
+        return json({ name: ACCOUNT.name, owner: ACCOUNT.owner, email: ACCOUNT.email || '' })
+      case 'people':
+        return json(listPeople())
       case 'cardio':
         return json(getCardio(e.parameter.since))
       case 'workouts':
@@ -236,8 +254,16 @@ function doPost(e) {
   try {
     const body = e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {}
     const route = e.parameter.route
-    if (route !== 'join' && !OWNER_SECRET_ROUTES[route]) useAccount(e.parameter.user)
+    if (!SIGN_IN_ROUTES[route] && !OWNER_SECRET_ROUTES[route]) useAccount(e.parameter.user)
     switch (route) {
+      case 'register':
+        return json(withLock(function () { return registerAccount(body) }))
+      case 'login':
+        return json(logIn(body))
+      case 'claim_owner':
+        return json(withLock(function () { return claimOwner(body) }))
+      case 'set_login':
+        return json(withLock(function () { return setLogin(e.parameter.user, body) }))
       case 'join':
         return json(withLock(function () { return joinAccount(body) }))
       case 'invite':
@@ -1134,16 +1160,22 @@ function scriptProp(key) {
 function resolveAccount(token) {
   const t = String(token || '').trim()
   if (!t) {
-    if (scriptProp('REQUIRE_ACCOUNT')) throw new Error('Sign in required')
+    // The owner signing in by email is what closes this: from then on every
+    // device has a key, and the backend address in the public bundle no longer
+    // opens the owner's tabs to anyone who finds it.
+    if (scriptProp('REQUIRE_ACCOUNT') || ownerRowAt(userRows()) > 0) throw new Error('Sign in required')
     return { owner: true, name: '', id: '', prefix: '' }
   }
   const secret = scriptProp('CHAT_SHARED_SECRET')
   if (secret && t === secret) return { owner: true, name: '', id: '', prefix: '' }
-  const rows = ownerSheet('users', USER_HEADERS).getDataRange().getValues()
+  const rows = userRows()
   for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] && String(rows[i][0]) === t) {
-      const id = String(rows[i][1])
-      return { owner: false, name: String(rows[i][2]), id: id, prefix: 'u' + id + '_' }
+    if (rows[i][U_TOKEN] && String(rows[i][U_TOKEN]) === t) {
+      touchSeen(i, rows[i])
+      const email = String(rows[i][U_EMAIL] || '')
+      if (isOwnerRow(rows[i])) return { owner: true, name: String(rows[i][U_NAME]), id: '', prefix: '', email: email }
+      const id = String(rows[i][U_ID])
+      return { owner: false, name: String(rows[i][U_NAME]), id: id, prefix: 'u' + id + '_', email: email }
     }
   }
   throw new Error('Unknown account')
@@ -1169,6 +1201,222 @@ function randomFrom(alphabet, length) {
   let out = ''
   for (let i = 0; i < length; i++) out += alphabet.charAt(Math.floor(Math.random() * alphabet.length))
   return out
+}
+
+/* ------------------------------------------------------- email sign-in */
+
+// A password is never stored, only a salted digest of it, hashed over and over
+// so a copy of the users tab can't be run through a word list quickly. Apps
+// Script has no bcrypt or scrypt; iterated SHA-256 is what it has.
+const PASSWORD_ROUNDS = 1000
+const PASSWORD_MIN = 8
+// Wrong passwords for one email, inside the window, before it stops being
+// checked at all until the window passes.
+const LOGIN_FAILS_MAX = 10
+const LOGIN_LOCK_SECONDS = 15 * 60
+
+function userRows() {
+  return ownerSheet('users', USER_HEADERS).getDataRange().getValues()
+}
+
+function isOwnerRow(row) {
+  return String(row[U_OWNER] || '') === 'yes'
+}
+
+/** The owner's row in `rows`, or -1. Row 0 is the header. */
+function ownerRowAt(rows) {
+  for (let i = 1; i < rows.length; i++) if (isOwnerRow(rows[i])) return i
+  return -1
+}
+
+function normEmail(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function checkEmail(email) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Error("That email doesn't look right")
+}
+
+function checkPassword(password) {
+  if (typeof password !== 'string' || password.length < PASSWORD_MIN) {
+    throw new Error('Password must be at least ' + PASSWORD_MIN + ' characters')
+  }
+  if (password.length > 200) throw new Error('Password is too long')
+}
+
+/** The users-tab row holding `email`, or -1. */
+function emailRowAt(rows, email) {
+  for (let i = 1; i < rows.length; i++) if (normEmail(rows[i][U_EMAIL]) === email) return i
+  return -1
+}
+
+function hashPassword(password, salt) {
+  const alg = Utilities.DigestAlgorithm.SHA_256
+  let bytes = Utilities.computeDigest(alg, salt + ':' + password, Utilities.Charset.UTF_8)
+  for (let i = 1; i < PASSWORD_ROUNDS; i++) bytes = Utilities.computeDigest(alg, bytes)
+  return bytes.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2) }).join('')
+}
+
+function passwordMatches(row, password) {
+  const salt = String(row[U_SALT] || '')
+  return !!salt && typeof password === 'string' && hashPassword(password, salt) === String(row[U_HASH])
+}
+
+/** [email, salt, hash] for a users row. */
+function loginCells(email, password) {
+  const salt = Utilities.getUuid().replace(/-/g, '')
+  return [email, salt, hashPassword(password, salt)]
+}
+
+function newUserId(rows) {
+  const taken = {}
+  rows.slice(1).forEach(function (r) { taken[String(r[U_ID])] = true })
+  // "12e345" in a cell is a number, so an id never opens with a digit.
+  let id = randomFrom(ID_ALPHABET, 6)
+  while (taken[id] || /^\d/.test(id)) id = randomFrom(ID_ALPHABET, 6)
+  return id
+}
+
+function newToken() {
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '')
+}
+
+function cleanName(value) {
+  return String(value || '').trim().replace(/^[=+\-@\s]+/, '').slice(0, 40)
+}
+
+/**
+ * Make an account from an email and a password; anyone may. Asking again with
+ * the same email and password is answered with the account it already made, so
+ * a reply lost on the way back doesn't strand the phone that asked.
+ */
+function registerAccount(body) {
+  const email = normEmail(body && body.email)
+  const password = body && body.password
+  checkEmail(email)
+  checkPassword(password)
+  const name = cleanName(body && body.name)
+  if (!name) throw new Error('A name is required')
+  const users = ownerSheet('users', USER_HEADERS)
+  const rows = users.getDataRange().getValues()
+  const at = emailRowAt(rows, email)
+  if (at > 0) {
+    if (passwordMatches(rows[at], password)) {
+      return { saved: 1, token: String(rows[at][U_TOKEN]), name: String(rows[at][U_NAME]), owner: isOwnerRow(rows[at]) }
+    }
+    throw new Error('An account with that email already exists')
+  }
+  const token = newToken()
+  const cells = loginCells(email, password)
+  const now = new Date().toISOString()
+  users.appendRow([token, newUserId(rows), name, now, cells[0], cells[1], cells[2], '', now])
+  return { saved: 1, token: token, name: name, owner: false }
+}
+
+function loginFailKey(email) {
+  return 'login_fail_' + Utilities.base64EncodeWebSafe(email)
+}
+
+/** Trade an email and password for the account's token. */
+function logIn(body) {
+  const email = normEmail(body && body.email)
+  const password = body && body.password
+  const cache = CacheService.getScriptCache()
+  const key = loginFailKey(email)
+  const fails = Number(cache.get(key) || 0)
+  if (fails >= LOGIN_FAILS_MAX) throw new Error('Too many tries. Wait 15 minutes and try again')
+  const rows = userRows()
+  const at = email ? emailRowAt(rows, email) : -1
+  if (at < 0 || !passwordMatches(rows[at], password)) {
+    cache.put(key, String(fails + 1), LOGIN_LOCK_SECONDS)
+    throw new Error('Wrong email or password')
+  }
+  cache.remove(key)
+  return { saved: 1, token: String(rows[at][U_TOKEN]), name: String(rows[at][U_NAME]), owner: isOwnerRow(rows[at]) }
+}
+
+/**
+ * Give the owner an email and password, by the owner secret. The first call
+ * makes the owner's row — the account the unprefixed tabs, i.e. everything the
+ * owner ever logged, belong to — and with it shuts out tokenless requests. A
+ * later one resets the owner's login: the secret is the owner's way back in.
+ */
+function claimOwner(body) {
+  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
+  const email = normEmail(body.email)
+  const password = body.password
+  checkEmail(email)
+  checkPassword(password)
+  const users = ownerSheet('users', USER_HEADERS)
+  const rows = users.getDataRange().getValues()
+  const owner = ownerRowAt(rows)
+  const taken = emailRowAt(rows, email)
+  if (taken > 0 && taken !== owner) throw new Error('An account with that email already exists')
+  const cells = loginCells(email, password)
+  if (owner > 0) {
+    users.getRange(owner + 1, U_EMAIL + 1, 1, 3).setValues([cells])
+    return { saved: 1, token: String(rows[owner][U_TOKEN]), name: String(rows[owner][U_NAME]), owner: true }
+  }
+  const token = newToken()
+  const name = cleanName(body.name)
+  const now = new Date().toISOString()
+  users.appendRow([token, '', name, now, cells[0], cells[1], cells[2], 'yes', now])
+  return { saved: 1, token: token, name: name, owner: true }
+}
+
+// How often last_seen is rewritten for one account. Every request resolves the
+// account, and a cell write on each would be most of a read's cost.
+const SEEN_EVERY_SECONDS = 60 * 60
+
+/** Stamp a users row as seen now, at most once per SEEN_EVERY_SECONDS. */
+function touchSeen(at, row) {
+  // Bookkeeping: a stamp that fails must never fail the request it rode on.
+  try {
+    const cache = CacheService.getScriptCache()
+    const key = 'seen_' + String(row[U_TOKEN]).slice(0, 16)
+    if (cache.get(key)) return
+    cache.put(key, '1', SEEN_EVERY_SECONDS)
+    ownerSheet('users', USER_HEADERS).getRange(at + 1, U_SEEN + 1).setValue(new Date().toISOString())
+  } catch (err) {
+    /* last_seen stays as it was */
+  }
+}
+
+function cellIso(value) {
+  if (value instanceof Date) return value.toISOString()
+  return String(value || '')
+}
+
+/** Everyone with an account, for the owner: who, since when, and last seen. Never a token or a hash. */
+function listPeople() {
+  if (!ACCOUNT || !ACCOUNT.owner) throw new Error('Owner only')
+  return userRows().slice(1).filter(function (r) { return r[U_TOKEN] }).map(function (r) {
+    return {
+      name: String(r[U_NAME] || ''),
+      email: String(r[U_EMAIL] || ''),
+      createdAt: cellIso(r[3]),
+      lastSeen: cellIso(r[U_SEEN]),
+      owner: isOwnerRow(r),
+    }
+  })
+}
+
+/** Set or change the signed-in account's email and password. */
+function setLogin(token, body) {
+  const email = normEmail(body && body.email)
+  const password = body && body.password
+  checkEmail(email)
+  checkPassword(password)
+  const users = ownerSheet('users', USER_HEADERS)
+  const rows = users.getDataRange().getValues()
+  const t = String(token || '').trim()
+  let at = -1
+  for (let i = 1; i < rows.length; i++) if (t && String(rows[i][U_TOKEN]) === t) at = i
+  if (at < 0) throw new Error('Sign in required')
+  const taken = emailRowAt(rows, email)
+  if (taken > 0 && taken !== at) throw new Error('An account with that email already exists')
+  users.getRange(at + 1, U_EMAIL + 1, 1, 3).setValues([loginCells(email, password)])
+  return { saved: 1 }
 }
 
 /** Mint a one-time invite code. Owner only, by the shared secret. */

@@ -52,3 +52,17 @@ export function mayReachBackend(settings: Settings): boolean {
 export function accountKey(settings: Settings): string {
   return settings.accountToken?.trim() ?? ''
 }
+
+/**
+ * Whether this device has to get an account before the app opens. Every device
+ * belongs to one now: a `local` device kept its data to itself, and a `legacy`
+ * one — the owner's, from before accounts — reached the backend with no key,
+ * which the backend stops taking once the owner has signed in by email. A
+ * backend address typed into Settings is the device's own deployment, where
+ * it is the owner, so it's left alone.
+ */
+export function needsAccount(settings: Settings): boolean {
+  if (settings.apiUrl.trim()) return false
+  if (settings.accountMode === 'local') return true
+  return settings.accountMode === 'legacy' && !settings.accountToken?.trim()
+}

@@ -15,16 +15,11 @@ import { useSignIn } from './SignInLanding'
 /** The plan a new account starts on when it didn't set strength up for itself. */
 const DEFAULT_STRENGTH: StrengthSetup = { daysPerWeek: 3, equipment: 'gym' }
 
-/** The invite code on the link that opened the app, if it carried one. */
-function inviteFromUrl(): string | undefined {
-  return new URLSearchParams(window.location.search).get('invite')?.trim().toUpperCase() || undefined
-}
-
 /**
  * Whether this is an iPhone or iPad showing the app in a Safari tab rather than
  * from the home screen. iOS gives an installed app its own storage, separate
  * from the browser's: an account set up in the tab is not there when the icon is
- * opened, and the invite that made it is already spent.
+ * opened.
  */
 function inIosBrowserTab(): boolean {
   const ios =
@@ -37,7 +32,7 @@ function inIosBrowserTab(): boolean {
   return ios && !standalone
 }
 
-/** Drop `?invite=` once it has been spent, so a reload doesn't offer a dead code. */
+/** Drop an `?invite=` left by an older share link: accounts no longer need one. */
 function clearInviteFromUrl() {
   const url = new URL(window.location.href)
   if (!url.searchParams.has('invite')) return
@@ -49,14 +44,13 @@ function clearInviteFromUrl() {
  * The welcome flow, wired to the account it sets up.
  *
  * Shown in place of the app on a device that has never chosen how to store its
- * data (see lib/account). Nothing leaves the device until this finishes: an
- * invite is spent or a key checked first, and only then is the mode saved that
+ * data (see lib/account). Nothing leaves the device until this finishes: the
+ * account is made or signed into first, and only then is the mode saved that
  * lets the outbox and the sync run.
  */
 export function WelcomeGate() {
-  const { updateSettings, updatePlan, logBodyWeight } = useData()
+  const { updateSettings, updatePlan, logBodyWeight, signInToAccount } = useData()
   const signIn = useSignIn()
-  const [invite] = useState(inviteFromUrl)
   // On iOS the app is installed before it is set up, or the setup is lost (see
   // inIosBrowserTab). The one screen in the app that tells you how to do
   // something, because nothing on it could be a control that does it for you.
@@ -76,10 +70,16 @@ export function WelcomeGate() {
     // An existing account brings its own profile, plan and history down with
     // the first sync, so nothing typed into the form is saved over them — and
     // nothing of this blank device is pushed up first (see signInToAccount).
-    if (r.account.kind === 'key') {
-      const cred = credentialFromText(r.account.token)
-      if (!cred) throw new Error("That isn't an account key")
-      await signIn(cred, coach)
+    if (r.account.kind === 'signin') {
+      const typed = r.account.email.trim()
+      if (/^https?:\/\//i.test(typed)) {
+        const cred = credentialFromText(typed)
+        if (!cred) throw new Error("That link doesn't sign in")
+        await signIn(cred, coach)
+      } else {
+        const who = await api.login(typed, r.account.password)
+        await signInToAccount({ ...coach, accountMode: 'hosted', accountToken: who.token, accountName: who.name })
+      }
       clearInviteFromUrl()
       return
     }
@@ -94,11 +94,8 @@ export function WelcomeGate() {
       stashResumeTab('coach')
     }
 
-    let account: Partial<Settings> = { accountMode: 'local' }
-    if (r.account.kind === 'invite') {
-      const joined = await api.join(r.account.code.trim().toUpperCase(), r.profile.name)
-      account = { accountMode: 'hosted', accountToken: joined.token, accountName: joined.name }
-    }
+    const made = await api.register(r.account.email.trim(), r.account.password, r.profile.name)
+    const account: Partial<Settings> = { accountMode: 'hosted', accountToken: made.token, accountName: made.name }
     kickOff()
     updateSettings({
       ...base,
@@ -126,9 +123,6 @@ export function WelcomeGate() {
             <li>add to home screen</li>
             <li>open workout tracker from the home screen</li>
           </ol>
-          {invite && (
-            <p className="mb-4 text-center font-mono text-2xl font-bold tracking-widest">{invite}</p>
-          )}
           <button
             type="button"
             onClick={() => setInstallFirst(false)}
@@ -145,7 +139,7 @@ export function WelcomeGate() {
   // scrolls and it shrinks with the keyboard the way every other screen does.
   return (
     <div className="app-shell overflow-y-auto">
-      <Welcome initialInvite={invite} onFinish={finish} />
+      <Welcome onFinish={finish} />
     </div>
   )
 }

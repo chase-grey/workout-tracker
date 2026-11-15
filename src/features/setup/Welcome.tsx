@@ -22,11 +22,18 @@ import { setTheme, useTheme } from '../../lib/themeStore'
 import { usePressAction } from '../../lib/usePressAction'
 import { useFieldInView } from '../../lib/useFieldInView'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
+import { emailOk, loginOk } from '../../lib/login'
+import { LoginFields } from './LoginFields'
 
+/**
+ * Every device belongs to an account: a new one made here, or one signed back
+ * into. `signin` takes a pasted sign-in link in the email field too (see
+ * lib/signInLink), which is how an iPhone carries a QR's sign-in into the
+ * installed app.
+ */
 export type WelcomeAccount =
-  | { kind: 'invite'; code: string }
-  | { kind: 'key'; token: string }
-  | { kind: 'local' }
+  | { kind: 'create'; email: string; password: string }
+  | { kind: 'signin'; email: string; password: string }
 
 export type WelcomeResult = {
   profile: Profile
@@ -201,13 +208,7 @@ function ThemeStep() {
   )
 }
 
-export function Welcome({
-  initialInvite,
-  onFinish,
-}: {
-  initialInvite?: string
-  onFinish: (result: WelcomeResult) => Promise<void>
-}) {
+export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Promise<void> }) {
   const rootRef = useRef<HTMLDivElement>(null)
   useFieldInView(rootRef)
   const [step, setStep] = useState(0)
@@ -240,9 +241,9 @@ export function Welcome({
   const [aiKey, setAiKey] = useState('')
 
   // 6 - account
-  const [mode, setMode] = useState<WelcomeAccount['kind']>('invite')
-  const [code, setCode] = useState((initialInvite ?? '').toUpperCase())
-  const [token, setToken] = useState('')
+  const [mode, setMode] = useState<WelcomeAccount['kind']>('create')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -304,8 +305,11 @@ export function Welcome({
   const planOk =
     !dietOn || (inRange(calorieNum, 800, 6000) && (targetWeight.trim() === '' || inRange(num(targetWeight), 50, 700)))
 
+  const pastedLink = /^https?:\/\//i.test(email.trim())
   const accountOk =
-    mode === 'local' || (mode === 'invite' ? code.trim() !== '' : token.trim() !== '')
+    mode === 'create'
+      ? loginOk(email, password)
+      : pastedLink || (emailOk(email) && password !== '')
 
   const valid = [name.trim() !== '', aboutOk, planOk, true, true, accountOk][step]
 
@@ -324,12 +328,7 @@ export function Welcome({
       createdAt: now.toISOString(),
     }
     const key = aiKey.trim()
-    const account: WelcomeAccount =
-      mode === 'invite'
-        ? { kind: 'invite', code: code.trim() }
-        : mode === 'key'
-          ? { kind: 'key', token: token.trim() }
-          : { kind: 'local' }
+    const account: WelcomeAccount = { kind: mode, email: email.trim(), password }
     setPending(true)
     setError(null)
     try {
@@ -353,7 +352,11 @@ export function Welcome({
     if (last) void finish()
     else setStep(step + 1)
   }
-  const nextLabel = last ? (pending ? 'starting…' : 'start') : step === 4 && !aiKey.trim() ? 'skip' : 'next'
+  const nextLabel = last
+    ? mode === 'signin'
+      ? pending ? 'signing in…' : 'sign in'
+      : pending ? 'starting…' : 'start'
+    : step === 4 && !aiKey.trim() ? 'skip' : 'next'
 
   const heading = ['welcome', 'about you', 'your plan', 'theme', 'coach', 'account'][step]
 
@@ -566,42 +569,23 @@ export function Welcome({
               label="account"
               value={mode}
               options={[
-                { value: 'invite' as WelcomeAccount['kind'], label: 'invite code' },
-                { value: 'key' as WelcomeAccount['kind'], label: 'account key' },
-                { value: 'local' as WelcomeAccount['kind'], label: 'this phone' },
+                { value: 'create' as WelcomeAccount['kind'], label: 'new account' },
+                { value: 'signin' as WelcomeAccount['kind'], label: 'sign in' },
               ]}
               onChange={(m) => {
                 setMode(m)
                 setError(null)
               }}
             />
-            {mode === 'invite' && (
-              <label className="flex flex-col gap-2">
-                <span className={LABEL}>invite code</span>
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  autoComplete="off"
-                  autoCapitalize="characters"
-                  spellCheck={false}
-                  className={`${FIELD} font-mono uppercase`}
-                />
-              </label>
-            )}
-            {mode === 'key' && (
-              <label className="flex flex-col gap-2">
-                <span className={LABEL}>account key</span>
-                <input
-                  type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  className={FIELD}
-                />
-              </label>
-            )}
+            <LoginFields
+              email={email}
+              password={password}
+              onEmail={setEmail}
+              onPassword={setPassword}
+              fresh={mode === 'create'}
+              fieldClass={FIELD}
+              labelClass={LABEL}
+            />
           </>
         )}
       </div>
@@ -622,7 +606,7 @@ export function Welcome({
         {step === 0 && (
           <PressButton
             onPress={() => {
-              setMode('key')
+              setMode('signin')
               setError(null)
               setSkipped(true)
               setStep(STEPS - 1)

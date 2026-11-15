@@ -34,7 +34,8 @@ import type { VariantKey } from './config/plan'
 import { WelcomeGate } from './features/setup/WelcomeGate'
 import { SignInLanding, takeCredentialFromUrl } from './features/setup/SignInLanding'
 import { isSignedInAs } from './lib/signInLink'
-import { accountModeOf } from './lib/account'
+import { accountModeOf, needsAccount } from './lib/account'
+import { AccountGate } from './features/setup/AccountGate'
 
 // A device in use before accounts existed never chose how to store its data.
 // Settle it as the owner's before anything renders, so it goes on syncing as it
@@ -65,8 +66,8 @@ export default function App() {
 
 /**
  * A scanned sign-in link first, on any device it isn't already the account
- * of; then the welcome flow until this device has an account mode, the app
- * after.
+ * of; then the welcome flow until this device has an account mode; then, for
+ * a device from before every device needed one, an account; the app after.
  */
 function Gate() {
   const { settings } = useData()
@@ -75,7 +76,9 @@ function Gate() {
     return c && !isSignedInAs(storage.loadSettings(), c) ? c : undefined
   })
   if (cred) return <SignInLanding cred={cred} onDone={() => setCred(undefined)} />
-  return settings.accountMode ? <AppShell /> : <WelcomeGate />
+  if (!settings.accountMode) return <WelcomeGate />
+  if (needsAccount(settings)) return <AccountGate />
+  return <AppShell />
 }
 
 function AppShell() {

@@ -110,7 +110,12 @@ the backend separately using the deployment instructions above.
 | POST | `?route=import` | `{ rows: WorkoutRow[] }` | `{ saved }` |
 | POST | `?route=notes` | `{ session, exercise, notes }` | `{ saved }` |
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
-| GET | `?route=account` | `user` | `{ name, owner }` (see Accounts) |
+| GET | `?route=account` | `user` | `{ name, owner, email }` (see Accounts) |
+| GET | `?route=people` | `user` (the owner's) | `[{ name, email, createdAt, lastSeen, owner }]` |
+| POST | `?route=register` | `{ email, password, name }` | `{ saved, token, name, owner }` |
+| POST | `?route=login` | `{ email, password }` | `{ saved, token, name, owner }` |
+| POST | `?route=claim_owner` | `{ secret, email, password }` | `{ saved, token, name, owner }` |
+| POST | `?route=set_login` | `{ email, password }` + `user` | `{ saved }` |
 | POST | `?route=join` | `{ invite, name, claim }` | `{ saved, token, name }` |
 | POST | `?route=invite` | `{ secret }` | `{ saved, code }` |
 | GET | `?route=cardio&since=YYYY-MM-DD` | — | `{id, date, kind, minutes, distanceMi?}[]` |
@@ -124,7 +129,7 @@ the backend separately using the deployment instructions above.
 | GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |
 | POST | `?route=answer_issue` | `{ secret, number, answer }` | `{ answered }` |
 
-Every route except `version`, `join` and the four issue routes (and `invite`)
+Every route except `version`, `join`, `register`, `login`, `claim_owner` and the four issue routes (and `invite`)
 takes a `user` query parameter, the account key (see Accounts).
 
 ### Accounts
@@ -137,7 +142,7 @@ per-user prefix. A user whose id is `ab12cd` has `uab12cd_workouts`,
 bare names, so nothing the owner already logged moved.
 
 Four tabs belong to the book rather than to anyone in it and are never prefixed:
-`users` (`token, id, name, created_at`), `invites` (`code, created_at, used_at,
+`users` (`token, id, name, created_at, email, pass_salt, pass_hash, owner, last_seen`), `invites` (`code, created_at, used_at,
 used_by, claim, user_id`), `save_errors` and `feedback`. Failed-save reports from every account
 land in `save_errors` with the account's name in a last `user` column, and
 `save_errors` can only be read by the owner. `feedback` (`at, user, build,
@@ -145,9 +150,11 @@ message`) is where the app's feedback box writes.
 
 Each request names its account with `?user=<key>`, on GET and POST alike:
 
-- Blank or missing is the owner, which is what every request was before hosting.
+- Blank or missing is the owner, which is what every request was before hosting —
+  until the owner has an account row (below), after which it is refused.
 - The `CHAT_SHARED_SECRET` script property is also the owner.
-- A key found in the `users` tab is that user.
+- A key found in the `users` tab is that user; the row marked `owner = yes` is
+  the owner, on the bare tabs.
 - Anything else throws `Unknown account`. It never falls back to the owner, so a
   mistyped key cannot read or write someone else's data.
 
@@ -163,8 +170,32 @@ and gets back `{ saved, token, name }`; the token is their account key and the
 only copy that exists to give them. `claim` is an id the phone mints for its
 attempt and repeats on every retry: a join whose reply was lost is answered
 again with the same token for the same claim, rather than refused as spent.
-`GET ?route=account` returns `{ name, owner }`
+`GET ?route=account` returns `{ name, owner, email }`
 for a key, which is how the app checks one that was pasted in.
+
+### Email and password
+
+Accounts are open: anyone can `POST ?route=register` with an email, a password
+(8 characters or more) and a name, and gets a key back. `login` trades the same
+email and password for the key. The password itself is never stored: `pass_hash`
+is SHA-256 run 1000 times over a per-account random `pass_salt` and the password
+(Apps Script has nothing stronger built in). After 10 wrong passwords for one
+email inside 15 minutes, `login` stops checking that email until the window
+passes (`CacheService`). A repeated `register` with the same email and password
+is answered with the account it made, so a lost reply doesn't strand the phone.
+
+The owner's account predates all this and has no row. `claim_owner` makes one,
+proven by `CHAT_SHARED_SECRET`: the row is marked `owner = yes`, its key reaches
+the bare tabs (so nothing moves), and from then on a request with no key is
+refused. The app does this from the owner's old phone, which carries the secret
+as its issue token. Calling it again resets the owner's email and password — the
+secret is the owner's way back in. `set_login` sets or changes the signed-in
+account's own email and password, which is how an account made by invite gets
+one.
+
+Every request that resolves to a row stamps its `last_seen`, at most once an
+hour per account. `GET ?route=people` lists every account for the owner, with
+no keys or hashes in it.
 
 Each user takes about a dozen tabs of their own, and one spreadsheet can only
 hold so many, so the tab limit of the book is the ceiling on how many people it
