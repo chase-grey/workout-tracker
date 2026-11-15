@@ -171,7 +171,7 @@ export type Settings = {
   coachEnabled?: boolean
   /**
    * Which service the coach talks to (see lib/aiProvider). Unset means
-   * OpenAI, as it always was. Device-local with the key.
+   * Anthropic, unless an OpenAI key was saved before that default. Device-local with the key.
    */
   aiProvider?: ProviderId
   /** API root for the `custom` provider; ignored for the presets. */

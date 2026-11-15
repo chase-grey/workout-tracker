@@ -31,15 +31,6 @@ export type Provider = {
 
 export const PROVIDERS: readonly Provider[] = [
   {
-    id: 'openai',
-    label: 'openai',
-    wire: 'openai',
-    baseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4o-mini',
-    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-5-mini', 'gpt-5'],
-    keyHint: 'sk-…',
-  },
-  {
     id: 'anthropic',
     label: 'anthropic',
     wire: 'anthropic',
@@ -47,6 +38,15 @@ export const PROVIDERS: readonly Provider[] = [
     defaultModel: 'claude-opus-5-5',
     models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
     keyHint: 'sk-ant-…',
+  },
+  {
+    id: 'openai',
+    label: 'openai',
+    wire: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o-mini',
+    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-5-mini', 'gpt-5'],
+    keyHint: 'sk-…',
   },
   {
     id: 'openrouter',
@@ -76,13 +76,23 @@ export const PROVIDERS: readonly Provider[] = [
 /** The part of Settings this module reads. */
 export type ProviderSettings = {
   aiProvider?: string
+  openAiKey?: string
   aiBaseUrl?: string
   openAiModel?: string
 }
 
-/** The provider a settings value names, or OpenAI for anything unset or unknown. */
-export function providerOf(id: string | undefined): Provider {
-  return PROVIDERS.find((p) => p.id === id) ?? PROVIDERS[0]
+/**
+ * The provider a settings value names. Unset or unknown means Anthropic —
+ * except where an OpenAI key is already saved from before the default moved
+ * (a plain `sk-` key with no provider ever picked), which keeps talking to
+ * OpenAI rather than sending that key somewhere it was never for.
+ */
+export function providerOf(id: string | undefined, key?: string): Provider {
+  const named = PROVIDERS.find((p) => p.id === id)
+  if (named) return named
+  const k = key?.trim() ?? ''
+  if (k.startsWith('sk-') && !k.startsWith('sk-ant-')) return PROVIDERS.find((p) => p.id === 'openai')!
+  return PROVIDERS[0]
 }
 
 /** `url` without trailing slashes, so a path can be joined onto it. */
@@ -96,7 +106,7 @@ export function trimBaseUrl(url: string): string {
  * should refuse to send to rather than fetch from.
  */
 export function baseUrlFor(s: ProviderSettings): string {
-  const p = providerOf(s.aiProvider)
+  const p = providerOf(s.aiProvider, s.openAiKey)
   return p.baseUrl ?? trimBaseUrl(s.aiBaseUrl ?? '')
 }
 
@@ -108,5 +118,5 @@ export function chatCompletionsUrl(baseUrl: string): string {
 /** The model to ask for: the typed one, else the provider's default. */
 export function modelFor(s: ProviderSettings): string {
   const typed = s.openAiModel?.trim()
-  return typed || providerOf(s.aiProvider).defaultModel
+  return typed || providerOf(s.aiProvider, s.openAiKey).defaultModel
 }

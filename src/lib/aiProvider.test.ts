@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { baseUrlFor, chatCompletionsUrl, modelFor, providerOf, trimBaseUrl } from './aiProvider'
 
 describe('providerOf', () => {
-  it('is openai for anything unset or unknown, as the coach always was', () => {
-    expect(providerOf(undefined).id).toBe('openai')
-    expect(providerOf('gemini').id).toBe('openai')
-    expect(providerOf('anthropic').id).toBe('anthropic')
+  it('is anthropic for anything unset or unknown', () => {
+    expect(providerOf(undefined).id).toBe('anthropic')
+    expect(providerOf('gemini').id).toBe('anthropic')
+    expect(providerOf('openai').id).toBe('openai')
+  })
+
+  it('keeps an unpicked device on openai when it already holds an openai key', () => {
+    expect(providerOf(undefined, 'sk-proj-abc').id).toBe('openai')
+    expect(providerOf(undefined, 'sk-ant-abc').id).toBe('anthropic')
+    expect(providerOf(undefined, '').id).toBe('anthropic')
+    expect(providerOf('anthropic', 'sk-proj-abc').id).toBe('anthropic')
   })
 })
 
@@ -45,6 +52,7 @@ describe('modelFor', () => {
       'claude-sonnet-5-5',
     )
     expect(modelFor({ aiProvider: 'anthropic', openAiModel: '' })).toBe('claude-opus-5-5')
-    expect(modelFor({})).toBe('gpt-4o-mini')
+    expect(modelFor({})).toBe('claude-opus-5-5')
+    expect(modelFor({ openAiKey: 'sk-proj-abc' })).toBe('gpt-4o-mini')
   })
 })

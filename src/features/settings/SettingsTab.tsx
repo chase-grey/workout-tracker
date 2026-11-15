@@ -151,7 +151,7 @@ export function SettingsTab({
   const [baseUrlDraft, setBaseUrlDraft] = useState(settings.aiBaseUrl ?? '')
   const [modelDraft, setModelDraft] = useState(settings.openAiModel ?? '')
   const [keySaved, setKeySaved] = useState(false)
-  const provider = providerOf(settings.aiProvider)
+  const provider = providerOf(settings.aiProvider, settings.openAiKey)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
