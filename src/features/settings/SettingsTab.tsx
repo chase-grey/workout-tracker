@@ -21,8 +21,8 @@ import { PlanEditor } from './PlanEditor'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { stashResumeTab } from '../../lib/resumeTab'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
-import { ACCENTS, MODES, palette } from '../../lib/theme'
-import { setTheme, useTheme } from '../../lib/themeStore'
+import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
+import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
 import { PROVIDERS, providerOf, trimBaseUrl } from '../../lib/aiProvider'
 
 const FIELD =
@@ -49,6 +49,7 @@ const ISSUE_BADGE: Record<IssueProgress, string> = {
  */
 function ThemePicker() {
   const { theme } = useTheme()
+  const pref = useThemePref()
   return (
     <section className="flex flex-col gap-2">
       <label className="text-sm font-medium text-neutral-300">theme</label>
@@ -56,7 +57,7 @@ function ThemePicker() {
         {ACCENTS.map((a) => (
           <button
             key={a}
-            onClick={() => setTheme({ ...theme, accent: a })}
+            onClick={() => setTheme({ ...pref, accent: a })}
             aria-label={a}
             aria-pressed={theme.accent === a}
             className={`h-11 w-11 rounded-full ring-offset-2 ring-offset-bg ${
@@ -67,12 +68,13 @@ function ThemePicker() {
         ))}
       </div>
       <div className="flex gap-1 rounded-xl bg-surface p-1">
-        {MODES.map((m) => (
+        {MODE_PREFS.map((m) => (
           <button
             key={m}
-            onClick={() => setTheme({ ...theme, mode: m })}
+            onClick={() => setTheme({ ...pref, mode: m })}
+            aria-pressed={pref.mode === m}
             className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
-              theme.mode === m ? 'bg-accent text-on-accent' : 'text-neutral-400'
+              pref.mode === m ? 'bg-accent text-on-accent' : 'text-neutral-400'
             }`}
           >
             {m}

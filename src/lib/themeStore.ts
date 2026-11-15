@@ -1,9 +1,20 @@
 import { useSyncExternalStore } from 'react'
-import { palette, parseTheme, SHADES, type Palette, type Theme } from './theme'
+import {
+  palette,
+  parseThemePref,
+  resolveTheme,
+  SHADES,
+  type Palette,
+  type ThemePref,
+} from './theme'
 
 /**
  * The chosen theme, held per device: a phone in a dim gym and a desktop at noon
  * can want different grounds, so it isn't synced with the rest of settings.
+ *
+ * What's saved is a preference, and its ground defaults to `system`: until you
+ * pick dark or light, the app wears whatever the phone is wearing, and turns
+ * over with it when the phone switches at sunset.
  *
  * Applying it writes the accent's scale onto <html> as `--accent-<shade>` (which
  * index.css maps onto the Tailwind accent tokens) and `data-mode`, so everything
@@ -13,15 +24,23 @@ import { palette, parseTheme, SHADES, type Palette, type Theme } from './theme'
 
 const KEY = 'wt:theme'
 
-function load(): Theme {
+function load(): ThemePref {
   try {
-    return parseTheme(JSON.parse(localStorage.getItem(KEY) ?? 'null'))
+    return parseThemePref(JSON.parse(localStorage.getItem(KEY) ?? 'null'))
   } catch {
-    return parseTheme(null)
+    return parseThemePref(null)
   }
 }
 
-let current: Palette = palette(load())
+const systemDark =
+  typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null
+
+const isSystemDark = () => systemDark?.matches ?? true
+
+let pref: ThemePref = load()
+let current: Palette = palette(resolveTheme(pref, isSystemDark()))
 const listeners = new Set<() => void>()
 
 function apply(p: Palette) {
@@ -33,24 +52,36 @@ function apply(p: Palette) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', p.ground.bg)
 }
 
-/** Paint the saved theme before the first render. */
+function refresh() {
+  current = palette(resolveTheme(pref, isSystemDark()))
+  apply(current)
+  for (const l of listeners) l()
+}
+
+/** Paint the saved theme before the first render, and follow the system after. */
 export function initTheme() {
   apply(current)
+  systemDark?.addEventListener('change', () => {
+    if (pref.mode === 'system') refresh()
+  })
 }
 
 export function currentPalette(): Palette {
   return current
 }
 
-export function setTheme(theme: Theme) {
-  current = palette(theme)
+export function currentThemePref(): ThemePref {
+  return pref
+}
+
+export function setTheme(next: ThemePref) {
+  pref = next
   try {
-    localStorage.setItem(KEY, JSON.stringify(theme))
+    localStorage.setItem(KEY, JSON.stringify(next))
   } catch {
     // Private mode / full storage: the theme still applies for this visit.
   }
-  apply(current)
-  for (const l of listeners) l()
+  refresh()
 }
 
 export function onThemeChange(listener: () => void): () => void {
@@ -61,4 +92,9 @@ export function onThemeChange(listener: () => void): () => void {
 /** The current palette, re-rendering the caller when it changes. */
 export function useTheme(): Palette {
   return useSyncExternalStore(onThemeChange, currentPalette)
+}
+
+/** The saved preference — what the picker shows pressed. */
+export function useThemePref(): ThemePref {
+  return useSyncExternalStore(onThemeChange, currentThemePref)
 }

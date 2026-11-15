@@ -29,6 +29,28 @@ export const DEFAULT_THEME: Theme = { accent: 'green', mode: 'dark' }
 export const ACCENTS: Accent[] = ['green', 'purple', 'blue', 'rose']
 export const MODES: Mode[] = ['dark', 'light']
 
+/**
+ * What the picker saves: a ground, or `system` to wear whichever one the phone
+ * is wearing. Unset means `system` — a light phone opens a light app.
+ */
+export type ModePref = Mode | 'system'
+export const MODE_PREFS: ModePref[] = ['system', 'dark', 'light']
+
+export interface ThemePref {
+  accent: Accent
+  mode: ModePref
+}
+
+export const DEFAULT_PREF: ThemePref = { accent: 'green', mode: 'system' }
+
+/** The theme a preference comes to, given whether the system is dark. */
+export function resolveTheme(pref: ThemePref, systemDark: boolean): Theme {
+  return {
+    accent: pref.accent,
+    mode: pref.mode === 'system' ? (systemDark ? 'dark' : 'light') : pref.mode,
+  }
+}
+
 export type Shade = 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900
 export const SHADES: Shade[] = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
 
@@ -156,12 +178,12 @@ export function palette(theme: Theme): Palette {
   }
 }
 
-/** Whatever was saved, or the default for any part of it that isn't a theme. */
-export function parseTheme(raw: unknown): Theme {
+/** Whatever was saved, or the default for any part of it that isn't a preference. */
+export function parseThemePref(raw: unknown): ThemePref {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return {
-    accent: ACCENTS.includes(o.accent as Accent) ? (o.accent as Accent) : DEFAULT_THEME.accent,
-    mode: MODES.includes(o.mode as Mode) ? (o.mode as Mode) : DEFAULT_THEME.mode,
+    accent: ACCENTS.includes(o.accent as Accent) ? (o.accent as Accent) : DEFAULT_PREF.accent,
+    mode: MODE_PREFS.includes(o.mode as ModePref) ? (o.mode as ModePref) : DEFAULT_PREF.mode,
   }
 }
 

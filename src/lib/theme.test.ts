@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_THEME, palette, parseTheme, rotateHue, SHADES } from './theme'
+import { DEFAULT_PREF, DEFAULT_THEME, palette, parseThemePref, resolveTheme, rotateHue, SHADES } from './theme'
 
-describe('parseTheme', () => {
-  it('keeps a saved theme', () => {
-    expect(parseTheme({ accent: 'purple', mode: 'light' })).toEqual({ accent: 'purple', mode: 'light' })
+describe('parseThemePref', () => {
+  it('keeps a saved preference', () => {
+    expect(parseThemePref({ accent: 'purple', mode: 'light' })).toEqual({ accent: 'purple', mode: 'light' })
+    expect(parseThemePref({ accent: 'blue', mode: 'system' })).toEqual({ accent: 'blue', mode: 'system' })
   })
 
-  it('falls back part by part on anything it does not know', () => {
-    expect(parseTheme(null)).toEqual(DEFAULT_THEME)
-    expect(parseTheme({ accent: 'chartreuse', mode: 'light' })).toEqual({ accent: 'green', mode: 'light' })
-    expect(parseTheme({ accent: 'rose', mode: 'dim' })).toEqual({ accent: 'rose', mode: 'dark' })
+  it('falls back part by part on anything it does not know, to the system ground', () => {
+    expect(parseThemePref(null)).toEqual(DEFAULT_PREF)
+    expect(parseThemePref({ accent: 'chartreuse', mode: 'light' })).toEqual({ accent: 'green', mode: 'light' })
+    expect(parseThemePref({ accent: 'rose', mode: 'dim' })).toEqual({ accent: 'rose', mode: 'system' })
+    expect(parseThemePref({ accent: 'rose' })).toEqual({ accent: 'rose', mode: 'system' })
+  })
+})
+
+describe('resolveTheme', () => {
+  it('follows the system only when asked to', () => {
+    expect(resolveTheme({ accent: 'green', mode: 'system' }, true).mode).toBe('dark')
+    expect(resolveTheme({ accent: 'green', mode: 'system' }, false).mode).toBe('light')
+    expect(resolveTheme({ accent: 'green', mode: 'dark' }, false).mode).toBe('dark')
+    expect(resolveTheme({ accent: 'rose', mode: 'light' }, true)).toEqual({ accent: 'rose', mode: 'light' })
   })
 })
 

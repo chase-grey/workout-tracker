@@ -19,11 +19,14 @@
     <link rel="apple-touch-icon" href="/icon-180.png" />
     <title>workout tracker</title>
     <!-- The ground before the first paint, so a light theme doesn't open on a
-         black flash. Everything else in the theme waits for src/lib/themeStore. -->
+         black flash. An unpicked ground follows the system, as themeStore does.
+         Everything else in the theme waits for src/lib/themeStore. -->
     <script>
       try {
-        if (JSON.parse(localStorage.getItem('wt:theme') || '{}').mode === 'light')
-          document.documentElement.dataset.mode = 'light'
+        var mode = JSON.parse(localStorage.getItem('wt:theme') || '{}').mode
+        if (mode !== 'dark' && mode !== 'light')
+          mode = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        if (mode === 'light') document.documentElement.dataset.mode = 'light'
       } catch (e) {}
     </script>
   </head>
