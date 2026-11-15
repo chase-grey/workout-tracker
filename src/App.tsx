@@ -7,6 +7,7 @@ import {
 } from './store/DataContext'
 import { CelebrationProvider, useCelebrate } from './store/CelebrationContext'
 import { BottomNav, type Tab } from './components/BottomNav'
+import { InstallBanner } from './components/InstallBanner'
 import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { StretchFinishOverlay } from './components/StretchFinishOverlay'
@@ -300,6 +301,7 @@ function AppShell() {
           {controls.session ? 'back to your workout' : storage.loadStretch()?.officeAbs ? 'back to core' : 'back to your stretch'}
         </button>
       )}
+      {!immersive && !typingToCoach && <InstallBanner />}
       {!immersive && !typingToCoach && (
         <BottomNav
           active={tab}
