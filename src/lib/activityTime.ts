@@ -51,3 +51,27 @@ export function monthlyActivity(durations: SessionDuration[]): ActivityMonth[] {
   }
   return [...byMonth.values()].sort((a, b) => (a.month < b.month ? -1 : 1))
 }
+
+/**
+ * Where a month's totals land if the rest of it goes like the part already
+ * lived. Only the month `today` falls in is still being written, so any other
+ * month — or a current month on its last day — returns null: there is nothing
+ * left to project. The elapsed share counts today as a whole day, so a session
+ * logged this morning isn't stretched across a day that has barely started.
+ */
+export function projectMonth(m: ActivityMonth, today: Date): ActivityMonth | null {
+  const y = today.getFullYear()
+  const mo = today.getMonth()
+  const key = `${y}-${String(mo + 1).padStart(2, '0')}`
+  if (m.month !== key) return null
+  const daysInMonth = new Date(y, mo + 1, 0).getDate()
+  const elapsed = today.getDate()
+  if (elapsed >= daysInMonth) return null
+  const scale = daysInMonth / elapsed
+  return {
+    month: m.month,
+    workoutSec: m.workoutSec * scale,
+    stretchSec: m.stretchSec * scale,
+    restSec: m.restSec * scale,
+  }
+}

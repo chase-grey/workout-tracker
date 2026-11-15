@@ -13,7 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import { useData } from '../../store/DataContext'
-import { activityTotals, monthlyActivity, secToMin } from '../../lib/activityTime'
+import { activityTotals, monthlyActivity, projectMonth, secToMin } from '../../lib/activityTime'
 import { CHART_SURFACE, CHART_SURFACE_2, LINE_GOAL, LINE_PRIMARY, LINE_SECONDARY, niceScale } from '../../lib/chart'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { AxisBreak } from '../../components/AxisBreak'
@@ -39,6 +39,18 @@ function fmtHm(sec: number): string {
 }
 
 const axisTick = { fill: '#737373', fontSize: 11 }
+type MonthRow = {
+  month: string
+  workout: number
+  stretch: number
+  rest: number
+  workoutPace?: number
+  stretchPace?: number
+  restPace?: number
+}
+
+const PACE_KEY = { workout: 'workoutPace', stretch: 'stretchPace', rest: 'restPace' } as const
+
 const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }
 
 export function TimeSpent() {
@@ -60,19 +72,38 @@ export function TimeSpent() {
     [totals],
   )
 
-  const monthly = useMemo(
-    () =>
-      monthlyActivity(durations).map((m) => ({
-        month: monthLabel(m.month),
-        workout: secToMin(m.workoutSec),
-        stretch: secToMin(m.stretchSec),
-        rest: secToMin(m.restSec),
-      })),
-    [durations],
-  )
+  // Each month's minutes, plus — when this month is still under way — where it
+  // is on pace to finish. The pace keys sit on the last finished month too (at
+  // its actual value) so a dashed segment runs from there to the projection.
+  const monthly = useMemo(() => {
+    const months = monthlyActivity(durations)
+    const rows: MonthRow[] = months.map((m) => ({
+      month: monthLabel(m.month),
+      workout: secToMin(m.workoutSec),
+      stretch: secToMin(m.stretchSec),
+      rest: secToMin(m.restSec),
+    }))
+    const last = months[months.length - 1]
+    const proj = last ? projectMonth(last, new Date()) : null
+    if (proj && rows.length > 1) {
+      const cur = rows[rows.length - 1]
+      const prev = rows[rows.length - 2]
+      cur.workoutPace = secToMin(proj.workoutSec)
+      cur.stretchPace = secToMin(proj.stretchSec)
+      cur.restPace = secToMin(proj.restSec)
+      prev.workoutPace = prev.workout
+      prev.stretchPace = prev.stretch
+      prev.restPace = prev.rest
+    }
+    return rows
+  }, [durations])
+  const paceRow = monthly[monthly.length - 1]?.workoutPace != null ? monthly[monthly.length - 1] : null
 
   const minutesScale = useMemo(
-    () => niceScale(monthly.flatMap((m) => [m.workout, m.stretch, m.rest])),
+    () =>
+      niceScale(
+        monthly.flatMap((m) => [m.workout, m.stretch, m.rest, m.workoutPace, m.stretchPace, m.restPace].filter((v): v is number => v != null)),
+      ),
     [monthly],
   )
 
@@ -154,12 +185,41 @@ export function TimeSpent() {
                     {...monthlyReadout.tooltip}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: 'var(--color-neutral-400)' }}
-                    formatter={(v, n) => [`${v} min`, n]}
+                    formatter={(v, n, item) => {
+                      const row = item?.payload as MonthRow | undefined
+                      const key = item?.dataKey as keyof typeof PACE_KEY | undefined
+                      const pace = row === paceRow && key && key in PACE_KEY ? row?.[PACE_KEY[key]] : undefined
+                      return [pace != null ? `${v} min · on pace for ${pace}` : `${v} min`, n]
+                    }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Line type="monotone" dataKey="workout" name="working out" stroke={colors().workout} strokeWidth={2} dot={{ r: 2 }} />
                   <Line type="monotone" dataKey="stretch" name="stretch + core" stroke={colors().stretch} strokeWidth={2} dot={{ r: 2 }} />
                   <Line type="monotone" dataKey="rest" name="resting" stroke={colors().rest} strokeWidth={2} dot={{ r: 2 }} />
+                  {paceRow &&
+                    (['workout', 'stretch', 'rest'] as const).map((k) => (
+                      <Line
+                        key={k}
+                        type="linear"
+                        dataKey={PACE_KEY[k]}
+                        stroke={colors()[k]}
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        strokeOpacity={0.7}
+                        dot={(p: { cx?: number; cy?: number; index?: number }) =>
+                          p.index === monthly.length - 1 && p.cx != null && p.cy != null ? (
+                            <circle key={`${k}-pace`} cx={p.cx} cy={p.cy} r={3} fill={CHART_SURFACE} stroke={colors()[k]} strokeWidth={1.5} />
+                          ) : (
+                            <g key={`${k}-pace-${p.index}`} />
+                          )
+                        }
+                        activeDot={false}
+                        legendType="none"
+                        tooltipType="none"
+                        connectNulls={false}
+                        isAnimationActive={false}
+                      />
+                    ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>

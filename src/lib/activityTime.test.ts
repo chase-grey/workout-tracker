@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activityTotals, monthlyActivity, secToMin } from './activityTime'
+import { activityTotals, monthlyActivity, projectMonth, secToMin } from './activityTime'
 import type { SessionDuration } from './estimate'
 
 const w = (date: string, totalSec: number, restSec: number, dayType: 'push' | 'pull' = 'push'): SessionDuration => ({
@@ -50,5 +50,27 @@ describe('monthlyActivity', () => {
     ])
     expect(months.map((m) => m.month)).toEqual(['2026-06', '2026-07'])
     expect(months[1]).toEqual({ month: '2026-07', workoutSec: 3000, stretchSec: 1000, restSec: 800 })
+  })
+})
+
+describe('projectMonth', () => {
+  const nov = { month: '2026-11', workoutSec: 3000, stretchSec: 1500, restSec: 600 }
+
+  it('scales the current month by the share of it already lived', () => {
+    // 15 of 30 days gone: twice what's logged
+    expect(projectMonth(nov, new Date(2026, 10, 15))).toEqual({
+      month: '2026-11',
+      workoutSec: 6000,
+      stretchSec: 3000,
+      restSec: 1200,
+    })
+  })
+
+  it('leaves any other month alone', () => {
+    expect(projectMonth(nov, new Date(2026, 11, 3))).toBeNull()
+  })
+
+  it('has nothing to project on the last day', () => {
+    expect(projectMonth(nov, new Date(2026, 10, 30))).toBeNull()
   })
 })
