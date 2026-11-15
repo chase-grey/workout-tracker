@@ -1101,3 +1101,19 @@ input[type='number'] {
     animation: none;
   }
 }
+
+/* The update check's answer rises into place rather than blinking on. */
+.update-toast {
+  animation: update-toast-in 180ms ease-out;
+}
+@keyframes update-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-toast {
+    animation: none;
+  }
+}

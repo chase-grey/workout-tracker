@@ -11,6 +11,8 @@ import { InstallBanner } from './components/InstallBanner'
 import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { StretchFinishOverlay } from './components/StretchFinishOverlay'
+import { UpdateToast } from './components/UpdateToast'
+import { useAppUpdate } from './lib/version'
 import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
 import { ProgressTab } from './features/progress/ProgressTab'
@@ -126,6 +128,9 @@ function AppShell() {
   }, [saveError, tab])
   // The issue whose question the coach tab is currently taking an answer for.
   const [answering, setAnswering] = useState<number | null>(null)
+  // A newer build is ready: the dot stays until you restart onto it, the way an
+  // app store badge does — it's a thing to do, not a thing to have seen.
+  const { ready: updateReady } = useAppUpdate()
   const keyboardOpen = useKeyboardOpen()
 
   // Scroll back to the top when switching tabs.
@@ -321,9 +326,12 @@ function AppShell() {
           active={tab}
           onChange={setTab}
           showChat={showChat}
-          alerts={awaiting.length > 0 || (saveError && !saveErrorSeen) ? ['settings'] : []}
+          alerts={
+            awaiting.length > 0 || (saveError && !saveErrorSeen) || updateReady ? ['settings'] : []
+          }
         />
       )}
+      <UpdateToast />
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
       {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}
       {stretchSummary && (

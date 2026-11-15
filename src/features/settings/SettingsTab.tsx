@@ -18,8 +18,7 @@ import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
 import { ownerFlavour } from '../../lib/profile'
 import { PlanEditor } from './PlanEditor'
-import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
-import { stashResumeTab } from '../../lib/resumeTab'
+import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate, useAppUpdate } from '../../lib/version'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
 import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
@@ -53,7 +52,7 @@ function ThemePicker() {
   return (
     <section className="flex flex-col gap-2">
       <label className="text-sm font-medium text-neutral-300">theme</label>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         {ACCENTS.map((a) => (
           <button
             key={a}
@@ -157,7 +156,7 @@ export function SettingsTab({
   const provider = providerOf(settings.aiProvider, settings.openAiKey)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
-  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const update = useAppUpdate()
   // Closed issues fold away by default — they're history, and the live ones are
   // what you came here for. Opening them lasts only as long as the visit.
   const [showClosed, setShowClosed] = useState(false)
@@ -214,20 +213,25 @@ export function SettingsTab({
           version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
           {new Date(APP_BUILD_TIME).toLocaleString()}
         </p>
-        {/* Waiting for the new worker to take over takes a moment, and an
+        {/* One button, three states, like any app's updater: a newer build
+            already in hand is a restart away and wears the accent (and the tab's
+            dot); otherwise it checks, and only reloads if there is something to
+            reload onto. Waiting on the new worker takes a moment, and an
             unchanged button invites the second tap this is meant to remove. */}
         <button
-          onClick={() => {
-            setCheckingUpdate(true)
-            // Come back here rather than to Today — you tapped this to see the
-            // build stamp change.
-            stashResumeTab('settings')
-            void checkForUpdate()
-          }}
-          disabled={checkingUpdate}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2 disabled:text-neutral-500"
+          onClick={() => void checkForUpdate()}
+          disabled={update.checking}
+          className={`relative min-h-[44px] rounded-xl font-medium disabled:text-neutral-500 ${
+            update.ready
+              ? 'bg-accent text-on-accent active:opacity-80'
+              : 'bg-surface active:bg-surface-2'
+          }`}
         >
-          {checkingUpdate ? 'checking…' : 'check for updates & reload'}
+          {update.checking
+            ? 'checking…'
+            : update.ready
+              ? 'update ready · restart'
+              : 'check for updates'}
         </button>
       </section>
 
