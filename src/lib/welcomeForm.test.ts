@@ -56,6 +56,7 @@ describe('a blank form', () => {
       'you',
       'track',
       'about',
+      'flexibility',
       'goals',
       'schedule',
       'theme',
@@ -363,5 +364,34 @@ describe('the cardio goal section', () => {
 
   it('stays away without the cardio pillar', () => {
     expect(visibleSections(filled({ pillars: ['strength'] }), { account: true })).not.toContain('cardio')
+  })
+})
+
+describe('the flexibility section', () => {
+  const f = filled({ pillars: ['strength', 'flexibility'] })
+
+  it('blocks the form until skills, or sessions only, is picked', () => {
+    expect(invalidSections(f, { account: false }, NOW)).toEqual(['flexibility'])
+    expect(invalidSections({ ...f, flexSkills: ['pancake'] }, { account: false }, NOW)).toEqual([])
+    expect(invalidSections({ ...f, flexSkills: [] }, { account: false }, NOW)).toEqual([])
+  })
+
+  it('stays away, and out of the profile, without the flexibility pillar', () => {
+    const off = filled({ flexSkills: ['pancake'] })
+    expect(visibleSections(off, { account: false })).not.toContain('flexibility')
+    expect(buildProfile(off, NOW).flexSkills).toBeUndefined()
+  })
+
+  it('writes the answer to the profile, sessions only included', () => {
+    expect(buildProfile({ ...f, flexSkills: ['pancake', 'bridge'] }, NOW).flexSkills).toEqual(['pancake', 'bridge'])
+    expect(buildProfile({ ...f, flexSkills: [] }, NOW).flexSkills).toEqual([])
+  })
+
+  it('opens an update on what the profile trains, the original two for one from before the question', () => {
+    const before = buildProfile(f, NOW)
+    expect(formFromProfile(before, { today: '2026-11-18' }).flexSkills).toEqual(['side_split', 'head_to_toe'])
+    const after = formFromProfile({ ...before, flexSkills: ['bridge'] }, { today: '2026-11-18' })
+    expect(after.flexSkills).toEqual(['bridge'])
+    expect(mergeSetup(before, buildProfile({ ...after, flexSkills: [] }, NOW), NOW).flexSkills).toEqual([])
   })
 })

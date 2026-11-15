@@ -32,6 +32,8 @@ import { starterDays } from '../config/planTemplates'
 import { PROVIDERS, type ProviderId } from './aiProvider'
 import { DEFAULT_MINUTES } from './planBuilder'
 import type { Plan } from '../config/plan'
+import type { FlexRoutineKey } from '../config/flexRoutines'
+import { flexSkillsOf } from './flexSkills'
 import { PINNABLE, toggleWeekday, type CalendarPins, type PinnablePillar } from './weekCalendar'
 
 /** The form's sections, top to bottom. */
@@ -40,6 +42,7 @@ export type SectionId =
   | 'track'
   | 'about'
   | 'strength'
+  | 'flexibility'
   | 'cardio'
   | 'diet'
   | 'goals'
@@ -53,6 +56,7 @@ export const SECTION_ORDER: SectionId[] = [
   'track',
   'about',
   'strength',
+  'flexibility',
   'cardio',
   'diet',
   'goals',
@@ -79,6 +83,8 @@ export type FormState = {
   minutes: WorkoutMinutes
   /** The muscles to grow, in the order picked. */
   focus: Muscle[]
+  /** Null until answered: a skill or two, or [] for sessions only (see lib/flexSkills). */
+  flexSkills: FlexRoutineKey[] | null
   direction: DietDirection
   activity: Activity
   targetWeight: string
@@ -114,6 +120,7 @@ export function emptyForm(): FormState {
     // What the welcome flow has always opened on; a saved profile without an answer reads as DEFAULT_MINUTES.
     minutes: 45,
     focus: [],
+    flexSkills: null,
     direction: 'lose',
     activity: 'moderate',
     targetWeight: '',
@@ -172,6 +179,8 @@ export function formFromProfile(
     equipment: profile.strength?.equipment ?? f.equipment,
     minutes: profile.strength?.minutes ?? DEFAULT_MINUTES,
     focus: profile.strength?.focus ? [...profile.strength.focus] : [],
+    // A profile already stretching has an answer, even one from before the question.
+    flexSkills: profile.pillars.includes('flexibility') ? flexSkillsOf(profile) : null,
     direction: profile.dietDirection ?? f.direction,
     activity: profile.activity ?? f.activity,
     targetWeight: profile.targetWeightLbs ? trimNum(profile.targetWeightLbs) : '',
@@ -284,6 +293,7 @@ export function toggleScheduleDay(f: FormState, pillar: PinnablePillar, weekday:
 export function visibleSections(f: FormState, opts: { account: boolean; coach?: boolean }): SectionId[] {
   return SECTION_ORDER.filter((s) => {
     if (s === 'strength') return f.pillars.includes('strength')
+    if (s === 'flexibility') return f.pillars.includes('flexibility')
     if (s === 'cardio') return f.pillars.includes('cardio')
     if (s === 'diet') return f.pillars.includes('diet')
     if (s === 'goals') return f.pillars.length > 0
@@ -322,6 +332,7 @@ export function invalidSections(
     track: f.pillars.length > 0,
     about: aboutOk,
     strength: true,
+    flexibility: f.flexSkills !== null,
     cardio: true,
     diet: dietOk,
     goals: true,
@@ -357,6 +368,7 @@ export function buildProfile(f: FormState, now: Date = new Date()): Profile {
     scale: f.scale ?? true,
     bodyFatReading: f.bodyFat ?? true,
     ...(strengthOn ? { strength: strengthOf(f) } : {}),
+    ...(f.pillars.includes('flexibility') && f.flexSkills !== null ? { flexSkills: f.flexSkills } : {}),
     weeklyGoals: [{ from: weekStartISO(toISODate(now)), goals: d.goals }],
     calorieGoals: dietOn && d.calorieNum !== null ? [{ from: toISODate(now), goal: d.calorieNum }] : [],
     createdAt: now.toISOString(),
@@ -402,6 +414,7 @@ export function mergeSetup(existing: Profile, fresh: Profile, now: Date = new Da
     ...(fresh.sex ? { sex: fresh.sex } : {}),
     ...(fresh.birthYear ? { birthYear: fresh.birthYear } : {}),
     ...(fresh.strength ? { strength: mergeStrength(existing.strength, fresh.strength) } : {}),
+    ...(fresh.flexSkills ? { flexSkills: fresh.flexSkills } : {}),
     ...(dietOn ? { activity: fresh.activity, dietDirection: fresh.dietDirection } : {}),
   }
   if (dietOn) {

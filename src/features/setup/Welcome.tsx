@@ -57,6 +57,7 @@ import {
   type SectionId,
 } from '../../lib/welcomeForm'
 import { PINNABLE, PIN_LABEL, WEEKDAY_SHORT, type CalendarPins } from '../../lib/weekCalendar'
+import { FlexSkillPicker } from '../../components/FlexSkillPicker'
 
 /**
  * Every device belongs to an account: a new one made here, or one signed back
@@ -208,6 +209,7 @@ const SECTION_TITLES: Record<SectionId, string> = {
   track: 'what to track',
   about: 'about you',
   strength: 'strength plan',
+  flexibility: 'flexibility',
   cardio: 'cardio goal',
   diet: 'diet',
   goals: 'weekly goals',
@@ -745,6 +747,10 @@ function SetupForm({
                   />
                 )}
               </>
+            )}
+
+            {id === 'flexibility' && (
+              <FlexSkillPicker value={f.flexSkills} onChange={(v) => set({ flexSkills: v })} />
             )}
 
             {id === 'cardio' && <CardioGoalForm onSaved={() => {}} daysPerWeek={d.goals.cardio || undefined} />}

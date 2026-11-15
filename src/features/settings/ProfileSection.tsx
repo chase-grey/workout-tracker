@@ -21,6 +21,9 @@ import { MACROS, type Macro } from '../../lib/calories'
 import { MACRO_LABELS, trackedMacros } from '../../lib/macros'
 import { recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
+import { FlexSkillPicker } from '../../components/FlexSkillPicker'
+import type { FlexRoutineKey } from '../../config/flexRoutines'
+import { flexSkillsOf, sameSkills } from '../../lib/flexSkills'
 import { PressButton, SETTINGS_BUTTON, SETTINGS_FIELD, SETTINGS_LABEL } from './PressButton'
 
 const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[] = [
@@ -64,6 +67,7 @@ export function TrackingSection() {
   const [scaleDraft, setScale] = useState<boolean | null>(null)
   const [bodyFatDraft, setBodyFat] = useState<boolean | null>(null)
   const [editing, setEditing] = useState(false)
+  const [skillsDraft, setSkills] = useState<FlexRoutineKey[] | null>(null)
 
   const pillars = pillarsDraft ?? profile.pillars
   const goals = goalsDraft ?? goalsInForce(profile)
@@ -75,6 +79,8 @@ export function TrackingSection() {
   const direction = directionDraft ?? baseDirection
   const scale = scaleDraft ?? weighsIn(profile)
   const bodyFat = bodyFatDraft ?? readsBodyFat(profile)
+  const baseSkills = flexSkillsOf(profile)
+  const skills = skillsDraft ?? baseSkills
   const on = (p: Pillar) => pillars.includes(p)
 
   const calories = Number(caloriesText)
@@ -95,6 +101,7 @@ export function TrackingSection() {
   const macroGoalsChanged = MACROS.some(macroGoalChanged)
   const directionChanged = on('diet') && !ownerFlavour(profile) && direction !== baseDirection
   const measuresChanged = scale !== weighsIn(profile) || bodyFat !== readsBodyFat(profile)
+  const skillsChanged = on('flexibility') && !sameSkills(skills, baseSkills)
   const changed =
     pillarsChanged ||
     goalsChanged ||
@@ -102,7 +109,8 @@ export function TrackingSection() {
     macrosChanged ||
     macroGoalsChanged ||
     directionChanged ||
-    measuresChanged
+    measuresChanged ||
+    skillsChanged
 
   const togglePillar = (p: Pillar) => {
     if (!on(p)) {
@@ -131,6 +139,7 @@ export function TrackingSection() {
       next = num === null ? rest : { ...rest, [MACRO_GOAL_KEYS[m]]: num }
     }
     if (on('diet') && !ownerFlavour(profile)) next = { ...next, dietDirection: direction }
+    if (skillsChanged) next = { ...next, flexSkills: skills }
     void updateSettings({ ...settings, profile: next })
     close()
   }
@@ -144,6 +153,7 @@ export function TrackingSection() {
     setDirection(null)
     setScale(null)
     setBodyFat(null)
+    setSkills(null)
     setEditing(false)
   }
 
@@ -188,6 +198,8 @@ export function TrackingSection() {
           </PressButton>
         ))}
       </div>
+
+      {on('flexibility') && <FlexSkillPicker value={skills} onChange={setSkills} labelClass={SETTINGS_LABEL} />}
 
       {GOAL_ROWS.filter((r) => on(r.pillar)).map((r) => (
         <div key={r.key} className="flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3">

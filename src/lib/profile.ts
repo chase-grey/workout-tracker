@@ -14,6 +14,7 @@
 
 import type { WeeklyGoalConfig } from './weeklyStreak'
 import type { Macro } from './calories'
+import type { FlexRoutineKey } from '../config/flexRoutines'
 
 /** The four things the app can track. A profile switches each on or off. */
 export type Pillar = 'strength' | 'flexibility' | 'cardio' | 'diet'
@@ -134,6 +135,12 @@ export type Profile = {
    */
   scale?: boolean
   bodyFatReading?: boolean
+  /**
+   * The flexibility skills trained, each a stretch routine. Empty means stretch
+   * sessions are only counted, not guided; absent means the profile predates the
+   * question and keeps the original two (see lib/flexSkills).
+   */
+  flexSkills?: FlexRoutineKey[]
   /**
    * The weekly goals and the Monday each set took effect, oldest first — the
    * same shape as WEEKLY_GOAL_HISTORY, and for the same reason: a changed goal

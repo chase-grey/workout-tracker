@@ -2,15 +2,28 @@ import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from './flexPlan'
 import type { PhotoKind } from '../lib/photoSteps'
 
 /**
- * The two stretch routines, and everything that distinguishes one from the other.
+ * The stretch routines, and everything that distinguishes one from another.
  *
- * They alternate the way the push and pull days do: Today dims whichever was
- * done last, so the other reads as up next (see lib/stretchRotation). One place
- * knows what a routine *is* — its blocks, its name, and the photos it offers —
- * so adding the head-to-toe routine didn't mean teaching the session flow, the
- * photo gates and the plan editor about it separately.
+ * Each is one of the flexibility skills a profile can choose to train (see
+ * lib/flexSkills) — the six core skills of the Mobility & Flexibility Toolkit
+ * (matthewismith.com) much of this is built on. Today offers the ones chosen and
+ * dims whichever was done last (see lib/stretchRotation). One place knows what a
+ * routine *is* — its blocks, its name, and the photos it offers — so adding one
+ * doesn't mean teaching the session flow, the photo gates and the plan editor
+ * about it separately.
+ *
+ * The side split and head to toe were the owner's, and are the only two with
+ * measured photos. The other four are starter routines with no shots: plain,
+ * editable in Settings and by the coach, and no attempt at the toolkit's own
+ * programming.
  */
-export type FlexRoutineKey = 'side_split' | 'head_to_toe'
+export type FlexRoutineKey =
+  | 'side_split'
+  | 'head_to_toe'
+  | 'front_split'
+  | 'pancake'
+  | 'bridge'
+  | 'shoulders'
 
 export type FlexRoutine = {
   key: FlexRoutineKey
@@ -143,6 +156,222 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
   },
 ]
 
+/**
+ * Front split: open the hip flexor of the back leg, lengthen the hamstring of the
+ * front one, then put the two together. Every set is one side at a time, and a
+ * leg change is a kneel and re-set, so it gets the ten seconds the floss does.
+ */
+const FRONT_SPLIT_BLOCKS: FlexBlock[] = [
+  {
+    label: 'hip flexors',
+    exercises: [
+      {
+        key: 'couch_stretch',
+        name: 'couch stretch',
+        sets: '2',
+        maxSets: 2,
+        reps: 1,
+        tempo: '',
+        holdSec: 60,
+        perSide: true,
+        restSec: 30,
+        restAfterSides: true,
+        sideSwitchSec: 10,
+      },
+    ],
+  },
+  {
+    label: 'hamstrings',
+    exercises: [
+      {
+        key: 'half_split',
+        name: 'half split',
+        sets: '2',
+        maxSets: 2,
+        reps: 5,
+        tempo: '5s pushing down · 5s passive hang',
+        perSide: true,
+        restSec: 45,
+        restAfterSides: true,
+        sideSwitchSec: 10,
+      },
+    ],
+  },
+  {
+    label: 'split',
+    exercises: [
+      {
+        key: 'front_split_hold',
+        name: 'front split hold',
+        sets: '2',
+        maxSets: 2,
+        reps: 1,
+        tempo: '',
+        holdSec: 60,
+        perSide: true,
+        restSec: 45,
+        restAfterSides: true,
+        sideSwitchSec: 10,
+      },
+    ],
+  },
+]
+
+/**
+ * Pancake: the adductors first, then the hip-flexor strength that holds a folded
+ * straddle, then the fold itself. The horse squat and the pancake hang share
+ * their keys with the side split's, so their history is one history.
+ */
+const PANCAKE_BLOCKS: FlexBlock[] = [
+  {
+    label: 'adductors',
+    exercises: [
+      {
+        key: 'horse_squat',
+        name: 'horse squat',
+        sets: '3',
+        maxSets: 3,
+        reps: 8,
+        tempo: '2s down · 3s hold at bottom · 1s up',
+        restSec: 60,
+      },
+    ],
+  },
+  {
+    label: 'compression',
+    exercises: [
+      {
+        key: 'straddle_leg_lift',
+        name: 'straddle leg lifts',
+        sets: '3',
+        maxSets: 3,
+        reps: 8,
+        tempo: '2s lift · 2s lower',
+        restSec: 45,
+      },
+    ],
+  },
+  {
+    label: 'pancake',
+    exercises: [
+      {
+        key: 'pancake_hang',
+        name: 'pancake hang',
+        sets: '3',
+        maxSets: 3,
+        reps: 6,
+        tempo: '5s pushing down · 5s passive hang',
+        restSec: 60,
+      },
+    ],
+  },
+]
+
+/**
+ * Bridge: the two places a bridge is short of — the front of the hips and the
+ * overhead reach of the shoulders — and then the bridge, held.
+ */
+const BRIDGE_BLOCKS: FlexBlock[] = [
+  {
+    label: 'hip flexors',
+    exercises: [
+      {
+        key: 'kneeling_lunge',
+        name: 'kneeling lunge',
+        sets: '2',
+        maxSets: 2,
+        reps: 1,
+        tempo: '',
+        holdSec: 45,
+        perSide: true,
+        restSec: 30,
+        restAfterSides: true,
+      },
+    ],
+  },
+  {
+    label: 'shoulders',
+    exercises: [
+      {
+        key: 'puppy_pose',
+        name: 'puppy pose',
+        sets: '3',
+        maxSets: 3,
+        reps: 1,
+        tempo: '',
+        holdSec: 45,
+        restSec: 30,
+      },
+    ],
+  },
+  {
+    label: 'bridge',
+    exercises: [
+      {
+        key: 'bridge_hold',
+        name: 'bridge hold',
+        sets: '3',
+        maxSets: 3,
+        reps: 1,
+        tempo: '',
+        holdSec: 20,
+        restSec: 60,
+      },
+    ],
+  },
+]
+
+/**
+ * Shoulders: a loaded pass-through to warm the whole range, then a long hold
+ * overhead and a long hold behind. The puppy pose is the bridge's, key and all.
+ */
+const SHOULDER_BLOCKS: FlexBlock[] = [
+  {
+    label: 'pass-throughs',
+    exercises: [
+      {
+        key: 'shoulder_dislocate',
+        name: 'stick pass-through',
+        sets: '2',
+        maxSets: 2,
+        reps: 10,
+        tempo: '2s over · 2s back',
+        restSec: 30,
+      },
+    ],
+  },
+  {
+    label: 'overhead',
+    exercises: [
+      {
+        key: 'puppy_pose',
+        name: 'puppy pose',
+        sets: '3',
+        maxSets: 3,
+        reps: 1,
+        tempo: '',
+        holdSec: 45,
+        restSec: 30,
+      },
+    ],
+  },
+  {
+    label: 'behind the back',
+    exercises: [
+      {
+        key: 'shoulder_extension',
+        name: 'shoulder extension',
+        sets: '3',
+        maxSets: 3,
+        reps: 1,
+        tempo: '',
+        holdSec: 30,
+        restSec: 30,
+      },
+    ],
+  },
+]
+
 export const FLEX_ROUTINES: Record<FlexRoutineKey, FlexRoutine> = {
   side_split: {
     key: 'side_split',
@@ -163,11 +392,53 @@ export const FLEX_ROUTINES: Record<FlexRoutineKey, FlexRoutine> = {
     // without getting up between them.
     burstShots: true,
   },
+  front_split: {
+    key: 'front_split',
+    label: 'front split',
+    blocks: FRONT_SPLIT_BLOCKS,
+    coldShots: [],
+    warmShots: [],
+  },
+  pancake: {
+    key: 'pancake',
+    label: 'pancake',
+    blocks: PANCAKE_BLOCKS,
+    coldShots: [],
+    warmShots: [],
+  },
+  bridge: {
+    key: 'bridge',
+    label: 'bridge',
+    blocks: BRIDGE_BLOCKS,
+    coldShots: [],
+    warmShots: [],
+  },
+  shoulders: {
+    key: 'shoulders',
+    label: 'shoulders',
+    blocks: SHOULDER_BLOCKS,
+    coldShots: [],
+    warmShots: [],
+  },
 }
 
-/** Both routines, in the order Today offers them. */
-export const FLEX_ROUTINE_KEYS: FlexRoutineKey[] = ['side_split', 'head_to_toe']
+/**
+ * Every routine, in the order Today and the skill pickers offer them. The owner's
+ * two stay first: Today pairs and rotates the first two of whatever is chosen.
+ */
+export const FLEX_ROUTINE_KEYS: FlexRoutineKey[] = [
+  'side_split',
+  'head_to_toe',
+  'front_split',
+  'pancake',
+  'bridge',
+  'shoulders',
+]
 
 /** The routine a stored key names, falling back to the side split. */
 export const flexRoutineOf = (key: FlexRoutineKey | undefined): FlexRoutine =>
   FLEX_ROUTINES[key ?? 'side_split'] ?? FLEX_ROUTINES.side_split
+
+/** Every routine's shipped blocks, keyed by routine. */
+export const defaultFlexPlans = (): Record<FlexRoutineKey, FlexBlock[]> =>
+  Object.fromEntries(FLEX_ROUTINE_KEYS.map((k) => [k, FLEX_ROUTINES[k].blocks])) as Record<FlexRoutineKey, FlexBlock[]>

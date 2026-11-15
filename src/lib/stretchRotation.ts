@@ -49,11 +49,12 @@ export function lastStretchRoutine(entries: FlexEntry[]): FlexRoutineKey | null 
  * A tagged entry says so outright. An untagged one counts as a side split only
  * if it looks like a finished session rather than a bare measurement: a
  * measurement is logged with `note: 'measurement'` (see DataContext.logFlex),
- * and a session with the note it was finished under.
+ * and a session with the note it was finished under. A stretch only ticked off
+ * (`note: 'logged'`, see lib/flexSkills) finished no routine either.
  */
 export function completedRoutinesOf(e: FlexEntry): FlexRoutineKey[] {
   if (e.routines?.length) return e.routines
-  return e.note === 'measurement' ? [] : ['side_split']
+  return e.note === 'measurement' || e.note === 'logged' ? [] : ['side_split']
 }
 
 /**

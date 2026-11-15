@@ -11,7 +11,7 @@ import { NeverAskPhotos } from '../../components/NeverAskPhotos'
 import { toISODate } from '../../lib/dates'
 import { dayOrder, type VariantKey } from '../../config/plan'
 import { lastTrainingSession } from '../../lib/session'
-import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
+import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
@@ -27,6 +27,8 @@ import { candidateTiles, type HomeTile } from '../../lib/homeTiles'
 import { WeekCalendar } from './WeekCalendar'
 import { defaultCalendarDate, type CalendarAction, type PlannedCardio } from '../../lib/weekCalendar'
 import { weekStartISO } from '../../lib/dates'
+import { StretchLogCard } from './StretchLogCard'
+import { logsStretchOnly, stretchRoutinesFor } from '../../lib/flexSkills'
 
 type Props = {
   onStart: (dayType: DayType, variant?: VariantKey) => void
@@ -35,7 +37,7 @@ type Props = {
 }
 
 export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
-  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries, cardioEntries, logCardio, deleteCardio } =
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries, cardioEntries, goals, logCardio, deleteCardio, logFlex } =
     useData()
   // What this person tracks decides what the page offers (see lib/profile). The
   // owner's own extras — the photo history, the core block — stay his.
@@ -141,7 +143,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     ],
     // The core block is the owner's.
     core: owner,
-    routines: nextUpFirst(FLEX_ROUTINE_KEYS, dimmedStretch),
+    // Only the skills this person trains; one who just counts sessions gets the log card instead.
+    routines: nextUpFirst(stretchRoutinesFor(profile), dimmedStretch),
     pins: settings.cardioPins ?? [],
   })
 
@@ -265,6 +268,14 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
             {...(showCalendar ? { date: pickedDate, onSelectDate: setCalendarDate } : {})}
           />
         </div>
+      )}
+
+      {logsStretchOnly(profile) && (
+        <StretchLogCard
+          entries={flexEntries}
+          goal={goals.flex}
+          onLog={(date) => void logFlex({ date, note: 'logged' })}
+        />
       )}
 
       {(weighsIn(profile) || readsBodyFat(profile)) && <WeightCard />}

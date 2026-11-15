@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore, MdRestaurant } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { dayOrder } from '../../config/plan'
-import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
+import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
+import { stretchRoutinesFor, stretchRotationFor } from '../../lib/flexSkills'
 import { calorieGoalOn } from '../../lib/calories'
 import { parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import { hasPillar, ownerFlavour, PILLARS, type Pillar } from '../../lib/profile'
-import { nextStretchRoutine, otherStretchRoutine } from '../../lib/stretchRotation'
+import { lastStretchRoutine } from '../../lib/stretchRotation'
 import { pillarColours } from '../../lib/theme'
 import { useTheme } from '../../lib/themeStore'
 import {
@@ -111,8 +112,11 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
   const pillars = useMemo(() => PILLARS.filter((p) => hasPillar(profile, p)), [profile])
   const days = useMemo(() => {
     // The same "up next" Today's buttons show: the owner's focus is head to
-    // toe; anyone else's two routines take turns.
-    const next: FlexRoutineKey = ownerFlavour(profile) ? 'head_to_toe' : nextStretchRoutine(flexEntries)
+    // toe; anyone else's routines take turns, and someone who only counts
+    // sessions has none to name.
+    const stretchRotation: FlexRoutineKey[] = ownerFlavour(profile)
+      ? ['head_to_toe']
+      : stretchRotationFor(stretchRoutinesFor(profile), lastStretchRoutine(flexEntries))
     const liftDays = dayOrder(plan).filter((t) => plan[t].exercises.length > 0)
     return weekCalendar({
       weekStart,
@@ -122,8 +126,11 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
       liftDays,
       liftLabels: { push: plan.push.label, pull: plan.pull.label, fullbody: plan.fullbody.label },
       flexEntries,
-      stretchRotation: ownerFlavour(profile) ? [next] : [next, otherStretchRoutine(next)],
-      stretchLabels: { side_split: FLEX_ROUTINES.side_split.label, head_to_toe: FLEX_ROUTINES.head_to_toe.label },
+      stretchRotation,
+      stretchLabels: Object.fromEntries(FLEX_ROUTINE_KEYS.map((k) => [k, FLEX_ROUTINES[k].label])) as Record<
+        FlexRoutineKey,
+        string
+      >,
       cardioEntries,
       plannedCardio,
       calorieEntries,

@@ -118,6 +118,8 @@ export function gateAfterStep(
 ): PhotoGate | null {
   const step = steps[index]
   if (!step || step.kind !== 'flex') return null
+  // A routine with nothing measured has no warm photo to ask for.
+  if (FLEX_ROUTINES[routine].warmShots.length === 0) return null
 
   const flexIdx = flexIndices(steps)
   if (flexIdx.length === 0) return null

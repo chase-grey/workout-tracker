@@ -26,7 +26,8 @@ import { GuideSection } from './GuideSection'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate, showUpdateToast, useAppUpdate } from '../../lib/version'
 import { LABEL_MODES, labelModeFor } from '../../lib/controlLabels'
 import { discardPendingUses } from '../../lib/useControlLabel'
-import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
+import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
+import { stretchRoutinesFor } from '../../lib/flexSkills'
 import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
 import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
 import { PROVIDERS, modelFor, providerOf, trimBaseUrl } from '../../lib/aiProvider'
@@ -345,10 +346,11 @@ export function SettingsTab({
             <PlanEditor />
           </Group>
 
+          {stretchRoutinesFor(settings.profile).length > 0 && (
           <Group title="stretching">
             <section className="flex flex-col gap-2">
               <label className="text-sm font-medium text-neutral-300">stretch routines</label>
-              {FLEX_ROUTINE_KEYS.map((r) => (
+              {stretchRoutinesFor(settings.profile).map((r) => (
                 <button
                   key={r}
                   onClick={() => {
@@ -369,6 +371,7 @@ export function SettingsTab({
               ))}
             </section>
           </Group>
+          )}
 
           <RestartAccount />
         </>
