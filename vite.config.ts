@@ -371,6 +371,12 @@ export default defineConfig(({ mode }) => {
           orientation: 'portrait',
           start_url: `/${REPO}/`,
           scope: `/${REPO}/`,
+          // Lets a page in a browser tab ask whether this app is installed
+          // (navigator.getInstalledRelatedApps, Chrome on Android): the sign-in
+          // landing says to open the app rather than install it again.
+          related_applications: [
+            { platform: 'webapp', url: `https://chase-grey.github.io/${REPO}/manifest.webmanifest` },
+          ],
           // PNGs first, and PNGs at all, because that's what makes this install
           // as a real app rather than a browser shortcut: Chrome/Android mints a
           // WebAPK from raster manifest icons, so an SVG-only manifest gets you

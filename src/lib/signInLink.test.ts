@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   credentialFromHash,
+  credentialFromScan,
   credentialFromText,
   isHandheld,
   isSignedInAs,
@@ -104,5 +105,17 @@ describe('signInLanding', () => {
     expect(signInLanding({ handheld: true, standalone: false })).toBe('install')
     expect(signInLanding({ handheld: true, standalone: true })).toBe('today')
     expect(signInLanding({ handheld: false, standalone: false })).toBe('today')
+  })
+})
+
+describe('credentialFromScan', () => {
+  it('takes a sign-in link', () => {
+    expect(credentialFromScan(`${APP}#key=k`)).toEqual({ kind: 'key', key: 'k' })
+  })
+
+  it('ignores any other code, the bare app link included', () => {
+    expect(credentialFromScan(APP)).toBeUndefined()
+    expect(credentialFromScan('abc123')).toBeUndefined()
+    expect(credentialFromScan('https://example.com/')).toBeUndefined()
   })
 })

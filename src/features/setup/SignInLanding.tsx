@@ -3,7 +3,6 @@ import { MdInstallMobile, MdIosShare } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { api } from '../../services/api'
 import type { Settings } from '../../services/storage'
-import { copyText } from '../../lib/clipboard'
 import { isIOS } from '../../lib/installPrompt'
 import { useInstallPrompt } from '../../lib/useInstallPrompt'
 import { stashResumeTab } from '../../lib/resumeTab'
@@ -12,7 +11,6 @@ import {
   credentialFromHash,
   isHandheld,
   signInLanding,
-  signInLink,
   withoutCredential,
   type SignInCredential,
 } from '../../lib/signInLink'
@@ -25,6 +23,29 @@ export function takeCredentialFromUrl(): SignInCredential | undefined {
   const cred = credentialFromHash(window.location.hash)
   if (cred) window.history.replaceState(null, '', withoutCredential(window.location.href))
   return cred
+}
+
+/**
+ * Whether the browser says this app is installed. Only Chrome on Android
+ * answers (the manifest lists itself under related_applications); everywhere
+ * else this stays false, which is "don't know", not "no".
+ */
+function useInstalled(): boolean {
+  const [installed, setInstalled] = useState(false)
+  useEffect(() => {
+    const get = (navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> })
+      .getInstalledRelatedApps
+    if (!get) return
+    let alive = true
+    get
+      .call(navigator)
+      .then((apps) => alive && setInstalled(apps.length > 0))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+  return installed
 }
 
 const standalone = () =>
@@ -62,9 +83,9 @@ const SECONDARY = 'min-h-[44px] w-full rounded-xl text-sm font-medium text-neutr
  * Signing in starts at once. On a laptop, or in the installed app, that's all
  * there is, and the app opens on Today. A phone or tablet still in a browser
  * tab gets a welcome that puts the home screen first: on Android the browser's
- * storage is the installed app's, so the sign-in already done goes with it; an
- * iPhone gives the installed app storage of its own, so the link is copied to
- * be pasted there.
+ * storage is the installed app's, so the sign-in already done goes with it. An
+ * iPhone gives the installed app storage of its own, and Safari can neither see
+ * nor open it, so the way in is the app's own scanner, pointed at the same QR.
  */
 export function SignInLanding({ cred, onDone }: { cred: SignInCredential; onDone: () => void }) {
   const signIn = useSignIn()
@@ -76,7 +97,7 @@ export function SignInLanding({ cred, onDone }: { cred: SignInCredential; onDone
   const ios = isIOS(navigator.userAgent, navigator.maxTouchPoints)
   const [status, setStatus] = useState<'pending' | 'done' | 'error'>('pending')
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const installed = useInstalled()
 
   // Open on Today. A session left on this device goes behind its "back to"
   // pill rather than over the screen (see AppShell's resumed tab).
@@ -118,26 +139,27 @@ export function SignInLanding({ cred, onDone }: { cred: SignInCredential; onDone
           <div className="flex flex-1 flex-col gap-4">
             {ios ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copyText(signInLink(`${location.origin}${location.pathname}`, cred)).then(
-                      (ok) => ok && setCopied(true),
-                    )
-                  }}
-                  className={PRIMARY}
-                >
-                  {copied ? 'copied ✓' : 'copy sign-in link'}
-                </button>
-                <ol className="flex list-decimal flex-col gap-3 pl-5 text-base text-neutral-300">
-                  <li>
-                    tap share <MdIosShare className="inline text-lg" aria-hidden />
-                  </li>
-                  <li>add to home screen</li>
-                  <li>open workout tracker from the home screen</li>
-                  <li>i already have an account → paste</li>
-                </ol>
+                <section className="flex flex-col gap-2">
+                  <h2 className="text-sm font-medium text-neutral-400">already installed</h2>
+                  <ol className="flex list-decimal flex-col gap-2 pl-5 text-base text-neutral-200">
+                    <li>open workout tracker</li>
+                    <li>i already have an account → scan QR code</li>
+                  </ol>
+                </section>
+                <section className="flex flex-col gap-2">
+                  <h2 className="text-sm font-medium text-neutral-400">not installed</h2>
+                  <ol className="flex list-decimal flex-col gap-2 pl-5 text-base text-neutral-200">
+                    <li>
+                      tap share <MdIosShare className="inline text-lg" aria-hidden />
+                    </li>
+                    <li>add to home screen</li>
+                    <li>open workout tracker</li>
+                    <li>i already have an account → scan QR code</li>
+                  </ol>
+                </section>
               </>
+            ) : installed ? (
+              <p className="text-base text-neutral-200">open workout tracker from your home screen</p>
             ) : offer === 'prompt' ? (
               <button
                 type="button"

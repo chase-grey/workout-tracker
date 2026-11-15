@@ -24,6 +24,9 @@ import { useFieldInView } from '../../lib/useFieldInView'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
 import { emailOk, loginOk } from '../../lib/login'
 import { LoginFields } from './LoginFields'
+import { QrScanner } from './QrScanner'
+import { signInLink } from '../../lib/signInLink'
+import { MdQrCodeScanner } from 'react-icons/md'
 
 /**
  * Every device belongs to an account: a new one made here, or one signed back
@@ -244,6 +247,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
   const [mode, setMode] = useState<WelcomeAccount['kind']>('create')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [scanning, setScanning] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -313,7 +317,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
 
   const valid = [name.trim() !== '', aboutOk, planOk, true, true, accountOk][step]
 
-  const finish = async () => {
+  const finish = async (account: WelcomeAccount = { kind: mode, email: email.trim(), password }) => {
     const now = new Date()
     const profile: Profile = {
       name: name.trim(),
@@ -328,7 +332,6 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
       createdAt: now.toISOString(),
     }
     const key = aiKey.trim()
-    const account: WelcomeAccount = { kind: mode, email: email.trim(), password }
     setPending(true)
     setError(null)
     try {
@@ -586,7 +589,29 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
               fieldClass={FIELD}
               labelClass={LABEL}
             />
+            {mode === 'signin' && (
+              <PressButton
+                onPress={() => {
+                  if (pending) return
+                  setError(null)
+                  setScanning(true)
+                }}
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-surface font-semibold active:bg-surface-2"
+              >
+                <MdQrCodeScanner className="text-xl" aria-hidden />
+                scan QR code
+              </PressButton>
+            )}
           </>
+        )}
+        {scanning && (
+          <QrScanner
+            onCredential={(cred) => {
+              setScanning(false)
+              void finish({ kind: 'signin', email: signInLink(location.href, cred), password: '' })
+            }}
+            onClose={() => setScanning(false)}
+          />
         )}
       </div>
 

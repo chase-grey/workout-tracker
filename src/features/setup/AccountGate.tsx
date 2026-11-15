@@ -5,6 +5,10 @@ import { emailOk, loginOk } from '../../lib/login'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
 import { PressButton, SETTINGS_FIELD, SETTINGS_LABEL } from '../settings/PressButton'
 import { LoginFields } from './LoginFields'
+import { QrScanner } from './QrScanner'
+import { useSignIn } from './SignInLanding'
+import { MdQrCodeScanner } from 'react-icons/md'
+import type { SignInCredential } from '../../lib/signInLink'
 
 type Mode = 'new' | 'signin'
 
@@ -31,6 +35,8 @@ export function AccountGate() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const signIn = useSignIn()
 
   const ok = mode === 'new' ? loginOk(email, password) : emailOk(email) && password !== ''
 
@@ -56,6 +62,18 @@ export function AccountGate() {
         const name = settings.profile?.name?.trim() || email.trim().split('@')[0]
         adopt(await api.register(email.trim(), password, name))
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'something went wrong')
+      setBusy(false)
+    }
+  }
+
+  const fromScan = async (cred: SignInCredential) => {
+    setScanning(false)
+    setBusy(true)
+    setError(null)
+    try {
+      await signIn(cred)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'something went wrong')
       setBusy(false)
@@ -94,6 +112,20 @@ export function AccountGate() {
           fieldClass={SETTINGS_FIELD}
           labelClass={SETTINGS_LABEL}
         />
+        {mode === 'signin' && (
+          <PressButton
+            onPress={() => {
+              if (busy) return
+              setError(null)
+              setScanning(true)
+            }}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-surface font-semibold active:bg-surface-2"
+          >
+            <MdQrCodeScanner className="text-xl" aria-hidden />
+            scan QR code
+          </PressButton>
+        )}
+        {scanning && <QrScanner onCredential={(c) => void fromScan(c)} onClose={() => setScanning(false)} />}
         <div className="flex-1" />
         <div className="mb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col gap-2">
           {error && (

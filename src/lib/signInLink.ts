@@ -78,3 +78,13 @@ export function isHandheld(userAgent: string, maxTouchPoints: number): boolean {
 export function signInLanding(o: { handheld: boolean; standalone: boolean }): 'install' | 'today' {
   return o.handheld && !o.standalone ? 'install' : 'today'
 }
+
+/**
+ * What a scanned QR signs in with: only a sign-in link counts, so pointing the
+ * camera at some other code is just a code that isn't the one.
+ */
+export function credentialFromScan(text: string): SignInCredential | undefined {
+  const t = text.trim()
+  const hash = t.indexOf('#')
+  return /^https?:\/\//i.test(t) && hash >= 0 ? credentialFromHash(t.slice(hash)) : undefined
+}
