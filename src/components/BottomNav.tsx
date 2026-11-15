@@ -26,9 +26,16 @@ export function BottomNav({
   alerts?: Tab[]
 }) {
   const tabs = TABS.filter((t) => t.id !== 'coach' || showChat)
+  // Dark, the bar wears the ground rather than a surface: an installed app on
+  // Android doesn't draw under the system navigation bar yet, and Chrome paints
+  // that bar the manifest's theme_color — the dark ground. On the ground, the
+  // two read as one bar instead of a grey strip sat on a black one. Light keeps
+  // its white surface; the manifest has one colour, and it's the dark one.
+  // viewport-fit=cover and the safe-area padding below already carry the bar to
+  // the bottom edge for the day Chrome does draw under it.
   return (
     <nav
-      className="sticky bottom-0 z-30 grid border-t border-border bg-surface/95 backdrop-blur"
+      className="sticky bottom-0 z-30 grid border-t border-border bg-bg/95 backdrop-blur [[data-mode=light]_&]:bg-surface/95"
       style={{
         gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))`,
         paddingBottom: 'env(safe-area-inset-bottom)',
