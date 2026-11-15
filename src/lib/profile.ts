@@ -113,7 +113,11 @@ const NO_GOALS: WeeklyGoalConfig = { workouts: 0, flex: 0, calDays: 0, cardio: 0
 
 /**
  * The weekly goals a profile holds the week starting Monday `week` to. A week
- * from before the profile existed is judged against nothing at all.
+ * from before the profile's first entry is held to that first entry: the
+ * history a device already had when it took a profile on is still a run of
+ * weeks that met the bar or didn't. Judging it against nothing instead scored
+ * every one of them full, and a phone with a year of stretches behind it woke
+ * up on a fifty-week streak.
  *
  * Read from the history alone, never through today's pillars: switching a
  * pillar off writes a new entry with that goal at 0 (see maskGoals), which
@@ -121,7 +125,7 @@ const NO_GOALS: WeeklyGoalConfig = { workouts: 0, flex: 0, calDays: 0, cardio: 0
  * week already lived and hand back a streak those weeks didn't earn.
  */
 export function profileWeeklyGoals(profile: Profile, week: string): WeeklyGoalConfig {
-  let goals = NO_GOALS
+  let goals = profile.weeklyGoals[0]?.goals ?? NO_GOALS
   for (const g of profile.weeklyGoals) if (g.from <= week) goals = g.goals
   return { ...goals, cardio: goals.cardio ?? 0 }
 }

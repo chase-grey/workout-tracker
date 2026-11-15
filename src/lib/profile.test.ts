@@ -72,12 +72,11 @@ describe('ageOf', () => {
 })
 
 describe('profileWeeklyGoals', () => {
-  it('judges a week from before the first entry against nothing', () => {
-    expect(profileWeeklyGoals(makeProfile(), '2025-12-29')).toEqual({
-      workouts: 0,
-      flex: 0,
-      calDays: 0,
-      cardio: 0,
+  it('holds a week from before the first entry to that first entry', () => {
+    const profile = makeProfile()
+    expect(profileWeeklyGoals(profile, '2025-12-29')).toEqual({
+      ...profile.weeklyGoals[0].goals,
+      cardio: profile.weeklyGoals[0].goals.cardio ?? 0,
     })
   })
 

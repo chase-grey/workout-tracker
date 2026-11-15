@@ -240,3 +240,51 @@ describe('weekPace', () => {
     expect(cardio).toMatchObject({ done: 0, goal: 2, remaining: 2 })
   })
 })
+
+describe('weeklyStreakHistory under a profile younger than the history', () => {
+  // A profile that took effect the week of 2026-07-06, on a device whose
+  // stretches go back to May. Each earlier week has one stretch and nothing
+  // else: short against any real goal.
+  const profile = makeProfile({
+    weeklyGoals: [{ from: WEEK, goals: { workouts: 2, flex: 2, calDays: 0, cardio: 0 } }],
+  })
+  const earlier = ['2026-05-04', '2026-05-11', '2026-05-18', '2026-05-25', '2026-06-01', '2026-06-08']
+
+  it('holds the weeks before the profile to its first goals, not to nothing', () => {
+    setActiveProfile(profile)
+    const history = weeklyStreakHistory({
+      workoutDates: [],
+      flexDates: earlier,
+      calorieHitDates: [],
+      today: new Date(2026, 6, 10),
+    })
+    expect(history[0].goals).toEqual({ workouts: 2, flex: 2, calDays: 0, cardio: 0 })
+    expect(history.every((w) => w.outcome === 'reset')).toBe(true)
+    expect(history[history.length - 1].streakAfter).toBe(0)
+  })
+
+  it('still counts the earlier weeks that met those goals', () => {
+    setActiveProfile(profile)
+    const days = ['2026-06-15', '2026-06-16', '2026-06-22', '2026-06-23', '2026-06-29', '2026-06-30']
+    const history = weeklyStreakHistory({
+      workoutDates: days,
+      flexDates: days,
+      calorieHitDates: [],
+      today: new Date(2026, 6, 10),
+    })
+    expect(history[history.length - 1].streakAfter).toBe(3)
+  })
+
+  it('skips a week whose every goal is 0 rather than scoring it full', () => {
+    setActiveProfile(
+      makeProfile({ weeklyGoals: [{ from: '0000-01-01', goals: { workouts: 0, flex: 0, calDays: 0, cardio: 0 } }] }),
+    )
+    const history = weeklyStreakHistory({
+      workoutDates: [],
+      flexDates: earlier,
+      calorieHitDates: [],
+      today: new Date(2026, 6, 10),
+    })
+    expect(history).toEqual([])
+  })
+})

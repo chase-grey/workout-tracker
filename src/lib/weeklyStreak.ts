@@ -189,8 +189,15 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   const currentIsFull =
     classifyWeek(countsFor(currentWeekStart), goalsFor(currentWeekStart)).tier === 'full'
 
+  // A week whose goals are all 0 judges nothing — every pillar was off — so it
+  // neither builds the run nor breaks it. Scored, it would come out full and
+  // add one to the streak for a week nobody was held to anything.
+  const judged = (w: string) => {
+    const g = goalsFor(w)
+    return g.workouts > 0 || g.flex > 0 || g.calDays > 0 || (g.cardio ?? 0) > 0
+  }
   const weeks = enumerateWeeks(earliestWeek, currentWeekStart).filter(
-    (w) => w < currentWeekStart || currentIsFull,
+    (w) => (w < currentWeekStart || currentIsFull) && judged(w),
   )
 
   const out: WeekResult[] = []
