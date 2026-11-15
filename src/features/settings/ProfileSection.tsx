@@ -51,7 +51,7 @@ export function ProfileSection() {
   const [goalsDraft, setGoals] = useState<WeeklyGoalConfig | null>(null)
   const [caloriesDraft, setCalories] = useState<string | null>(null)
   const [directionDraft, setDirection] = useState<DietDirection | null>(null)
-  const [saved, setSaved] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const pillars = pillarsDraft ?? profile.pillars
   const goals = goalsDraft ?? goalsInForce(profile)
@@ -89,12 +89,37 @@ export function ProfileSection() {
     if (caloriesChanged) next = withCalorieGoal(next, Math.round(calories), today)
     if (on('diet') && !ownerFlavour(profile)) next = { ...next, dietDirection: direction }
     void updateSettings({ ...settings, profile: next })
+    close()
+  }
+
+  const close = () => {
     setPillars(null)
     setGoals(null)
     setCalories(null)
     setDirection(null)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+    setEditing(false)
+  }
+
+  if (!editing) {
+    return (
+      <section className="flex flex-col gap-2">
+        <label className={SETTINGS_LABEL}>tracking</label>
+        <div className="flex min-h-[56px] items-center gap-3 rounded-xl bg-surface pl-3 pr-1">
+          <span className="flex-1 text-base font-semibold">
+            {PILLARS.filter((p) => profile.pillars.includes(p))
+              .map((p) => PILLAR_LABELS[p])
+              .join(' · ')}
+          </span>
+          <PressButton
+            onPress={() => setEditing(true)}
+            label="edit tracking"
+            className="min-h-[44px] rounded-lg bg-surface-2 px-4 text-sm font-medium active:opacity-60"
+          >
+            edit
+          </PressButton>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -170,9 +195,14 @@ export function ProfileSection() {
         </>
       )}
 
-      <PressButton onPress={save} disabled={!changed} className={SETTINGS_BUTTON}>
-        {saved ? 'saved ✓' : 'save'}
-      </PressButton>
+      <div className="flex gap-2">
+        <PressButton onPress={close} className={`${SETTINGS_BUTTON} flex-1`}>
+          cancel
+        </PressButton>
+        <PressButton onPress={save} disabled={!changed} className={`${SETTINGS_BUTTON} flex-1`}>
+          save
+        </PressButton>
+      </div>
     </section>
   )
 }
