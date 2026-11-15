@@ -246,7 +246,7 @@ describe('buildSystemPrompt for someone other than the owner', () => {
     expect(p).toContain('## About this person')
     expect(p).toContain('Name: Sam')
     expect(p).toContain('Tracks: strength, cardio')
-    expect(p).toContain('female, 36 years old')
+    expect(p).toContain('woman, 36 years old')
     expect(p).toContain(`5'6" tall`)
     expect(p).toContain('Strength: 2 days a week, dumbbells')
   })

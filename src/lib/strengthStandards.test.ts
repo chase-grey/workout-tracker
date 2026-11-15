@@ -502,3 +502,36 @@ describe('the leg press is ranked as the squat it implies', () => {
     expect(rows.find((r) => r.lift === 'squat')!.load).toBe(300)
   })
 })
+
+describe('standards by sex', () => {
+  it("ranks a woman against lower ratios than a man at the same bodyweight", () => {
+    const man = liftPercentile('bench', 135, 140, 'male')
+    const woman = liftPercentile('bench', 135, 140, 'female')
+    expect(woman.percentile).toBeGreaterThan(man.percentile)
+  })
+
+  it("puts a 140 lb woman's intermediate squat near 1.05x bodyweight", () => {
+    // 0.7 of the men's 1.5x, read in her reference bracket.
+    expect(liftPercentile('squat', 147, 140, 'female').percentile).toBe(50)
+  })
+
+  it('puts non-binary between the two', () => {
+    const at = (sex: 'male' | 'female' | 'nonbinary') => liftPercentile('ohp', 90, 160, sex).percentile
+    expect(at('nonbinary')).toBeGreaterThan(at('male'))
+    expect(at('nonbinary')).toBeLessThan(at('female'))
+  })
+
+  it("quotes a woman's tiers off her own standards", () => {
+    const man = liftReadouts(logs({ barbell_squat: 150 }), 140, 'male')[0]
+    const woman = liftReadouts(logs({ barbell_squat: 150 }), 140, 'female')[0]
+    expect(woman.tiers.at(-1)!.value).toBeLessThan(man.tiers.at(-1)!.value)
+    for (const t of woman.tiers.slice(1)) {
+      expect(liftPercentile('squat', t.value, 140, 'female').band).toBe(t.band)
+    }
+  })
+
+  it('scores the muscles off the same standards', () => {
+    const l = logs({ flat_bench: 100 })
+    expect(muscleDevelopment(l, 140, 'female').chest).not.toEqual(muscleDevelopment(l, 140, 'male').chest)
+  })
+})

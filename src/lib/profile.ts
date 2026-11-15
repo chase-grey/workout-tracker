@@ -32,8 +32,8 @@ export const LEGACY_PILLARS: Pillar[] = ['strength', 'flexibility', 'diet']
 export type Sex = 'male' | 'female' | 'nonbinary'
 
 export const SEX_LABELS: Record<Sex, string> = {
-  male: 'male',
-  female: 'female',
+  male: 'man',
+  female: 'woman',
   nonbinary: 'non-binary',
 }
 export type DietDirection = 'lose' | 'maintain' | 'gain'

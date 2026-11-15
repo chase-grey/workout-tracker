@@ -1,7 +1,8 @@
 /**
- * Strength standards for adult MALE lifters, used to turn a logged lift into a
- * band (Beginner → Elite) and a 0..1 "development" score that colors the muscle
- * avatar on the Progress tab.
+ * Strength standards for adult lifters — the men's tables, with women's and
+ * non-binary standards estimated off them (see FEMALE_SCALE) — used to turn a
+ * logged lift into a band (Beginner → Elite) and a 0..1 "development" score that
+ * colors the muscle avatar on the Progress tab.
  *
  * There are two kinds of comparison here, and the difference matters:
  *
@@ -32,6 +33,7 @@
  */
 
 import { exerciseName } from '../config/plan'
+import type { Sex } from './profile'
 import { LEG_PRESS_TO_SQUAT } from './liftRatios'
 
 /** Standardized lift identifiers the population table is keyed by. */
@@ -146,6 +148,54 @@ function bracketFactor(bodyweightLb: number): number {
 }
 
 /**
+ * Women's standards as a fraction of the men's, lift by lift. ESTIMATES, not a
+ * second table: read off the gap between the male and female bodyweight-multiple
+ * tables Strength Level and ExRx publish, where a woman's intermediate squat sits
+ * near 1.05× bodyweight against a man's 1.5×, her bench near 0.6× against 1.0×.
+ * The gap is widest on the upper body and narrowest on the legs, and these keep
+ * that shape rather than one blanket factor.
+ *
+ * The pull-up scores total load, and bodyweight is most of it whoever is
+ * hanging, so its gap is the smallest of the upper-body lifts.
+ */
+const FEMALE_SCALE: Record<Lift, number> = {
+  squat: 0.7,
+  bench: 0.6,
+  ohp: 0.6,
+  row: 0.65,
+  pullup: 0.78,
+  curl: 0.6,
+  tricep: 0.6,
+  legcurl: 0.7,
+  calfraise: 0.75,
+}
+
+/**
+ * Where each table's reference body sits. The bracket factors are shaped around a
+ * ~180 lb man; a woman's tables centre nearer 140 lb, so her bodyweight is read
+ * against the brackets as if scaled up to the men's — 140 lb lands in the
+ * reference bracket for her the way 180 does for him.
+ */
+const REFERENCE_BW: Record<Sex, number> = { male: 180, female: 140, nonbinary: 160 }
+
+/**
+ * How far the standards move off the men's for this sex. There is no published
+ * table for non-binary lifters, so they sit halfway between the men's and the
+ * women's — the same midpoint lib/recommend takes for the calorie equation.
+ */
+function sexScale(lift: Lift, sex: Sex): number {
+  if (sex === 'male') return 1
+  if (sex === 'female') return FEMALE_SCALE[lift]
+  return (1 + FEMALE_SCALE[lift]) / 2
+}
+
+/** The five level ratios for one lift, for this bodyweight and sex. */
+function thresholdsFor(lift: Lift, bodyweightLb: number, sex: Sex): number[] {
+  const factor = bracketFactor((bodyweightLb * REFERENCE_BW.male) / REFERENCE_BW[sex]) * sexScale(lift, sex)
+  return STANDARDS[lift].map((r) => r * factor)
+}
+
+/**
  * Piecewise-linear map from a ratio to a 0..99 position on the five-level scale.
  * `thresholds` are the ratios at each level, ascending.
  */
@@ -229,7 +279,7 @@ function tiersFor(thresholds: number[], unit: number): Tier[] {
 }
 
 export type LiftResult = {
-  /** Percentile vs. other men at this bodyweight, 0–99. */
+  /** Percentile vs. others of the same sex at this bodyweight, 0–99. */
   percentile: number
   /** Strength band label (Beginner … Elite). */
   band: string
@@ -242,12 +292,12 @@ export type LiftResult = {
  * to the value the standard expects (e.g. pull-ups pass bodyweight + added
  * weight — see EXERCISE_SOURCES).
  */
-export function liftPercentile(lift: Lift, load: number, bodyweightLb: number): LiftResult {
+export function liftPercentile(lift: Lift, load: number, bodyweightLb: number, sex: Sex = 'male'): LiftResult {
   if (!(load > 0) || !(bodyweightLb > 0)) {
     return { percentile: 0, band: bandFor(0), developmentScore: 0 }
   }
   const ratio = load / bodyweightLb
-  const thresholds = STANDARDS[lift].map((r) => r * bracketFactor(bodyweightLb))
+  const thresholds = thresholdsFor(lift, bodyweightLb, sex)
   const percentile = Math.round(Math.max(0, Math.min(99, interpolateLevel(ratio, thresholds))))
   return { percentile, band: bandFor(percentile), developmentScore: percentile / 100 }
 }
@@ -473,7 +523,7 @@ export type MuscleScore =
       band: string
       /** How the band was arrived at. */
       basis: 'standard' | 'ladder' | 'presence'
-      /** Percentile vs. men at this bodyweight; only set when basis is 'standard'. */
+      /** Percentile vs. others of the same sex at this bodyweight; only set when basis is 'standard'. */
       percentile: number | null
     }
 
@@ -482,11 +532,12 @@ function scoreSource(
   key: string,
   log: ExerciseLog,
   bodyweightLb: number,
+  sex: Sex,
 ): { developmentScore: number; band: string; basis: 'standard' | 'ladder'; percentile: number | null } | null {
   const src = EXERCISE_SOURCES[key]
   if (src.lift != null) {
     const load = (src.toLoad ?? ((e) => e))(log.best, bodyweightLb)
-    const r = liftPercentile(src.lift, load, bodyweightLb)
+    const r = liftPercentile(src.lift, load, bodyweightLb, sex)
     return { developmentScore: r.developmentScore, band: r.band, basis: 'standard', percentile: r.percentile }
   }
   if (src.ladder != null) {
@@ -509,6 +560,7 @@ function scoreSource(
 export function muscleDevelopment(
   logs: Record<string, ExerciseLog>,
   bodyweightLb: number,
+  sex: Sex = 'male',
 ): Record<Muscle, MuscleScore> {
   const out = {} as Record<Muscle, MuscleScore>
   for (const muscle of MUSCLES) {
@@ -521,7 +573,7 @@ export function muscleDevelopment(
     }
     let best: ReturnType<typeof scoreSource> = null
     for (const k of keys) {
-      const r = scoreSource(k, logs[k], bodyweightLb)
+      const r = scoreSource(k, logs[k], bodyweightLb, sex)
       if (r != null && (best == null || r.developmentScore > best.developmentScore)) best = r
     }
     out[muscle] =
@@ -571,7 +623,11 @@ const READOUT_ORDER: Lift[] = [
  * One percentile readout per standardized lift the user has data for, taking the
  * best (highest-load) contributing exercise for each.
  */
-export function liftReadouts(logs: Record<string, ExerciseLog>, bodyweightLb: number): LiftReadout[] {
+export function liftReadouts(
+  logs: Record<string, ExerciseLog>,
+  bodyweightLb: number,
+  sex: Sex = 'male',
+): LiftReadout[] {
   const bestLoad = {} as Partial<Record<Lift, number>>
   for (const [key, src] of Object.entries(EXERCISE_SOURCES)) {
     if (src.lift == null || !(key in logs)) continue
@@ -584,8 +640,8 @@ export function liftReadouts(logs: Record<string, ExerciseLog>, bodyweightLb: nu
   for (const lift of READOUT_ORDER) {
     const load = bestLoad[lift]
     if (load == null) continue
-    const r = liftPercentile(lift, load, bodyweightLb)
-    const thresholds = STANDARDS[lift].map((s) => s * bracketFactor(bodyweightLb))
+    const r = liftPercentile(lift, load, bodyweightLb, sex)
+    const thresholds = thresholdsFor(lift, bodyweightLb, sex)
     const up = nextBand(r.percentile, thresholds)
     out.push({
       lift,

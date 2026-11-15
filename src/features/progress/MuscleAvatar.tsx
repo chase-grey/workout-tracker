@@ -446,21 +446,17 @@ export function MuscleAvatar() {
 
   const latestWeight = bodyWeights.filter((b) => b.weightLbs >= 50).slice(-1)[0]
   const bodyweightLb = latestWeight?.weightLbs ?? 0
-  // The population standards are adult male tables (see strengthStandards), and
-  // there is no other table to swap in, so only someone who said male (or the
-  // owner, who predates the question) is ranked against them. Without them the
-  // map is read off the personal ladders and what was trained alone — nobody's
-  // rank, just their own climb — and the lift bands and the bodyweight they need
-  // drop away.
-  const standards = (settings.profile?.sex ?? 'male') === 'male'
-  const figure: Figure = settings.profile?.sex === 'female' ? 'female' : 'male'
+  // Ranked against the standards for their own sex (the owner, who predates the
+  // question, is a man). The women's and non-binary standards are estimated off
+  // the men's tables — see strengthStandards.FEMALE_SCALE.
+  const sex = settings.profile?.sex ?? 'male'
+  const figure: Figure = sex === 'female' ? 'female' : 'male'
 
   const logs = useMemo(() => {
     const out: Record<string, ExerciseLog> = {}
     for (const key of AVATAR_EXERCISE_KEYS) {
       // Reps ladders grow by reps, not load — a bodyweight hanging raise has no
       // est-1RM to read at all.
-      if (!standards && EXERCISE_SOURCES[key].lift != null) continue
       const metric = EXERCISE_SOURCES[key].ladder === 'reps' ? 'topreps' : '1rm'
       // Every session, not just the slot that trains the lift freshest (see
       // progress.SlotScope). The lead-slot read exists to stop a chart line
@@ -474,12 +470,12 @@ export function MuscleAvatar() {
       }
     }
     return out
-  }, [workouts, standards])
+  }, [workouts])
 
-  const scores = useMemo(() => muscleDevelopment(logs, bodyweightLb), [logs, bodyweightLb])
+  const scores = useMemo(() => muscleDevelopment(logs, bodyweightLb, sex), [logs, bodyweightLb, sex])
   const lifts = useMemo(
-    () => (standards ? liftReadouts(logs, bodyweightLb) : []),
-    [logs, bodyweightLb, standards],
+    () => liftReadouts(logs, bodyweightLb, sex),
+    [logs, bodyweightLb, sex],
   )
   const ladders = useMemo(() => ladderReadouts(logs), [logs])
 
@@ -488,12 +484,12 @@ export function MuscleAvatar() {
   return (
     <div className="flex flex-col gap-3">
       <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">
-        strength map{standards && bodyweightLb ? ` · ${bodyweightLb} lbs` : ''}
+        strength map{bodyweightLb ? ` · ${bodyweightLb} lbs` : ''}
       </h3>
 
-      {standards && !bodyweightLb ? (
+      {!bodyweightLb ? (
         <div className="flex min-h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
-          log a body weight to compare my lifts to other men.
+          log a body weight to compare my lifts to others.
         </div>
       ) : !hasAnyData ? (
         <div className="flex min-h-24 items-center justify-center rounded-2xl bg-surface px-4 text-center text-sm text-neutral-500">
@@ -511,7 +507,7 @@ export function MuscleAvatar() {
             </div>
 
             <div className="flex flex-1 flex-col gap-4">
-              {!standards ? null : lifts.length > 0 ? (
+              {lifts.length > 0 ? (
                 <ul className="flex flex-col gap-2">
                   {lifts.map((r) => (
                     <Row
