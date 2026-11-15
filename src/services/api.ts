@@ -166,6 +166,13 @@ export const api = {
     }),
   /** Who the backend says `key` is. Throws `Unknown account` for a key it doesn't hold. */
   account: (key: string) => get<{ name: string; owner: boolean }>('account', { user: key }),
+  /**
+   * Whether `secret` is the owner's issue token. Asks an owner-only route,
+   * which sends no account key and so works on a device not yet signed in.
+   */
+  checkOwnerSecret: async (secret: string): Promise<void> => {
+    await get<unknown>('issues', { secret })
+  },
   /** Mint a one-time invite code. Owner only: gated on the issue token. */
   invite: (secret: string) => post<{ saved: number; code: string }>('invite', { secret }),
   /**
