@@ -29,7 +29,13 @@ export const PILLAR_LABELS: Record<Pillar, string> = {
 /** What a device without a profile tracks: everything the app did before cardio. */
 export const LEGACY_PILLARS: Pillar[] = ['strength', 'flexibility', 'diet']
 
-export type Sex = 'male' | 'female'
+export type Sex = 'male' | 'female' | 'nonbinary'
+
+export const SEX_LABELS: Record<Sex, string> = {
+  male: 'male',
+  female: 'female',
+  nonbinary: 'non-binary',
+}
 export type DietDirection = 'lose' | 'maintain' | 'gain'
 export type Activity = 'light' | 'moderate' | 'active'
 export type Equipment = 'gym' | 'dumbbells' | 'bodyweight'

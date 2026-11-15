@@ -336,10 +336,12 @@ export function MuscleAvatar() {
   const latestWeight = bodyWeights.filter((b) => b.weightLbs >= 50).slice(-1)[0]
   const bodyweightLb = latestWeight?.weightLbs ?? 0
   // The population standards are adult male tables (see strengthStandards), and
-  // there is no female table to swap in. Without them the map is read off the
-  // personal ladders and what was trained alone — nobody's rank, just their own
-  // climb — and the lift bands and the bodyweight they need drop away.
-  const standards = settings.profile?.sex !== 'female'
+  // there is no other table to swap in, so only someone who said male (or the
+  // owner, who predates the question) is ranked against them. Without them the
+  // map is read off the personal ladders and what was trained alone — nobody's
+  // rank, just their own climb — and the lift bands and the bodyweight they need
+  // drop away.
+  const standards = (settings.profile?.sex ?? 'male') === 'male'
 
   const logs = useMemo(() => {
     const out: Record<string, ExerciseLog> = {}

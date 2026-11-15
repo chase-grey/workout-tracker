@@ -9,6 +9,7 @@ import {
   ACTIVITY_LABELS,
   DIET_LABELS,
   EQUIPMENT_LABELS,
+  SEX_LABELS,
   ageOf,
   hasPillar,
   ownerFlavour,
@@ -264,7 +265,7 @@ function renderAboutPerson(profile: Profile, today: Date, heightIn: number | und
   if (profile.name.trim()) lines.push(`Name: ${profile.name.trim()}`)
   lines.push(`Tracks: ${profile.pillars.join(', ') || 'nothing yet'}`)
   const body: string[] = []
-  if (profile.sex) body.push(profile.sex)
+  if (profile.sex) body.push(SEX_LABELS[profile.sex])
   const age = ageOf(profile, today)
   if (age != null) body.push(`${age} years old`)
   if (heightIn) body.push(`${Math.floor(heightIn / 12)}'${Math.round(heightIn % 12)}" tall`)

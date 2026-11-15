@@ -39,6 +39,12 @@ describe('restingBurn', () => {
   it('matches Mifflin-St Jeor for a female', () => {
     expect(restingBurn(FEMALE)).toBeCloseTo(1305.904, 1)
   })
+
+  it('puts non-binary halfway between the two', () => {
+    const male = restingBurn({ ...FEMALE, sex: 'male' })
+    const female = restingBurn(FEMALE)
+    expect(restingBurn({ ...FEMALE, sex: 'nonbinary' })).toBeCloseTo((male + female) / 2, 6)
+  })
 })
 
 describe('recommendCalories', () => {

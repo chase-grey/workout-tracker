@@ -12,6 +12,7 @@ import {
   type Pillar,
   type Profile,
   type Sex,
+  SEX_LABELS,
 } from '../../lib/profile'
 import { recommendCalories, recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
@@ -431,10 +432,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
             <Segmented
               label="sex"
               value={sex}
-              options={[
-                { value: 'male' as Sex, label: 'male' },
-                { value: 'female' as Sex, label: 'female' },
-              ]}
+              options={(Object.keys(SEX_LABELS) as Sex[]).map((v) => ({ value: v, label: SEX_LABELS[v] }))}
               onChange={setSex}
             />
             <div className="flex gap-3">

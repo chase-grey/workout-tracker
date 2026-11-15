@@ -17,8 +17,18 @@ const ACTIVITY_FACTOR: Record<Activity, number> = { light: 1.375, moderate: 1.55
 /** A pound a week down; about half a pound a week up. */
 const DAILY_OFFSET: Record<DietDirection, number> = { lose: -500, maintain: 0, gain: 300 }
 
-/** Below these a target stops being a diet and starts being a risk. */
-export const CALORIE_FLOOR: Record<Sex, number> = { male: 1500, female: 1200 }
+/**
+ * Below these a target stops being a diet and starts being a risk. Non-binary
+ * sits halfway, as it does in the resting burn.
+ */
+export const CALORIE_FLOOR: Record<Sex, number> = { male: 1500, female: 1200, nonbinary: 1350 }
+
+/**
+ * Mifflin-St Jeor's sex term. The equation was fitted on men and women only;
+ * for anyone else the midpoint of the two is the least-wrong guess, and the
+ * target it feeds is an editable starting figure anyway.
+ */
+const SEX_OFFSET: Record<Sex, number> = { male: 5, female: -161, nonbinary: -78 }
 
 export type CalorieInputs = {
   sex: Sex
@@ -33,7 +43,7 @@ export type CalorieInputs = {
 export function restingBurn({ sex, age, heightIn, weightLbs }: Omit<CalorieInputs, 'activity' | 'direction'>): number {
   const kg = weightLbs / LB_PER_KG
   const cm = heightIn * CM_PER_IN
-  return 10 * kg + 6.25 * cm - 5 * age + (sex === 'male' ? 5 : -161)
+  return 10 * kg + 6.25 * cm - 5 * age + SEX_OFFSET[sex]
 }
 
 /** A daily calorie target, rounded to the nearest 50 and never below the floor. */
