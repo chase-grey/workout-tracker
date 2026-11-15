@@ -158,6 +158,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         </div>
       )}
 
+      <WeightCard />
+
       {hasPillar(profile, 'cardio') && (
         <CardioCard
           entries={cardioEntries}
@@ -166,8 +168,6 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
           onDelete={(id) => void deleteCardio(id)}
         />
       )}
-
-      <WeightCard />
 
       {/* Lift days and stretches alternate within their columns; core sits at
           the bottom left beside full body. */}
