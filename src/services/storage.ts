@@ -230,6 +230,12 @@ export type Settings = {
    */
   hiddenAnimations?: string[]
   /**
+   * The cardio log's quick picks, as the person has edited them (see
+   * lib/cardio.cardioKinds). Unset means the defaults; an empty list means they
+   * removed every one.
+   */
+  cardioKinds?: string[]
+  /**
    * When these settings were last written on some device, ISO. The stamp the
    * merge orders the two copies by (see lib/settingsSync.mergeSettings); absent
    * means this device has never synced settings, which is what tells a fresh

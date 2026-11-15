@@ -56,8 +56,8 @@
  *   GET  ?route=durations[&since=YYYY-MM-DD]
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
  *   GET  ?route=settings         -> the account's settings blob, or null (see getSettings)
- *   GET  ?route=cardio[&since=YYYY-MM-DD] -> [{ id, date, kind, minutes, distanceMi? }]
- *   POST ?route=cardio        body: { id, date, kind, minutes, distanceMi? } (upsert by id)
+ *   GET  ?route=cardio[&since=YYYY-MM-DD] -> [{ id, date, kind, minutes?, distanceMi? }]
+ *   POST ?route=cardio        body: { id, date, kind, minutes?, distanceMi? } (upsert by id)
  *                 or { id, deleted: true } (removes it; fine if already gone)
  *   POST ?route=feedback      body: { message, build } (lands in the owner's feedback tab)
  *   GET  ?route=save_errors[&limit=N] -> failed-save reports, newest first (owner only; see getSaveErrors)
@@ -164,7 +164,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 10
+const BACKEND_VERSION = 11
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -1544,7 +1544,8 @@ function getCardio(since) {
     if (!r[0]) continue
     const date = isoDate(r[1])
     if (since && date < since) continue
-    const entry = { id: String(r[0]), date: date, kind: String(r[2] || ''), minutes: Number(r[3]) || 0 }
+    const entry = { id: String(r[0]), date: date, kind: String(r[2] || '') }
+    if (Number(r[3]) > 0) entry.minutes = Number(r[3])
     if (r[4] !== '' && r[4] !== null && r[4] !== undefined && isFinite(Number(r[4]))) {
       entry.distanceMi = Number(r[4])
     }
@@ -1571,15 +1572,23 @@ function saveCardio(body) {
     if (at !== -1) sh.deleteRow(at)
     return { saved: 1 }
   }
-  const minutes = Number(body.minutes)
+  // Only the kind and the date are required: a match has no distance, and a
+  // pickup game rarely has a clock on it.
   if (!body.date) throw new Error('A cardio date is required')
-  if (!isFinite(minutes) || minutes <= 0) throw new Error('Invalid cardio minutes')
-  const distance = body.distanceMi === null || body.distanceMi === undefined || body.distanceMi === '' ||
-    !isFinite(Number(body.distanceMi)) ? '' : Number(body.distanceMi)
+  if (!String(body.kind || '').trim()) throw new Error('A cardio kind is required')
+  const minutes = optionalPositive(body.minutes)
+  const distance = optionalPositive(body.distanceMi)
   const row = [id, body.date, plainText(body.kind || ''), minutes, distance]
   if (at === -1) sh.appendRow(row)
   else sh.getRange(at, 1, 1, CARDIO_HEADERS.length).setValues([row])
   return { saved: 1 }
+}
+
+// A blank cell for a value not given, the number for one that was.
+function optionalPositive(v) {
+  if (v === null || v === undefined || v === '') return ''
+  const n = Number(v)
+  return isFinite(n) && n > 0 ? n : ''
 }
 
 /* ---------------------------------------------------------------- feedback */

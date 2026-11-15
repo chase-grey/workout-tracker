@@ -46,7 +46,7 @@
 import type { DayType } from '../../types'
 import { ALL_EXERCISES, DAY_TYPES, exerciseName, type Plan } from '../../config/plan'
 import { matchExercise, nameScore, NAME_MATCH_MIN } from '../parseImport'
-import { CARDIO_KINDS } from '../cardio'
+import { DEFAULT_CARDIO_KINDS } from '../cardio'
 import {
   MI_10K,
   MI_5K,
@@ -429,7 +429,7 @@ const KIND_ALIASES: Record<string, string> = {
   rowing: 'row',
 }
 
-const PLAN_KINDS: string[] = CARDIO_KINDS.filter((k) => k !== 'other')
+const PLAN_KINDS: string[] = [...DEFAULT_CARDIO_KINDS]
 
 const NAMED_DISTANCES: Record<string, number> = {
   '5k': MI_5K,

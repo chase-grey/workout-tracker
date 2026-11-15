@@ -118,8 +118,8 @@ the backend separately using the deployment instructions above.
 | POST | `?route=set_login` | `{ email, password }` + `user` | `{ saved }` |
 | POST | `?route=join` | `{ invite, name, claim }` | `{ saved, token, name }` |
 | POST | `?route=invite` | `{ secret }` | `{ saved, code }` |
-| GET | `?route=cardio&since=YYYY-MM-DD` | — | `{id, date, kind, minutes, distanceMi?}[]` |
-| POST | `?route=cardio` | `{ id, date, kind, minutes, distanceMi? }` or `{ id, deleted: true }` | `{ saved }` |
+| GET | `?route=cardio&since=YYYY-MM-DD` | — | `{id, date, kind, minutes?, distanceMi?}[]` |
+| POST | `?route=cardio` | `{ id, date, kind, minutes?, distanceMi? }` or `{ id, deleted: true }` | `{ saved }` |
 | POST | `?route=feedback` | `{ message, build }` | `{ saved }` |
 | GET | `?route=save_errors&limit=N` | — | failed-save reports (owner only) |
 | GET | `?route=settings` | — | settings blob, or `null` |

@@ -8,7 +8,7 @@
  */
 
 import type { WorkoutRow } from '../types'
-import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
+import { cardioMinutesByWeek, cardioLine, type CardioEntry } from './cardio'
 import { parseISODate, toISODate, weekStartISO } from './dates'
 import { ACTIVITY_LABELS, EQUIPMENT_LABELS, SEX_LABELS, ageOf, type Profile, type StrengthSetup } from './profile'
 
@@ -81,7 +81,7 @@ export function recentCardio(entries: CardioEntry[], today: Date, n = 6): string
     .filter((e) => e.date >= from)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, n)
-    .map((e) => `${e.date}: ${e.kind}, ${cardioSummary(e)}`)
+    .map((e) => `${e.date}: ${cardioLine(e)}`)
 }
 
 /** Workouts (distinct sessions) in each of the last `weeks` Monday weeks, oldest first. */

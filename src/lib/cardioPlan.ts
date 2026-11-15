@@ -260,22 +260,22 @@ export function cardioLevelFrom(
   if (forWeekly.length === 0) return null
 
   let weekTotal = 0
-  for (const e of forWeekly) if (e.date < thisWeek) weekTotal += e.minutes
+  for (const e of forWeekly) if (e.date < thisWeek) weekTotal += e.minutes ?? 0
   const completeWeeks = Math.max(1, Math.min(lookbackWeeks, Math.ceil(daysBetween(earliest(forWeekly), thisWeek) / 7)))
-  const thisWeekMin = forWeekly.filter((e) => e.date >= thisWeek).reduce((s, e) => s + e.minutes, 0)
+  const thisWeekMin = forWeekly.filter((e) => e.date >= thisWeek).reduce((s, e) => s + (e.minutes ?? 0), 0)
   const weeklyMin = Math.round(Math.max(weekTotal / completeWeeks, thisWeekMin))
 
-  const longestMin = own.reduce((m, e) => Math.max(m, e.minutes), 0)
+  const longestMin = own.reduce((m, e) => Math.max(m, e.minutes ?? 0), 0)
   const longestMi = own.reduce((m, e) => Math.max(m, e.distanceMi ?? 0), 0)
-  const paced = own.filter((e) => (e.distanceMi ?? 0) > 0)
-  const paces = paced.map((e) => e.minutes / e.distanceMi!).sort((a, b) => a - b)
+  const paced = own.filter((e) => (e.distanceMi ?? 0) > 0 && (e.minutes ?? 0) > 0)
+  const paces = paced.map((e) => e.minutes! / e.distanceMi!).sort((a, b) => a - b)
   const paceMinPerMi = paces.length ? round1(paces[Math.floor(paces.length / 2)]) : undefined
 
   let timeMin: number | undefined
   if (goal && goal.type !== 'weekly') {
     const usable = paced.filter((e) => e.distanceMi! >= goal.distanceMi * 0.4)
     if (usable.length) {
-      timeMin = round1(Math.min(...usable.map((e) => riegel(e.minutes, e.distanceMi!, goal.distanceMi))))
+      timeMin = round1(Math.min(...usable.map((e) => riegel(e.minutes!, e.distanceMi!, goal.distanceMi))))
     }
   }
 
@@ -759,11 +759,11 @@ export function actualLevel(plan: CardioPlan, entries: CardioEntry[], today: str
   const own = counted.filter((e) => e.kind === plan.kind)
   const since = plusDays(thisWeek, -21)
   const recentOwn = own.filter((e) => e.date >= since)
-  const weekMin = (start: string) => counted.filter((e) => weekStartISO(e.date) === start).reduce((s, e) => s + e.minutes, 0)
+  const weekMin = (start: string) => counted.filter((e) => weekStartISO(e.date) === start).reduce((s, e) => s + (e.minutes ?? 0), 0)
   const lastTwo = Math.max(weekMin(plusDays(thisWeek, -7)), weekMin(plusDays(thisWeek, -14)), weekMin(thisWeek))
   const fromLog = cardioLevelFrom(own, plan.kind, plan.goal, today, 4)
   return {
-    longestMin: recentOwn.length ? Math.round(Math.max(...recentOwn.map((e) => e.minutes))) : plan.level.longestMin,
+    longestMin: recentOwn.length ? Math.round(Math.max(...recentOwn.map((e) => e.minutes ?? 0))) : plan.level.longestMin,
     longestMi: recentOwn.length ? round1(Math.max(...recentOwn.map((e) => e.distanceMi ?? 0))) : plan.level.longestMi,
     weeklyMin: counted.length ? Math.round(lastTwo) : plan.level.weeklyMin,
     ...(fromLog?.timeMin != null || plan.level.timeMin != null ? { timeMin: fromLog?.timeMin ?? plan.level.timeMin } : {}),
@@ -852,10 +852,10 @@ export function sessionMeets(c: CardioCheckpoint, e: Pick<CardioEntry, 'minutes'
     const d = e.distanceMi ?? 0
     if (d <= 0 || d < c.distanceMi * 0.99) return false
     // A longer session meets a time when its pace would have covered the distance in time.
-    if (c.withinMin != null) return e.minutes * (c.distanceMi / d) <= c.withinMin + 1 / 120
+    if (c.withinMin != null) return e.minutes != null && e.minutes * (c.distanceMi / d) <= c.withinMin + 1 / 120
     return true
   }
-  return c.minutes != null && e.minutes >= c.minutes
+  return c.minutes != null && (e.minutes ?? 0) >= c.minutes
 }
 
 /** The date `c` was first met by a session counted toward the plan, or null. */
@@ -867,7 +867,7 @@ export function checkpointHitDate(c: CardioCheckpoint, plan: CardioPlan, entries
     const totals = new Map<string, number>()
     for (const e of counted) {
       const wk = weekStartISO(e.date)
-      const total = (totals.get(wk) ?? 0) + e.minutes
+      const total = (totals.get(wk) ?? 0) + (e.minutes ?? 0)
       totals.set(wk, total)
       if (total >= c.weekMin) return e.date
     }
@@ -985,11 +985,11 @@ export function planStanding(plan: CardioPlan, entries: CardioEntry[], today: st
   const week = plan.weeks.find((w) => w.start === lastWeek)
   if (!week || week.phase === 'goal') return null
   const done = entries.filter((e) => countsToward(plan, e) && weekStartISO(e.date) === lastWeek)
-  const minutes = done.reduce((s, e) => s + e.minutes, 0)
+  const minutes = done.reduce((s, e) => s + (e.minutes ?? 0), 0)
   const days = new Set(done.map((e) => e.date)).size
   const planned = plannedMinutes(week)
   const plannedLong = Math.max(...week.sessions.map((s) => s.minutes))
-  const longest = done.reduce((m, e) => Math.max(m, e.minutes), 0)
+  const longest = done.reduce((m, e) => Math.max(m, e.minutes ?? 0), 0)
   if (minutes < planned * 0.75 || days < week.sessions.length - 1) return 'behind'
   if (minutes > planned * 1.2 && longest > plannedLong * 1.1) return 'ahead'
   return 'on'
@@ -1041,7 +1041,7 @@ export function planChartRows(plan: CardioPlan, entries: CardioEntry[], today: s
     let actual: number | undefined
     if (goal.type === 'weekly') {
       planned = plannedMinutes(w)
-      if (done.length) actual = Math.round(done.reduce((s, e) => s + e.minutes, 0))
+      if (done.length) actual = Math.round(done.reduce((s, e) => s + (e.minutes ?? 0), 0))
     } else if (goal.type === 'distance') {
       const pace = easyPace(plan.kind, plan.level, goal)
       planned = round1(Math.max(...w.sessions.map((s) => s.distanceMi ?? s.minutes / pace)))
@@ -1051,8 +1051,8 @@ export function planChartRows(plan: CardioPlan, entries: CardioEntry[], today: s
       if (startTime && startTime > goal.minutes) planned = round1(startTime - ((startTime - goal.minutes) * i) / span)
       else planned = goal.minutes
       const times = done
-        .filter((e) => (e.distanceMi ?? 0) >= goal.distanceMi * 0.4)
-        .map((e) => riegel(e.minutes, e.distanceMi!, goal.distanceMi))
+        .filter((e) => (e.distanceMi ?? 0) >= goal.distanceMi * 0.4 && (e.minutes ?? 0) > 0)
+        .map((e) => riegel(e.minutes!, e.distanceMi!, goal.distanceMi))
       if (times.length) actual = round1(Math.min(...times))
     }
     return { week: w.start, ...(planned != null ? { planned } : {}), ...(actual != null ? { actual } : {}) }

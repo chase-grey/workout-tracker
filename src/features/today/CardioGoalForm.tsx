@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../../store/DataContext'
-import { CARDIO_KINDS, asksDistance } from '../../lib/cardio'
+import { DEFAULT_CARDIO_KINDS, asksDistance } from '../../lib/cardio'
 import {
   buildCardioPlan,
   cardioLevelFrom,
@@ -24,7 +24,7 @@ import { currentWeeklyGoals } from '../../lib/weeklyStreak'
 import { LiveCompanion } from '../companion/CompanionFlow'
 import { usePressAction } from '../../lib/usePressAction'
 
-const KINDS = CARDIO_KINDS.filter((k) => k !== 'other')
+const KINDS = DEFAULT_CARDIO_KINDS
 
 const GOAL_TYPE_LABELS: Record<CardioGoalType, string> = {
   distance: 'distance',
