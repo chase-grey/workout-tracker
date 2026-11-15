@@ -7,7 +7,7 @@ import { APP_COMMIT } from '../../lib/version'
 import { api } from '../../services/api'
 import type { RawMessage, Tool } from '../../services/openai'
 import { coachTurn } from '../../services/coach'
-import { hasPillar, ownerFlavour, type Profile } from '../../lib/profile'
+import { ownerFlavour, type Profile } from '../../lib/profile'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
 import { applyFlexPlanEdits, type FlexEdit } from '../../lib/flexTools'
 import {
@@ -20,6 +20,7 @@ import {
 import { refreshIssues } from '../../store/useTrackedIssues'
 import { dayOrder, exerciseName, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
 import { DAY_TYPES, STRETCH_CORE } from '../../config/plan'
+import { logsStretchOnly, stretchRoutinesFor } from '../../lib/flexSkills'
 import {
   DISCOMFORT_SPOTS,
   discomfortEdit,
@@ -330,8 +331,14 @@ function planSnapshot(
       )
     })
   }
-  // Someone who doesn't track flexibility has no use for the routines.
-  if (!hasPillar(profile, 'flexibility')) return lines.join('\n')
+  // Someone who doesn't train a flexibility skill has no use for the routines.
+  const routines = stretchRoutinesFor(profile)
+  if (routines.length === 0) {
+    if (logsStretchOnly(profile)) {
+      lines.push('', 'STRETCHING: tracked as a count of sessions a week, logged by hand; there is no guided stretch routine.')
+    }
+    return lines.join('\n')
+  }
   // The sit-up it is told apart from is the owner's push day; no one else's
   // plan has it.
   const apart = owner
@@ -342,9 +349,9 @@ function planSnapshot(
     planEdits
       ? 'CURRENT STRETCH ROUTINES (use routine key + block label + stretch key with update_flex_routine):'
       : 'CURRENT STRETCH ROUTINES:',
-    `The two alternate: whichever was done last, the app offers the other next. Both end with the same four sets of key=${STRETCH_CORE.key} — ${STRETCH_CORE.name}, done flat on the mat${apart}. The second stretch of a day skips them, because the first one already did them.`,
+    `${routines.length > 1 ? 'These are the flexibility skills this person trains; whichever was done last, the app offers another next.' : 'This is the one flexibility skill this person trains.'} Each ends with the same four sets of key=${STRETCH_CORE.key} — ${STRETCH_CORE.name}, done flat on the mat${apart}. The second stretch of a day skips them, because the first one already did them.`,
   )
-  for (const r of FLEX_ROUTINE_KEYS) {
+  for (const r of routines) {
     lines.push('', `routine=${r} — the ${FLEX_ROUTINES[r].label} routine:`)
     for (const b of flexPlans[r] ?? []) {
       lines.push(`${b.label}:`)

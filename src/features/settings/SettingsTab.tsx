@@ -20,7 +20,8 @@ import { ownerFlavour } from '../../lib/profile'
 import { PlanEditor } from './PlanEditor'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate } from '../../lib/version'
 import { stashResumeTab } from '../../lib/resumeTab'
-import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
+import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
+import { stretchRoutinesFor } from '../../lib/flexSkills'
 import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
 import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
 import { PROVIDERS, providerOf, trimBaseUrl } from '../../lib/aiProvider'
@@ -252,29 +253,30 @@ export function SettingsTab({
 
       <PlanEditor />
 
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">stretch routines</label>
-        {FLEX_ROUTINE_KEYS.map((r) => (
-          <button
-            key={r}
-            onClick={() => {
-              if (confirmRestore !== r) {
-                setConfirmRestore(r)
-                return
-              }
-              updateFlexPlan(r, FLEX_ROUTINES[r].blocks)
-              setConfirmRestore(null)
-            }}
-            onBlur={() => setConfirmRestore(null)}
-            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-          >
-            {confirmRestore === r
-              ? 'tap again to restore'
-              : `restore default ${FLEX_ROUTINES[r].label} routine`}
-          </button>
-        ))}
-      </section>
-
+      {stretchRoutinesFor(settings.profile).length > 0 && (
+        <section className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-neutral-300">stretch routines</label>
+          {stretchRoutinesFor(settings.profile).map((r) => (
+            <button
+              key={r}
+              onClick={() => {
+                if (confirmRestore !== r) {
+                  setConfirmRestore(r)
+                  return
+                }
+                updateFlexPlan(r, FLEX_ROUTINES[r].blocks)
+                setConfirmRestore(null)
+              }}
+              onBlur={() => setConfirmRestore(null)}
+              className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+            >
+              {confirmRestore === r
+                ? 'tap again to restore'
+                : `restore default ${FLEX_ROUTINES[r].label} routine`}
+            </button>
+          ))}
+        </section>
+      )}
 
       {settings.coachEnabled && (
         <section className="flex flex-col gap-2">

@@ -9,13 +9,15 @@ import { photoReminder } from '../../lib/photoReminder'
 import { toISODate } from '../../lib/dates'
 import { dayOrder, type VariantKey } from '../../config/plan'
 import { lastTrainingSession } from '../../lib/session'
-import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
+import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
 import { hasPillar, ownerFlavour } from '../../lib/profile'
 import { lastStretchRoutine } from '../../lib/stretchRotation'
 import { CardioCard } from './CardioCard'
+import { StretchLogCard } from './StretchLogCard'
+import { logsStretchOnly, stretchRoutinesFor } from '../../lib/flexSkills'
 
 const sessionButton =
   'min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2'
@@ -27,14 +29,13 @@ type Props = {
 }
 
 export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
-  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries, cardioEntries, goals, logCardio, deleteCardio } =
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries, cardioEntries, goals, logCardio, deleteCardio, logFlex } =
     useData()
   // What this person tracks decides what the page offers (see lib/profile). The
   // owner's own extras — the photo history, the core block — stay his.
   const profile = settings.profile
   const owner = ownerFlavour(profile)
   const strength = hasPillar(profile, 'strength')
-  const flexibility = hasPillar(profile, 'flexibility')
   const [flash, setFlash] = useState<string | null>(null)
   const [photoDismissed, setPhotoDismissed] = useState(false)
   const [habitWeek, setHabitWeek] = useState<string | null>(null)
@@ -107,8 +108,9 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     : []
   const showFullBody = strength && plan.fullbody.exercises.length > 0
 
-  // The right column: the same two routines, rotated the same way.
-  const stretchRoutines = flexibility ? nextUpFirst(FLEX_ROUTINE_KEYS, dimmedStretch) : []
+  // The right column: the routines this person trains, rotated the same way. One
+  // who only counts stretch sessions gets the log card instead.
+  const stretchRoutines = nextUpFirst(stretchRoutinesFor(profile), dimmedStretch)
   const showCore = owner && strength
   // With only one of the two columns in use, its buttons run across both rather
   // than down one side of an empty half.
@@ -164,6 +166,14 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
           goal={goals.cardio ?? 0}
           onLog={(entry) => void logCardio(entry)}
           onDelete={(id) => void deleteCardio(id)}
+        />
+      )}
+
+      {logsStretchOnly(profile) && (
+        <StretchLogCard
+          entries={flexEntries}
+          goal={goals.flex}
+          onLog={(date) => void logFlex({ date, note: 'logged' })}
         />
       )}
 

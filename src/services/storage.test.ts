@@ -21,7 +21,7 @@ vi.stubGlobal('localStorage', {
 
 const { storage } = await import('./storage')
 const { DEFAULT_FLEX_ROUTINE } = await import('../config/flexPlan')
-const { FLEX_ROUTINES } = await import('../config/flexRoutines')
+const { FLEX_ROUTINES, defaultFlexPlans } = await import('../config/flexRoutines')
 
 it('does not report an outbox write as durable when browser storage is full', () => {
   const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError') })
@@ -86,7 +86,7 @@ describe('loadFlexPlans', () => {
 
   it('prefers the stored map once there is one', () => {
     backing.set('wt.flexplan', JSON.stringify(CUSTOM))
-    storage.saveFlexPlans({ side_split: DEFAULT_FLEX_ROUTINE, head_to_toe: CUSTOM })
+    storage.saveFlexPlans({ ...defaultFlexPlans(), side_split: DEFAULT_FLEX_ROUTINE, head_to_toe: CUSTOM })
     const plans = storage.loadFlexPlans()
     expect(plans.side_split).toEqual(DEFAULT_FLEX_ROUTINE)
     expect(plans.head_to_toe).toEqual(CUSTOM)
@@ -114,7 +114,7 @@ describe('loadFlexPlans', () => {
         tempo: '', holdSec: 90, perSide: true, restSec: 60, setLabels: ['knee straight', 'knee bent'] },
       ...CUSTOM[0].exercises,
     ] }]
-    storage.saveFlexPlans({ side_split: CUSTOM, head_to_toe: blocks })
+    storage.saveFlexPlans({ ...defaultFlexPlans(), side_split: CUSTOM, head_to_toe: blocks })
     const plans = storage.loadFlexPlans()
     expect(plans.head_to_toe[0].exercises[0]).toMatchObject({
       holdSec: 30, maxSets: 3, restSec: 0, sideSwitchSec: 5,
@@ -125,8 +125,8 @@ describe('loadFlexPlans', () => {
   })
 
   it('round-trips a saved map', () => {
-    storage.saveFlexPlans({ side_split: CUSTOM, head_to_toe: CUSTOM })
-    expect(storage.loadFlexPlans()).toEqual({ side_split: CUSTOM, head_to_toe: CUSTOM })
+    storage.saveFlexPlans({ ...defaultFlexPlans(), side_split: CUSTOM, head_to_toe: CUSTOM })
+    expect(storage.loadFlexPlans()).toEqual({ ...defaultFlexPlans(), side_split: CUSTOM, head_to_toe: CUSTOM })
   })
 })
 

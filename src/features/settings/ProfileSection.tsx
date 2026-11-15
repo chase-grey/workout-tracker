@@ -17,6 +17,9 @@ import {
 } from '../../lib/profile'
 import { recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
+import { FlexSkillPicker } from '../../components/FlexSkillPicker'
+import type { FlexRoutineKey } from '../../config/flexRoutines'
+import { flexSkillsOf, sameSkills } from '../../lib/flexSkills'
 import { PressButton, SETTINGS_BUTTON, SETTINGS_FIELD, SETTINGS_LABEL } from './PressButton'
 
 const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[] = [
@@ -52,11 +55,14 @@ export function ProfileSection() {
   const [caloriesDraft, setCalories] = useState<string | null>(null)
   const [directionDraft, setDirection] = useState<DietDirection | null>(null)
   const [editing, setEditing] = useState(false)
+  const [skillsDraft, setSkills] = useState<FlexRoutineKey[] | null>(null)
 
   const pillars = pillarsDraft ?? profile.pillars
   const goals = goalsDraft ?? goalsInForce(profile)
   const caloriesText = caloriesDraft ?? (baseCalories ? String(baseCalories) : '')
   const direction = directionDraft ?? baseDirection
+  const baseSkills = flexSkillsOf(profile)
+  const skills = skillsDraft ?? baseSkills
   const on = (p: Pillar) => pillars.includes(p)
 
   const calories = Number(caloriesText)
@@ -66,7 +72,8 @@ export function ProfileSection() {
   const goalsChanged = !sameGoals(maskGoals(goals, pillars), baseGoals)
   const caloriesChanged = on('diet') && caloriesValid && Math.round(calories) !== baseCalories
   const directionChanged = on('diet') && !ownerFlavour(profile) && direction !== baseDirection
-  const changed = pillarsChanged || goalsChanged || caloriesChanged || directionChanged
+  const skillsChanged = on('flexibility') && !sameSkills(skills, baseSkills)
+  const changed = pillarsChanged || goalsChanged || caloriesChanged || directionChanged || skillsChanged
 
   const togglePillar = (p: Pillar) => {
     if (!on(p)) {
@@ -88,6 +95,7 @@ export function ProfileSection() {
     if (goalsChanged) next = withWeeklyGoals(next, maskGoals(goals, pillars), weekStartISO(today))
     if (caloriesChanged) next = withCalorieGoal(next, Math.round(calories), today)
     if (on('diet') && !ownerFlavour(profile)) next = { ...next, dietDirection: direction }
+    if (skillsChanged) next = { ...next, flexSkills: skills }
     void updateSettings({ ...settings, profile: next })
     close()
   }
@@ -97,6 +105,7 @@ export function ProfileSection() {
     setGoals(null)
     setCalories(null)
     setDirection(null)
+    setSkills(null)
     setEditing(false)
   }
 
@@ -139,6 +148,8 @@ export function ProfileSection() {
           </PressButton>
         ))}
       </div>
+
+      {on('flexibility') && <FlexSkillPicker value={skills} onChange={setSkills} labelClass={SETTINGS_LABEL} />}
 
       {GOAL_ROWS.filter((r) => on(r.pillar)).map((r) => (
         <div key={r.key} className="flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3">

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { FLEX_ROUTINE, type FlexBlock } from '../config/flexPlan'
-import { FLEX_ROUTINES } from '../config/flexRoutines'
+import { FLEX_ROUTINES, defaultFlexPlans } from '../config/flexRoutines'
 import { applyFlexEdits, applyFlexPlanEdits, type FlexEdit } from './flexTools'
 
 describe('applyFlexEdits', () => {
@@ -164,6 +164,7 @@ describe('applyFlexEdits', () => {
 
 describe('applyFlexPlanEdits', () => {
   const plans = () => ({
+    ...defaultFlexPlans(),
     side_split: FLEX_ROUTINES.side_split.blocks,
     head_to_toe: FLEX_ROUTINES.head_to_toe.blocks,
   })

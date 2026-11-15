@@ -27,6 +27,8 @@ import { LoginFields } from './LoginFields'
 import { QrScanner } from './QrScanner'
 import { signInLink } from '../../lib/signInLink'
 import { MdQrCodeScanner } from 'react-icons/md'
+import { FlexSkillPicker } from '../../components/FlexSkillPicker'
+import type { FlexRoutineKey } from '../../config/flexRoutines'
 
 /**
  * Every device belongs to an account: a new one made here, or one signed back
@@ -238,6 +240,8 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
   // Null until typed by hand; until then the field shows the suggestion.
   const [calorieText, setCalorieText] = useState<string | null>(null)
   const [goalEdits, setGoalEdits] = useState<WeeklyGoalConfig | null>(null)
+  // Null until answered: a skill or two, or [] for sessions only.
+  const [flexSkills, setFlexSkills] = useState<FlexRoutineKey[] | null>(null)
 
   // 5 - coach
   const [provider, setProvider] = useState<ProviderId>(PROVIDERS[0].id)
@@ -254,6 +258,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
   const on = (p: Pillar) => pillars.includes(p)
   const strengthOn = on('strength')
   const dietOn = on('diet')
+  const flexOn = on('flexibility')
 
   const heightFt = num(feet)
   const heightIn = heightFt === null ? null : heightFt * 12 + (num(inches) ?? 0)
@@ -307,7 +312,8 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
 
   const calorieNum = num(calories)
   const planOk =
-    !dietOn || (inRange(calorieNum, 800, 6000) && (targetWeight.trim() === '' || inRange(num(targetWeight), 50, 700)))
+    (!flexOn || flexSkills !== null) &&
+    (!dietOn || (inRange(calorieNum, 800, 6000) && (targetWeight.trim() === '' || inRange(num(targetWeight), 50, 700))))
 
   const pastedLink = /^https?:\/\//i.test(email.trim())
   const accountOk =
@@ -327,6 +333,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
       ...(dietOn ? { activity, dietDirection: direction } : {}),
       ...(dietOn && inRange(num(targetWeight), 50, 700) ? { targetWeightLbs: num(targetWeight)! } : {}),
       ...(strengthOn ? { strength: { daysPerWeek: days, equipment } } : {}),
+      ...(flexOn && flexSkills !== null ? { flexSkills } : {}),
       weeklyGoals: [{ from: weekStartISO(toISODate(now)), goals }],
       calorieGoals: dietOn && calorieNum !== null ? [{ from: toISODate(now), goal: calorieNum }] : [],
       createdAt: now.toISOString(),
@@ -504,6 +511,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
                 </div>
               </>
             )}
+            {flexOn && <FlexSkillPicker value={flexSkills} onChange={setFlexSkills} labelClass={LABEL} />}
             <div role="group" aria-label="weekly goals" className="flex flex-col gap-2">
               <span className={LABEL}>weekly goals</span>
               {GOAL_ROWS.filter((r) => on(r.pillar)).map((r) => (

@@ -178,6 +178,8 @@ export type FlexMeasurement = {
   routines?: FlexRoutineKey[]
   startSides?: FlexEntry['startSides']
   note?: string
+  /** The day it belongs to, when logged after the fact; today otherwise. */
+  date?: string
 }
 
 /** The angle fields a measurement can carry — one non-null makes it a reading. */
@@ -769,7 +771,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const logFlex = useCallback(
     async (m: FlexMeasurement, opts?: { quiet?: boolean }): Promise<Celebration | null> => {
       const entry: FlexEntry = {
-        date: toISODate(new Date()),
+        date: m.date ?? toISODate(new Date()),
         splitDeg: m.splitDeg ?? null,
         coldSplitDeg: m.coldSplitDeg ?? null,
         warmSplitDeg: m.warmSplitDeg ?? null,
