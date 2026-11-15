@@ -477,7 +477,7 @@ export function Welcome({
                   onChange={setDirection}
                 />
                 <Segmented
-                  label="activity"
+                  label="active days a week"
                   value={activity}
                   options={(Object.keys(ACTIVITY_LABELS) as Activity[]).map((v) => ({
                     value: v,

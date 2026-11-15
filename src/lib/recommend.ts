@@ -11,7 +11,7 @@ import type { WeeklyGoalConfig } from './weeklyStreak'
 const LB_PER_KG = 2.20462
 const CM_PER_IN = 2.54
 
-/** Multipliers on resting burn for a day that also includes a few workouts a week. */
+/** Multipliers on resting burn by days of exercise a week: 1–3, 3–5, 6–7, the usual bands. */
 const ACTIVITY_FACTOR: Record<Activity, number> = { light: 1.375, moderate: 1.55, active: 1.725 }
 
 /** A pound a week down; about half a pound a week up. */

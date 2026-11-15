@@ -246,7 +246,7 @@ function renderAboutPerson(profile: Profile, today: Date, heightIn: number | und
   const age = ageOf(profile, today)
   if (age != null) body.push(`${age} years old`)
   if (heightIn) body.push(`${Math.floor(heightIn / 12)}'${Math.round(heightIn % 12)}" tall`)
-  if (profile.activity) body.push(`day to day: ${ACTIVITY_LABELS[profile.activity]}`)
+  if (profile.activity) body.push(`active ${ACTIVITY_LABELS[profile.activity]} days a week`)
   if (body.length > 0) lines.push(`Body: ${body.join(', ')}`)
   if (hasPillar(profile, 'diet')) {
     const diet: string[] = []

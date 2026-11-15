@@ -40,10 +40,15 @@ export const DIET_LABELS: Record<DietDirection, string> = {
   gain: 'gain weight',
 }
 
+/**
+ * Asked as a whole week, not a job: the factors these choose (lib/recommend)
+ * are the standard ones for days of exercise a week, so a desk worker who plays
+ * soccer four nights is 'moderate', not 'light'. Workouts logged here count.
+ */
 export const ACTIVITY_LABELS: Record<Activity, string> = {
-  light: 'mostly sitting',
-  moderate: 'on my feet',
-  active: 'physical job',
+  light: '0–2',
+  moderate: '3–5',
+  active: '6+',
 }
 
 export const EQUIPMENT_LABELS: Record<Equipment, string> = {
