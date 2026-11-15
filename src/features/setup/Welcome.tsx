@@ -391,7 +391,7 @@ export function Welcome({
         ? 'skip'
         : 'next'
 
-  const heading = ['welcome', 'getting started', 'about you', 'your plan', 'coach', 'account'][step]
+  const heading = ['welcome', 'getting started', 'about you', 'your plan', 'coach', skipped ? 'sign in' : 'account'][step]
 
   return (
     <div className={`flex min-h-full flex-col bg-bg ${SHELL_WIDTH} w-full ${SHELL_PAD_X} ${SHELL_PAD_TOP}`}>
@@ -402,6 +402,7 @@ export function Welcome({
               if (pending) return
               if (skipped) {
                 setSkipped(false)
+                setMode('invite')
                 setStep(0)
               } else setStep(step - 1)
             }}
@@ -610,19 +611,20 @@ export function Welcome({
 
         {step === 5 && (
           <>
-            <Segmented
-              label="account"
-              value={mode}
-              options={[
-                { value: 'invite' as WelcomeAccount['kind'], label: 'invite code' },
-                { value: 'key' as WelcomeAccount['kind'], label: 'account key' },
-                { value: 'local' as WelcomeAccount['kind'], label: 'this phone' },
-              ]}
-              onChange={(m) => {
-                setMode(m)
-                setError(null)
-              }}
-            />
+            {!skipped && (
+              <Segmented
+                label="account"
+                value={mode}
+                options={[
+                  { value: 'invite' as WelcomeAccount['kind'], label: 'invite code' },
+                  { value: 'local' as WelcomeAccount['kind'], label: 'this phone' },
+                ]}
+                onChange={(m) => {
+                  setMode(m)
+                  setError(null)
+                }}
+              />
+            )}
             {mode === 'invite' && (
               <label className="flex flex-col gap-2">
                 <span className={LABEL}>invite code</span>
