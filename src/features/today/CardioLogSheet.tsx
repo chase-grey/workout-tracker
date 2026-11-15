@@ -1,11 +1,28 @@
 import { useState } from 'react'
-import { CARDIO_KINDS, type CardioEntry, type CardioKind } from '../../lib/cardio'
+import {
+  addCardioKind,
+  cardioKinds,
+  normalizeKind,
+  removeCardioKind,
+  type CardioEntry,
+  type CardioKind,
+} from '../../lib/cardio'
 import { toISODate } from '../../lib/dates'
 import { useBackGuard } from '../../lib/useBackGuard'
 import { usePressAction } from '../../lib/usePressAction'
+import { useData } from '../../store/DataContext'
 
 const inputClass =
   'mt-1 min-h-[52px] w-full rounded-xl bg-surface-2 px-3 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent'
+
+const chipClass = 'min-h-[44px] rounded-full px-4 font-medium'
+
+/** '' is a field left blank; a value must be a positive number to count. */
+function optional(text: string): { value?: number; valid: boolean } {
+  if (text.trim() === '') return { valid: true }
+  const n = Number(text)
+  return Number.isFinite(n) && n > 0 ? { value: n, valid: true } : { valid: false }
+}
 
 export function CardioLogSheet({
   onSave,
@@ -14,25 +31,49 @@ export function CardioLogSheet({
   onSave: (entry: Omit<CardioEntry, 'id'>) => void
   onClose: () => void
 }) {
+  const { settings, updateSettings } = useData()
+  const kinds = cardioKinds(settings.cardioKinds)
   const today = toISODate(new Date())
-  const [kind, setKind] = useState<CardioKind>('run')
+  const [kind, setKind] = useState<CardioKind>(kinds[0] ?? '')
   const [minutes, setMinutes] = useState('')
   const [distance, setDistance] = useState('')
   const [date, setDate] = useState(today)
+  const [editing, setEditing] = useState(false)
+  const [newKind, setNewKind] = useState('')
 
   useBackGuard(true, onClose)
 
-  const min = Number(minutes)
-  const minValid = minutes.trim() !== '' && Number.isFinite(min) && min > 0
-  const hasDistance = distance.trim() !== ''
-  const dist = Number(distance)
-  const distValid = !hasDistance || (Number.isFinite(dist) && dist > 0)
+  const saveKinds = (next: CardioKind[]) => updateSettings({ ...settings, cardioKinds: next })
+
+  const removeKind = (k: CardioKind) => {
+    const next = removeCardioKind(kinds, k)
+    saveKinds(next)
+    if (kind === k) setKind(next[0] ?? '')
+  }
+
+  const addKind = () => {
+    const k = normalizeKind(newKind)
+    if (k === '') return
+    const next = addCardioKind(kinds, k)
+    if (next !== kinds) saveKinds(next)
+    setKind(k)
+    setNewKind('')
+  }
+  const addPress = usePressAction(addKind)
+
+  const min = optional(minutes)
+  const dist = optional(distance)
   const dateValid = date !== '' && date <= today
-  const valid = minValid && distValid && dateValid
+  const valid = kind !== '' && min.valid && dist.valid && dateValid
 
   const save = () => {
     if (!valid) return
-    onSave({ date, kind, minutes: min, ...(hasDistance ? { distanceMi: dist } : {}) })
+    onSave({
+      date,
+      kind,
+      ...(min.value !== undefined ? { minutes: min.value } : {}),
+      ...(dist.value !== undefined ? { distanceMi: dist.value } : {}),
+    })
     onClose()
   }
   const savePress = usePressAction(save)
@@ -46,30 +87,75 @@ export function CardioLogSheet({
       >
         <h2 className="mb-4 text-lg font-bold">log cardio</h2>
         <div className="mb-4 flex flex-wrap gap-2">
-          {CARDIO_KINDS.map((k) => (
-            <button
-              key={k}
-              onClick={() => setKind(k)}
-              aria-pressed={kind === k}
-              className={`min-h-[44px] rounded-full px-4 font-medium ${
-                kind === k ? 'bg-accent text-on-accent' : 'bg-surface-2 text-neutral-300'
-              }`}
-            >
-              {k}
-            </button>
-          ))}
+          {kinds.map((k) =>
+            editing ? (
+              <button
+                key={k}
+                onClick={() => removeKind(k)}
+                aria-label={`remove ${k}`}
+                className={`${chipClass} bg-surface-2 text-neutral-300`}
+              >
+                {k} <span className="text-neutral-500">✕</span>
+              </button>
+            ) : (
+              <button
+                key={k}
+                onClick={() => setKind(k)}
+                aria-pressed={kind === k}
+                className={`${chipClass} ${
+                  kind === k ? 'bg-accent text-on-accent' : 'bg-surface-2 text-neutral-300'
+                }`}
+              >
+                {k}
+              </button>
+            ),
+          )}
+          <button
+            onClick={() => {
+              setEditing((v) => !v)
+              setNewKind('')
+            }}
+            aria-pressed={editing}
+            className={`${chipClass} ${editing ? 'bg-accent text-on-accent' : 'text-neutral-500'}`}
+          >
+            {editing ? 'done' : 'edit'}
+          </button>
         </div>
+        {editing && (
+          <div className="mb-4 flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              aria-label="new type"
+              placeholder="new type"
+              maxLength={24}
+              value={newKind}
+              onChange={(e) => setNewKind(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addKind()
+              }}
+              className="min-h-[44px] min-w-0 flex-1 rounded-xl bg-surface-2 px-3 text-lg focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+            <button
+              {...addPress}
+              disabled={normalizeKind(newKind) === ''}
+              className="min-h-[44px] rounded-xl bg-surface-2 px-5 font-medium disabled:opacity-30"
+            >
+              add
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <label className="min-w-0 text-xs text-neutral-400">
             minutes
             <input
-              autoFocus
               type="number"
               inputMode="decimal"
               min="0"
               step="any"
               value={minutes}
               onChange={(e) => setMinutes(e.target.value)}
+              aria-invalid={!min.valid}
               className={inputClass}
             />
           </label>
@@ -82,7 +168,7 @@ export function CardioLogSheet({
               step="any"
               value={distance}
               onChange={(e) => setDistance(e.target.value)}
-              aria-invalid={!distValid}
+              aria-invalid={!dist.valid}
               className={inputClass}
             />
           </label>

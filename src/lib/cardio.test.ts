@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
+  DEFAULT_CARDIO_KINDS,
+  addCardioKind,
   cardioDates,
+  cardioKinds,
+  cardioLine,
   cardioMinutesByWeek,
   cardioSummary,
   mergeCardio,
+  removeCardioKind,
   type CardioEntry,
 } from './cardio'
 
@@ -93,5 +98,47 @@ describe('cardioSummary', () => {
 
   it('rounds the minutes to a whole number', () => {
     expect(cardioSummary({ minutes: 31.6 })).toBe('32 min')
+  })
+})
+
+describe('optional minutes and distance', () => {
+  it('summarises neither as nothing, and the line as the kind alone', () => {
+    expect(cardioSummary({})).toBe('')
+    expect(cardioLine({ kind: 'soccer' })).toBe('soccer')
+  })
+
+  it('summarises a distance with no minutes', () => {
+    expect(cardioSummary({ distanceMi: 3.1 })).toBe('3.1 mi')
+    expect(cardioLine({ kind: 'run', minutes: 32, distanceMi: 3.1 })).toBe('run · 32 min · 3.1 mi')
+  })
+
+  it('counts an untimed session as no minutes in its week', () => {
+    const weeks = cardioMinutesByWeek([
+      { id: 'a', date: '2026-07-06', kind: 'soccer' },
+      entry({ id: 'b', date: '2026-07-07', minutes: 20 }),
+    ])
+    expect(weeks.get('2026-07-06')).toBe(20)
+  })
+})
+
+describe('cardio quick picks', () => {
+  it('starts from the defaults, with soccer and without row', () => {
+    expect(cardioKinds(undefined)).toEqual(DEFAULT_CARDIO_KINDS)
+    expect(DEFAULT_CARDIO_KINDS).toContain('soccer')
+    expect(DEFAULT_CARDIO_KINDS).not.toContain('row')
+  })
+
+  it('keeps an emptied list empty rather than restoring the defaults', () => {
+    expect(cardioKinds([])).toEqual([])
+  })
+
+  it('adds a tidied name once', () => {
+    expect(addCardioKind(['run'], '  Rock   Climbing ')).toEqual(['run', 'rock climbing'])
+    expect(addCardioKind(['run'], 'RUN')).toEqual(['run'])
+    expect(addCardioKind(['run'], '   ')).toEqual(['run'])
+  })
+
+  it('removes one', () => {
+    expect(removeCardioKind(['run', 'walk', 'bike'], 'walk')).toEqual(['run', 'bike'])
   })
 })

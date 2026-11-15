@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { cardioDates, cardioSummary, type CardioEntry } from '../../lib/cardio'
+import { cardioDates, cardioLine, type CardioEntry } from '../../lib/cardio'
 import { parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import { CardioLogSheet } from './CardioLogSheet'
 
@@ -23,7 +23,7 @@ export function CardioCard({
     .filter((e) => weekStartISO(e.date) === thisWeek)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const days = cardioDates(week).length
-  const minutes = Math.round(week.reduce((sum, e) => sum + e.minutes, 0))
+  const minutes = Math.round(week.reduce((sum, e) => sum + (e.minutes ?? 0), 0))
 
   return (
     <div className="rounded-2xl bg-surface p-3">
@@ -45,7 +45,7 @@ export function CardioCard({
           {week.map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate text-sm text-neutral-300">
-                {e.kind} · {cardioSummary(e)}
+                {cardioLine(e)}
                 <span className="text-neutral-500">
                   {' '}
                   · {parseISODate(e.date).toLocaleDateString('en-US', { weekday: 'short' }).toLowerCase()}

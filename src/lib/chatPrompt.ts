@@ -14,7 +14,7 @@ import {
   ownerFlavour,
   type Profile,
 } from './profile'
-import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
+import { cardioLine, cardioMinutesByWeek, type CardioEntry } from './cardio'
 
 /** Format one set as "weightxreps" (e.g. "135x8"), or "BWxreps" when weight is blank. */
 function formatSet(row: WorkoutRow): string {
@@ -295,7 +295,7 @@ function renderCardio(entries: CardioEntry[], today: Date): string[] {
     .filter((e) => parseISODate(e.date) >= cutoff)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6)
-    .map((e) => `${e.date}: ${e.kind}, ${cardioSummary(e)}`)
+    .map((e) => `${e.date}: ${cardioLine(e)}`)
   return recent.length > 0 ? [...lines, 'Latest sessions:', ...recent] : lines
 }
 
