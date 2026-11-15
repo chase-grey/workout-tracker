@@ -98,7 +98,8 @@ queued write itself, to the backend's `save_errors` tab
 script reads it back. `-- --json` gives the whole payloads, enough to replay a
 stuck write. The script also says when the backend doesn't answer at all, the
 one failure a phone can't report. It exits 3 if the deployed backend predates
-the route; that means `SimpleBackend.gs` needs redeploying (see BACKEND.md).
+the route; that means `SimpleBackend.gs` needs redeploying (see BACKEND.md). It goes as the owner
+with `CHAT_SHARED_SECRET` from `.env`, and exits 4 if the backend refuses it.
 
 Before any of that, check the backend's version against the app's: `npm run
 backend:check`. The app shows "Backend is behind" on Today and in Settings when

@@ -10,12 +10,26 @@
  * (see SimpleBackend.gs appendSaveError). This is the reading end, so a "couldn't
  * save" on the phone can be diagnosed from here. It also says whether the backend
  * answers at all, which covers the one failure a phone can't report.
+ *
+ * The backend takes no request without a key once the owner has signed in, and
+ * save_errors is the owner's alone, so this goes as the owner: the issue token
+ * in .env (CHAT_SHARED_SECRET), which the backend accepts as the owner's key.
  */
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+try {
+  process.loadEnvFile(path.join(root, '.env'))
+} catch {
+  /* no .env: the key can still come from the environment */
+}
+const key = (process.env.CHAT_SHARED_SECRET || '').trim()
+if (!key) {
+  console.error('No owner key: set CHAT_SHARED_SECRET in .env (the issue token from Settings).')
+  process.exit(1)
+}
 const config = readFileSync(path.join(root, 'src', 'config', 'backend.ts'), 'utf8')
 const url = process.env.API_URL || (config.match(/'(https:[^']+\/exec)'/) || [])[1]
 if (!url) {
@@ -30,17 +44,23 @@ const limit = Number(args.find((a) => /^[0-9]+$/.test(a))) || 20
 async function get(route, params = {}) {
   const u = new URL(url)
   u.searchParams.set('route', route)
+  u.searchParams.set('user', key)
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v)
   const res = await fetch(u, { signal: AbortSignal.timeout(60_000) })
   if (!res.ok) throw new Error(`GET ${route}: HTTP ${res.status}`)
   return res.json()
 }
 
+let probe
 try {
-  await get('settings')
+  probe = await get('settings')
 } catch (e) {
   console.error(`Backend did not answer: ${e.message}`)
   process.exit(2)
+}
+if (probe && typeof probe.error === 'string') {
+  console.error(`Backend refused the owner key (${probe.error}). Check CHAT_SHARED_SECRET in .env against the script's.`)
+  process.exit(4)
 }
 
 const reports = await get('save_errors', { limit: String(limit) })
