@@ -55,19 +55,46 @@ export async function reportSaveFailures(
 /**
  * Tell the backend the pose detector wouldn't load, on the same save_errors tab
  * — the phone has no console, and the stored error in Settings is only seen by
- * someone who goes looking. Throttled like a stuck write: once per distinct
- * error per window.
+ * someone who goes looking.
  */
-export async function reportPoseFailure(detail: unknown): Promise<void> {
-  if (!api.isConfigured()) return
+export function reportPoseFailure(detail: unknown): Promise<void> {
   const err = detail as { message?: string } | null
+  return reportDeviceFailure('pose_model', err?.message ?? 'pose model failed to load', {
+    error: detail,
+    userAgent: navigator.userAgent,
+  })
+}
+
+/**
+ * A render threw and took the whole screen with it (see CrashScreen). The stack,
+ * and how this page was reached, are what make it fixable from this side.
+ */
+export function reportCrash(error: unknown, componentStack?: string | null): Promise<void> {
+  const err = error instanceof Error ? error : new Error(String(error))
+  const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+  return reportDeviceFailure('crash', err.message || err.name, {
+    stack: err.stack,
+    componentStack,
+    navigation: nav?.type,
+    historyLength: history.length,
+    historyState: history.state,
+    userAgent: navigator.userAgent,
+  })
+}
+
+/**
+ * A failure the phone can't show anyone, onto the save_errors tab. Throttled
+ * like a stuck write: once per distinct error per window.
+ */
+async function reportDeviceFailure(route: string, message: string, payload: unknown): Promise<void> {
+  if (!api.isConfigured()) return
   const report: SaveErrorReport = {
     build: APP_COMMIT,
-    route: 'pose_model',
-    writeId: 'pose_model',
-    message: err?.message ?? 'pose model failed to load',
+    route,
+    writeId: route,
+    message,
     pending: 0,
-    payload: { error: detail, userAgent: navigator.userAgent },
+    payload,
   }
   const { due, log } = dueReports([report], loadLog(), Date.now())
   if (due.length === 0) return
