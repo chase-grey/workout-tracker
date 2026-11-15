@@ -52,3 +52,29 @@ export function credentialFromText(text: string): SignInCredential | undefined {
   if (hash >= 0 && /^https?:\/\//i.test(t)) return credentialFromHash(t.slice(hash))
   return { kind: 'key', key: t }
 }
+
+/** Whether a device with these settings is already signed in with `cred`. */
+export function isSignedInAs(
+  settings: { accountMode?: string; accountToken?: string; chatToken: string },
+  cred: SignInCredential,
+): boolean {
+  return cred.kind === 'key'
+    ? settings.accountMode === 'hosted' && settings.accountToken?.trim() === cred.key
+    : settings.accountMode === 'legacy' && settings.chatToken.trim() === cred.secret
+}
+
+/** A phone or tablet: somewhere the app belongs on the home screen. */
+export function isHandheld(userAgent: string, maxTouchPoints: number): boolean {
+  if (/iPhone|iPad|iPod|Android|Mobi/i.test(userAgent)) return true
+  // iPadOS reports itself as a Mac; a Mac has no touch points.
+  return /Macintosh/.test(userAgent) && maxTouchPoints > 1
+}
+
+/**
+ * Where a sign-in link lands. A phone or tablet still in a browser tab is
+ * offered the home screen first; anywhere else — a laptop, or the installed
+ * app itself — signs straight in and opens on Today.
+ */
+export function signInLanding(o: { handheld: boolean; standalone: boolean }): 'install' | 'today' {
+  return o.handheld && !o.standalone ? 'install' : 'today'
+}

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { credentialFromHash, credentialFromText, signInLink, withoutCredential } from './signInLink'
+import {
+  credentialFromHash,
+  credentialFromText,
+  isHandheld,
+  isSignedInAs,
+  signInLanding,
+  signInLink,
+  withoutCredential,
+} from './signInLink'
 
 const APP = 'https://chase-grey.github.io/workout-tracker/'
 const hashOf = (link: string) => new URL(link).hash
@@ -60,5 +68,41 @@ describe('credentialFromText', () => {
   it('is undefined for blank text or a link without a credential', () => {
     expect(credentialFromText('  ')).toBeUndefined()
     expect(credentialFromText(`${APP}#a=1`)).toBeUndefined()
+  })
+})
+
+describe('isSignedInAs', () => {
+  const base = { chatToken: '' }
+  it('matches a hosted account by its key', () => {
+    expect(isSignedInAs({ ...base, accountMode: 'hosted', accountToken: 'k' }, { kind: 'key', key: 'k' })).toBe(true)
+    expect(isSignedInAs({ ...base, accountMode: 'hosted', accountToken: 'j' }, { kind: 'key', key: 'k' })).toBe(false)
+  })
+
+  it('matches the owner by mode and issue token', () => {
+    const owner = { kind: 'owner', secret: 's' } as const
+    expect(isSignedInAs({ accountMode: 'legacy', chatToken: ' s ' }, owner)).toBe(true)
+    expect(isSignedInAs({ accountMode: 'legacy', chatToken: '' }, owner)).toBe(false)
+    expect(isSignedInAs({ accountMode: 'local', chatToken: 's' }, owner)).toBe(false)
+  })
+})
+
+describe('isHandheld', () => {
+  it('knows phones and tablets, including an iPad posing as a Mac', () => {
+    expect(isHandheld('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', 5)).toBe(true)
+    expect(isHandheld('Mozilla/5.0 (Linux; Android 15; Pixel 9) Mobile', 5)).toBe(true)
+    expect(isHandheld('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 5)).toBe(true)
+  })
+
+  it('takes a laptop for a laptop', () => {
+    expect(isHandheld('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 0)).toBe(false)
+    expect(isHandheld('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 10)).toBe(false)
+  })
+})
+
+describe('signInLanding', () => {
+  it('offers the home screen only to a handheld still in the browser', () => {
+    expect(signInLanding({ handheld: true, standalone: false })).toBe('install')
+    expect(signInLanding({ handheld: true, standalone: true })).toBe('today')
+    expect(signInLanding({ handheld: false, standalone: false })).toBe('today')
   })
 })

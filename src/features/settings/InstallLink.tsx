@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { qrSvg } from '../../lib/qr'
+import { copyText } from '../../lib/clipboard'
 import { signInLink, type SignInCredential } from '../../lib/signInLink'
 import { PressButton, SETTINGS_BUTTON, SETTINGS_LABEL } from './PressButton'
 
@@ -10,25 +11,6 @@ import { PressButton, SETTINGS_BUTTON, SETTINGS_LABEL } from './PressButton'
  * server still points somewhere a stranger's phone can open and install.
  */
 export const INSTALL_URL = 'https://chase-grey.github.io/workout-tracker/'
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    // Older iOS webviews and non-secure origins have no async clipboard.
-    const el = document.createElement('textarea')
-    el.value = text
-    el.setAttribute('readonly', '')
-    el.style.position = 'fixed'
-    el.style.opacity = '0'
-    document.body.appendChild(el)
-    el.select()
-    const ok = document.execCommand('copy')
-    el.remove()
-    return ok
-  }
-}
 
 type Audience = 'me' | 'new'
 

@@ -32,6 +32,8 @@ import type { FlexRoutineKey } from './config/flexRoutines'
 import type { DayType } from './types'
 import type { VariantKey } from './config/plan'
 import { WelcomeGate } from './features/setup/WelcomeGate'
+import { SignInLanding, takeCredentialFromUrl } from './features/setup/SignInLanding'
+import { isSignedInAs } from './lib/signInLink'
 import { accountModeOf } from './lib/account'
 
 // A device in use before accounts existed never chose how to store its data.
@@ -61,9 +63,18 @@ export default function App() {
   )
 }
 
-/** The welcome flow until this device has an account mode, the app after. */
+/**
+ * A scanned sign-in link first, on any device it isn't already the account
+ * of; then the welcome flow until this device has an account mode, the app
+ * after.
+ */
 function Gate() {
   const { settings } = useData()
+  const [cred, setCred] = useState(() => {
+    const c = takeCredentialFromUrl()
+    return c && !isSignedInAs(storage.loadSettings(), c) ? c : undefined
+  })
+  if (cred) return <SignInLanding cred={cred} onDone={() => setCred(undefined)} />
   return settings.accountMode ? <AppShell /> : <WelcomeGate />
 }
 
