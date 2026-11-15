@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { currentPalette } from '../../lib/themeStore'
 import { rgbOf } from '../../lib/theme'
 import { useData } from '../../store/DataContext'
@@ -12,6 +12,7 @@ import {
   muscleDevelopment,
   MUSCLES,
   type ExerciseLog,
+  type Tier,
   type Muscle,
   type MuscleScore,
 } from '../../lib/strengthStandards'
@@ -139,6 +140,11 @@ const PECS = [
   'M71 92 Q86 81 107 88 Q109 105 107 121 Q86 131 74 117 Q66 105 71 92 Z',
   'M149 92 Q134 81 113 88 Q111 105 113 121 Q134 131 146 117 Q154 105 149 92 Z',
 ]
+/** The female chest: the same muscle under it, drawn as the rounded mass that shows. */
+const BUST = [
+  'M74 100 Q90 93 107 99 Q111 118 102 132 Q88 142 77 132 Q66 116 74 100 Z',
+  'M146 100 Q130 93 113 99 Q109 118 118 132 Q132 142 143 132 Q154 116 146 100 Z',
+]
 /**
  * Starts below the rib cage, not at the pec line — the gap is where the ribs are —
  * and runs down past the navel to the V of the lower abs at the groin.
@@ -192,12 +198,53 @@ function Regions({
 const HEAD = 'M110 14 C123 14 130 24 129 37 C128 50 121 62 110 62 C99 62 92 50 91 37 C90 24 97 14 110 14 Z'
 
 /**
+ * Which body the map draws: female for someone who said female, the original
+ * figure for everyone else.
+ */
+type Figure = 'male' | 'female'
+
+/**
+ * Torso and pelvis per figure. The female pair narrows at the waist and widens
+ * at the hip; every muscle region sits on either one unchanged.
+ */
+const TORSO: Record<Figure, string> = {
+  male: 'M70 78 Q110 66 150 78 C157 100 156 130 145 152 C141 180 137 199 132 214 Q110 221 88 214 C83 199 79 180 75 152 C64 130 63 100 70 78 Z',
+  female:
+    'M73 80 Q110 70 147 80 C153 102 151 126 141 148 C133 166 131 186 138 214 Q110 222 82 214 C89 186 87 166 79 148 C69 126 67 102 73 80 Z',
+}
+const PELVIS: Record<Figure, string> = {
+  male: 'M88 212 Q110 206 132 212 Q143 234 141 258 Q110 266 79 258 Q77 234 88 212 Z',
+  female: 'M84 208 Q110 202 136 208 Q153 232 151 260 Q110 272 69 260 Q67 232 84 208 Z',
+}
+
+/** A bun, drawn behind the head so the skull's outline crosses it. */
+const BUN = <circle cx="110" cy="10" r="10" />
+/** Hair swept back off the face, with a lock past each ear. */
+const HAIR_FRONT = [
+  'M90 38 C89 22 98 13 110 13 C122 13 131 22 130 38 C126 29 119 25 110 25 C101 25 94 29 90 38 Z',
+  'M90 34 Q85 52 92 66 Q96 50 94 36 Z',
+  'M130 34 Q135 52 128 66 Q124 50 126 36 Z',
+]
+
+/**
  * The neutral silhouette both views draw their regions on. The head is drawn
  * last, over the regions, because the neck runs up behind the jaw — from the
  * front the face has to sit in front of it, and from the back the skull does.
- * Anything in `face` goes on top of the head.
+ * Anything in `behindHead` goes just under the head, anything in `face` on top.
  */
-function Silhouette({ label, face, children }: { label: string; face?: ReactNode; children: ReactNode }) {
+function Silhouette({
+  label,
+  sex,
+  behindHead,
+  face,
+  children,
+}: {
+  label: string
+  sex: Figure
+  behindHead?: ReactNode
+  face?: ReactNode
+  children: ReactNode
+}) {
   const bodyFill = { fill: bodyBase(), stroke: noData(), strokeWidth: 1.5 } as const
   return (
     <figure className="flex items-center justify-center">
@@ -205,18 +252,19 @@ function Silhouette({ label, face, children }: { label: string; face?: ReactNode
         {/* Neck, torso, arms, hands, pelvis, legs, feet. */}
         <g {...bodyFill} strokeLinejoin="round" strokeLinecap="round">
           <path d="M101 52 C100 66 98 76 94 82 Q110 88 126 82 C122 76 120 66 119 52 Z" />
-          <path d="M70 78 Q110 66 150 78 C157 100 156 130 145 152 C141 180 137 199 132 214 Q110 221 88 214 C83 199 79 180 75 152 C64 130 63 100 70 78 Z" />
+          <path d={TORSO[sex]} />
           <path d="M74 82 C56 82 45 96 43 116 C42 140 43 166 45 190 C46 214 49 234 55 252 Q62 255 70 250 C64 230 63 204 66 180 C68 158 69 136 71 118 C72 102 74 92 78 86 Z" />
           <path d="M146 82 C164 82 175 96 177 116 C178 140 177 166 175 190 C174 214 171 234 165 252 Q158 255 150 250 C156 230 157 204 154 180 C152 158 151 136 149 118 C148 102 146 92 142 86 Z" />
           <path d="M53 245 Q60 243 67 246 Q71 261 64 271 Q55 276 51 266 Q48 254 53 245 Z" />
           <path d="M167 245 Q160 243 153 246 Q149 261 156 271 Q165 276 169 266 Q172 254 167 245 Z" />
-          <path d="M88 212 Q110 206 132 212 Q143 234 141 258 Q110 266 79 258 Q77 234 88 212 Z" />
+          <path d={PELVIS[sex]} />
           <path d="M80 252 C70 286 70 330 76 364 C78 392 81 420 83 446 Q89 451 94 446 C96 418 97 390 98 362 C102 322 105 286 107 252 Z" />
           <path d="M140 252 C150 286 150 330 144 364 C142 392 139 420 137 446 Q131 451 126 446 C124 418 123 390 122 362 C118 322 115 286 113 252 Z" />
           <path d="M83 440 Q90 437 96 441 Q99 452 95 459 Q83 462 73 458 Q70 447 83 440 Z" />
           <path d="M137 440 Q130 437 124 441 Q121 452 125 459 Q137 462 147 458 Q150 447 137 440 Z" />
         </g>
         {children}
+        {behindHead}
         <path {...bodyFill} strokeLinejoin="round" d={HEAD} />
         {face}
       </svg>
@@ -240,22 +288,51 @@ function SixPackLines() {
   )
 }
 
-function FrontView({ scores, sixPack }: { scores: Record<Muscle, MuscleScore>; sixPack: boolean }) {
+/** Hair is drawn in the "no data" grey, like the eyes, so it never reads as a score. */
+function Hair({ children }: { children: ReactNode }) {
+  return (
+    <g fill={noData()} stroke={noData()} strokeWidth={1.5} strokeLinejoin="round">
+      {children}
+    </g>
+  )
+}
+
+function FrontView({
+  scores,
+  sixPack,
+  sex,
+}: {
+  scores: Record<Muscle, MuscleScore>
+  sixPack: boolean
+  sex: Figure
+}) {
+  const female = sex === 'female'
   return (
     <Silhouette
       label="front"
-      /* The only thing telling the two views apart. */
+      sex={sex}
+      behindHead={female && <Hair>{BUN}</Hair>}
+      /* The eyes are what tell the front from the back. */
       face={
-        <g fill={noData()}>
-          <ellipse cx="102" cy="34" rx="2.6" ry="3" />
-          <ellipse cx="118" cy="34" rx="2.6" ry="3" />
-        </g>
+        <>
+          {female && (
+            <Hair>
+              {HAIR_FRONT.map((d) => (
+                <path key={d} d={d} />
+              ))}
+            </Hair>
+          )}
+          <g fill={noData()}>
+            <ellipse cx="102" cy="34" rx="2.6" ry="3" />
+            <ellipse cx="118" cy="34" rx="2.6" ry="3" />
+          </g>
+        </>
       }
     >
       <Regions muscle="neck" scores={scores} paths={NECK_FRONT} />
-      {/* Pecs before the delts: the shoulder cap sits in front of the chest's
+      {/* Chest before the delts: the shoulder cap sits in front of the chest's
           upper-outer corner, the way it does on a body. */}
-      <Regions muscle="chest" scores={scores} paths={PECS} />
+      <Regions muscle="chest" scores={scores} paths={female ? BUST : PECS} />
       <Regions muscle="shoulders" scores={scores} paths={DELTS} />
       <Regions muscle="biceps" scores={scores} paths={UPPER_ARMS} />
       <Regions muscle="core" scores={scores} paths={ABS} />
@@ -267,9 +344,22 @@ function FrontView({ scores, sixPack }: { scores: Record<Muscle, MuscleScore>; s
   )
 }
 
-function BackView({ scores }: { scores: Record<Muscle, MuscleScore> }) {
+function BackView({ scores, sex }: { scores: Record<Muscle, MuscleScore>; sex: Figure }) {
+  const female = sex === 'female'
   return (
-    <Silhouette label="back">
+    <Silhouette
+      label="back"
+      sex={sex}
+      behindHead={female && <Hair>{BUN}</Hair>}
+      /* From behind, the hair is the whole of the head. */
+      face={
+        female && (
+          <Hair>
+            <path d={HEAD} />
+          </Hair>
+        )
+      }
+    >
       {/* Lats first, then the trap yoke over them, then the delts on top — each
           sits in front of the mass it overlaps from behind. */}
       <Regions muscle="back" scores={scores} paths={LATS} />
@@ -297,34 +387,55 @@ function Legend() {
 }
 
 /**
- * One exercise: where it stands today, and on the line beneath, the load that
- * unlocks the tier above. The second line is dropped once there's no tier left.
+ * One exercise: where it stands today. Tapping the band opens every tier with
+ * the value that reaches it, the current one picked out.
  */
 function Row({
   label,
   value,
   band,
-  next,
+  tiers,
   unit,
 }: {
   label: string
   value: string
   band: string
-  next: { band: string; value: number } | null
+  tiers: Tier[]
   unit: string
 }) {
+  const [open, setOpen] = useState(false)
   return (
     <li className="flex flex-col">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
+      <div className="flex items-center justify-between gap-3 text-sm">
         <span className="text-neutral-300">{label}</span>
-        <span className="tabular-nums text-neutral-500">
-          {value} · <span className="text-accent-2">{band}</span>
+        <span className="flex items-center gap-1 tabular-nums text-neutral-500">
+          {value} ·
+          <button
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            className="-my-2 min-h-[36px] rounded-lg px-1.5 text-accent-2 active:bg-surface-2"
+          >
+            {band}
+          </button>
         </span>
       </div>
-      {next && (
-        <span className="text-right text-xs tabular-nums text-neutral-600">
-          {next.band} at {next.value} {unit}
-        </span>
+      {open && (
+        <ul className="mt-1 flex flex-col gap-0.5 rounded-xl bg-surface-2 px-3 py-2 text-xs tabular-nums">
+          {tiers.map((t, i) => {
+            const above = tiers[i + 1]
+            return (
+              <li
+                key={t.band}
+                className={`flex justify-between gap-3 ${
+                  t.band === band ? 'font-semibold text-accent-2' : 'text-neutral-500'
+                }`}
+              >
+                <span>{t.band}</span>
+                <span>{i === 0 && above ? `under ${above.value} ${unit}` : `${t.value} ${unit}`}</span>
+              </li>
+            )
+          })}
+        </ul>
       )}
     </li>
   )
@@ -342,6 +453,7 @@ export function MuscleAvatar() {
   // rank, just their own climb — and the lift bands and the bodyweight they need
   // drop away.
   const standards = (settings.profile?.sex ?? 'male') === 'male'
+  const figure: Figure = settings.profile?.sex === 'female' ? 'female' : 'male'
 
   const logs = useMemo(() => {
     const out: Record<string, ExerciseLog> = {}
@@ -392,8 +504,8 @@ export function MuscleAvatar() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="mx-auto flex w-full max-w-[300px] flex-col gap-2 sm:mx-0 sm:w-1/2 sm:max-w-none">
               <div className="grid grid-cols-2 gap-2">
-                <FrontView scores={scores} sixPack={settings.sixPackStatus === 'have'} />
-                <BackView scores={scores} />
+                <FrontView scores={scores} sixPack={settings.sixPackStatus === 'have'} sex={figure} />
+                <BackView scores={scores} sex={figure} />
               </div>
               <Legend />
             </div>
@@ -407,7 +519,7 @@ export function MuscleAvatar() {
                       label={r.label}
                       value={`est. 1rm ${r.load} lbs`}
                       band={r.band}
-                      next={r.next}
+                      tiers={r.tiers}
                       unit="lbs"
                     />
                   ))}
@@ -426,7 +538,7 @@ export function MuscleAvatar() {
                       label={r.label}
                       value={`${r.baseline} → ${r.best} ${r.unit}`}
                       band={r.band}
-                      next={r.next}
+                      tiers={r.tiers}
                       unit={r.unit}
                     />
                   ))}

@@ -212,6 +212,22 @@ function nextBand(percentile: number, thresholds: number[]): { band: string; rat
   return { band: cut.band, ratio: ratioAtLevel(cut.pct, thresholds) }
 }
 
+/** One band and the value it starts at, in the readout's own units. */
+export type Tier = { band: string; value: number }
+
+/**
+ * Every band from beginner to elite with the value that opens it, given the
+ * ratios on the scale and what one ratio is worth (bodyweight for a population
+ * lift, your own starting point for a ladder). Beginner opens at 0. Rounded up
+ * like `next`, so each number shown is enough for its band.
+ */
+function tiersFor(thresholds: number[], unit: number): Tier[] {
+  return [
+    { band: bandFor(0), value: 0 },
+    ...BAND_CUTS.map((c) => ({ band: c.band, value: Math.ceil(ratioAtLevel(c.pct, thresholds) * unit) })),
+  ]
+}
+
 export type LiftResult = {
   /** Percentile vs. other men at this bodyweight, 0–99. */
   percentile: number
@@ -292,6 +308,8 @@ export type LadderResult = {
   developmentScore: number
   /** The band above and what it takes to reach it; null once at Elite. */
   next: { band: string; value: number } | null
+  /** Every band and what it takes, beginner first. */
+  tiers: Tier[]
 }
 
 /**
@@ -313,6 +331,7 @@ export function ladderPosition(
     band: bandFor(position),
     developmentScore: position / 100,
     next: up && { band: up.band, value: Math.ceil(baseline * up.ratio) },
+    tiers: tiersFor(mults, baseline),
   }
 }
 
@@ -531,6 +550,8 @@ export type LiftReadout = {
    * (so pull-ups read as a total, matching the row above it). Null at elite.
    */
   next: { band: string; value: number } | null
+  /** Every band and the load that opens it, beginner first, in `load`'s units. */
+  tiers: Tier[]
 }
 
 /** Order lifts appear in the population readout. */
@@ -564,7 +585,8 @@ export function liftReadouts(logs: Record<string, ExerciseLog>, bodyweightLb: nu
     const load = bestLoad[lift]
     if (load == null) continue
     const r = liftPercentile(lift, load, bodyweightLb)
-    const up = nextBand(r.percentile, STANDARDS[lift].map((s) => s * bracketFactor(bodyweightLb)))
+    const thresholds = STANDARDS[lift].map((s) => s * bracketFactor(bodyweightLb))
+    const up = nextBand(r.percentile, thresholds)
     out.push({
       lift,
       label: LIFT_LABELS[lift],
@@ -572,6 +594,7 @@ export function liftReadouts(logs: Record<string, ExerciseLog>, bodyweightLb: nu
       percentile: r.percentile,
       band: r.band,
       next: up && { band: up.band, value: Math.ceil(up.ratio * bodyweightLb) },
+      tiers: tiersFor(thresholds, bodyweightLb),
     })
   }
   return out
@@ -590,6 +613,8 @@ export type LadderReadout = {
   band: string
   /** The rung above and what it takes; null once past Elite. */
   next: { band: string; value: number } | null
+  /** Every rung and what it takes, beginner first. */
+  tiers: Tier[]
 }
 
 /** Order the personal-ladder rows appear in — the muscle order, then plan order. */
@@ -628,6 +653,7 @@ export function ladderReadouts(logs: Record<string, ExerciseLog>): LadderReadout
       baseline: Math.round(baseline),
       band: r.band,
       next: r.next,
+      tiers: r.tiers,
     })
   }
   return out

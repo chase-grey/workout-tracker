@@ -374,6 +374,22 @@ describe('liftReadouts', () => {
     expect(liftPercentile('squat', r.next!.value, BW).band).toBe('advanced')
   })
 
+  it('lists every tier from beginner up, each load reading its own band', () => {
+    const [r] = liftReadouts(logs({ barbell_squat: 1.5 * BW }), BW)
+    expect(r.tiers.map((t) => t.band)).toEqual(['beginner', 'novice', 'intermediate', 'advanced', 'elite'])
+    expect(r.tiers[0].value).toBe(0)
+    for (let i = 1; i < r.tiers.length; i++) {
+      expect(r.tiers[i].value).toBeGreaterThan(r.tiers[i - 1].value)
+      expect(liftPercentile('squat', r.tiers[i].value, BW).band).toBe(r.tiers[i].band)
+    }
+    // The tier above is the same number the next-band target names.
+    expect(r.tiers.find((t) => t.band === r.next!.band)!.value).toBe(r.next!.value)
+  })
+
+  it('still lists the tiers once the lift is elite', () => {
+    expect(liftReadouts(logs({ barbell_squat: 3.5 * BW }), BW)[0].tiers).toHaveLength(5)
+  })
+
   it('has no next band once the lift is elite', () => {
     expect(liftReadouts(logs({ barbell_squat: 3.5 * BW }), BW)[0].next).toBeNull()
   })
@@ -386,6 +402,12 @@ describe('liftReadouts', () => {
 })
 
 describe('ladderReadouts', () => {
+  it('lists every rung off your own starting point', () => {
+    const [row] = ladderReadouts({ neck_extension: grew(10, 25) })
+    expect(row.tiers.map((t) => t.band)).toEqual(['beginner', 'novice', 'intermediate', 'advanced', 'elite'])
+    expect(row.tiers.find((t) => t.band === 'advanced')!.value).toBe(29) // matches next
+  })
+
   it('reports where you started, where you are, and the next rung', () => {
     const rows = ladderReadouts({ neck_extension: grew(10, 25) })
     expect(rows).toHaveLength(1)
