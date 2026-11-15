@@ -17,6 +17,7 @@ import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration 
 import { toFastMode, type FastMode } from '../lib/fastMode'
 import type { SkippedExercises } from '../lib/skipped'
 import type { Profile } from '../lib/profile'
+import type { CardioPin, HomeLayout } from '../lib/homeTiles'
 import type { CardioEntry } from '../lib/cardio'
 
 const KEYS = {
@@ -223,6 +224,13 @@ export type Settings = {
    * target applying to them unchanged. Synced: it's the account's, not the phone's.
    */
   profile?: Profile
+  /**
+   * The order of the buttons at the foot of Today, and the ones taken off it
+   * (see lib/homeTiles). Unset is the default grouping.
+   */
+  homeLayout?: HomeLayout
+  /** Cardio sessions pinned to Today as one-tap logs. */
+  cardioPins?: CardioPin[]
   /**
    * How this device stores its data (see lib/account). Device-local with the
    * token: the mode says how THIS phone reaches the backend, and a second phone

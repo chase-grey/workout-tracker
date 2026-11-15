@@ -198,3 +198,25 @@ export function calorieDayHit(total: number, goal: number, direction: DietDirect
   if (direction === 'lose') return total <= goal
   return total >= goal * 0.9 && total <= goal * 1.1
 }
+
+/** The weekly goal each pillar is counted against. */
+export const PILLAR_GOAL_KEY: Record<Pillar, keyof WeeklyGoalConfig> = {
+  strength: 'workouts',
+  flexibility: 'flex',
+  cardio: 'cardio',
+  diet: 'calDays',
+}
+
+/**
+ * `profile` with `pillar` switched on at `goal` a week, or off, from Monday
+ * `week` on. The last pillar can't be switched off — a profile tracking
+ * nothing has nothing to show — so that comes back unchanged.
+ */
+export function withPillar(profile: Profile, pillar: Pillar, on: boolean, goal: number, week: string): Profile {
+  const has = profile.pillars.includes(pillar)
+  if (!on && has && profile.pillars.length === 1) return profile
+  const pillars = on ? PILLARS.filter((p) => p === pillar || profile.pillars.includes(p)) : profile.pillars.filter((p) => p !== pillar)
+  const current = profileWeeklyGoals(profile, week)
+  const goals = maskGoals({ ...current, ...(on ? { [PILLAR_GOAL_KEY[pillar]]: goal } : {}) }, pillars)
+  return withWeeklyGoals({ ...profile, pillars }, goals, week)
+}

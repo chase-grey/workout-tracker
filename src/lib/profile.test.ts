@@ -10,6 +10,7 @@ import {
   profileCalorieGoal,
   profileWeeklyGoals,
   withCalorieGoal,
+  withPillar,
   withWeeklyGoals,
   type Profile,
 } from './profile'
@@ -243,5 +244,31 @@ describe('weighsIn / readsBodyFat', () => {
     expect(weighsIn(p)).toBe(true)
     expect(readsBodyFat(p)).toBe(false)
     expect(weighsIn(makeProfile({ scale: false }))).toBe(false)
+  })
+})
+
+describe('withPillar', () => {
+  it('switches a pillar off from this week, zeroing only its goal', () => {
+    const p = withPillar(makeProfile(), 'flexibility', false, 0, '2026-02-02')
+    expect(p.pillars).toEqual(['strength', 'cardio', 'diet'])
+    expect(profileWeeklyGoals(p, '2026-02-02')).toEqual({ workouts: 3, flex: 0, calDays: 5, cardio: 2 })
+    // The weeks already lived keep the goal they were held to.
+    expect(profileWeeklyGoals(p, '2026-01-26').flex).toBe(2)
+  })
+
+  it('switches a pillar on at the goal given, in pillar order', () => {
+    const p = withPillar(makeProfile({ pillars: ['strength'] }), 'cardio', true, 3, '2026-02-02')
+    expect(p.pillars).toEqual(['strength', 'cardio'])
+    expect(profileWeeklyGoals(p, '2026-02-02')).toMatchObject({ workouts: 3, cardio: 3, flex: 0, calDays: 0 })
+  })
+
+  it('changes the goal of a pillar already on', () => {
+    const p = withPillar(makeProfile(), 'strength', true, 2, '2026-02-02')
+    expect(profileWeeklyGoals(p, '2026-02-02').workouts).toBe(2)
+  })
+
+  it('will not switch off the last pillar', () => {
+    const base = makeProfile({ pillars: ['cardio'] })
+    expect(withPillar(base, 'cardio', false, 0, '2026-02-02')).toBe(base)
   })
 })

@@ -6,9 +6,33 @@
 
 import { weekStartISO } from './dates'
 
-export type CardioKind = 'run' | 'walk' | 'bike' | 'swim' | 'row' | 'other'
+/** The kinds offered as chips. Anything else typed under "other" is stored as typed. */
+export const CARDIO_KINDS = [
+  'run',
+  'walk',
+  'hike',
+  'bike',
+  'swim',
+  'row',
+  'soccer',
+  'basketball',
+  'tennis',
+  'hiit',
+  'other',
+] as const
 
-export const CARDIO_KINDS: CardioKind[] = ['run', 'walk', 'bike', 'swim', 'row', 'other']
+/** A preset kind, or a name typed under "other" — the backend stores it as text. */
+export type CardioKind = (typeof CARDIO_KINDS)[number] | (string & {})
+
+/**
+ * Kinds measured in time alone. Nobody knows how far they ran in a soccer
+ * game, so these never ask for a distance; anything else offers the field.
+ */
+const NO_DISTANCE = new Set<string>(['soccer', 'basketball', 'tennis', 'hiit'])
+
+export function asksDistance(kind: string): boolean {
+  return !NO_DISTANCE.has(kind)
+}
 
 export type CardioEntry = {
   /** Client-minted, so a retried save is recognised rather than stored twice. */

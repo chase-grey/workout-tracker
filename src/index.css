@@ -1117,3 +1117,25 @@ input[type='number'] {
     animation: none;
   }
 }
+
+/* A Today tile in edit mode rocks a hair either way, so the grid reads as
+   loose and draggable (see features/today/HomeTiles). */
+@keyframes tile-wiggle {
+  0%,
+  100% {
+    transform: rotate(-0.7deg);
+  }
+  50% {
+    transform: rotate(0.7deg);
+  }
+}
+
+.tile-wiggle {
+  animation: tile-wiggle 0.3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile-wiggle {
+    animation: none;
+  }
+}

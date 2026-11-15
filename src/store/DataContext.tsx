@@ -235,7 +235,8 @@ type DataContextValue = {
    */
   logFlex: (measurement: FlexMeasurement, opts?: { quiet?: boolean }) => Promise<Celebration | null>
   logCalories: (calories: number, date?: string) => Promise<void>
-  logCardio: (entry: Omit<CardioEntry, 'id'>) => Promise<void>
+  /** `id` may be minted by the caller, so a one-tap log can be undone before its save lands. */
+  logCardio: (entry: Omit<CardioEntry, 'id'> & { id?: string }) => Promise<void>
   deleteCardio: (id: string) => Promise<void>
   logMeasurement: (m: Omit<MeasurementEntry, 'date'> & { date?: string }) => Promise<void>
   logSessionDuration: (entry: SessionDuration) => Promise<void>
@@ -914,8 +915,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const logCardio = useCallback(
-    async (input: Omit<CardioEntry, 'id'>) => {
-      const entry: CardioEntry = { ...input, id: uuid() }
+    async (input: Omit<CardioEntry, 'id'> & { id?: string }) => {
+      const entry: CardioEntry = { ...input, id: input.id ?? uuid() }
       const prev = storage.loadCardio()
       const next = mergeCardio(prev, [entry])
       setCardioEntries(next)

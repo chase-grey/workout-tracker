@@ -1,4 +1,5 @@
-import { Fragment, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { v4 as uuid } from 'uuid'
 import { useData } from '../../store/DataContext'
 import { ThisWeek } from './ThisWeek'
 import { DailyHabits } from './DailyHabits'
@@ -15,10 +16,10 @@ import { MdPhotoCamera } from 'react-icons/md'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
 import { hasPillar, ownerFlavour, readsBodyFat, weighsIn } from '../../lib/profile'
 import { lastStretchRoutine } from '../../lib/stretchRotation'
-import { CardioCard } from './CardioCard'
-
-const sessionButton =
-  'min-h-[52px] rounded-2xl bg-surface text-lg font-bold active:bg-surface-2'
+import { cardioSummary } from '../../lib/cardio'
+import { HomeTiles } from './HomeTiles'
+import { CardioLogSheet } from './CardioLogSheet'
+import { candidateTiles, type HomeTile } from '../../lib/homeTiles'
 
 type Props = {
   onStart: (dayType: DayType, variant?: VariantKey) => void
@@ -27,15 +28,16 @@ type Props = {
 }
 
 export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
-  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries, cardioEntries, goals, logCardio, deleteCardio } =
+  const { logProgressPhoto, updateSettings, settings, workouts, bodyWeights, plan, flexEntries, cardioEntries, logCardio, deleteCardio } =
     useData()
   // What this person tracks decides what the page offers (see lib/profile). The
   // owner's own extras — the photo history, the core block — stay his.
   const profile = settings.profile
   const owner = ownerFlavour(profile)
   const strength = hasPillar(profile, 'strength')
-  const flexibility = hasPillar(profile, 'flexibility')
-  const [flash, setFlash] = useState<string | null>(null)
+  const [flash, setFlash] = useState<{ text: string; undo?: () => void } | null>(null)
+  const flashTimer = useRef<number | undefined>(undefined)
+  const [loggingCardio, setLoggingCardio] = useState(false)
   const [photoDismissed, setPhotoDismissed] = useState(false)
   const [habitWeek, setHabitWeek] = useState<string | null>(null)
   const habitsRef = useRef<HTMLDivElement>(null)
@@ -61,9 +63,10 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     setPhotoDismissed(true)
   }
 
-  const flashMsg = (m: string) => {
-    setFlash(m)
-    setTimeout(() => setFlash(null), 1800)
+  const flashMsg = (text: string, undo?: () => void) => {
+    setFlash({ text, undo })
+    window.clearTimeout(flashTimer.current)
+    flashTimer.current = window.setTimeout(() => setFlash(null), undo ? 5000 : 1800)
   }
 
   // Dim the button of whichever lift day was trained last, so the app nudges you
@@ -93,26 +96,59 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const nextUpFirst = <T,>(pair: T[], dimmed: T | null) =>
     dimmed && pair.length === 2 && pair[0] === dimmed ? [pair[1], pair[0]] : pair
 
-  // The alternating lifts in the left column. Full body is placed rather than
-  // ordered — it sits at bottom right whatever Settings says — so the order
-  // chosen there applies to the two days that alternate. A full-body day just
-  // done dims its own button and leaves this pair's order alone.
-  // A day with no exercises is a slot the plan doesn't use — a two-day starter
-  // plan leaves its third empty — so it gets no button.
-  const liftDays = strength
-    ? nextUpFirst(
-        dayOrder(plan).filter((t) => t !== 'fullbody' && plan[t].exercises.length > 0),
-        dimmedDay,
-      )
-    : []
-  const showFullBody = strength && plan.fullbody.exercises.length > 0
+  // That rotation only orders the tiles until they've been dragged into an
+  // order of their own (see HomeTiles); from then on that order holds.
+  const liftDays = dayOrder(plan).filter((t) => plan[t].exercises.length > 0)
+  const candidates = candidateTiles({
+    liftDays: [
+      ...nextUpFirst(liftDays.filter((t) => t !== 'fullbody'), dimmedDay),
+      ...liftDays.filter((t) => t === 'fullbody'),
+    ],
+    // The core block is the owner's.
+    core: owner,
+    routines: nextUpFirst(FLEX_ROUTINE_KEYS, dimmedStretch),
+    pins: settings.cardioPins ?? [],
+  })
 
-  // The right column: the same two routines, rotated the same way.
-  const stretchRoutines = flexibility ? nextUpFirst(FLEX_ROUTINE_KEYS, dimmedStretch) : []
-  const showCore = owner && strength
-  // With only one of the two columns in use, its buttons run across both rather
-  // than down one side of an empty half.
-  const paired = liftDays.length > 0 && stretchRoutines.length > 0
+  const tileLabel = (t: HomeTile) => {
+    switch (t.type) {
+      case 'lift':
+        return plan[t.day].label
+      case 'stretch':
+        return FLEX_ROUTINES[t.routine].label
+      case 'pin':
+        return t.pin.kind
+      default:
+        return t.type
+    }
+  }
+  const tileDetail = (t: HomeTile) =>
+    t.type === 'pin' ? cardioSummary({ minutes: t.pin.minutes, distanceMi: t.pin.distanceMi }) : undefined
+  const tileDimmed = (t: HomeTile) =>
+    (t.type === 'lift' && t.day === dimmedDay) ||
+    (t.type === 'stretch' && t.routine === dimmedStretch) ||
+    (t.type === 'core' && absRemaining === 0)
+
+  const openTile = (t: HomeTile) => {
+    switch (t.type) {
+      case 'lift':
+        return onStart(t.day)
+      case 'stretch':
+        return onStartStretch(t.routine)
+      case 'core':
+        return onStartAbs()
+      case 'cardio':
+        return setLoggingCardio(true)
+      case 'pin': {
+        // One tap logs it for today; the flash holds the way back.
+        const id = uuid()
+        const { kind, minutes, distanceMi } = t.pin
+        void logCardio({ id, date: toISODate(new Date()), kind, minutes, ...(distanceMi ? { distanceMi } : {}) })
+        flashMsg(`${kind} logged`, () => void deleteCardio(id))
+        return
+      }
+    }
+  }
 
   return (
     // No bottom padding of its own: `main` already pads below the scroll area, and
@@ -147,7 +183,21 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
       )}
 
       {flash && (
-        <div className="rounded-xl bg-accent-2/20 p-2 text-center text-sm text-accent-2">{flash}</div>
+        <div className="flex min-h-[44px] items-center justify-center gap-3 rounded-xl bg-accent-2/20 px-2 text-sm text-accent-2">
+          <span>{flash.text}</span>
+          {flash.undo && (
+            <button
+              onClick={() => {
+                flash.undo?.()
+                window.clearTimeout(flashTimer.current)
+                setFlash(null)
+              }}
+              className="min-h-[44px] px-2 font-semibold underline"
+            >
+              undo
+            </button>
+          )}
+        </div>
       )}
 
       <ThisWeek onSelectWeek={showHabitWeek} />
@@ -158,64 +208,24 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         </div>
       )}
 
-      {hasPillar(profile, 'cardio') && (
-        <CardioCard
-          entries={cardioEntries}
-          goal={goals.cardio ?? 0}
-          onLog={(entry) => void logCardio(entry)}
-          onDelete={(id) => void deleteCardio(id)}
-        />
-      )}
-
       {(weighsIn(profile) || readsBodyFat(profile)) && <WeightCard />}
 
-      {/* Lift days and stretches alternate within their columns; core sits at
-          the bottom left beside full body. */}
-      <div className="grid grid-cols-2 gap-2">
-        {Array.from({ length: Math.max(liftDays.length, stretchRoutines.length) }, (_, i) => {
-          const t = liftDays[i]
-          const r = stretchRoutines[i]
-          return (
-            <Fragment key={i}>
-              {t ? (
-                <button
-                  onClick={() => onStart(t)}
-                  className={`${sessionButton} ${t === dimmedDay ? 'opacity-50' : ''}`}
-                >
-                  {plan[t].label}
-                </button>
-              ) : (
-                paired && <div />
-              )}
-              {r ? (
-                <button
-                  onClick={() => onStartStretch(r)}
-                  className={`${sessionButton} ${r === dimmedStretch ? 'opacity-50' : ''}`}
-                >
-                  {FLEX_ROUTINES[r].label}
-                </button>
-              ) : (
-                paired && <div />
-              )}
-            </Fragment>
-          )
-        })}
-        {showCore ? (
-          <button onClick={onStartAbs} className={`${sessionButton} ${absRemaining === 0 ? 'opacity-50' : ''}`}>
-            core
-          </button>
-        ) : (
-          showFullBody && paired && <div />
-        )}
-        {showFullBody && (
-          <button
-            onClick={() => onStart('fullbody')}
-            className={`${sessionButton} ${dimmedDay === 'fullbody' ? 'opacity-50' : ''}`}
-          >
-            {plan.fullbody.label}
-          </button>
-        )}
-      </div>
+      <HomeTiles
+        candidates={candidates}
+        label={tileLabel}
+        detail={tileDetail}
+        dimmed={tileDimmed}
+        onOpen={openTile}
+      />
+
+      {loggingCardio && (
+        <CardioLogSheet
+          onSave={(entry) => void logCardio(entry)}
+          entries={cardioEntries}
+          onDelete={(id) => void deleteCardio(id)}
+          onClose={() => setLoggingCardio(false)}
+        />
+      )}
     </div>
   )
 }
