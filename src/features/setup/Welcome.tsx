@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import {
   ACTIVITY_LABELS,
   DIET_LABELS,
@@ -20,6 +20,7 @@ import { toISODate, weekStartISO } from '../../lib/dates'
 import { ACCENTS, MODES, palette } from '../../lib/theme'
 import { setTheme, useTheme } from '../../lib/themeStore'
 import { usePressAction } from '../../lib/usePressAction'
+import { useFieldInView } from '../../lib/useFieldInView'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
 
 export type WelcomeAccount =
@@ -207,6 +208,8 @@ export function Welcome({
   initialInvite?: string
   onFinish: (result: WelcomeResult) => Promise<void>
 }) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  useFieldInView(rootRef)
   const [step, setStep] = useState(0)
   // Set when the account step was reached straight from the first one.
   const [skipped, setSkipped] = useState(false)
@@ -355,7 +358,7 @@ export function Welcome({
   const heading = ['welcome', 'about you', 'your plan', 'theme', 'coach', 'account'][step]
 
   return (
-    <div className={`flex min-h-full flex-col bg-bg ${SHELL_WIDTH} w-full ${SHELL_PAD_X} ${SHELL_PAD_TOP}`}>
+    <div ref={rootRef} className={`flex min-h-full flex-col bg-bg ${SHELL_WIDTH} w-full ${SHELL_PAD_X} ${SHELL_PAD_TOP}`}>
       <div className="flex min-h-[44px] items-center justify-between">
         {step > 0 ? (
           <PressButton
@@ -488,7 +491,7 @@ export function Welcome({
                 <div className="flex gap-3">
                   <NumberField label="target weight (lbs)" value={targetWeight} onChange={setTargetWeight} decimal />
                   <NumberField
-                    label="calories a day"
+                    label="target calories"
                     value={calories}
                     onChange={setCalorieText}
                   />
