@@ -10,6 +10,7 @@ import {
   type TrackedIssue,
 } from '../../services/issues'
 import { PhoneLink } from './PhoneLink'
+import { InstallLink } from './InstallLink'
 import { PoseCheck } from './PoseCheck'
 import { AccountSection } from './AccountSection'
 import { ProfileSection } from './ProfileSection'
@@ -220,6 +221,8 @@ export function SettingsTab({
           {checkingUpdate ? 'checking…' : 'check for updates & reload'}
         </button>
       </section>
+
+      <InstallLink />
 
       {owner && <PoseCheck />}
 
