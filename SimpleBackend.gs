@@ -79,9 +79,10 @@
  *   POST ?route=notes         body: { session, exercise, notes }
  *                 (rewrites the note on every set row of one logged exercise; see updateWorkoutNotes)
  *   POST ?route=bodyweight    body: { date, weightLbs }
- *   POST ?route=calories      body: { date, calories, label, loggedAt, lastAmount } (upsert by date; calories = running daily total,
+ *   POST ?route=calories      body: { date, calories, label, loggedAt, lastAmount, helpings } (upsert by date; calories = running daily total,
  *                 loggedAt = ISO time of the last tap made ON that date and lastAmount = how many calories that tap added;
- *                 both omitted on a backfill, which keeps the stored pair)
+ *                 helpings = [{at, amount}] every helping logged ON that date, stored as JSON;
+ *                 all three omitted on a backfill, which keeps the stored ones)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  *   POST ?route=durations     body: { date, kind, dayType, routine, totalSec, restSec } (append)
  *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
@@ -128,7 +129,7 @@ const FLEX_HEADERS = [
   'start_sides',
 ]
 const CONFIG_HEADERS = ['key', 'value']
-const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount']
+const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount', 'helpings']
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note', 'body_fat_pct', 'abs_visibility']
 // `routine` is which stretch routine a stretch session was, blank for a workout
 // and for a stretch logged before there were two. Appended, and the generic
@@ -159,7 +160,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 6
+const BACKEND_VERSION = 7
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -704,6 +705,15 @@ function getCalories(since) {
     if (loggedAt && r[4] !== '' && r[4] !== null && r[4] !== undefined && isFinite(Number(r[4]))) {
       entry.lastAmount = Number(r[4])
     }
+    // The day's breakdown, JSON in one cell. Unreadable is the same as absent.
+    if (loggedAt && r[5]) {
+      try {
+        const helpings = JSON.parse(String(r[5]))
+        if (Array.isArray(helpings)) entry.helpings = helpings
+      } catch (err) {
+        /* leave it off */
+      }
+    }
     out.push(entry)
   }
   return out
@@ -725,7 +735,8 @@ function appendCalories(body) {
     const lastAmount = isFinite(Number(e.lastAmount)) && e.lastAmount !== null && e.lastAmount !== undefined
       ? Number(e.lastAmount)
       : ''
-    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '', lastAmount)
+    const helpings = Array.isArray(e.helpings) ? JSON.stringify(e.helpings) : ''
+    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '', lastAmount, helpings)
     saved++
   }
   if (saved === 0 && list.length) {
@@ -734,11 +745,12 @@ function appendCalories(body) {
   return { saved: saved }
 }
 
-function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount) {
+function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount, helpings) {
   const rows = sh.getDataRange().getValues()
   let firstRow = -1
   let storedLoggedAt = ''
   let storedLastAmount = ''
+  let storedHelpings = ''
   const extraRows = []
   for (let r = 1; r < rows.length; r++) {
     if (rows[r][0] && isoDate(rows[r][0]) === date) {
@@ -746,11 +758,12 @@ function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount) {
         firstRow = r + 1 // 1-based sheet row
         storedLoggedAt = String(rows[r][3] || '')
         storedLastAmount = rows[r][4] === undefined || rows[r][4] === null ? '' : rows[r][4]
+        storedHelpings = String(rows[r][5] || '')
       } else extraRows.push(r + 1)
     }
   }
   if (firstRow === -1) {
-    sh.appendRow([date, calories, label, loggedAt, lastAmount])
+    sh.appendRow([date, calories, label, loggedAt, lastAmount, helpings])
     return
   }
   // A backfill sends no log time; keep the time and the helping already stored
@@ -759,7 +772,8 @@ function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount) {
   // helping the day being shown never had.
   const at = loggedAt ? loggedAt : storedLoggedAt
   const amount = loggedAt ? lastAmount : storedLastAmount
-  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at, amount]])
+  const list = loggedAt ? helpings : storedHelpings
+  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at, amount, list]])
   // Delete leftover legacy rows bottom-up so earlier indices stay valid.
   for (let k = extraRows.length - 1; k >= 0; k--) {
     sh.deleteRow(extraRows[k])
