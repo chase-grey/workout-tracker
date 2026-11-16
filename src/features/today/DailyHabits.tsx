@@ -14,11 +14,17 @@ import {
 } from '../../lib/calories'
 import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import { proteinGoalOn } from '../../lib/protein'
+import { commonMeals } from '../../lib/commonMeals'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
 const QUICK_ADDS = [100, 500]
 const PROTEIN_ADDS = [10, 25]
 const ADD_BUTTON = 'min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80'
+/** The card's own buttons, which a meal button would only repeat. */
+const BUTTON_MEALS = [
+  ...QUICK_ADDS.map((calories) => ({ calories, protein: 0 })),
+  ...PROTEIN_ADDS.map((protein) => ({ calories: 0, protein })),
+]
 
 type Props = {
   /** A Monday selected from streak history; null keeps following the current week. */
@@ -69,6 +75,8 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
   const selProtein = proteinForDate(calorieEntries, selDate)
   const proteinGoal = proteinGoalOn(selDate, bodyWeights, settings.profile ?? null)
   const proteinPct = proteinGoal ? Math.min(selProtein / proteinGoal, 1) * 100 : 0
+
+  const meals = commonMeals(calorieEntries, { now, exclude: BUTTON_MEALS })
 
   const addFood = (calories: number, protein = 0) => {
     if (calories !== 0 || protein !== 0) void logCalories(calories, selDate, protein)
@@ -191,7 +199,23 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
         })}
       </div>
 
-      <div className="mt-2 flex gap-1.5">
+      {meals.length > 0 && (
+        <div className="mt-2 flex gap-1.5">
+          {meals.map((m) => (
+            <button
+              key={`${m.calories}|${m.protein}`}
+              onClick={() => addFood(m.calories, m.protein)}
+              className={`${ADD_BUTTON} tabular-nums`}
+            >
+              {[m.calories !== 0 && formatHelping(m.calories), m.protein !== 0 && formatProtein(m.protein)]
+                .filter(Boolean)
+                .join(' · ')}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={`${meals.length > 0 ? 'mt-1.5' : 'mt-2'} flex gap-1.5`}>
         {QUICK_ADDS.map((calories) => (
           <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
             +{calories}
