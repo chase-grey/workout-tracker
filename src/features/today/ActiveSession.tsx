@@ -16,7 +16,8 @@ import {
   withCircuitRoundRest,
   type PlannedExercise,
 } from '../../config/plan'
-import { performedExercises } from '../../lib/performed'
+import { performedExercises, REST_RULES } from '../../lib/performed'
+import type { RestRule } from '../../lib/groupRest'
 import { nextTargets, targetLabel, type Target } from '../../lib/progression'
 import { goalsFor } from '../../lib/profileGoals'
 import { goalCueForExercise } from '../../lib/goalCue'
@@ -250,8 +251,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const day = plan[session.dayType]
   // The day as this session is actually performing it: the A/B variant's set
   // counts and press order, how much of the day it's running (the short form
-  // until the checklist opens it up — see SessionLength), whether the ab block is
-  // sitting this one out (see lib/absRest), and which arm leads the
+  // until the checklist opens it up — see SessionLength), which groups are
+  // sitting this one out (see lib/groupRest), and which arm leads the
   // one-arm-at-a-time work — all pinned when the session started (see
   // lib/performed).
   //
@@ -298,14 +299,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setPendingStepKey(held)
   }
 
-  // Bring the ab block back into a session that started without it (see
-  // lib/absRest). The abs land at the top of the day, ahead of whatever is on
-  // screen, so the set on screen is held by key across the reshaped list the way
-  // the expansion above holds it — the workout carries on from where it was, and
-  // the abs are there in the checklist to jump to.
-  const bringAbsBack = () => {
+  // Bring a resting group back into a session that started without it (see
+  // lib/groupRest). Its movements land where the day has them — the abs at the
+  // top, ahead of whatever is on screen — so the set on screen is held by key
+  // across the reshaped list the way the expansion above holds it: the workout
+  // carries on from where it was, and the group is there in the checklist to
+  // jump to.
+  const bringBack = (rule: RestRule) => {
     const held = step.stepKey
-    controls.restoreAbs()
+    controls.restoreRested(rule)
     setPendingStepKey(held)
   }
 
@@ -1195,9 +1197,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       : []),
     { label: roundMode ? 'add a round' : 'add a set', onClick: addSet },
     { label: 'add an exercise', onClick: () => setShowAddExercise(true) },
-    // Only while the abs are sitting the session out — a block that's in the day
+    // Only while a group is sitting the session out — a block that's in the day
     // has nothing to bring back.
-    ...(session.restAbs ? [{ label: 'bring abs back', onClick: bringAbsBack }] : []),
+    ...REST_RULES.filter((rule) => session[rule.flag]).map((rule) => ({
+      label: `bring ${rule.label} back`,
+      onClick: () => bringBack(rule),
+    })),
     { label: 'pause workout', onClick: () => setPaused(true) },
     { label: 'finish and log', onClick: finish },
     {
