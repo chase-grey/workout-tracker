@@ -24,10 +24,11 @@ import {
 } from '../config/plan'
 import type { WorkoutRow, WorkoutSession } from '../types'
 import { ABS_REST } from './absRest'
+import { NECK_REST } from './neckRest'
 import { restsGroup, withoutGroup, type RestFlag, type RestRule } from './groupRest'
 
 /** Every group a session can rest, in the order the kebab offers them back. */
-export const REST_RULES: readonly RestRule[] = [ABS_REST]
+export const REST_RULES: readonly RestRule[] = [ABS_REST, NECK_REST]
 
 export type PerformedShape = Pick<WorkoutSession, 'variant' | 'length' | 'startSide' | RestFlag>
 

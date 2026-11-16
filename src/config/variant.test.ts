@@ -3,7 +3,7 @@ import {
   DEFAULT_PLAN,
   FULLBODY_ARMS_ROUND_REST_SEC,
   GRADUATION_SETS,
-  NECK_ROUND_REST_SEC,
+  NECK_REST_SEC,
   STRETCH_CORE,
   repRangeLabel,
   shortExercises,
@@ -147,9 +147,15 @@ describe('the pull + legs day', () => {
     expect(STRETCH_CORE.sets).toBe(4)
   })
 
-  it('runs the neck pair a round at a time with its own rest after the round', () => {
-    const neck = DEFAULT_PLAN.pull.exercises.filter((e) => e.circuit === 'neck')
-    expect(neck.every((e) => e.roundScreen && e.circuitRoundRestSec === NECK_ROUND_REST_SEC)).toBe(true)
+  it('trains neck flexion as a plain movement with its own rest, and no extension', () => {
+    const keys = DEFAULT_PLAN.pull.exercises.map((e) => e.key)
+    expect(keys).not.toContain('neck_extension')
+    const flexion = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'neck_flexion')!
+    expect(flexion.circuit).toBeUndefined()
+    expect(flexion.roundScreen).toBeUndefined()
+    expect(flexion.restSec).toBe(NECK_REST_SEC)
+    expect(flexion.sets).toBe(3)
+    expect(shortExercises(DEFAULT_PLAN.pull.exercises, 'short').find((e) => e.key === 'neck_flexion')?.sets).toBe(3)
   })
 
   it('no longer carries the calf raise', () => {
@@ -173,12 +179,12 @@ describe('the pull + legs day', () => {
     expect(repRangeLabel({ repMin: 15, repMax: 15, repLadder: true })).toBe('15+')
   })
 
-  it('pairs the two neck directions as a circuit', () => {
-    const neck = DEFAULT_PLAN.pull.exercises.filter((e) => e.circuit === 'neck')
-    expect(neck.map((e) => e.key)).toEqual(['neck_extension', 'neck_flexion'])
-    // Light and high-rep by design — the neck is the one place a heavy grind is a
-    // bad bet, so a low rep floor here would be a regression.
-    expect(neck.every((e) => e.repMin >= 12)).toBe(true)
+  it('keeps the neck light and high-rep', () => {
+    // The neck is the one place a heavy grind is a bad bet, so a low rep floor
+    // here would be a regression.
+    const neck = DEFAULT_PLAN.pull.exercises.filter((e) => e.group === 'neck')
+    expect(neck.map((e) => e.key)).toEqual(['neck_flexion'])
+    expect(neck.every((e) => e.repMin >= 12 && e.increment === 2.5)).toBe(true)
   })
 })
 
@@ -207,8 +213,17 @@ describe('the full body day', () => {
   it('lands in the same ballpark of sets as a push day', () => {
     const full = DEFAULT_PLAN.fullbody.exercises.reduce((s, e) => s + e.sets, 0)
     const push = variantExercises(DEFAULT_PLAN.push, 'A').reduce((s, e) => s + e.sets, 0)
+    // The neck's second day is the one set it runs past push by.
+    const neck = DEFAULT_PLAN.fullbody.exercises.find((e) => e.key === 'neck_flexion')!.sets
     expect(full).toBeGreaterThan(15)
-    expect(full).toBeLessThanOrEqual(push)
+    expect(full - neck).toBeLessThanOrEqual(push)
+  })
+
+  it('closes with neck flexion, two sets on the short day and three on the full one', () => {
+    const last = DEFAULT_PLAN.fullbody.exercises.at(-1)!
+    expect(last.key).toBe('neck_flexion')
+    expect(last.sets).toBe(3)
+    expect(shortExercises(DEFAULT_PLAN.fullbody.exercises, 'short').at(-1)).toMatchObject({ key: 'neck_flexion', sets: 2 })
   })
 
   it('rests its compounds two minutes', () => {
@@ -224,6 +239,16 @@ describe('the full body day', () => {
   })
 })
 
+describe('the neck', () => {
+  it('is trained on two of the three lift days, and not on push', () => {
+    const days = (['push', 'pull', 'fullbody'] as const).filter((t) =>
+      DEFAULT_PLAN[t].exercises.some((e) => e.key === 'neck_flexion'),
+    )
+    expect(days).toEqual(['pull', 'fullbody'])
+    expect(Object.values(DEFAULT_PLAN).some((d) => d.exercises.some((e) => e.key === 'neck_extension'))).toBe(false)
+  })
+})
+
 describe('the short forms', () => {
   const total = (list: { sets: number }[]) => list.reduce((s, e) => s + e.sets, 0)
   const short = (type: 'push' | 'pull' | 'fullbody', variant: 'A' | 'B' | null = null) =>
@@ -232,11 +257,11 @@ describe('the short forms', () => {
   it('cut every day, with the ab block the eight sets the short days have in common', () => {
     expect(total(short('push', 'A'))).toBe(25)
     expect(total(short('push', 'B'))).toBe(25)
-    expect(total(short('pull'))).toBe(26)
-    expect(total(short('fullbody'))).toBe(25)
+    expect(total(short('pull'))).toBe(25)
+    expect(total(short('fullbody'))).toBe(27)
     expect(total(variantExercises(DEFAULT_PLAN.push, 'A'))).toBe(30)
-    expect(total(DEFAULT_PLAN.pull.exercises)).toBe(43)
-    expect(total(DEFAULT_PLAN.fullbody.exercises)).toBe(28)
+    expect(total(DEFAULT_PLAN.pull.exercises)).toBe(40)
+    expect(total(DEFAULT_PLAN.fullbody.exercises)).toBe(31)
   })
 
   it('train the pull-ups and the leg press at four sets on every day, short or full', () => {

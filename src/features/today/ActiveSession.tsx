@@ -264,7 +264,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     const have = new Set(own.map((e) => e.key))
     return [...own, ...(session.adHocExercises ?? []).filter((e) => !have.has(e.key))]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [day, session.variant, session.length, session.startSide, session.restAbs, session.adHocExercises])
+  }, [day, session.variant, session.length, session.startSide, session.restAbs, session.restNeck, session.adHocExercises])
 
   // What the add-exercise sheet can offer (see lib/adHocExercise), grouped the
   // way the plan is: built only while it's open, since it reads the whole log.

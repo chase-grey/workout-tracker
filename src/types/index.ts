@@ -61,6 +61,11 @@ export type WorkoutSession = {
    * block into the log (lib/absRest.restoreAbs). Absent means the abs are in.
    */
   restAbs?: boolean
+  /**
+   * The same for the neck: its work left out because the neck trained the day
+   * before (or earlier today) — see lib/neckRest. Absent means the neck is in.
+   */
+  restNeck?: boolean
 }
 
 export type BodyWeightEntry = {

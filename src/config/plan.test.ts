@@ -274,6 +274,27 @@ describe('withPlanDefaults', () => {
     expect(flat?.restSec).toBe(200)
   })
 
+  it('retires the neck extension and runs flexion plain on a stored day that still has the pair', () => {
+    const pair = { repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck', circuitRoundRestSec: 45, roundScreen: true, sets: 3, shortSets: 2 }
+    const storedPull = {
+      ...DEFAULT_PLAN.pull,
+      exercises: [
+        ...DEFAULT_PLAN.pull.exercises.filter((e) => e.key !== 'neck_flexion'),
+        { key: 'neck_extension', name: 'neck extension', ...pair },
+        { key: 'neck_flexion', name: 'neck flexion', ...pair },
+      ],
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION - 1)
+    expect(merged.pull.exercises.map((e) => e.key)).not.toContain('neck_extension')
+    const flexion = merged.pull.exercises.find((e) => e.key === 'neck_flexion')
+    expect(flexion).toMatchObject({ sets: 3, restSec: 45, group: 'neck' })
+    expect(flexion?.circuit).toBeUndefined()
+    expect(flexion?.roundScreen).toBeUndefined()
+    // Retired, the extension still has a name to chart its history under.
+    expect(exerciseName('neck_extension')).toBe('neck extension')
+    expect(ALL_EXERCISES.some((e) => e.key === 'neck_extension')).toBe(true)
+  })
+
   it('drops the retired calf raise from a stored day that still lists it', () => {
     const calf = { key: 'calf_raise', name: 'calf raise', sets: 3, repMin: 20, repMax: 20, restSec: 60, group: 'legs' }
     const storedPull = { ...DEFAULT_PLAN.pull, exercises: [...DEFAULT_PLAN.pull.exercises, calf] }
@@ -631,7 +652,6 @@ describe('withCircuitRoundRest', () => {
 
   it('leaves the stations of other circuits alone', () => {
     const next = withCircuitRoundRest(day, 'copenhagen', 120)
-    expect(station(next, 'neck_extension')?.circuitRoundRestSec).toBe(station(day, 'neck_extension')?.circuitRoundRestSec)
     expect(station(next, 'sideways_leg_raise_l')?.circuitRoundRestSec).toBe(station(day, 'sideways_leg_raise_l')?.circuitRoundRestSec)
     expect(next.exercises.map((e) => e.key)).toEqual(day.exercises.map((e) => e.key))
   })

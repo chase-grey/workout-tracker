@@ -41,7 +41,7 @@ export type RestFill = 'borrow' | 'sets' | 'none'
 export const MAX_EXTRA_SETS = 2
 
 /** The session flag each rule pins at start and its kebab action clears. */
-export type RestFlag = 'restAbs'
+export type RestFlag = 'restAbs' | 'restNeck'
 
 export type RestRule = {
   /** What the kebab calls the block: "bring {label} back". */
