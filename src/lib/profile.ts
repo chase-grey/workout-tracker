@@ -63,9 +63,45 @@ export const EQUIPMENT_LABELS: Record<Equipment, string> = {
   bodyweight: 'no equipment',
 }
 
+/** The muscle groups the welcome flow offers to prioritise (see lib/planBuilder). */
+export type Muscle = 'chest' | 'back' | 'shoulders' | 'arms' | 'glutes' | 'quads' | 'hamstrings' | 'abs' | 'calves'
+
+export const MUSCLES: Muscle[] = ['chest', 'back', 'shoulders', 'arms', 'glutes', 'quads', 'hamstrings', 'abs', 'calves']
+
+export const MUSCLE_LABELS: Record<Muscle, string> = {
+  chest: 'chest',
+  back: 'back',
+  shoulders: 'shoulders',
+  arms: 'arms',
+  glutes: 'glutes',
+  quads: 'quads',
+  hamstrings: 'hamstrings',
+  abs: 'abs',
+  calves: 'calves',
+}
+
+/** How long a standard workout they'll do, in minutes. */
+export type WorkoutMinutes = 30 | 45 | 60 | 75
+
+export const WORKOUT_MINUTES: WorkoutMinutes[] = [30, 45, 60, 75]
+
 export type StrengthSetup = {
   daysPerWeek: 2 | 3
   equipment: Equipment
+  /**
+   * The muscles they most want to grow, in the order they were picked — which
+   * is also the order they're kept in when the time won't hold them all (see
+   * lib/planBuilder). Absent on a profile from before the question, whose plan
+   * is the fixed starter template (see config/planTemplates.planFor).
+   */
+  focus?: Muscle[]
+  /** The longest a standard workout should run. Absent: a pre-question profile. */
+  minutes?: WorkoutMinutes
+  /**
+   * The session size a workout starts at (see config/plan.SessionLength).
+   * Absent starts short, as every session did before this was asked.
+   */
+  length?: 'short' | 'full'
 }
 
 export type Profile = {

@@ -1,6 +1,6 @@
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types'
 import { DAY_TYPES, DUMBBELL_MAX_LBS, exerciseName, repRangeLabel, type Plan } from '../config/plan'
-import { starterPlan } from '../config/planTemplates'
+import { planFor } from '../config/planTemplates'
 import { toISODate, parseISODate, weekStartISO } from './dates'
 import { parseDiscomfort } from './discomfort'
 import { calorieGoalOn } from './calories'
@@ -287,7 +287,11 @@ function renderAboutPerson(profile: Profile, today: Date, heightIn: number | und
   )
   if (hasPillar(profile, 'strength') && profile.strength) {
     lines.push(
-      `Strength: ${profile.strength.daysPerWeek} days a week, ${EQUIPMENT_LABELS[profile.strength.equipment]}`,
+      [
+        `Strength: ${profile.strength.daysPerWeek} days a week, ${EQUIPMENT_LABELS[profile.strength.equipment]}`,
+        ...(profile.strength.minutes ? [`workouts up to ${profile.strength.minutes} min`] : []),
+        ...(profile.strength.focus?.length ? [`wants to grow ${profile.strength.focus.join(', ')}`] : []),
+      ].join(', '),
     )
   }
   return lines
@@ -334,7 +338,7 @@ function renderCardio(entries: CardioEntry[], today: Date): string[] {
  */
 function isFreshStarter(plan: Plan, profile: Profile): boolean {
   if (!profile.strength) return false
-  const starter = starterPlan(profile.strength)
+  const starter = planFor(profile.strength)
   const keys = (p: Plan, d: DayType) => (p[d]?.exercises ?? []).map((e) => e.key).join(',')
   return DAY_TYPES.every((d) => keys(plan, d) === keys(starter, d))
 }

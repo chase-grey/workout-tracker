@@ -22,7 +22,9 @@ import { performedExercises, restingFlags } from '../../lib/performed'
  * progression target (weight × reps that beats the last session) — editable.
  */
 export function useActiveSession() {
-  const { plan, workouts } = useData()
+  const { plan, workouts, settings } = useData()
+  // The size a workout opens at: the profile's choice, else short as always.
+  const defaultLength: SessionLength = settings.profile?.strength?.length ?? 'short'
   const [session, setSession] = useState<WorkoutSession | null>(() => storage.loadActiveSession())
 
   // Mirror the session from here rather than from inside the state updaters.
@@ -37,9 +39,9 @@ export function useActiveSession() {
   const start = useCallback(
     // `variant` overrides the automatic A/B choice (Push + Core only); omit it to
     // take whichever press the last push session didn't start with. `length` is
-    // the day's short form unless asked for the whole day (see SessionLength);
+    // the profile's default size — short unless it says full (see SessionLength);
     // the checklist can open a short session up later.
-    (dayType: DayType, variant?: VariantKey, length: SessionLength = 'short') => {
+    (dayType: DayType, variant?: VariantKey, length: SessionLength = defaultLength) => {
       // A day with nothing in it has no first set to open on.
       if (plan[dayType].exercises.length === 0) return
       storage.saveActiveStep(0)
@@ -96,7 +98,7 @@ export function useActiveSession() {
         }),
       })
     },
-    [plan, workouts],
+    [plan, workouts, defaultLength],
   )
 
   // Open a short session up to the whole day: the movements the short form left

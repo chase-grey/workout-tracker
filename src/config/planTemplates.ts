@@ -14,11 +14,16 @@
  *
  * Nothing here carries the original's gym-specific fields (weight caps, numbered
  * stacks, A/B variants, circuits, sides): a starter exercise is a plain row.
+ *
+ * These fixed programmes are what a profile from before the welcome flow asked
+ * about focus muscles and workout length still has; a profile that answered
+ * those is built by lib/planBuilder instead (see {@link planFor}).
  */
 
 import type { DayType } from '../types'
 import type { StrengthSetup } from '../lib/profile'
 import { DAY_TYPES, type DayPlan, type Plan, type PlannedExercise } from './plan'
+import { buildPlan } from '../lib/planBuilder'
 
 type Equipment = StrengthSetup['equipment']
 
@@ -204,4 +209,56 @@ export function starterPlan(setup: StrengthSetup): Plan {
     plan[type] = day
   })
   return plan
+}
+
+/** The plan a new account starts on when it didn't set strength up for itself. */
+export const DEFAULT_STRENGTH: StrengthSetup = { daysPerWeek: 3, equipment: 'gym' }
+
+/** Whether `setup` answered the focus and length questions, so is built rather than templated. */
+export function isBuiltSetup(setup: StrengthSetup): boolean {
+  return setup.minutes != null || setup.focus != null
+}
+
+/**
+ * The plan `setup` starts on: built to its answers by lib/planBuilder when it
+ * has them, else the fixed starter template it was always given — so an
+ * account set up before the questions existed reads the same plan as before.
+ */
+export function planFor(setup: StrengthSetup): Plan {
+  return isBuiltSetup(setup) ? buildPlan(setup).plan : starterPlan(setup)
+}
+
+/**
+ * A fresh plan for `next`, keeping what was added to `current` by hand.
+ *
+ * "By hand" is anything on a day that the plan `was` would have generated for
+ * that day doesn't have: what was built is replaced, edits to it included, and
+ * what was added is not the generator's to throw away. Each added movement is
+ * appended to the same day, in the order it had; when that day isn't used any
+ * more (three days down to two) it goes on the last day that is. A movement the
+ * new day already has is not added twice. A sided pair travels together, since
+ * both halves were added and keep their order. So does where each day sits
+ * in Today's list.
+ */
+export function rebuildPlan(current: Plan, was: StrengthSetup | undefined, next: StrengthSetup): Plan {
+  const before = planFor(was ?? DEFAULT_STRENGTH)
+  const fresh = planFor(next)
+  const used = DAY_TYPES.filter((t) => fresh[t].exercises.length > 0)
+  const out = {} as Plan
+  // Where the days sit in Today's list is theirs too (see plan.dayOrder).
+  for (const t of DAY_TYPES) {
+    out[t] = { ...fresh[t], exercises: [...fresh[t].exercises], order: current[t]?.order ?? fresh[t].order }
+  }
+  for (const t of DAY_TYPES) {
+    const generated = new Set((before[t]?.exercises ?? []).map((e) => e.key))
+    const added = (current[t]?.exercises ?? []).filter((e) => !generated.has(e.key))
+    if (!added.length) continue
+    const target = fresh[t].exercises.length > 0 ? t : used[used.length - 1]
+    if (!target) continue
+    const day = out[target]
+    for (const e of added) {
+      if (!day.exercises.some((x) => x.key === e.key)) day.exercises.push({ ...e })
+    }
+  }
+  return out
 }

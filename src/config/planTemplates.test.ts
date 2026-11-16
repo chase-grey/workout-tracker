@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { DAY_TYPES, DEFAULT_PLAN, PLAN_REVISION, withPlanDefaults, withRemovedFrom } from './plan'
-import { STARTER_EXERCISE_NAMES, starterPlan } from './planTemplates'
+import { DEFAULT_STRENGTH, STARTER_EXERCISE_NAMES, planFor, rebuildPlan, starterPlan } from './planTemplates'
+import { buildPlan } from '../lib/planBuilder'
 import type { StrengthSetup } from '../lib/profile'
 
 const FORBIDDEN = [
@@ -115,5 +116,69 @@ describe('a stored day that is not custom', () => {
       DEFAULT_PLAN.push.exercises.map((e) => e.key),
     )
     expect(out.push.custom).toBeUndefined()
+  })
+})
+
+describe('planFor', () => {
+  it('keeps a profile from before the plan questions on its starter template', () => {
+    for (const setup of SETUPS) expect(planFor(setup)).toEqual(starterPlan(setup))
+  })
+
+  it('builds a profile that answered them', () => {
+    const setup = { daysPerWeek: 3, equipment: 'gym', focus: ['arms'], minutes: 45 } as const
+    expect(planFor({ ...setup, focus: [...setup.focus] })).toEqual(buildPlan({ ...setup, focus: [...setup.focus] }).plan)
+    expect(planFor({ daysPerWeek: 2, equipment: 'gym', focus: [] })).toEqual(buildPlan({ daysPerWeek: 2, equipment: 'gym', focus: [] }).plan)
+  })
+})
+
+describe('rebuildPlan', () => {
+  const was = { daysPerWeek: 3, equipment: 'gym', focus: ['chest'], minutes: 60 } as const
+  const old = () => planFor({ ...was, focus: [...was.focus] })
+  const added = { key: 'face_pull', name: 'face pull', sets: 3, repMin: 12, repMax: 15, restSec: 60, group: 'shoulders' }
+
+  it('replaces what was generated, edits included, with the new answers', () => {
+    const current = old()
+    current.push.exercises[0] = { ...current.push.exercises[0], sets: 9 }
+    const next = { daysPerWeek: 2, equipment: 'dumbbells', focus: ['glutes'], minutes: 45 } as const
+    const out = rebuildPlan(current, { ...was, focus: [...was.focus] }, { ...next, focus: [...next.focus] })
+    expect(out).toEqual(planFor({ ...next, focus: [...next.focus] }))
+  })
+
+  it('appends what was added by hand to the same day', () => {
+    const current = old()
+    current.pull.exercises.push(added)
+    const next = { ...was, focus: ['arms' as const], minutes: 75 as const }
+    const out = rebuildPlan(current, { ...was, focus: [...was.focus] }, next)
+    const fresh = planFor(next)
+    expect(out.pull.exercises).toEqual([...fresh.pull.exercises, added])
+    expect(out.push).toEqual(fresh.push)
+  })
+
+  it('moves a hand-added movement off a day that is no longer used, and never doubles one', () => {
+    const current = old()
+    current.fullbody.exercises.push(added)
+    current.push.exercises.push({ ...added, key: 'flat_bench_extra' })
+    const next = { ...was, daysPerWeek: 2 as const, focus: [...was.focus] }
+    const out = rebuildPlan(current, { ...was, focus: [...was.focus] }, next)
+    expect(out.fullbody.exercises).toEqual([])
+    expect(out.pull.exercises[out.pull.exercises.length - 1]).toEqual(added)
+    const again = rebuildPlan(out, next, next)
+    expect(again).toEqual(out)
+  })
+
+  it('keeps the days where they sit in Today', () => {
+    const current = old()
+    current.push.order = 2
+    current.fullbody.order = 0
+    const out = rebuildPlan(current, { ...was, focus: [...was.focus] }, { ...was, focus: [...was.focus] })
+    expect(out.push.order).toBe(2)
+    expect(out.fullbody.order).toBe(0)
+  })
+
+  it('reads a profile with no strength answers as the default starter', () => {
+    const current = starterPlan(DEFAULT_STRENGTH)
+    current.push.exercises.push(added)
+    const next = { ...was, focus: [...was.focus] }
+    expect(rebuildPlan(current, undefined, next).push.exercises.at(-1)).toEqual(added)
   })
 })
