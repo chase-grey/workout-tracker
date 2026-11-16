@@ -20,6 +20,7 @@ import {
 import { recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
 import { PressButton, SETTINGS_BUTTON, SETTINGS_FIELD, SETTINGS_LABEL } from './PressButton'
+import { PlanSetupSection } from './PlanSetupSection'
 
 const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[] = [
   { pillar: 'strength', key: 'workouts', label: 'workouts' },
@@ -39,6 +40,15 @@ const sameGoals = (a: WeeklyGoalConfig, b: WeeklyGoalConfig) =>
   a.workouts === b.workouts && a.flex === b.flex && a.calDays === b.calDays && (a.cardio ?? 0) === (b.cardio ?? 0)
 
 export function ProfileSection() {
+  return (
+    <>
+      <TrackingSection />
+      <PlanSetupSection />
+    </>
+  )
+}
+
+function TrackingSection() {
   const { settings, updateSettings } = useData()
   const [fallback] = useState(() => ownerProfile())
   const profile = settings.profile ?? fallback
