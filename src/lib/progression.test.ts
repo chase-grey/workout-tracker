@@ -323,18 +323,94 @@ describe('nextTarget', () => {
     })
   })
 
-  it('re-paces from the most recent (lower) session', () => {
+  it('re-paces from the most recent (lower) sessions once there are two of them', () => {
     const rows = [
       // Earlier heavy session.
       row({ session_id: 's1', date: '2026-01-01', weight_lbs: 135, reps: 10 }),
-      // Most recent session was lighter (user backed off).
-      row({ session_id: 's2', date: '2026-01-08', weight_lbs: 125, reps: 7 }),
+      // Two lighter sessions since (user backed off).
+      row({ session_id: 's2', date: '2026-01-05', weight_lbs: 125, reps: 7 }),
+      row({ session_id: 's3', date: '2026-01-08', weight_lbs: 125, reps: 7 }),
     ]
-    // Target derives from the newer 125x7 session, not the older 135x10 one.
+    // Target derives from the newer 125x7 sessions, not the older 135x10 one.
     expect(nextTarget(rows, 'bench', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
       weightLbs: 125,
       reps: 8,
     })
+  })
+})
+
+describe('nextTarget after one bad session', () => {
+  const RANGE = { repMin: 8, repMax: 12, today: TODAY }
+  /** One session of `sets` sets, every set at the same weight and reps. */
+  const session = (id: string, date: string, weight: number | null, reps: number, sets = 3) =>
+    Array.from({ length: sets }, (_, i) =>
+      row({ session_id: id, date, set_number: i + 1, weight_lbs: weight, reps }),
+    )
+
+  it('holds the number the session before earned rather than dropping the weight', () => {
+    // 100×6 alone would re-pace below the range and solve back to 90×8.
+    const bad = session('s2', '2026-01-08', 100, 6)
+    expect(nextTarget(bad, 'bench', RANGE)).toEqual({ weightLbs: 90, reps: 8 })
+    const rows = [...session('s1', '2026-01-05', 100, 10), ...bad]
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 10 })
+  })
+
+  it('holds the reps a short session lost, without stepping up on them', () => {
+    // The floor repeats 100×10 — it doesn't ask for the 11 the earlier session
+    // would have been asked for next.
+    const rows = [...session('s1', '2026-01-05', 100, 10), ...session('s2', '2026-01-08', 100, 8)]
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 10 })
+  })
+
+  it('holds the old weight when a step up to a heavier one fell apart', () => {
+    const rows = [...session('s1', '2026-01-05', 100, 12), ...session('s2', '2026-01-08', 105, 4)]
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 12 })
+  })
+
+  it('holds a reps-only lift too', () => {
+    const LADDER = { repMin: 15, repMax: 15, bodyweight: true, repLadder: true, today: TODAY }
+    const rows = [...session('s1', '2026-01-05', null, 20), ...session('s2', '2026-01-08', null, 14)]
+    expect(nextTarget(rows, 'bench', LADDER)).toEqual({ weightLbs: null, reps: 20 })
+  })
+
+  it('comes down after a second bad session in a row', () => {
+    const rows = [
+      ...session('s1', '2026-01-02', 100, 10),
+      ...session('s2', '2026-01-05', 100, 6),
+      ...session('s3', '2026-01-08', 100, 6),
+    ]
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 90, reps: 8 })
+  })
+
+  it('comes down to the better of two slipping sessions', () => {
+    const rows = [
+      ...session('s1', '2026-01-02', 100, 12),
+      ...session('s2', '2026-01-05', 100, 10),
+      ...session('s3', '2026-01-08', 100, 9),
+    ]
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 10 })
+  })
+
+  it('still climbs straight off a better session', () => {
+    const more = [...session('s1', '2026-01-05', 100, 9), ...session('s2', '2026-01-08', 100, 11)]
+    expect(nextTarget(more, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 12 })
+    // A weight bump reads as a step up, though it's fewer reps.
+    const bumped = [...session('s1', '2026-01-05', 100, 12), ...session('s2', '2026-01-08', 105, 8)]
+    expect(nextTarget(bumped, 'bench', RANGE)).toEqual({ weightLbs: 105, reps: 9 })
+  })
+
+  it('takes a light comeback after a layoff as the real number', () => {
+    const rows = [...session('s1', '2025-12-01', 100, 10), ...session('s2', '2026-01-08', 100, 6)]
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 90, reps: 8 })
+  })
+
+  it('reads the floor from the same A/B slot only', () => {
+    const rows = [
+      ...session('b1', '2026-01-05', 120, 10).map((r) => ({ ...r, variant: 'B' as const })),
+      ...session('a1', '2026-01-07', 100, 10).map((r) => ({ ...r, variant: 'A' as const })),
+      ...session('a2', '2026-01-09', 100, 8).map((r) => ({ ...r, variant: 'A' as const })),
+    ]
+    expect(nextTarget(rows, 'bench', { ...RANGE, variant: 'A' })).toEqual({ weightLbs: 100, reps: 10 })
   })
 })
 
@@ -581,10 +657,12 @@ describe('nextTarget across A/B slots', () => {
   })
 
   it('ignores slots entirely when no variant is asked for', () => {
-    // The lifts both variants train alike keep one ladder off every session.
+    // The lifts both variants train alike keep one ladder off every session: the
+    // 165 is read as a lighter day after the 185 rather than as another slot's
+    // own number, so the 185 holds (see heldFloor).
     expect(nextTarget(twoSlots, 'bench', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
-      weightLbs: 165,
-      reps: 9,
+      weightLbs: 185,
+      reps: 8,
     })
   })
 })

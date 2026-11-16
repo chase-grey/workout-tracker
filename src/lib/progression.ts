@@ -248,6 +248,22 @@ export function lastPerformance(
    */
   variant?: VariantKey | null,
 ): LastPerformance | null {
+  return recentPerformances(workouts, exerciseKey, repMin, variant)[0] ?? null
+}
+
+/**
+ * Every comparable session's performance for one exercise, newest first — what
+ * {@link lastPerformance} reads the head of, and what {@link nextTarget} reads the
+ * session before it from (see heldFloor). Same grouping, same slot rule: when the
+ * slot asked for has no sessions, the other slot's are read and every reading is
+ * flagged `sameSlot: false`.
+ */
+function recentPerformances(
+  workouts: WorkoutRow[],
+  exerciseKey: string,
+  repMin: number,
+  variant?: VariantKey | null,
+): LastPerformance[] {
   const bySession = new Map<string, SessionGroup>()
   for (const r of workouts) {
     if (r.exercise !== exerciseKey) continue
@@ -264,7 +280,7 @@ export function lastPerformance(
     bySession.set(key, g)
   }
 
-  if (bySession.size === 0) return null
+  if (bySession.size === 0) return []
 
   const groups = [...bySession.values()]
   const comparable = comparableSessions(groups, variant)
@@ -274,32 +290,35 @@ export function lastPerformance(
   const sameSlot = comparable.length > 0
   const pool = sameSlot ? comparable : groups
 
-  // Pick the session with the latest date (YYYY-MM-DD sorts lexicographically).
-  let latest: SessionGroup | null = null
-  for (const g of pool) {
-    if (latest === null || g.date > latest.date) latest = g
-  }
-  if (latest === null) return null
+  // Newest first (YYYY-MM-DD sorts lexicographically). Two sessions on one date
+  // keep the order they were first logged in, so the earlier-logged one still
+  // reads as the latest, as it always has.
+  const ordered = pool
+    .map((g, i) => ({ g, i }))
+    .sort((a, b) => (a.g.date === b.g.date ? a.i - b.i : b.g.date.localeCompare(a.g.date)))
+    .map(({ g }) => g)
 
-  const working = workingSet(latest.sets, repMin)
-  if (working === null) {
-    // Bodyweight session: no weight anywhere, so the reading is the reps alone.
-    const reps = latest.sets.map((s) => s.reps)
+  return ordered.map((session) => {
+    const working = workingSet(session.sets, repMin)
+    if (working === null) {
+      // Bodyweight session: no weight anywhere, so the reading is the reps alone.
+      const reps = session.sets.map((s) => s.reps)
+      return {
+        date: session.date,
+        topWeight: null,
+        topReps: sustainedReps(reps),
+        heldEverySet: heldEverySet(reps),
+        sameSlot,
+      }
+    }
     return {
-      date: latest.date,
-      topWeight: null,
-      topReps: sustainedReps(reps),
-      heldEverySet: heldEverySet(reps),
+      date: session.date,
+      topWeight: working.weight,
+      topReps: working.reps,
+      heldEverySet: working.heldEverySet,
       sameSlot,
     }
-  }
-  return {
-    date: latest.date,
-    topWeight: working.weight,
-    topReps: working.reps,
-    heldEverySet: working.heldEverySet,
-    sameSlot,
-  }
+  })
 }
 
 /**
@@ -317,10 +336,12 @@ export function lastPerformance(
  * target that climbs while a set is still being missed just widens the gap. This is
  * the rep half of double progression: finish all your sets, then ask for more.
  *
- * Re-pacing note: the target is always derived from the MOST RECENT session, so
- * if the user logs below target one week, next week's target is computed from that
- * lower actual — the plan automatically re-paces to reality rather than compounding
- * an aspirational number the user never actually hit. After a gap of more than
+ * Re-pacing note: the target is derived from the MOST RECENT session, so a lift
+ * logged below target re-paces to that lower actual rather than compounding an
+ * aspirational number never actually hit — but not off one session alone. The
+ * session before it is a floor (see heldFloor): one bad day holds the number the
+ * day before it earned, and only a second one in a row lets the target come down.
+ * A better session moves it up straight away. After a gap of more than
  * STALE_HISTORY_DAYS it stops asking for a step up at all and simply repeats the
  * last working set, so coming back from a break starts from something achievable.
  *
@@ -381,13 +402,91 @@ export function nextTarget(
     return { weightLbs: null, reps: repMax }
   }
 
-  const last = lastPerformance(workouts, exerciseKey, repMin, opts.variant)
+  const [last, prev] = recentPerformances(workouts, exerciseKey, repMin, opts.variant)
 
   // Brand-new exercise: no weight suggestion, start at the bottom of the range.
-  if (last === null) {
+  if (last == null) {
     return { weightLbs: null, reps: repMin }
   }
 
+  const stale = daysBetween(last.date, toISODate(today)) > STALE_HISTORY_DAYS
+  const fromLast = targetFrom(last, opts, increment, stale)
+  const floor = heldFloor(last, prev, opts, increment, stale)
+  return floor != null && isHigher(floor, fromLast) ? floor : fromLast
+}
+
+/**
+ * How far the session before the latest one holds the target up: what that
+ * session earned as a number to repeat, or null when it has no say.
+ *
+ * Reading only the latest session let one bad day write the next one's
+ * prescription. Bench at 100×10 on Monday and 100×6 on Thursday (a bad night's
+ * sleep, a cold, a long day) dropped the
+ * next ask below the range and solved it back to 90×8 — ten pounds and a week of
+ * work gone on the strength of one session, which the next good day then had to
+ * climb back through one rep at a time.
+ *
+ * So the target is never lower than a plain repeat of the session before: the
+ * better of the last two sessions sets it. One weak session holds the number the
+ * one before it earned; two in a row are a trend, and the target comes down to
+ * the better of the two — which is how far the lifter has actually slipped, not
+ * how far one day slipped. The floor never climbs: it's the previous session's
+ * working set repeated, never a step up on it, so a good session still has to be
+ * followed by its own to be built on, and a better latest session is read as it
+ * always was (see isHigher) — rising stays a session away.
+ *
+ * It has no say when the latest session can't be built on in the first place —
+ * a layoff since (the stale rule repeats it instead), or a reading borrowed from
+ * the other A/B slot — or when the two sessions were themselves more than
+ * STALE_HISTORY_DAYS apart: then the latest is a comeback, and a comeback that
+ * came in light is the real number rather than a bad day.
+ */
+function heldFloor(
+  last: LastPerformance,
+  prev: LastPerformance | undefined,
+  opts: TargetRules,
+  increment: number,
+  stale: boolean,
+): Target | null {
+  if (prev == null || stale || !last.sameSlot) return null
+  if (daysBetween(prev.date, last.date) > STALE_HISTORY_DAYS) return null
+  // A bodyweight reading and a loaded one aren't the same ladder to compare.
+  if ((prev.topWeight == null) !== (last.topWeight == null)) return null
+  return targetFrom(prev, opts, increment, true)
+}
+
+/**
+ * Whether target `a` asks for more than `b`: more weight, or the same weight for
+ * more reps. Weight first because that's double progression's own order — a bump
+ * from 100×12 to 105×8 is a step up, though it's four reps fewer.
+ */
+function isHigher(a: Target, b: Target): boolean {
+  const aw = a.weightLbs ?? -Infinity
+  const bw = b.weightLbs ?? -Infinity
+  return aw !== bw ? aw > bw : a.reps > b.reps
+}
+
+/** The plan fields a single target is worked out from — see {@link nextTarget}. */
+type TargetRules = {
+  repMin: number
+  repMax: number
+  bodyweight?: boolean
+  weightCapLbs?: number
+  repLadder?: boolean
+}
+
+/**
+ * The target one session's performance calls for (see {@link nextTarget}).
+ * `repeatOnly` asks for that session again rather than anything on top of it —
+ * the stale rule's answer, and the floor's (see heldFloor).
+ */
+function targetFrom(
+  last: LastPerformance,
+  opts: TargetRules,
+  increment: number,
+  repeatOnly: boolean,
+): Target {
+  const { repMin, repMax } = opts
   const cap = opts.weightCapLbs
   /**
    * Already training at the heaviest load this movement has — or, for a movement
@@ -407,7 +506,6 @@ export function nextTarget(
   const repeatReps = Math.max(1, Math.min(last.topReps, repCeiling))
   // Checked before the bodyweight branch, so reps-only lifts re-pace after a
   // layoff too rather than being asked for a rep they haven't earned in months.
-  const stale = daysBetween(last.date, toISODate(today)) > STALE_HISTORY_DAYS
   /**
    * Repeat the last working set rather than step up. Three cases share the reason:
    * the number hasn't been earned as a baseline to add to. Either it wasn't set
@@ -417,7 +515,7 @@ export function nextTarget(
    * the one to beat (see heldEverySet). Each is a starting point; the session that
    * holds it clean across the board sets the real one.
    */
-  const repeat = stale || !last.sameSlot || !last.heldEverySet
+  const repeat = repeatOnly || !last.sameSlot || !last.heldEverySet
 
   // Bodyweight (flagged, or no weight recorded): progress reps only. Nothing to
   // lighten, so this is the one case where the target may sit below repMin.
