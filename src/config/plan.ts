@@ -339,7 +339,11 @@ export type Plan = Record<DayType, DayPlan>
 // the plan should trim last.
 // 20: the incline curl is three sets wherever it's trained — the short pull + legs
 // day no longer cuts it to two. It was four direct bicep sets in a short week.
-export const PLAN_REVISION = 20
+// 21: neck extension is retired, and neck flexion is trained twice a week instead
+// of once — three sets on pull + legs and on full body, a plain movement now that
+// it has no partner to circuit with. The neck rests the day after neck work the
+// way the abs do (see lib/neckRest).
+export const PLAN_REVISION = 21
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -475,11 +479,56 @@ export const SIDE_RAISE_SWITCH_SEC = 10
 export const SIDE_RAISE_ROUND_REST_SEC = 45
 
 /**
- * The rest after a round of the neck pair — extension then flexion, back to back
- * on one screen. Forty-five seconds: light loads and high reps, and each direction
- * has already rested through the other's set.
+ * The rest after a set of neck flexion. Forty-five seconds: light loads and high
+ * reps, and what the pair used to rest after a whole round of both directions —
+ * one direction alone needs no more than the two did.
  */
-export const NECK_ROUND_REST_SEC = 45
+export const NECK_REST_SEC = 45
+
+/**
+ * Neck flexion: lying face up on a bench with a plate on the forehead, the chin
+ * curled to the chest. The one direction the plan trains since revision 21 — the
+ * extension it was paired with felt like it barely worked, and two sets a week
+ * more of the direction that does is a better use of the minutes than a circuit
+ * whose other half is going through the motions.
+ *
+ * Twice a week, on pull + legs and full body, at three sets — two on the short
+ * day of full body, the longer of those two short days. Load stays light and the
+ * reps stay high: the neck is the one place where grinding a heavy single is a
+ * bad bet. Grouped `neck`, which is what makes it the block lib/neckRest leaves
+ * out the day after neck work.
+ */
+export const NECK_FLEXION: PlannedExercise = {
+  key: 'neck_flexion',
+  name: 'neck flexion',
+  sets: 3,
+  repMin: 12,
+  repMax: 20,
+  restSec: NECK_REST_SEC,
+  increment: 2.5,
+  group: 'neck',
+}
+
+/** The neck extension's key — retired from every day since revision 21. */
+export const NECK_EXTENSION_KEY = 'neck_extension'
+
+/**
+ * The neck extension as it last shipped, half of the pull + legs neck circuit
+ * until revision 21 retired it: it felt like it barely worked. Kept as an entry
+ * for the same reasons as {@link HANGING_RAISE} — its logged history keeps its
+ * name and its place on the neck's ladder, an imported log that says "neck
+ * extension" still lands on it, and the add-an-exercise sheet can still offer it.
+ */
+export const NECK_EXTENSION: PlannedExercise = {
+  key: NECK_EXTENSION_KEY,
+  name: 'neck extension',
+  sets: 3,
+  repMin: 12,
+  repMax: 20,
+  restSec: NECK_REST_SEC,
+  increment: 2.5,
+  group: 'neck',
+}
 
 /**
  * The rest after a round of full body's arm pair — a curl and a tricep extension,
@@ -700,18 +749,11 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
       { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 0, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
 
-      // Extension and flexion are antagonists, so they rotate as a circuit and the
-      // pair costs about as long as one of them would alone. Two directions is what
-      // changes how the neck reads front and back; lateral flexion is the slow
-      // third and isn't worth the sets yet. Load stays light and the reps stay
-      // high — the neck is the one place where grinding a heavy single is a bad bet.
-      //
-      // A round at a time: the two directions go back to back on one screen — the
-      // flexors rest while the extensors work and the load is light enough that
-      // neither needs more — and the one rest of the round comes after both. Two
-      // rounds on the short day.
-      { key: 'neck_extension', name: 'neck extension', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck', circuitRoundRestSec: NECK_ROUND_REST_SEC, roundScreen: true },
-      { key: 'neck_flexion', name: 'neck flexion', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: 30, increment: 2.5, group: 'neck circuit', circuit: 'neck', circuitRoundRestSec: NECK_ROUND_REST_SEC, roundScreen: true },
+      // The neck closes the day, as it closes full body (see NECK_FLEXION). All
+      // three sets on the short day too: this is the shortest of the three short
+      // days, and losing the extension's two rounds already gave it more back than
+      // the third set costs.
+      NECK_FLEXION,
     ],
   },
   fullbody: {
@@ -756,6 +798,13 @@ export const DEFAULT_PLAN: Plan = {
       // the week; the extension's second. Two rounds on the short day.
       { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...DUMBBELL_PAIR, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
+
+      // The neck's second day of the week (see NECK_FLEXION). Here and on pull +
+      // legs rather than push because these two already want a day between them —
+      // both run four sets of the leg press and the pull-ups — so the neck rides a
+      // gap the week keeps anyway, and push is the day that naturally falls in it.
+      // Two sets on the short day, the longest of the three; three on the full one.
+      { ...NECK_FLEXION, shortSets: 2 },
     ],
   },
 }
@@ -872,9 +921,9 @@ export function withCircuitRoundRest(
  * fallback. Keys repeat across days (leg press and bench appear on Full Body too),
  * so the first occurrence of each key wins.
  *
- * The retired hanging raise and the Stretch + Core session's mat sit-up are
- * appended last: neither is a movement a training day prescribes (see
- * HANGING_RAISE, STRETCH_CORE), so nothing else would give them a name to chart
+ * The retired hanging raise and neck extension and the Stretch + Core session's
+ * mat sit-up are appended last: none is a movement a training day prescribes (see
+ * HANGING_RAISE, NECK_EXTENSION, STRETCH_CORE), so nothing else would give them a name to chart
  * under — and the sit-up coming last is what makes an old log that just says
  * "weighted sit-ups" resolve to the incline one the training days train, which is
  * what such a log meant.
@@ -887,6 +936,7 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     ...DEFAULT_PLAN.pull.exercises,
     ...DEFAULT_PLAN.fullbody.exercises,
     HANGING_RAISE,
+    NECK_EXTENSION,
     STRETCH_CORE,
   ]) {
     if (seen.has(e.key)) continue
@@ -1031,6 +1081,9 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     // no top, so every week it took a little longer, for a muscle none of the goals
     // read. Cut when the day had grown too long to want to finish.
     'calf_raise',
+    // Neck extension: it felt like it barely worked, and the flexion it was paired
+    // with takes its minutes on a second day instead (see NECK_FLEXION).
+    NECK_EXTENSION_KEY,
   ],
   fullbody: [
     'barbell_squat',
