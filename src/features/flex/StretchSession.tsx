@@ -53,6 +53,7 @@ import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
 import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
+import { landingStep, withSkipped } from '../../lib/skipped'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -108,6 +109,10 @@ type RoutineChecklistProps = {
   currentKey?: string
   done: Set<string>
   skipped: Set<string>
+  /** Single sets dropped from this run, by step key (see lib/skipped). */
+  skippedSteps: Set<string>
+  /** Whether a set can leave the flow — the last one in play can't. */
+  canSkipStep: (stepKey: string) => boolean
   timeLeft: Map<string, number>
   /** The session clock at the top: so far and left, working and resting. */
   clock: ReactNode
@@ -118,6 +123,9 @@ type RoutineChecklistProps = {
   onJump: (stepKey: string) => void
   onToggleDone: (stepKey: string) => void
   onToggleSkipped: (exKey: string, skip: boolean) => void
+  onToggleStepSkipped: (stepKey: string, skip: boolean) => void
+  /** Put a skipped set back and go to it. */
+  onUnskipStep: (stepKey: string) => void
 }
 
 /** The full routine stays visible here even when an exercise leaves today's flow. */
@@ -126,6 +134,8 @@ function RoutineChecklist({
   currentKey,
   done,
   skipped,
+  skippedSteps,
+  canSkipStep,
   timeLeft,
   clock,
   took,
@@ -134,6 +144,8 @@ function RoutineChecklist({
   onJump,
   onToggleDone,
   onToggleSkipped,
+  onToggleStepSkipped,
+  onUnskipStep,
 }: RoutineChecklistProps) {
   const exercises = steps.reduce<Array<{ key: string; name: string; blockLabel: string; steps: SessionStep[] }>>(
     (groups, step) => {
@@ -157,7 +169,10 @@ function RoutineChecklist({
         <div className="flex flex-col gap-3">
           {exercises.map((exercise) => {
             const isSkipped = skipped.has(exercise.key)
-            const finished = !isSkipped && exercise.steps.every((step) => done.has(step.stepKey))
+            // Finished once every set still in play is done — not when every
+            // set was skipped one by one.
+            const live = exercise.steps.filter((step) => !skippedSteps.has(step.stepKey))
+            const finished = !isSkipped && live.length > 0 && live.every((step) => done.has(step.stepKey))
             return (
               <section key={exercise.key} className="rounded-xl bg-surface-2/40 px-2 py-1">
                 <div className="flex items-center gap-2">
@@ -185,23 +200,39 @@ function RoutineChecklist({
                   <div className="flex flex-col gap-1 pb-1">
                     {exercise.steps.map((step) => {
                       const isDone = done.has(step.stepKey)
+                      const isStepSkipped = skippedSteps.has(step.stepKey)
                       return (
                         <div
                           key={step.stepKey}
                           className={`flex items-center gap-2 rounded-xl px-2 ${step.stepKey === currentKey ? 'bg-surface-2' : ''}`}
                         >
                           <button
-                            onClick={() => onJump(step.stepKey)}
-                            className="flex-1 py-2 text-left active:opacity-70"
+                            // A skipped set has no step to jump to until it's back
+                            // in the flow, so choosing it puts it back.
+                            onClick={() => (isStepSkipped ? onUnskipStep(step.stepKey) : onJump(step.stepKey))}
+                            className={`flex-1 py-2 text-left active:opacity-70 ${isStepSkipped ? 'opacity-50' : ''}`}
                           >
-                            <span className="block text-sm font-medium">
+                            <span className={`block text-sm font-medium ${isStepSkipped ? 'line-through' : ''}`}>
                               {[stepPosition(step), setOfLabel(step)].filter(Boolean).join(' · ')}
                             </span>
                           </button>
+                          {/* One tap drops the set from this run, the same mark as
+                              skipping the exercise. Not on a set already done,
+                              nor on the last one in play; held in place when
+                              absent so the checks stay lined up. */}
+                          <button
+                            onClick={() => onToggleStepSkipped(step.stepKey, !isStepSkipped)}
+                            disabled={!isStepSkipped && (isDone || !canSkipStep(step.stepKey))}
+                            aria-label={isStepSkipped ? 'unskip set' : 'skip set'}
+                            className="p-2 text-xl disabled:invisible"
+                          >
+                            <MdBlock className={isStepSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                          </button>
                           <button
                             onClick={() => onToggleDone(step.stepKey)}
+                            disabled={isStepSkipped}
                             aria-label={isDone ? 'mark incomplete' : 'mark complete'}
-                            className="p-2 text-2xl"
+                            className="p-2 text-2xl disabled:invisible"
                           >
                             {isDone ? (
                               <MdCheckCircle className="text-accent-2" aria-hidden />
@@ -265,6 +296,7 @@ export function StretchSession({
   const [current, setCurrent] = useState(saved?.step ?? 0)
   const [done, setDone] = useState<Set<string>>(() => new Set(saved?.done ?? []))
   const [skipped, setSkipped] = useState<Set<string>>(() => new Set(saved?.skipped ?? []))
+  const [skippedSteps, setSkippedSteps] = useState<Set<string>>(() => new Set(saved?.skippedSteps ?? []))
   const [coreReps, setCoreReps] = useState<Record<number, number>>(() => saved?.coreReps ?? {})
   // Weight per core set. A round that's absent hasn't been touched and takes the
   // prescribed load; one present with null was deliberately cleared to bodyweight.
@@ -355,11 +387,12 @@ export function StretchSession({
 
   const plan = flexPlans[routine] ?? FLEX_ROUTINES[routine].blocks
   const allSteps = useMemo(() => officeAbs ? buildCoreSteps() : buildSessionSteps(plan, { core: false, startSide }), [plan, officeAbs, startSide])
-  // Skipping is an exercise-level decision: all of its sides and sets leave the
-  // live flow, while allSteps keeps them available to restore from the checklist.
+  // Skipping an exercise takes all of its sides and sets out of the live flow,
+  // and skipping a set takes just that one; allSteps keeps them all available to
+  // restore from the checklist.
   const steps = useMemo(
-    () => allSteps.filter((step) => !skipped.has(step.exKey)),
-    [allSteps, skipped],
+    () => allSteps.filter((step) => !skipped.has(step.exKey) && !skippedSteps.has(step.stepKey)),
+    [allSteps, skipped, skippedSteps],
   )
   // A per-side round is two mounted guides, but it is one set: draw once for the
   // round so either side gets the same animation. A later round has another key
@@ -399,6 +432,7 @@ export function StretchSession({
       coreWeights,
       rep,
       skipped: [...skipped],
+      skippedSteps: [...skippedSteps],
       rest,
       // Written on every snapshot: `rest` flipping to null is the tick right after
       // a rest was banked, so the two always go to storage together.
@@ -409,7 +443,7 @@ export function StretchSession({
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, rep, skipped, rest, seenGates, fast])
+  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, rep, skipped, skippedSteps, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -594,6 +628,12 @@ export function StretchSession({
 
   if (N === 0) {
     const allSkipped = allSteps.length > 0
+    // Nothing is in play to skip from here; a set can only come back.
+    const restoreStep = (key: string) => {
+      setSkippedSteps((current) => withSkipped(current, key, false))
+      setCurrent(0)
+      setPreparing(!fast)
+    }
     return (
       <div className="flex min-h-full flex-col gap-4 pb-24 pt-16 text-center">
         <p className="text-neutral-500">
@@ -618,11 +658,15 @@ export function StretchSession({
             steps={allSteps}
             done={done}
             skipped={skipped}
+            skippedSteps={skippedSteps}
+            canSkipStep={() => false}
             timeLeft={exerciseTimeLeft}
             {...checklistTiming}
             onClose={() => setShowList(false)}
             onJump={() => {}}
             onToggleDone={() => {}}
+            onToggleStepSkipped={restoreStep}
+            onUnskipStep={restoreStep}
             onToggleSkipped={(key, skip) => {
               setSkipped((current) => {
                 const next = new Set(current)
@@ -744,6 +788,46 @@ export function StretchSession({
       setReadyOverrideSec(null)
       setPreparing(!!landing && (!fast || !exerciseStarted(landing, done)) && settleInSec(landing) > 0)
     }
+  }
+
+  /**
+   * Drop one set from this run, or put it back (see lib/skipped).
+   *
+   * The flow is rebuilt around it, so the set on screen is held by key. Skipping
+   * the set on screen moves on to the next one still owed, the way skipping its
+   * exercise would, and the rest or setup count that was leading into it goes
+   * with it. With `jump`, putting a set back also goes to it, by the same path a
+   * checklist jump takes.
+   */
+  const setStepSkipped = (key: string, skip: boolean, jump = false) => {
+    if (skip && !steps.some((candidate) => candidate.stepKey !== key)) return
+    const nextSkippedSteps = withSkipped(skippedSteps, key, skip)
+    const nextSteps = allSteps.filter(
+      (candidate) => !skipped.has(candidate.exKey) && !nextSkippedSteps.has(candidate.stepKey),
+    )
+    const landingKey = skip
+      ? landingStep(steps.map((candidate) => candidate.stepKey), (k) => k !== key, (k) => done.has(k), step.stepKey)
+      : jump ? key : step.stepKey
+    const at = Math.max(0, nextSteps.findIndex((candidate) => candidate.stepKey === landingKey))
+    const landing = nextSteps[at]
+    setSkippedSteps(nextSkippedSteps)
+    setCurrent(at)
+    if (landingKey === step.stepKey) return
+    setRep(1)
+    if (rest) {
+      bankRest()
+      setClock.current = endRest(setClock.current, Date.now())
+    }
+    setRest(null)
+    if (jump) {
+      const ready = landing ? settleInSec(landing, step) : 0
+      setReadyOverrideSec(ready > 0 ? ready : null)
+      setPreparing(ready > 0)
+      setShowList(false)
+      return
+    }
+    setReadyOverrideSec(null)
+    setPreparing(!!landing && (!fast || !exerciseStarted(landing, done)) && settleInSec(landing) > 0)
   }
 
   // Bank the rest slice just spent, then hand the screen to the get-ready count.
@@ -1158,6 +1242,10 @@ export function StretchSession({
           onClose={() => setShowList(false)}
           onToggleDone={toggleDone}
           onToggleSkipped={setExerciseSkipped}
+          skippedSteps={skippedSteps}
+          canSkipStep={(key) => steps.some((candidate) => candidate.stepKey !== key)}
+          onToggleStepSkipped={(key, skip) => setStepSkipped(key, skip)}
+          onUnskipStep={(key) => setStepSkipped(key, false, true)}
           onJump={(stepKey) => {
             const i = steps.findIndex((candidate) => candidate.stepKey === stepKey)
             if (i < 0) return

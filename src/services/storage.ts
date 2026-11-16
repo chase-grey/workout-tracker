@@ -117,6 +117,8 @@ export type StretchState = {
   rep?: number
   /** Exercise keys omitted from this run of the routine. */
   skipped?: string[]
+  /** Step keys of single sets omitted from this run (see lib/skipped). */
+  skippedSteps?: string[]
   /** The rest countdown that was on screen, if any. */
   rest?: RestState | null
   /**

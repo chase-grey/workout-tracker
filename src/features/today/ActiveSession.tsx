@@ -27,7 +27,7 @@ import { buildSetOrder, circuitStations, roundSteps } from '../../lib/circuit'
 import { checklistSetEdit } from '../../lib/checklistEdit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
-import { resumeSkipped, toSkippedRecord } from '../../lib/skipped'
+import { allInPlayDone, landingStep, resumeSkipped, setsInPlay, toSkippedRecord } from '../../lib/skipped'
 import { canSkipPair, pairKeys, withPairSkipped } from '../../lib/pairedSides'
 import {
   bankRest,
@@ -316,16 +316,23 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const inPlay = useMemo(() => exercises.filter((e) => !skipped.has(e.key)), [exercises, skipped])
   /**
    * Whether this exercise can be skipped — something has to be left to perform.
-   * A sided exercise is skipped with its other side (see lib/pairedSides).
+   * A sided exercise is skipped with its other side (see lib/pairedSides), and a
+   * move whose every other set has been skipped one by one is no help either.
    */
-  const skippable = (key: string) => canSkipPair(skipped, exercises.map((e) => e.key), key)
+  const skippable = (key: string) => {
+    const keys = exercises.map((e) => e.key)
+    const pair = pairKeys(keys, key)
+    return canSkipPair(skipped, keys, key) && steps.some((s) => !pair.includes(s.ex.key))
+  }
 
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
   const doneCount = (key: string) => logFor(key)?.sets.filter((s) => s.done && s.reps > 0).length ?? 0
-  const isComplete = (key: string) => {
-    const log = logFor(key)
-    return !!log && log.sets.length > 0 && log.sets.every((s) => s.done && s.reps > 0)
+  /** The sets of an exercise a single-set skip hasn't taken out of today. */
+  const setsOwed = (key: string, planned: number) => {
+    const l = logFor(key)
+    return l ? setsInPlay(l.sets).length : planned
   }
+  const isComplete = (key: string) => allInPlayDone(logFor(key)?.sets ?? [])
 
   // Flatten the workout into individual set-steps, one screen each. Driven by the
   // live log's set counts so an added/removed set reshapes the flow immediately.
@@ -339,7 +346,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       setIndex,
       setCount: counts[exIndex],
       stepKey: `${inPlay[exIndex].key}:${setIndex}`,
-    })) satisfies SetStep[]
+    }))
+      // A set skipped from the checklist leaves the flow the way a skipped
+      // exercise does, keeping its index: the sets around it are still the
+      // set numbers they were.
+      .filter((s) => !logFor(s.ex.key)?.sets[s.setIndex]?.skipped) satisfies SetStep[]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inPlay, session])
 
@@ -524,7 +535,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       done += logged
       // A skipped exercise still counts whatever you'd already logged of it —
       // those sets happened — but stops owing the ones you're not going to do.
-      all += skipped.has(e.key) ? logged : logFor(e.key)?.sets.length ?? e.sets
+      // A single skipped set is owed no more than a skipped exercise is.
+      all += skipped.has(e.key) ? logged : setsOwed(e.key, e.sets)
     }
     return { done, all }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -583,7 +595,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const setExerciseComplete = (key: string, complete: boolean) => {
     const l = logFor(key)
     if (!l) return
-    l.sets.forEach((_, i) => controls.updateSet(key, i, { done: complete }))
+    l.sets.forEach((s, i) => {
+      if (!s.skipped) controls.updateSet(key, i, { done: complete })
+    })
   }
 
   // A number typed into a checklist set is that set being logged: it's marked
@@ -750,11 +764,49 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setSkipped(withPairSkipped(skipped, exercises.map((e) => e.key), key, false))
     // Its steps don't exist yet, so land on it by key once they do — on the first
     // set still owed, as jumping to any other exercise does.
-    const owed = logFor(key)?.sets.findIndex((s) => !s.done) ?? -1
-    setPendingStepKey(`${key}:${owed >= 0 ? owed : 0}`)
+    // Not on a set skipped on its own, which stays out of the flow; and an
+    // exercise with every set skipped has nowhere to land, so the screen stays.
+    const sets = logFor(key)?.sets ?? []
+    const owed = sets.findIndex((s) => !s.done && !s.skipped)
+    const at = owed >= 0 ? owed : sets.length ? sets.findIndex((s) => !s.skipped) : 0
+    setPendingStepKey(at >= 0 ? `${key}:${at}` : step.stepKey)
     // closeRest also banks an in-flight rest.
     activeStartRef.current = Date.now()
     if (rest) closeRest()
+  }
+
+  /**
+   * Drop one set from today's workout, or put it back (see lib/skipped).
+   *
+   * Like an exercise skip, the flow is rebuilt around it, so the set on screen is
+   * held by key. Skipping the set on screen moves on to the next one still owed
+   * and ends the rest that was counting down to it; the seconds spent on it are
+   * dropped, as they are for a skipped exercise. The last set left in play can't
+   * go — finishing is what ends a workout.
+   */
+  const setSetSkipped = (key: string, index: number, skip: boolean) => {
+    const target = `${key}:${index}`
+    if (skip && !canSkipSet(target)) return
+    const done = new Set(steps.filter((_, i) => stepDone[i]).map((s) => s.stepKey))
+    const held = skip
+      ? landingStep(steps.map((s) => s.stepKey), (k) => k !== target, (k) => done.has(k), step.stepKey)
+      : step.stepKey
+    controls.updateSet(key, index, { skipped: skip })
+    setPendingStepKey(held)
+    if (held !== step.stepKey) {
+      activeStartRef.current = Date.now()
+      if (rest) closeRest()
+    }
+  }
+  const canSkipSet = (stepKey: string) => steps.some((s) => s.stepKey !== stepKey)
+
+  /** Tapping a skipped set in the checklist is deciding to do it after all. */
+  const unskipSetAndJump = (key: string, index: number) => {
+    controls.updateSet(key, index, { skipped: false })
+    setPendingStepKey(`${key}:${index}`)
+    activeStartRef.current = Date.now()
+    if (rest) closeRest()
+    setShowList(false)
   }
 
   // Rest again before the set on screen — for the rest that was cut short, or the
@@ -869,7 +921,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       seconds: restSec,
       endsAt: Date.now() + restSec * 1000,
       exKey: lastOnScreen.ex.key,
-      isLastSetOfExercise: lastOnScreen.setIndex === lastOnScreen.setCount - 1,
+      // Last of the sets still in play: a skipped final set isn't one to rest into.
+      isLastSetOfExercise: !steps.some((s) => s.ex.key === lastOnScreen.ex.key && s.setIndex > lastOnScreen.setIndex),
     })
   }
 
@@ -1557,7 +1610,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                         <span className="text-[10px] tracking-wide text-neutral-500">{e.group}</span>
                         <span className={`block font-medium ${isSkipped ? 'line-through' : ''}`}>{e.name}</span>
                         <span className="text-xs text-neutral-500 tabular-nums">
-                          {doneCount(e.key)}/{exerciseLog?.sets.length ?? e.sets} sets
+                          {doneCount(e.key)}/{setsOwed(e.key, e.sets)} sets
                           {!isSkipped && (exerciseTimeLeft.get(e.key) ?? 0) > 0 && ` · ${formatDuration(exerciseTimeLeft.get(e.key)!).replace(/^~/, '')}`}
                           {complete && (exerciseSpent?.get(e.key) ?? 0) > 0 &&
                             ` · took ${clockText(exerciseSpent!.get(e.key)!)} · est ${clockText(exerciseProjected?.get(e.key) ?? 0)}`}
@@ -1594,17 +1647,20 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                           // lib/checklistEdit): shown as the prompt it is, not as
                           // a number logged. Only a done set reads as a record.
                           const isDone = !!loggedSet.done
+                          const isSetSkipped = !!loggedSet.skipped
                           const stepIndex = steps.findIndex((s) => s.stepKey === `${e.key}:${setIndex}`)
                           const weightHint = loggedSet.weightLbs != null ? String(loggedSet.weightLbs) : e.bodyweight ? 'bw' : ''
-                          const field = 'min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent'
+                          const field = 'min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-30'
                           return (
                             <div
                               key={loggedSet.setNumber}
                               className={`flex items-center gap-2 rounded-lg px-1 ${step.stepKey === `${e.key}:${setIndex}` ? 'bg-surface-2/60' : ''}`}
                             >
                               <button
-                                onClick={() => jumpToStep(stepIndex)}
-                                className="min-h-[40px] w-10 shrink-0 text-left text-xs text-neutral-500 active:opacity-70"
+                                // A skipped set has no step to jump to until it's back
+                                // in the flow, so choosing it puts it back.
+                                onClick={() => (isSetSkipped ? unskipSetAndJump(e.key, setIndex) : jumpToStep(stepIndex))}
+                                className={`min-h-[40px] w-10 shrink-0 text-left text-xs text-neutral-500 active:opacity-70 ${isSetSkipped ? 'line-through opacity-50' : ''}`}
                               >
                                 set {setIndex + 1}
                               </button>
@@ -1619,6 +1675,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                                     placeholder={isDone ? '' : weightHint}
                                     onClick={(event) => event.stopPropagation()}
                                     onChange={(event) => editChecklistSet(e.key, setIndex, { weightLbs: toWeight(event.target.value) })}
+                                    disabled={isSetSkipped}
                                     className={field}
                                   />
                                   <span className="text-xs text-neutral-500">lb</span>
@@ -1635,6 +1692,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                                   placeholder={isDone ? '' : String(loggedSet.reps || '')}
                                   onClick={(event) => event.stopPropagation()}
                                   onChange={(event) => editChecklistSet(e.key, setIndex, { reps: Number(event.target.value) || 0 })}
+                                  disabled={isSetSkipped}
                                   className={field}
                                 />
                                 <span className="text-xs text-neutral-500">reps</span>
@@ -1642,10 +1700,24 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                               {/* Marking done logs the set at the numbers it holds, as
                                   the set screen's tap would; unmarking takes back a
                                   set logged by a stray one. */}
+                              {/* One tap drops the set from today, the same mark as
+                                  skipping the whole exercise. Not on a set already
+                                  logged — that's a record, taken back with its check
+                                  — nor on the last set left in play. Held in place
+                                  when absent so the columns stay lined up. */}
+                              <button
+                                onClick={() => setSetSkipped(e.key, setIndex, !isSetSkipped)}
+                                disabled={!isSetSkipped && (isDone || !canSkipSet(`${e.key}:${setIndex}`))}
+                                aria-label={isSetSkipped ? `unskip set ${setIndex + 1}` : `skip set ${setIndex + 1}`}
+                                className="p-1 text-xl disabled:invisible"
+                              >
+                                <MdBlock className={isSetSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                              </button>
                               <button
                                 onClick={() => controls.updateSet(e.key, setIndex, { done: !isDone })}
+                                disabled={isSetSkipped}
                                 aria-label={isDone ? `mark set ${setIndex + 1} incomplete` : `mark set ${setIndex + 1} complete`}
-                                className="p-1 text-xl"
+                                className="p-1 text-xl disabled:invisible"
                               >
                                 {isDone ? (
                                   <MdCheckCircle className="text-accent-2" aria-hidden />

@@ -44,3 +44,50 @@ export function withSkipped(current: Set<string>, key: string, skip: boolean): S
   else next.delete(key)
   return next
 }
+
+/*
+ * Single sets dropped from the flow.
+ *
+ * The same decision as skipping an exercise, made one set at a time from the
+ * checklist: the last set of the press when the shoulder says so, the second
+ * side of a calf stretch that's already loose. A skipped set stays in the
+ * checklist, struck through, to be put back; it leaves everything that's
+ * counted from the sets still to do.
+ */
+
+/** The sets of an exercise still owed or logged — the ones a skip hasn't taken out. */
+export function setsInPlay<T extends { skipped?: boolean }>(sets: readonly T[]): T[] {
+  return sets.filter((s) => !s.skipped)
+}
+
+/**
+ * Whether every set an exercise still has in play is logged. An exercise whose
+ * every set was skipped isn't complete — nothing of it was done.
+ */
+export function allInPlayDone(sets: readonly { skipped?: boolean; done?: boolean; reps: number }[]): boolean {
+  const live = setsInPlay(sets)
+  return live.length > 0 && live.every((s) => !!s.done && s.reps > 0)
+}
+
+/**
+ * The step the screen lands on once the flow has changed under it.
+ *
+ * The step on screen stays put while it's still in play. When it's the one
+ * that left, the screen moves on the way finishing it would have: to the next
+ * step still owed ahead of it, then to one left behind, then — when nothing is
+ * owed — to anything still in play. Null only when nothing is.
+ *
+ * `order` is the flow before the change, in order; `inPlay` says whether a step
+ * is still in it after; `done` whether a step is logged.
+ */
+export function landingStep(
+  order: readonly string[],
+  inPlay: (key: string) => boolean,
+  done: (key: string) => boolean,
+  current: string,
+): string | null {
+  if (inPlay(current)) return current
+  const at = order.indexOf(current)
+  const owed = (k: string) => inPlay(k) && !done(k)
+  return order.slice(at + 1).find(owed) ?? order.find(owed) ?? order.find(inPlay) ?? null
+}

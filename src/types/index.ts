@@ -10,6 +10,8 @@ export type SetLog = {
   notes?: string
   /** Whether the user has marked this set complete (only completed sets are saved). */
   done?: boolean
+  /** Dropped from today's workout from the checklist: not owed, never logged (see lib/skipped). */
+  skipped?: boolean
 }
 
 export type ExerciseLog = {
