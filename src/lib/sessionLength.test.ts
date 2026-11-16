@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { expandToFull } from './sessionLength'
+import { expandToFull, hasShortForm } from './sessionLength'
 import { DEFAULT_PLAN, shortExercises, variantExercises, type PlannedExercise } from '../config/plan'
 import type { WorkoutSession } from '../types'
+import { starterPlan } from '../config/planTemplates'
 
 const ex = (key: string, sets: number, extra: Partial<PlannedExercise> = {}): PlannedExercise => ({
   key, name: key, sets, repMin: 8, repMax: 12, restSec: 60, group: 'g', ...extra,
@@ -72,5 +73,30 @@ describe('expandToFull', () => {
     const out = expandToFull(short, planned, new Map())
     expect(out.exercises.map((l) => l.exercise)).toEqual(planned.map((e) => e.key))
     out.exercises.forEach((l, i) => expect(l.sets).toHaveLength(planned[i].sets))
+  })
+})
+
+describe('hasShortForm', () => {
+  it('is true for a day with a movement cut or left out of its short form', () => {
+    expect(hasShortForm({ exercises: full })).toBe(true)
+    expect(hasShortForm({ exercises: [ex('a', 3, { shortSets: 0 })] })).toBe(true)
+    expect(hasShortForm(DEFAULT_PLAN.push)).toBe(true)
+  })
+
+  it('is false when no short count is below the full one', () => {
+    expect(hasShortForm({ exercises: [ex('a', 3), ex('b', 2, { shortSets: 2 }), ex('c', 2, { shortSets: 5 })] })).toBe(false)
+    expect(hasShortForm({ exercises: [] })).toBe(false)
+  })
+
+  it('is false for every day of the legacy starter templates', () => {
+    for (const equipment of ['gym', 'dumbbells', 'bodyweight'] as const) {
+      const plan = starterPlan({ daysPerWeek: 3, equipment })
+      for (const day of Object.values(plan)) expect(hasShortForm(day)).toBe(false)
+    }
+  })
+
+  it('reads a variant that cuts what the base day does not', () => {
+    const day = { exercises: [ex('a', 3, { byVariant: { B: { shortSets: 1 } } })] }
+    expect(hasShortForm(day)).toBe(true)
   })
 })
