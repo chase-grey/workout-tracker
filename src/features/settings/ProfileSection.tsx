@@ -52,6 +52,7 @@ export function ProfileSection() {
   const [pillarsDraft, setPillars] = useState<Pillar[] | null>(null)
   const [goalsDraft, setGoals] = useState<WeeklyGoalConfig | null>(null)
   const [caloriesDraft, setCalories] = useState<string | null>(null)
+  const [proteinDraft, setProtein] = useState<string | null>(null)
   const [directionDraft, setDirection] = useState<DietDirection | null>(null)
   const [scaleDraft, setScale] = useState<boolean | null>(null)
   const [bodyFatDraft, setBodyFat] = useState<boolean | null>(null)
@@ -60,6 +61,8 @@ export function ProfileSection() {
   const pillars = pillarsDraft ?? profile.pillars
   const goals = goalsDraft ?? goalsInForce(profile)
   const caloriesText = caloriesDraft ?? (baseCalories ? String(baseCalories) : '')
+  const baseProtein = profile.proteinGoal ?? null
+  const proteinText = proteinDraft ?? (baseProtein ? String(baseProtein) : '')
   const direction = directionDraft ?? baseDirection
   const scale = scaleDraft ?? weighsIn(profile)
   const bodyFat = bodyFatDraft ?? readsBodyFat(profile)
@@ -71,9 +74,14 @@ export function ProfileSection() {
     pillars.length !== profile.pillars.length || pillars.some((p) => !profile.pillars.includes(p))
   const goalsChanged = !sameGoals(maskGoals(goals, pillars), baseGoals)
   const caloriesChanged = on('diet') && caloriesValid && Math.round(calories) !== baseCalories
+  // Blank hands the protein target back to body weight.
+  const proteinNum = proteinText.trim() === '' ? null : Math.round(Number(proteinText))
+  const proteinValid = proteinNum === null || (Number.isFinite(proteinNum) && proteinNum > 0)
+  const proteinChanged = on('diet') && proteinValid && proteinNum !== baseProtein
   const directionChanged = on('diet') && !ownerFlavour(profile) && direction !== baseDirection
   const measuresChanged = scale !== weighsIn(profile) || bodyFat !== readsBodyFat(profile)
-  const changed = pillarsChanged || goalsChanged || caloriesChanged || directionChanged || measuresChanged
+  const changed =
+    pillarsChanged || goalsChanged || caloriesChanged || proteinChanged || directionChanged || measuresChanged
 
   const togglePillar = (p: Pillar) => {
     if (!on(p)) {
@@ -94,6 +102,10 @@ export function ProfileSection() {
     let next: Profile = { ...profile, pillars, scale, bodyFatReading: bodyFat }
     if (goalsChanged) next = withWeeklyGoals(next, maskGoals(goals, pillars), weekStartISO(today))
     if (caloriesChanged) next = withCalorieGoal(next, Math.round(calories), today)
+    if (proteinChanged) {
+      const { proteinGoal: _dropped, ...rest } = next
+      next = proteinNum === null ? rest : { ...rest, proteinGoal: proteinNum }
+    }
     if (on('diet') && !ownerFlavour(profile)) next = { ...next, dietDirection: direction }
     void updateSettings({ ...settings, profile: next })
     close()
@@ -103,6 +115,7 @@ export function ProfileSection() {
     setPillars(null)
     setGoals(null)
     setCalories(null)
+    setProtein(null)
     setDirection(null)
     setScale(null)
     setBodyFat(null)
@@ -185,6 +198,17 @@ export function ProfileSection() {
             onChange={(e) => setCalories(e.target.value)}
             placeholder="daily calories"
             aria-label="daily calories"
+            className={SETTINGS_FIELD}
+          />
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            step="1"
+            value={proteinText}
+            onChange={(e) => setProtein(e.target.value)}
+            placeholder="daily protein (g)"
+            aria-label="daily protein in grams"
             className={SETTINGS_FIELD}
           />
           {!ownerFlavour(profile) && (

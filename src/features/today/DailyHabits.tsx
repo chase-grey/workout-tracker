@@ -8,12 +8,17 @@ import {
   foodLogStatus,
   formatClock,
   formatHelping,
+  formatProtein,
+  proteinForDate,
   totalForDate,
 } from '../../lib/calories'
 import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
+import { proteinGoalOn } from '../../lib/protein'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
 const QUICK_ADDS = [100, 500]
+const PROTEIN_ADDS = [10, 25]
+const ADD_BUTTON = 'min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80'
 
 type Props = {
   /** A Monday selected from streak history; null keeps following the current week. */
@@ -23,7 +28,7 @@ type Props = {
 
 /** The daily food log and its editable Mon-Sun timeline. */
 export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
-  const { calorieEntries, logCalories } = useData()
+  const { calorieEntries, logCalories, bodyWeights, settings } = useData()
 
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -61,8 +66,12 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
   const [showHelpings, setShowHelpings] = useState(false)
   useEffect(() => setShowHelpings(false), [selDate])
 
-  const addCalories = (calories: number) => {
-    if (calories !== 0) void logCalories(calories, selDate)
+  const selProtein = proteinForDate(calorieEntries, selDate)
+  const proteinGoal = proteinGoalOn(selDate, bodyWeights, settings.profile ?? null)
+  const proteinPct = proteinGoal ? Math.min(selProtein / proteinGoal, 1) * 100 : 0
+
+  const addFood = (calories: number, protein = 0) => {
+    if (calories !== 0 || protein !== 0) void logCalories(calories, selDate, protein)
   }
 
   return (
@@ -124,13 +133,34 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
         )}
       </div>
 
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-xs tracking-wider text-neutral-500">protein</span>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+          {proteinGoal != null && (
+            <div className="h-full bg-accent transition-all" style={{ width: `${proteinPct}%` }} />
+          )}
+        </div>
+        <p className="text-xs tabular-nums text-neutral-400">
+          <span
+            className={`font-semibold ${
+              proteinGoal != null && selProtein >= proteinGoal ? 'text-accent-2' : 'text-neutral-100'
+            }`}
+          >
+            {formatProtein(selProtein)}
+          </span>
+          {proteinGoal != null && ` / ${formatProtein(proteinGoal)}`}
+        </p>
+      </div>
+
       {showHelpings && helpings.length > 0 && (
         <ul className="mt-2 space-y-0.5 rounded-xl bg-surface-2 px-3 py-2 text-xs tabular-nums">
           {helpings.map((h) => (
             <li key={h.at} className="flex justify-between">
               <span className="text-neutral-400">{formatClock(new Date(h.at))}</span>
               <span className={h.amount < 0 ? 'text-neutral-500' : 'text-neutral-100'}>
-                {formatHelping(h.amount)}
+                {[h.amount !== 0 && formatHelping(h.amount), h.protein && formatProtein(h.protein)]
+                  .filter(Boolean)
+                  .join(' · ')}
               </span>
             </li>
           ))}
@@ -163,27 +193,32 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
 
       <div className="mt-2 flex gap-1.5">
         {QUICK_ADDS.map((calories) => (
-          <button
-            key={calories}
-            onClick={() => addCalories(calories)}
-            className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
-          >
+          <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
             +{calories}
           </button>
         ))}
         {selDate < today && (
-          <button
-            onClick={() => addCalories(selGoal)}
-            className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
-          >
+          <button onClick={() => addFood(selGoal)} className={ADD_BUTTON}>
             +{selGoal}
           </button>
         )}
-        <button
-          onClick={() => addCalories(-100)}
-          className="min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80"
-        >
+        <button onClick={() => addFood(-100)} className={ADD_BUTTON}>
           −100
+        </button>
+      </div>
+
+      <div className="mt-1.5 flex gap-1.5">
+        {PROTEIN_ADDS.map((grams) => (
+          <button key={grams} onClick={() => addFood(0, grams)} className={ADD_BUTTON}>
+            +{formatProtein(grams)}
+          </button>
+        ))}
+        <button
+          onClick={() => addFood(0, -10)}
+          disabled={selProtein <= 0}
+          className={`${ADD_BUTTON} disabled:text-neutral-600`}
+        >
+          −{formatProtein(10)}
         </button>
       </div>
     </div>

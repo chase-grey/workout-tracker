@@ -24,6 +24,7 @@ import {
   calorieHitDates,
   calorieGoalOn,
   coalesceHelping,
+  proteinForDate,
   recordHelping,
   mergeCaloriesByDate,
   setDayTotal,
@@ -235,7 +236,8 @@ type DataContextValue = {
    * (see `finishStretch`); left to itself, a completed session cheers here.
    */
   logFlex: (measurement: FlexMeasurement, opts?: { quiet?: boolean }) => Promise<Celebration | null>
-  logCalories: (calories: number, date?: string) => Promise<void>
+  /** Add `calories` (and `protein` grams) to a day's log; either may be 0. */
+  logCalories: (calories: number, date?: string, protein?: number) => Promise<void>
   /** `id` may be minted by the caller, so a one-tap log can be undone before its save lands. */
   logCardio: (entry: Omit<CardioEntry, 'id'> & { id?: string }) => Promise<void>
   deleteCardio: (id: string) => Promise<void>
@@ -859,12 +861,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const logCalories = useCallback(
     // `calories` is the amount to add; a day is stored as one running-total entry.
-    async (calories: number, date?: string) => {
+    async (calories: number, date?: string, protein = 0) => {
       const now = new Date()
       const day = date ?? toISODate(now)
       const prevCals = storage.loadCalories()
       // `calories` may be negative (a −100 correction); never let a day go below 0.
       const newTotal = Math.max(0, totalForDate(prevCals, day) + calories)
+      // Protein is a running total beside the calories, by the same rule.
+      const newProtein = Math.max(0, proteinForDate(prevCals, day) + protein)
       // Stamp the log time only when logging TODAY. Backfilling an earlier day
       // says nothing about when that day's food was eaten, so it leaves the
       // existing timestamp (if any) alone rather than writing a misleading one.
@@ -875,11 +879,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // was pressed last. Backfills carry neither.
       const helping = loggedAt ? coalesceHelping(prevCals, day, calories, now) : undefined
       // The day's whole breakdown rides along too, so another device can list it.
-      const helpings = loggedAt ? recordHelping(prevCals, day, calories, now) : undefined
-      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, helping, helpings)
+      const helpings = loggedAt ? recordHelping(prevCals, day, calories, now, protein) : undefined
+      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, helping, helpings, newProtein)
       const entry: CalorieEntry = {
         date: day,
         calories: newTotal,
+        protein: newProtein,
         ...(loggedAt && { loggedAt, helpings, ...(helping != null && { lastAmount: helping }) }),
       }
       persistCalories(nextCals)

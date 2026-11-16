@@ -21,6 +21,7 @@ import {
   isEmptyDayNagTime,
   isFoodLogStale,
   lastLoggedAt,
+  proteinForDate,
   type CalorieEntry,
 } from './calories'
 
@@ -638,5 +639,49 @@ describe('day helpings', () => {
     expect(mergeCaloriesByDate(local, server)[0].helpings).toEqual(serverList)
     const bareServer: CalorieEntry[] = [{ date: DATE, calories: 500, loggedAt: iso(9, 0), lastAmount: 500 }]
     expect(mergeCaloriesByDate(local, bareServer)[0].helpings).toEqual(localList)
+  })
+})
+
+describe('protein', () => {
+  const DATE = '2026-07-08'
+  const at = (h: number, m: number) => new Date(2026, 6, 8, h, m)
+  const iso = (h: number, m: number) => at(h, m).toISOString()
+
+  it('reads a day from before protein as none', () => {
+    expect(proteinForDate([{ date: DATE, calories: 800 }], DATE)).toBe(0)
+    expect(proteinForDate([{ date: DATE, calories: 800, protein: 60 }], DATE)).toBe(60)
+  })
+
+  it('folds protein into the helping it was logged with', () => {
+    const entries: CalorieEntry[] = [
+      { date: DATE, calories: 500, protein: 30, loggedAt: iso(12, 0), lastAmount: 500, helpings: [
+        { at: iso(12, 0), amount: 500, protein: 30 },
+      ] },
+    ]
+    expect(recordHelping(entries, DATE, 100, at(12, 1), 10)).toEqual([{ at: iso(12, 1), amount: 600, protein: 40 }])
+    expect(recordHelping(entries, DATE, 0, at(15, 0), 25)).toEqual([
+      { at: iso(12, 0), amount: 500, protein: 30 },
+      { at: iso(15, 0), amount: 0, protein: 25 },
+    ])
+    expect(recordHelping(entries, DATE, 100, at(15, 0))).toEqual([
+      { at: iso(12, 0), amount: 500, protein: 30 },
+      { at: iso(15, 0), amount: 100 },
+    ])
+  })
+
+  it('keeps the day\'s protein through a write that leaves it out', () => {
+    const prev: CalorieEntry[] = [{ date: DATE, calories: 500, protein: 30 }]
+    expect(setDayTotal(prev, DATE, 600)[0].protein).toBe(30)
+    expect(setDayTotal(prev, DATE, 600, iso(12, 0), 100, [], 45)[0].protein).toBe(45)
+    expect(setDayTotal([{ date: DATE, calories: 500 }], DATE, 600)[0]).not.toHaveProperty('protein')
+  })
+
+  it('merges protein from the side the total came from, unless that side has none', () => {
+    const local: CalorieEntry[] = [{ date: DATE, calories: 600, protein: 40 }]
+    const server: CalorieEntry[] = [{ date: DATE, calories: 500, protein: 30 }]
+    expect(mergeCaloriesByDate(local, server)[0].protein).toBe(40)
+    expect(mergeCaloriesByDate(local, server, { serverWins: true })[0].protein).toBe(30)
+    expect(mergeCaloriesByDate(local, [{ date: DATE, calories: 500 }], { serverWins: true })[0].protein).toBe(40)
+    expect(mergeCaloriesByDate([], server)[0].protein).toBe(30)
   })
 })
