@@ -1,19 +1,26 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ACTIVITY_LABELS,
   DIET_LABELS,
   EQUIPMENT_LABELS,
+  MUSCLES,
+  MUSCLE_LABELS,
   PILLARS,
+  WORKOUT_MINUTES,
   PILLAR_LABELS,
   maskGoals,
   type Activity,
   type DietDirection,
   type Equipment,
+  type Muscle,
   type Pillar,
   type Profile,
   type Sex,
+  type StrengthSetup,
+  type WorkoutMinutes,
   SEX_LABELS,
 } from '../../lib/profile'
+import { buildPlan, fitStatus } from '../../lib/planBuilder'
 import { recommendCalories, recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
 import { PROVIDERS, providerOf, type ProviderId } from '../../lib/aiProvider'
@@ -240,6 +247,9 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
   // 3 - plan
   const [days, setDays] = useState<2 | 3>(3)
   const [equipment, setEquipment] = useState<Equipment>('gym')
+  const [minutes, setMinutes] = useState<WorkoutMinutes>(45)
+  // In the order picked, which is the order they're kept in when time is short.
+  const [focus, setFocus] = useState<Muscle[]>([])
   const [direction, setDirection] = useState<DietDirection>('lose')
   const [activity, setActivity] = useState<Activity>('moderate')
   const [targetWeight, setTargetWeight] = useState('')
@@ -298,6 +308,16 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
     setGoalEdits({ ...goals, [key]: next })
   }
 
+  const strength: StrengthSetup = { daysPerWeek: days, equipment, focus, minutes, length: 'full' }
+  const fit = useMemo(() => {
+    const setup: StrengthSetup = { daysPerWeek: days, equipment, focus, minutes }
+    const build = buildPlan(setup)
+    return { unfitted: build.unfitted, status: fitStatus(setup, build) }
+  }, [days, equipment, focus, minutes])
+
+  const toggleFocus = (m: Muscle) =>
+    setFocus((cur) => (cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]))
+
   const togglePillar = (p: Pillar) =>
     setPillars((cur) => {
       if (!cur.includes(p)) return PILLARS.filter((x) => x === p || cur.includes(x))
@@ -339,7 +359,7 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
       ...(dietOn && scale && inRange(num(targetWeight), 50, 700) ? { targetWeightLbs: num(targetWeight)! } : {}),
       scale: scale ?? true,
       bodyFatReading: bodyFatReading ?? true,
-      ...(strengthOn ? { strength: { daysPerWeek: days, equipment } } : {}),
+      ...(strengthOn ? { strength } : {}),
       weeklyGoals: [{ from: weekStartISO(toISODate(now)), goals }],
       calorieGoals: dietOn && calorieNum !== null ? [{ from: toISODate(now), goal: calorieNum }] : [],
       createdAt: now.toISOString(),
@@ -494,6 +514,36 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
                   }))}
                   onChange={setEquipment}
                 />
+                <Segmented
+                  label="workout length"
+                  value={minutes}
+                  options={WORKOUT_MINUTES.map((m) => ({ value: m, label: `${m} min` }))}
+                  onChange={setMinutes}
+                />
+                <div role="group" aria-label="muscles to grow" className="flex flex-col gap-2">
+                  <span className={LABEL}>muscles to grow</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {MUSCLES.map((m) => {
+                      const picked = focus.includes(m)
+                      const left = picked && fit.unfitted.includes(m)
+                      return (
+                        <PressButton
+                          key={m}
+                          onPress={() => toggleFocus(m)}
+                          pressed={picked}
+                          className={`min-h-[44px] rounded-xl px-1 text-sm font-medium ${
+                            picked ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-400'
+                          } ${left ? 'line-through opacity-60' : ''}`}
+                        >
+                          {MUSCLE_LABELS[m]}
+                        </PressButton>
+                      )
+                    })}
+                  </div>
+                  <p role="status" className="text-sm text-neutral-300">
+                    {fit.status}
+                  </p>
+                </div>
               </>
             )}
             {dietOn && (

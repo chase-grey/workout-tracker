@@ -3,8 +3,7 @@ import { useData } from '../../store/DataContext'
 import { api } from '../../services/api'
 import { storage, type Settings } from '../../services/storage'
 import { providerOf } from '../../lib/aiProvider'
-import { starterPlan } from '../../config/planTemplates'
-import type { StrengthSetup } from '../../lib/profile'
+import { DEFAULT_STRENGTH, planFor } from '../../config/planTemplates'
 import { Welcome, type WelcomeResult } from './Welcome'
 import { stashCoachKickoff } from '../../lib/coachKickoff'
 import { stashResumeTab } from '../../lib/resumeTab'
@@ -12,9 +11,6 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
 import { credentialFromText } from '../../lib/signInLink'
 import { useSignIn } from './SignInLanding'
 import { InstallSteps } from '../../components/InstallSteps'
-
-/** The plan a new account starts on when it didn't set strength up for itself. */
-const DEFAULT_STRENGTH: StrengthSetup = { daysPerWeek: 3, equipment: 'gym' }
 
 /**
  * Whether this is an iPhone or iPad showing the app in a Safari tab rather than
@@ -109,8 +105,9 @@ export function WelcomeGate() {
     clearInviteFromUrl()
     // Always a starter plan, even with strength switched off: the plan a device
     // falls back to otherwise is the owner's own programme, which would be
-    // waiting for them the day they switched strength on.
-    updatePlan(starterPlan(r.profile.strength ?? DEFAULT_STRENGTH))
+    // waiting for them the day they switched strength on. Built from the plan
+    // answers when there are some (see lib/planBuilder).
+    updatePlan(planFor(r.profile.strength ?? DEFAULT_STRENGTH))
     if (r.weightLbs != null) void logBodyWeight(r.weightLbs)
   }
 
