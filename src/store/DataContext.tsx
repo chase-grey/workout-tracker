@@ -24,6 +24,7 @@ import {
   calorieHitDates,
   calorieGoalOn,
   coalesceHelping,
+  recordHelping,
   mergeCaloriesByDate,
   setDayTotal,
   totalForDate,
@@ -873,11 +874,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // so the helping is the burst's running sum rather than whichever button
       // was pressed last. Backfills carry neither.
       const helping = loggedAt ? coalesceHelping(prevCals, day, calories, now) : undefined
-      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, helping)
+      // The day's whole breakdown rides along too, so another device can list it.
+      const helpings = loggedAt ? recordHelping(prevCals, day, calories, now) : undefined
+      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, helping, helpings)
       const entry: CalorieEntry = {
         date: day,
         calories: newTotal,
-        ...(loggedAt && { loggedAt, ...(helping != null && { lastAmount: helping }) }),
+        ...(loggedAt && { loggedAt, helpings, ...(helping != null && { lastAmount: helping }) }),
       }
       persistCalories(nextCals)
       // Write-ahead: the outbox entry is on disk before the network is touched,

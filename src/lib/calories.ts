@@ -20,7 +20,17 @@ export type CalorieEntry = {
    * half of one fact with `loggedAt` and is kept, replaced and dropped with it.
    */
   lastAmount?: number
+  /**
+   * Every helping logged ON this date, oldest first — the day's breakdown, of
+   * which {@link loggedAt}/{@link lastAmount} is the newest line. A burst of taps
+   * is one helping (see {@link HELPING_MERGE_MS}). Backfills add nothing. Absent
+   * on entries that predate the field; see {@link dayHelpings}.
+   */
+  helpings?: Helping[]
 }
+
+/** One helping on a day's log: when it was eaten, and how many calories. */
+export type Helping = { at: string; amount: number }
 
 /**
  * The daily calorie target, and the day each one took effect, oldest first.
@@ -218,6 +228,45 @@ export function coalesceHelping(
   return total === 0 ? undefined : total
 }
 
+/**
+ * The helpings logged on `date`, oldest first. A day stamped before the list
+ * existed still has its last helping, so that one stands in for the whole log
+ * rather than the day reading as empty.
+ */
+export function dayHelpings(entries: CalorieEntry[], date: string): Helping[] {
+  let list: Helping[] | null = null
+  for (const entry of entries) {
+    if (entry.date === date && Array.isArray(entry.helpings)) list = entry.helpings
+  }
+  if (list) {
+    return list
+      .filter((h) => h && Number.isFinite(h.amount) && !Number.isNaN(new Date(h.at).getTime()))
+      .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+  }
+  const last = lastLog(entries, date)
+  return last?.amount != null ? [{ at: last.at.toISOString(), amount: last.amount }] : []
+}
+
+/**
+ * `date`'s helpings after a tap of `amount` at `now`. A tap inside
+ * {@link HELPING_MERGE_MS} of the last helping joins it (and moves its time up
+ * to this tap, as {@link coalesceHelping} does); a burst that nets to zero
+ * leaves no line at all.
+ */
+export function recordHelping(
+  entries: CalorieEntry[],
+  date: string,
+  amount: number,
+  now: Date = new Date(),
+): Helping[] {
+  const list = dayHelpings(entries, date)
+  const last = list[list.length - 1]
+  const joins = last != null && now.getTime() - new Date(last.at).getTime() < HELPING_MERGE_MS
+  const kept = joins ? list.slice(0, -1) : list
+  const total = (joins ? last.amount : 0) + amount
+  return total === 0 ? kept : [...kept, { at: now.toISOString(), amount: total }]
+}
+
 /** A logged helping the way the card writes it: `+500`, `−100`. */
 export function formatHelping(calories: number): string {
   return calories < 0 ? `−${Math.abs(calories)}` : `+${calories}`
@@ -263,6 +312,7 @@ export function foodLogStatus(
  * clearing it, so a backfill can't erase a real same-day log time. The helping
  * moves with the timestamp and never on its own: a backfill that kept the old
  * time but took this tap's amount would claim a helping the day never had.
+ * The day's helping list travels the same way.
  */
 export function setDayTotal(
   entries: CalorieEntry[],
@@ -270,12 +320,15 @@ export function setDayTotal(
   total: number,
   loggedAt?: string,
   lastAmount?: number,
+  helpings?: Helping[],
 ): CalorieEntry[] {
   const kept = loggedAt ? { at: loggedAt, amount: lastAmount } : lastLog(entries, date)
+  const keptList = loggedAt ? helpings : entries.findLast((e) => e.date === date && Array.isArray(e.helpings))?.helpings
   const entry: CalorieEntry = { date, calories: total }
   if (kept) {
     entry.loggedAt = typeof kept.at === 'string' ? kept.at : kept.at.toISOString()
     if (Number.isFinite(kept.amount)) entry.lastAmount = kept.amount
+    if (keptList) entry.helpings = keptList
   }
   return [...entries.filter((e) => e.date !== date), entry]
 }
@@ -295,7 +348,9 @@ export function setDayTotal(
  * The log timestamp is merged separately from the total, taking the newer of
  * the two sides (and bringing that side's helping with it): unlike the total it
  * only ever moves forward, so a device that hasn't logged today can still learn
- * when the logging device last did, and what it last ate.
+ * when the logging device last did, and what it last ate. The helping list
+ * comes from the same side; a side with no list (a backend that predates it)
+ * yields to the other's rather than wiping it.
  *
  * `serverWins` inverts the precedence for one fetch, letting the backend
  * overwrite dates this device already has. Local-wins is otherwise permanent:
@@ -324,6 +379,10 @@ export function mergeCaloriesByDate(
     if (at) {
       entry.loggedAt = at.at.toISOString()
       if (Number.isFinite(at.amount)) entry.lastAmount = at.amount
+      const listOf = (side: CalorieEntry[]) =>
+        side.findLast((e) => e.date === date && Array.isArray(e.helpings))?.helpings
+      const helpings = at === serverAt ? (listOf(server) ?? listOf(local)) : (listOf(local) ?? listOf(server))
+      if (helpings) entry.helpings = helpings
     }
     out.push(entry)
   }

@@ -10,6 +10,8 @@ import {
   calorieHitDates,
   caloriePR,
   coalesceHelping,
+  dayHelpings,
+  recordHelping,
   setDayTotal,
   mergeCaloriesByDate,
   foodLogStatus,
@@ -572,5 +574,69 @@ describe('calorieGoalOn', () => {
     ]
     expect(calorieHitDates(entries)).toEqual(['2026-10-25', '2026-10-27'])
     expect(calorieHitDates(entries, 4000)).toEqual(['2026-10-25', '2026-10-26', '2026-10-27'])
+  })
+})
+
+describe('day helpings', () => {
+  const DATE = '2026-07-08'
+  const at = (h: number, m: number) => new Date(2026, 6, 8, h, m)
+  const iso = (h: number, m: number) => at(h, m).toISOString()
+
+  it('lists a day oldest first', () => {
+    const entries: CalorieEntry[] = [
+      { date: DATE, calories: 800, loggedAt: iso(18, 0), lastAmount: 300, helpings: [
+        { at: iso(18, 0), amount: 300 },
+        { at: iso(9, 0), amount: 500 },
+      ] },
+    ]
+    expect(dayHelpings(entries, DATE).map((h) => h.amount)).toEqual([500, 300])
+  })
+
+  it('falls back to the last helping on a day stamped before the list', () => {
+    const entries: CalorieEntry[] = [{ date: DATE, calories: 800, loggedAt: iso(18, 0), lastAmount: 300 }]
+    expect(dayHelpings(entries, DATE)).toEqual([{ at: iso(18, 0), amount: 300 }])
+    expect(dayHelpings([{ date: DATE, calories: 800 }], DATE)).toEqual([])
+  })
+
+  it('starts a new line for a tap long after the last one', () => {
+    const entries: CalorieEntry[] = [
+      { date: DATE, calories: 500, loggedAt: iso(9, 0), lastAmount: 500, helpings: [{ at: iso(9, 0), amount: 500 }] },
+    ]
+    expect(recordHelping(entries, DATE, 100, at(12, 0))).toEqual([
+      { at: iso(9, 0), amount: 500 },
+      { at: iso(12, 0), amount: 100 },
+    ])
+  })
+
+  it('folds a burst into one line, and drops one that nets to zero', () => {
+    const entries: CalorieEntry[] = [
+      { date: DATE, calories: 600, loggedAt: iso(12, 0), lastAmount: 100, helpings: [
+        { at: iso(9, 0), amount: 500 },
+        { at: iso(12, 0), amount: 100 },
+      ] },
+    ]
+    expect(recordHelping(entries, DATE, 100, at(12, 1))).toEqual([
+      { at: iso(9, 0), amount: 500 },
+      { at: iso(12, 1), amount: 200 },
+    ])
+    expect(recordHelping(entries, DATE, -100, at(12, 1))).toEqual([{ at: iso(9, 0), amount: 500 }])
+  })
+
+  it('keeps the list through a backfill and replaces it on a same-day tap', () => {
+    const list = [{ at: iso(9, 0), amount: 500 }]
+    const prev: CalorieEntry[] = [{ date: DATE, calories: 500, loggedAt: iso(9, 0), lastAmount: 500, helpings: list }]
+    expect(setDayTotal(prev, DATE, 600)[0].helpings).toEqual(list)
+    const next = [...list, { at: iso(12, 0), amount: 100 }]
+    expect(setDayTotal(prev, DATE, 600, iso(12, 0), 100, next)[0].helpings).toEqual(next)
+  })
+
+  it('merges the list from the newer side, unless that side has none', () => {
+    const localList = [{ at: iso(9, 0), amount: 500 }]
+    const serverList = [...localList, { at: iso(12, 0), amount: 100 }]
+    const local: CalorieEntry[] = [{ date: DATE, calories: 500, loggedAt: iso(9, 0), lastAmount: 500, helpings: localList }]
+    const server: CalorieEntry[] = [{ date: DATE, calories: 600, loggedAt: iso(12, 0), lastAmount: 100, helpings: serverList }]
+    expect(mergeCaloriesByDate(local, server)[0].helpings).toEqual(serverList)
+    const bareServer: CalorieEntry[] = [{ date: DATE, calories: 500, loggedAt: iso(9, 0), lastAmount: 500 }]
+    expect(mergeCaloriesByDate(local, bareServer)[0].helpings).toEqual(localList)
   })
 })

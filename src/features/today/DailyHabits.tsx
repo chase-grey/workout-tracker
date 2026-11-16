@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { MdCheck } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { calorieGoalOn, caloriePaceFraction, foodLogStatus, totalForDate } from '../../lib/calories'
+import {
+  calorieGoalOn,
+  caloriePaceFraction,
+  dayHelpings,
+  foodLogStatus,
+  formatClock,
+  formatHelping,
+  totalForDate,
+} from '../../lib/calories'
 import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
@@ -49,6 +57,9 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
   const pct = Math.min(selTotal / selGoal, 1) * 100
   const { label: selLabel } = foodLogStatus(calorieEntries, selDate, now)
   const pace = selDate === today ? caloriePaceFraction(now) : null
+  const helpings = dayHelpings(calorieEntries, selDate)
+  const [showHelpings, setShowHelpings] = useState(false)
+  useEffect(() => setShowHelpings(false), [selDate])
 
   const addCalories = (calories: number) => {
     if (calories !== 0) void logCalories(calories, selDate)
@@ -61,7 +72,23 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
           {historical
             ? `week of ${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
             : 'daily calories'}
-          {selLabel && <> · {selLabel}</>}
+          {selLabel && (
+            <>
+              {' · '}
+              {helpings.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowHelpings((v) => !v)}
+                  aria-expanded={showHelpings}
+                  className="underline decoration-neutral-700 underline-offset-2 active:opacity-70"
+                >
+                  {selLabel}
+                </button>
+              ) : (
+                selLabel
+              )}
+            </>
+          )}
         </p>
         <div className="flex shrink-0 items-baseline gap-2">
           {historical && (
@@ -96,6 +123,19 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
           />
         )}
       </div>
+
+      {showHelpings && helpings.length > 0 && (
+        <ul className="mt-2 space-y-0.5 rounded-xl bg-surface-2 px-3 py-2 text-xs tabular-nums">
+          {helpings.map((h) => (
+            <li key={h.at} className="flex justify-between">
+              <span className="text-neutral-400">{formatClock(new Date(h.at))}</span>
+              <span className={h.amount < 0 ? 'text-neutral-500' : 'text-neutral-100'}>
+                {formatHelping(h.amount)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-2 flex gap-1">
         {week.map((date, i) => {
