@@ -232,7 +232,7 @@ describe('the short forms', () => {
   it('cut every day, with the ab block the eight sets the short days have in common', () => {
     expect(total(short('push', 'A'))).toBe(25)
     expect(total(short('push', 'B'))).toBe(25)
-    expect(total(short('pull'))).toBe(25)
+    expect(total(short('pull'))).toBe(26)
     expect(total(short('fullbody'))).toBe(25)
     expect(total(variantExercises(DEFAULT_PLAN.push, 'A'))).toBe(30)
     expect(total(DEFAULT_PLAN.pull.exercises)).toBe(43)
@@ -246,6 +246,11 @@ describe('the short forms', () => {
         expect(DEFAULT_PLAN[type].exercises.find((e) => e.key === key)?.sets).toBe(4)
       }
     }
+  })
+
+  it('train the incline curl at three sets on the short pull day as on the full one', () => {
+    expect(short('pull').find((e) => e.key === 'incline_db_curl')?.sets).toBe(3)
+    expect(DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'incline_db_curl')?.sets).toBe(3)
   })
 
   it('keep the lead press whole and cut the second to two, whichever press leads', () => {

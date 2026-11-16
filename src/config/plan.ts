@@ -337,7 +337,9 @@ export type Plan = Record<DayType, DayPlan>
 // short pull + legs day no longer cuts it to three, and full body runs four
 // rather than three. It's the lift the squat goals are read from, and the one
 // the plan should trim last.
-export const PLAN_REVISION = 19
+// 20: the incline curl is three sets wherever it's trained — the short pull + legs
+// day no longer cuts it to two. It was four direct bicep sets in a short week.
+export const PLAN_REVISION = 20
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -688,10 +690,14 @@ export const DEFAULT_PLAN: Plan = {
       // Both are a dumbbell in each hand, so both step in 10s and top out at the
       // rack's heaviest pair (see DUMBBELL_PAIR).
       //
-      // The short day keeps two sets of the incline curl and leaves the hammer curl
-      // to full body's arm pair, so each curl is trained once a week and neither is
-      // trained twice in one session.
-      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, shortSets: 2, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
+      // The short day keeps all three sets of the incline curl and leaves the hammer
+      // curl to full body's arm pair, so each curl is trained once a week and neither
+      // is trained twice in one session. Three rather than two since revision 20:
+      // the incline curl is the week's only curl that loads the biceps long, and two
+      // sets of it plus two of hammers was four direct sets a week for the arm the
+      // programme most wants to grow. The short pull day was the shortest of the
+      // three, so the set costs it nothing it needed.
+      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
       { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 0, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
 
       // Extension and flexion are antagonists, so they rotate as a circuit and the
