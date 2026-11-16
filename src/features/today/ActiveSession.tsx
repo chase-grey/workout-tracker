@@ -73,6 +73,8 @@ import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
+import { ControlWord } from '../../components/ControlWord'
+import { useControlLabel } from '../../lib/useControlLabel'
 import { SetCheer } from '../../components/SetCheer'
 import { useSessionFade } from '../../lib/useSessionFade'
 import { adHocAdditions, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
@@ -160,6 +162,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     logExerciseTimes,
     updatePlan,
   } = useData()
+  const historyLabel = useControlLabel('history')
+  const skipLabel = useControlLabel('skip')
   // A rest still running when the app closed resumes with its real remaining
   // time (it's wall-clock based, so the time away counts) unless it's long stale.
   const [rest, setRest] = useState<ActiveRest | null>(() => {
@@ -1247,11 +1251,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               screen has one of these per station instead. */}
           {!roundMode && (
             <button
-              onClick={() => setHistoryKey(planned.key)}
+              onClick={() => {
+                historyLabel.used()
+                setHistoryKey(planned.key)
+              }}
               aria-label={`recent sessions for ${planned.name}`}
-              className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
+              className="flex min-h-[44px] w-11 flex-col items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
             >
               <MdShowChart className="text-2xl" aria-hidden />
+              <ControlWord show={historyLabel.show} word={historyLabel.word} />
             </button>
           )}
           <FastForwardToggle mode={fastMode} onPress={stepFast} />
@@ -1403,11 +1411,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                       </span>
                     )}
                     <button
-                      onClick={() => setHistoryKey(s.ex.key)}
+                      onClick={() => {
+                        historyLabel.used()
+                        setHistoryKey(s.ex.key)
+                      }}
                       aria-label={`recent sessions for ${s.ex.name}`}
-                      className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
+                      className="flex min-h-[44px] w-11 flex-col items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
                     >
                       <MdShowChart className="text-2xl" aria-hidden />
+                      <ControlWord show={historyLabel.show} word={historyLabel.word} />
                     </button>
                   </div>
                 </div>
@@ -1626,11 +1638,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                       </button>
                       {(isSkipped || skippable(e.key)) && (
                         <button
-                          onClick={() => setExerciseSkipped(e.key, !isSkipped)}
+                          onClick={() => {
+                            skipLabel.used()
+                            setExerciseSkipped(e.key, !isSkipped)
+                          }}
                           aria-label={isSkipped ? `unskip ${e.name}` : `skip ${e.name}`}
-                          className="p-2 text-2xl"
+                          className="flex items-center p-2 text-2xl text-neutral-500"
                         >
                           <MdBlock className={isSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                          <ControlWord show={skipLabel.show} word={skipLabel.word} layout="inline" />
                         </button>
                       )}
                       {/* Nothing to mark done on an exercise that isn't being done. */}
@@ -1714,12 +1730,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                                   — nor on the last set left in play. Held in place
                                   when absent so the columns stay lined up. */}
                               <button
-                                onClick={() => setSetSkipped(e.key, setIndex, !isSetSkipped)}
+                                onClick={() => {
+                                  skipLabel.used()
+                                  setSetSkipped(e.key, setIndex, !isSetSkipped)
+                                }}
                                 disabled={!isSetSkipped && (isDone || !canSkipSet(`${e.key}:${setIndex}`))}
                                 aria-label={isSetSkipped ? `unskip set ${setIndex + 1}` : `skip set ${setIndex + 1}`}
-                                className="p-1 text-xl disabled:invisible"
+                                className="flex items-center p-1 text-xl text-neutral-500 disabled:invisible"
                               >
                                 <MdBlock className={isSetSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                                <ControlWord show={skipLabel.show} word={skipLabel.word} layout="inline" />
                               </button>
                               <button
                                 onClick={() => controls.updateSet(e.key, setIndex, { done: !isDone })}

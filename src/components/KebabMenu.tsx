@@ -3,6 +3,8 @@ import { MdMoreVert } from 'react-icons/md'
 import { withHidden } from '../lib/hiddenAnimations'
 import { useTopAnimation } from '../lib/useShownAnimation'
 import { useData } from '../store/DataContext'
+import { useControlLabel } from '../lib/useControlLabel'
+import { ControlWord } from './ControlWord'
 
 export type MenuItem = { label: string; onClick: () => void; danger?: boolean }
 
@@ -13,6 +15,7 @@ export function KebabMenu({ items: own }: { items: MenuItem[] }) {
   // Whatever animation is on screen can be marked bad from here, in either
   // session, without either one having to wire it in (see lib/useShownAnimation).
   const shown = useTopAnimation()
+  const label = useControlLabel('more')
   const items: MenuItem[] = shown
     ? [
         {
@@ -32,11 +35,15 @@ export function KebabMenu({ items: own }: { items: MenuItem[] }) {
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open) label.used()
+          setOpen((o) => !o)
+        }}
         aria-label="more options"
-        className="flex min-h-[44px] w-11 items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
+        className="flex min-h-[44px] w-11 flex-col items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
       >
         <MdMoreVert className="text-2xl" aria-hidden />
+        <ControlWord show={label.show} word={label.word} />
       </button>
       {open && (
         <>

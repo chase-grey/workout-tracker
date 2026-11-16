@@ -13,6 +13,8 @@ import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { startsNewExercise } from '../../lib/fastMode'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
+import { ControlWord } from '../../components/ControlWord'
+import { useControlLabel } from '../../lib/useControlLabel'
 import { PhotoStep } from './PhotoStep'
 import { formatDuration, type ExerciseTimeSample } from '../../lib/estimate'
 import {
@@ -156,6 +158,7 @@ function RoutineChecklist({
     },
     [],
   )
+  const skipLabel = useControlLabel('skip')
 
   return (
     <div className="fixed inset-0 z-60 flex items-end bg-black/60" onClick={onClose}>
@@ -189,11 +192,15 @@ function RoutineChecklist({
                     )}
                   </div>
                   <button
-                    onClick={() => onToggleSkipped(exercise.key, !isSkipped)}
+                    onClick={() => {
+                      skipLabel.used()
+                      onToggleSkipped(exercise.key, !isSkipped)
+                    }}
                     aria-label={isSkipped ? `unskip ${exercise.name}` : `skip ${exercise.name}`}
-                    className="p-2 text-2xl"
+                    className="flex items-center p-2 text-2xl text-neutral-500"
                   >
                     <MdBlock className={isSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                    <ControlWord show={skipLabel.show} word={skipLabel.word} layout="inline" />
                   </button>
                 </div>
                 {!isSkipped && (
@@ -221,12 +228,16 @@ function RoutineChecklist({
                               nor on the last one in play; held in place when
                               absent so the checks stay lined up. */}
                           <button
-                            onClick={() => onToggleStepSkipped(step.stepKey, !isStepSkipped)}
+                            onClick={() => {
+                              skipLabel.used()
+                              onToggleStepSkipped(step.stepKey, !isStepSkipped)
+                            }}
                             disabled={!isStepSkipped && (isDone || !canSkipStep(step.stepKey))}
                             aria-label={isStepSkipped ? 'unskip set' : 'skip set'}
-                            className="p-2 text-xl disabled:invisible"
+                            className="flex items-center p-2 text-xl text-neutral-500 disabled:invisible"
                           >
                             <MdBlock className={isStepSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                            <ControlWord show={skipLabel.show} word={skipLabel.word} layout="inline" />
                           </button>
                           <button
                             onClick={() => onToggleDone(step.stepKey)}

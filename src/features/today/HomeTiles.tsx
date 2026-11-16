@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { MdAdd, MdClose } from 'react-icons/md'
+import { MdAdd, MdClose, MdEdit } from 'react-icons/md'
 import { v4 as uuid } from 'uuid'
+import { Collapse } from '../../components/Collapse'
+import { ControlWord } from '../../components/ControlWord'
+import { useControlLabel } from '../../lib/useControlLabel'
 import { useData } from '../../store/DataContext'
 import { toISODate, weekStartISO } from '../../lib/dates'
 import { ownerProfile } from '../../lib/ownerProfile'
@@ -111,6 +114,14 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
 
   useBackGuard(editing, () => setEditing(false))
 
+  // The hold that opens edit mode is invisible, so while labels are on there's
+  // a plain edit button under the grid too. Holding counts as a use of it: by
+  // the third time in, you know where it is.
+  const editLabel = useControlLabel('editTiles')
+  const addLabel = useControlLabel('addTile')
+  const editEverShown = useRef(false)
+  if (editLabel.show) editEverShown.current = true
+
   const setDrag = (d: Drag | null) => {
     dragRef.current = d
     setDragState(d)
@@ -175,6 +186,7 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
         const held = press.current
         press.current = null
         if (!held) return
+        editLabel.used()
         setEditing(true)
         navigator.vibrate?.(10)
         pickUp(id, pointerId, held.x, held.y)
@@ -327,14 +339,34 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
         })}
       </div>
 
+      {editEverShown.current && (
+        <Collapse id="home-tiles-edit" open={editLabel.show && !editing}>
+          <button
+            onClick={() => {
+              editLabel.used()
+              setEditing(true)
+            }}
+            aria-label="edit tiles"
+            className="flex min-h-[44px] w-full items-center justify-center rounded-2xl text-xl text-neutral-400 active:bg-surface"
+          >
+            <MdEdit aria-hidden />
+            <ControlWord show={editLabel.show} word={editLabel.word} layout="inline" />
+          </button>
+        </Collapse>
+      )}
+
       {editing && (
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => setAdding(true)}
+            onClick={() => {
+              addLabel.used()
+              setAdding(true)
+            }}
             aria-label="add"
             className="flex min-h-[52px] items-center justify-center rounded-2xl border-2 border-dashed border-surface-2 text-2xl text-neutral-400 active:bg-surface"
           >
             <MdAdd aria-hidden />
+            <ControlWord show={addLabel.show} word={addLabel.word} layout="inline" />
           </button>
           <button
             onClick={() => setEditing(false)}

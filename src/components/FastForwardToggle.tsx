@@ -1,5 +1,7 @@
 import { MdFastForward } from 'react-icons/md'
 import type { FastMode } from '../lib/fastMode'
+import { useControlLabel } from '../lib/useControlLabel'
+import { ControlWord } from './ControlWord'
 
 /**
  * The three fast-forward triangles of turbo. No Material icon goes past two, so
@@ -32,11 +34,15 @@ const LABEL: Record<FastMode, string> = {
  */
 export function FastForwardToggle({ mode, onPress }: { mode: FastMode; onPress: () => void }) {
   const on = mode !== 'off'
+  const label = useControlLabel('auto')
   return (
     <button
-      onClick={onPress}
+      onClick={() => {
+        label.used()
+        onPress()
+      }}
       aria-label={LABEL[mode]}
-      className={`flex min-h-[44px] w-11 items-center justify-center rounded-xl active:bg-surface-2 ${
+      className={`flex min-h-[44px] w-11 flex-col items-center justify-center rounded-xl active:bg-surface-2 ${
         on ? 'bg-accent/25 text-accent-bright' : 'text-neutral-400'
       }`}
     >
@@ -45,6 +51,7 @@ export function FastForwardToggle({ mode, onPress }: { mode: FastMode; onPress: 
       ) : (
         <MdFastForward className="text-2xl" aria-hidden />
       )}
+      <ControlWord show={label.show} word={mode === 'turbo' ? 'turbo' : label.word} />
     </button>
   )
 }

@@ -18,7 +18,9 @@ import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
 import { ownerFlavour } from '../../lib/profile'
 import { PlanEditor } from './PlanEditor'
-import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate, useAppUpdate } from '../../lib/version'
+import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate, showUpdateToast, useAppUpdate } from '../../lib/version'
+import { LABEL_MODES, labelModeFor } from '../../lib/controlLabels'
+import { discardPendingUses } from '../../lib/useControlLabel'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
 import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
@@ -84,7 +86,54 @@ function ThemePicker() {
   )
 }
 
-const ISSUE_ROW = 'flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3'
+/**
+ * The starter words on icon-only controls (see lib/controlLabels): auto drops
+ * each after a few uses, always and never hold them on or off, and reset brings
+ * every one back in auto.
+ */
+function ButtonLabels() {
+  const { settings, updateSettings } = useData()
+  const mode = labelModeFor(settings.labelMode, ownerFlavour(settings.profile))
+  const reset = () => {
+    discardPendingUses()
+    updateSettings({
+      ...settings,
+      labelMode: 'auto',
+      controlUses: {},
+      controlUsesResetAt: new Date().toISOString(),
+    })
+    showUpdateToast('button labels back on')
+  }
+  return (
+    <section className="flex flex-col gap-2">
+      <label className="text-sm font-medium text-neutral-300">button labels</label>
+      <div className="flex gap-2">
+        <div className="flex flex-1 gap-1 rounded-xl bg-surface p-1">
+          {LABEL_MODES.map((m) => (
+            <button
+              key={m}
+              onClick={() => updateSettings({ ...settings, labelMode: m })}
+              aria-pressed={mode === m}
+              className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
+                mode === m ? 'bg-accent text-on-accent' : 'text-neutral-400'
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={reset}
+          className="min-h-[44px] rounded-xl bg-surface px-4 text-sm font-medium text-neutral-300 active:bg-surface-2"
+        >
+          reset
+        </button>
+      </div>
+    </section>
+  )
+}
+
+const ISSUE_ROW ='flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3'
 
 /**
  * One issue in the Settings list. An issue that's asking goes to the coach to be
@@ -403,6 +452,8 @@ export function SettingsTab({
 
 
       <ThemePicker />
+
+      <ButtonLabels />
 
       <AccountSection />
 

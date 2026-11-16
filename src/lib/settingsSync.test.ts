@@ -150,3 +150,23 @@ describe('sameSyncedSettings', () => {
     expect(sameSyncedSettings(a, b)).toBe(false)
   })
 })
+
+describe('mergeSettings control labels', () => {
+  it('keeps the larger use count, so a stale phone cannot bring a label back', () => {
+    const local: Settings = { ...base, updatedAt: '2026-11-16T10:00:00Z', controlUses: { more: 3 } }
+    const remote: SyncedSettings = { updatedAt: '2026-11-16T11:00:00Z', controlUses: { more: 1, skip: 2 } }
+    expect(mergeSettings(local, remote).controlUses).toEqual({ more: 3, skip: 2 })
+  })
+
+  it('lets a newer reset clear older counts', () => {
+    const local: Settings = { ...base, updatedAt: '2026-11-16T12:00:00Z', controlUses: { more: 3 } }
+    const remote: SyncedSettings = {
+      updatedAt: '2026-11-16T11:00:00Z',
+      controlUses: {},
+      controlUsesResetAt: '2026-11-16T11:00:00Z',
+    }
+    const merged = mergeSettings(local, remote)
+    expect(merged.controlUses).toEqual({})
+    expect(merged.controlUsesResetAt).toBe('2026-11-16T11:00:00Z')
+  })
+})

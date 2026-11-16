@@ -1,3 +1,4 @@
+import type { ControlUses, LabelMode } from '../lib/controlLabels'
 import { v4 as uuid } from 'uuid'
 import type { BodyWeightEntry, WorkoutRow, WorkoutSession } from '../types'
 import { DEFAULT_PLAN, PLAN_REVISION, withPlanDefaults, type Plan } from '../config/plan'
@@ -238,6 +239,16 @@ export type Settings = {
    * (see lib/homeTiles). Unset is the default grouping.
    */
   homeLayout?: HomeLayout
+  /**
+   * Whether the icon-only controls wear their starter word (see
+   * lib/controlLabels). Unset follows whose device it is: bare for the owner,
+   * auto for everyone else.
+   */
+  labelMode?: LabelMode
+  /** How often each labelled control has been used, capped at the point its label drops. */
+  controlUses?: ControlUses
+  /** When the counters were last reset from Settings, ISO; a newer reset beats older counts in the merge. */
+  controlUsesResetAt?: string
   /** Cardio sessions pinned to Today as one-tap logs. */
   cardioPins?: CardioPin[]
   /**

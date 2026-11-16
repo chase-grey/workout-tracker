@@ -1,3 +1,6 @@
+import { useControlLabel } from '../lib/useControlLabel'
+import { ControlWord } from './ControlWord'
+
 /**
  * How far through a session you are: a bar that fills as sets are completed,
  * with an optional caption row (sets left, time left). Pinned to the top of both
@@ -25,6 +28,7 @@ export function SessionProgress({
   const fraction = total > 0 ? Math.max(0, Math.min(1, done / total)) : 0
   const left = Math.max(0, total - done)
   const captioned = !!unit || !!timeLeftLabel
+  const label = useControlLabel('list')
   return (
     <div className={className}>
       <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
@@ -41,12 +45,13 @@ export function SessionProgress({
           )}
           {timeLeftLabel && (onTimeClick ? (
             <button
-              onClick={(event) => { event.stopPropagation(); onTimeClick() }}
+              onClick={(event) => { event.stopPropagation(); label.used(); onTimeClick() }}
               aria-label={`${timeLeftLabel.replace(/^~/, '')}. View checklist`}
               aria-haspopup="dialog"
-              className="ml-auto min-h-[44px] rounded-xl bg-surface-2 px-4 font-semibold tabular-nums text-neutral-200 active:text-accent-2"
+              className="ml-auto flex min-h-[44px] items-center rounded-xl bg-surface-2 px-4 font-semibold tabular-nums text-neutral-200 active:text-accent-2"
             >
               {timeLeftLabel.replace(/^~/, '')}
+              <ControlWord show={label.show} word={`· ${label.word}`} layout="inline" />
             </button>
           ) : <span className="ml-auto tabular-nums">{timeLeftLabel.replace(/^~/, '')}</span>)}
         </div>
