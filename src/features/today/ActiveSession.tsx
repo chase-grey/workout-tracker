@@ -18,6 +18,7 @@ import {
 } from '../../config/plan'
 import { performedExercises, REST_RULES } from '../../lib/performed'
 import type { RestRule } from '../../lib/groupRest'
+import { hasShortForm } from '../../lib/sessionLength'
 import { nextTargets, targetLabel, type Target } from '../../lib/progression'
 import { goalsFor } from '../../lib/profileGoals'
 import { goalCueForExercise } from '../../lib/goalCue'
@@ -1575,8 +1576,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 turns out to be there, gone once it's been taken. Here rather than
                 in the kebab: it's a decision about what today's workout is, made
                 while reading what's left of it. Adding a single movement is in
-                the kebab with adding a set, both rare. */}
-            {session.length === 'short' && (
+                the kebab with adding a set, both rare. Only on a day whose short
+                form is actually shorter: on a day that runs the same either way
+                (every legacy starter template's) it would add nothing. */}
+            {session.length === 'short' && hasShortForm(day) && (
               <div className="mb-3 flex gap-2">
                 <button
                   onClick={expandToFullDay}

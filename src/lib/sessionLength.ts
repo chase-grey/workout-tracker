@@ -15,8 +15,24 @@
  */
 
 import type { ExerciseLog, SetLog, WorkoutSession } from '../types'
-import type { PlannedExercise } from '../config/plan'
+import { shortExercises, variantExercises, type DayPlan, type PlannedExercise, type VariantKey } from '../config/plan'
 import type { Target } from './progression'
+
+/**
+ * Whether `day` has a short form that is actually shorter than the full one,
+ * under any variant it runs. A day none of whose movements carries a short
+ * count below its full one — a starter template's — runs the same either way,
+ * so there is nothing for "do the full workout" to add.
+ */
+export function hasShortForm(day: Pick<DayPlan, 'exercises'>): boolean {
+  const variants: (VariantKey | null)[] = day.exercises.some((e) => e.byVariant) ? [null, 'A', 'B'] : [null]
+  return variants.some((v) => {
+    const full = variantExercises(day as DayPlan, v)
+    const short = shortExercises(full, 'short')
+    const count = (list: PlannedExercise[]) => list.reduce((n, e) => n + e.sets, 0)
+    return count(short) < count(full)
+  })
+}
 
 /**
  * `session` opened up to `full`, the day's whole exercise list in performed order.
