@@ -17,6 +17,7 @@
 import type { Settings } from '../services/storage'
 import type { LockedProjections } from './goalLock'
 import { unionHidden } from './hiddenAnimations'
+import { mergeControlUses } from './controlLabels'
 
 /**
  * Settings that stay on the device they were entered on.
@@ -141,7 +142,8 @@ function mergeLockedGoals(local: Settings, remote: SyncedSettings): LockedProjec
  * doesn't propagate; none of these fields are cleared as a user action, and
  * blanking real data would be the worse failure. Locked goals merge per goal
  * (see {@link mergeLockedGoals}), hidden animations are unioned (see
- * lib/hiddenAnimations.unionHidden) and the device-local fields are always this
+ * lib/hiddenAnimations.unionHidden), label-use counters take the larger count (see
+ * lib/controlLabels.mergeControlUses) and the device-local fields are always this
  * device's (see {@link DEVICE_LOCAL_KEYS}).
  */
 export function mergeSettings(local: Settings, remote: SyncedSettings | null): Settings {
@@ -156,5 +158,11 @@ export function mergeSettings(local: Settings, remote: SyncedSettings | null): S
   merged.lockedGoals = mergeLockedGoals(local, remote)
   const hidden = unionHidden(local.hiddenAnimations, remote.hiddenAnimations)
   if (hidden) merged.hiddenAnimations = hidden
+  const uses = mergeControlUses(
+    { uses: local.controlUses, resetAt: local.controlUsesResetAt },
+    { uses: remote.controlUses, resetAt: remote.controlUsesResetAt },
+  )
+  if (uses.uses) merged.controlUses = uses.uses
+  if (uses.resetAt) merged.controlUsesResetAt = uses.resetAt
   return merged
 }

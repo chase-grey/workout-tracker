@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MdCheck, MdKeyboardArrowDown, MdMoreHoriz } from 'react-icons/md'
+import { useControlLabel } from '../../lib/useControlLabel'
+import { ControlWord } from '../../components/ControlWord'
 
 /** How many of the most-trained lifts show before the 3-dots row. */
 const TOP_N = 5
@@ -24,6 +26,7 @@ export function ExercisePicker({
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const label = useControlLabel('showAll')
 
   // Reopening starts collapsed again, so the top 5 is what the picker always
   // leads with.
@@ -87,11 +90,15 @@ export function ExercisePicker({
           ))}
           {!showAll && options.length > TOP_N && (
             <button
-              onClick={() => setExpanded(true)}
+              onClick={() => {
+                label.used()
+                setExpanded(true)
+              }}
               aria-label="show all lifts"
               className="flex min-h-[44px] w-full items-center justify-center border-t border-border text-neutral-400 active:bg-surface-2"
             >
               <MdMoreHoriz className="text-2xl" aria-hidden />
+              <ControlWord show={label.show} word={label.word} layout="inline" />
             </button>
           )}
         </div>
