@@ -27,10 +27,19 @@ export type CalorieEntry = {
    * on entries that predate the field; see {@link dayHelpings}.
    */
   helpings?: Helping[]
+  /**
+   * The day's running protein total in grams, kept beside the calorie total by
+   * the same rules. Absent on entries that predate the field, which read as no
+   * protein logged rather than as a gap to fill.
+   */
+  protein?: number
 }
 
-/** One helping on a day's log: when it was eaten, and how many calories. */
-export type Helping = { at: string; amount: number }
+/**
+ * One helping on a day's log: when it was eaten, how many calories, and the
+ * grams of protein in it when any were logged.
+ */
+export type Helping = { at: string; amount: number; protein?: number }
 
 /**
  * The daily calorie target, and the day each one took effect, oldest first.
@@ -148,6 +157,19 @@ export function totalForDate(entries: CalorieEntry[], date: string): number {
 }
 
 /**
+ * Grams of protein logged on a single date, summed the way {@link dayTotals}
+ * sums calories. A day from before protein was tracked is 0.
+ */
+export function proteinForDate(entries: CalorieEntry[], date: string): number {
+  let total = 0
+  for (const entry of entries) {
+    const g = entry.protein
+    if (entry.date === date && g != null && isValidCalories(g)) total += g
+  }
+  return total
+}
+
+/**
  * The last value recorded for each date, in array order — the right reducer for
  * a *fetch*, where {@link dayTotals}'s sum is not just redundant but ruinous.
  *
@@ -258,18 +280,26 @@ export function recordHelping(
   date: string,
   amount: number,
   now: Date = new Date(),
+  protein = 0,
 ): Helping[] {
   const list = dayHelpings(entries, date)
   const last = list[list.length - 1]
   const joins = last != null && now.getTime() - new Date(last.at).getTime() < HELPING_MERGE_MS
   const kept = joins ? list.slice(0, -1) : list
   const total = (joins ? last.amount : 0) + amount
-  return total === 0 ? kept : [...kept, { at: now.toISOString(), amount: total }]
+  const grams = Math.max(0, (joins ? (last.protein ?? 0) : 0) + protein)
+  if (total === 0 && grams === 0) return kept
+  return [...kept, { at: now.toISOString(), amount: total, ...(grams > 0 && { protein: grams }) }]
 }
 
 /** A logged helping the way the card writes it: `+500`, `−100`. */
 export function formatHelping(calories: number): string {
   return calories < 0 ? `−${Math.abs(calories)}` : `+${calories}`
+}
+
+/** Grams of protein the way the card writes them: `40g`. */
+export function formatProtein(grams: number): string {
+  return `${Math.round(grams)}g`
 }
 
 /**
@@ -313,6 +343,9 @@ export function foodLogStatus(
  * moves with the timestamp and never on its own: a backfill that kept the old
  * time but took this tap's amount would claim a helping the day never had.
  * The day's helping list travels the same way.
+ *
+ * `protein` is the day's new protein total; omitted, the date keeps the one it
+ * had, so a write that doesn't mention protein can't zero the grams logged.
  */
 export function setDayTotal(
   entries: CalorieEntry[],
@@ -321,10 +354,13 @@ export function setDayTotal(
   loggedAt?: string,
   lastAmount?: number,
   helpings?: Helping[],
+  protein?: number,
 ): CalorieEntry[] {
   const kept = loggedAt ? { at: loggedAt, amount: lastAmount } : lastLog(entries, date)
   const keptList = loggedAt ? helpings : entries.findLast((e) => e.date === date && Array.isArray(e.helpings))?.helpings
+  const grams = protein ?? entries.findLast((e) => e.date === date && Number.isFinite(e.protein))?.protein
   const entry: CalorieEntry = { date, calories: total }
+  if (grams != null && grams > 0) entry.protein = grams
   if (kept) {
     entry.loggedAt = typeof kept.at === 'string' ? kept.at : kept.at.toISOString()
     if (Number.isFinite(kept.amount)) entry.lastAmount = kept.amount
@@ -352,6 +388,10 @@ export function setDayTotal(
  * comes from the same side; a side with no list (a backend that predates it)
  * yields to the other's rather than wiping it.
  *
+ * The protein total comes from the same side as the calorie total, being the
+ * same kind of running figure; a side that has none (written before protein
+ * was tracked, or by a backend that doesn't store it) yields to the other's.
+ *
  * `serverWins` inverts the precedence for one fetch, letting the backend
  * overwrite dates this device already has. Local-wins is otherwise permanent:
  * a cache that recorded a wrong total once would keep it forever, with no fetch
@@ -376,6 +416,11 @@ export function mergeCaloriesByDate(
     const serverAt = lastLog(server, date)
     const at = !localAt || (serverAt && serverAt.at > localAt.at) ? serverAt : localAt
     const entry: CalorieEntry = { date, calories: total }
+    const proteinOf = (side: CalorieEntry[]) =>
+      side.findLast((e) => e.date === date && Number.isFinite(e.protein))?.protein
+    const fromServer = preferServer || !localTotals.has(date)
+    const protein = fromServer ? (proteinOf(server) ?? proteinOf(local)) : (proteinOf(local) ?? proteinOf(server))
+    if (protein != null && protein > 0) entry.protein = protein
     if (at) {
       entry.loggedAt = at.at.toISOString()
       if (Number.isFinite(at.amount)) entry.lastAmount = at.amount

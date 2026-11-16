@@ -101,6 +101,11 @@ export type Profile = {
   weeklyGoals: { from: string; goals: WeeklyGoalConfig }[]
   /** The daily calorie target and the day each took effect, oldest first. */
   calorieGoals: { from: string; goal: number }[]
+  /**
+   * A daily protein target in grams they set themselves. Unset, the target is
+   * worked out from body weight (see lib/protein).
+   */
+  proteinGoal?: number
   /** ISO timestamp the profile was first saved. */
   createdAt: string
 }
