@@ -27,7 +27,8 @@ import { buildSetOrder, circuitStations, roundSteps } from '../../lib/circuit'
 import { checklistSetEdit } from '../../lib/checklistEdit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
-import { canSkip, resumeSkipped, toSkippedRecord, withSkipped } from '../../lib/skipped'
+import { resumeSkipped, toSkippedRecord } from '../../lib/skipped'
+import { canSkipPair, pairKeys, withPairSkipped } from '../../lib/pairedSides'
 import {
   bankRest,
   canResumeRest,
@@ -72,7 +73,7 @@ import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { SetCheer } from '../../components/SetCheer'
 import { useSessionFade } from '../../lib/useSessionFade'
-import { adHocExercise, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
+import { adHocAdditions, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
 
 type Props = {
   session: WorkoutSession
@@ -313,8 +314,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // from this rather than from the day as written, so a skipped move stops being
   // owed the moment it's skipped instead of sitting in the estimate to the end.
   const inPlay = useMemo(() => exercises.filter((e) => !skipped.has(e.key)), [exercises, skipped])
-  /** Whether this exercise can be skipped — something has to be left to perform. */
-  const skippable = (key: string) => canSkip(skipped, exercises.map((e) => e.key), key)
+  /**
+   * Whether this exercise can be skipped — something has to be left to perform.
+   * A sided exercise is skipped with its other side (see lib/pairedSides).
+   */
+  const skippable = (key: string) => canSkipPair(skipped, exercises.map((e) => e.key), key)
 
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
   const doneCount = (key: string) => logFor(key)?.sets.filter((s) => s.done && s.reps > 0).length ?? 0
@@ -720,15 +724,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
    */
   const setExerciseSkipped = (key: string, skip: boolean) => {
     if (skip && !skippable(key)) return
-    const leaving = skip && planned.key === key
+    const pair = pairKeys(exercises.map((e) => e.key), key)
+    const leaving = skip && pair.includes(planned.key)
     const ahead = leaving
-      ? remainingFlow(stepDone, safeCurrent).slice(1).find((i) => steps[i].ex.key !== key)
+      ? remainingFlow(stepDone, safeCurrent).slice(1).find((i) => !pair.includes(steps[i].ex.key))
       : undefined
     const landing = leaving
-      ? (ahead != null ? steps[ahead] : steps.find((s) => s.ex.key !== key))
+      ? (ahead != null ? steps[ahead] : steps.find((s) => !pair.includes(s.ex.key)))
       : step
     const held = leaving ? (landing?.stepKey ?? null) : step.stepKey
-    setSkipped(withSkipped(skipped, key, skip))
+    setSkipped(withPairSkipped(skipped, exercises.map((e) => e.key), key, skip))
     setPendingStepKey(held)
     if (leaving) {
       // Start the active-time clock over on the set we're landing on. The seconds
@@ -742,7 +747,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
   /** Tapping a skipped exercise in the checklist is deciding to do it after all. */
   const unskipAndJump = (key: string) => {
-    setSkipped(withSkipped(skipped, key, false))
+    setSkipped(withPairSkipped(skipped, exercises.map((e) => e.key), key, false))
     // Its steps don't exist yet, so land on it by key once they do — on the first
     // set still owed, as jumping to any other exercise does.
     const owed = logFor(key)?.sets.findIndex((s) => !s.done) ?? -1
@@ -909,15 +914,19 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // go onto the history it has rather than opening a second one.
     const option = addable.find((o) => o.key === newExercisePick) ?? matchTypedName(newExerciseName, addable)
     if (!option && !newExerciseName.trim()) return
-    const exercise = adHocExercise(
+    // One side of a sided pair brings the other (see lib/adHocExercise).
+    const additions = adHocAdditions(
       { name: newExerciseName, sets: Number(newExerciseSets), reps: Number(newExerciseReps) },
       option,
+      addable,
     )
-    controls.addExercise(exercise, {
-      weightLbs: newExerciseWeight === '' ? null : toWeight(newExerciseWeight),
-      reps: exercise.repMin,
-    })
-    setPendingStepKey(`${exercise.key}:0`)
+    for (const exercise of additions) {
+      controls.addExercise(exercise, {
+        weightLbs: newExerciseWeight === '' ? null : toWeight(newExerciseWeight),
+        reps: exercise.repMin,
+      })
+    }
+    setPendingStepKey(`${additions[0].key}:0`)
     activeStartRef.current = Date.now()
     if (rest) closeRest()
     setNewExercisePick('')

@@ -9,6 +9,7 @@ import {
   type Plan,
   type PlannedExercise,
 } from '../config/plan'
+import { keepPairsTogether, pairKeys, withPartner } from './pairedSides'
 
 /**
  * Structured, serializable edits to a workout {@link Plan}. The AI chat assistant
@@ -247,11 +248,14 @@ export function applyPlanEdits(
         if (isValidNumber(src.increment)) exercise.increment = src.increment
         if (typeof src.bodyweight === 'boolean') exercise.bodyweight = src.bodyweight
         if (typeof src.optional === 'boolean') exercise.optional = src.optional
-        dayPlan.exercises.push(exercise)
+        // One side of a one-limb-at-a-time movement brings the other with it (see
+        // lib/pairedSides), side by side, left first.
+        const added = withPartner(exercise, [...existingKeys])
+        dayPlan.exercises.push(...added)
         // Asked for back, so the deletion no longer stands — otherwise the merge
         // would strike it out again on the next load.
-        clearRemoval(dayPlan, key)
-        applied.push(`added ${exercise.name} to ${edit.day}`)
+        for (const e of added) clearRemoval(dayPlan, e.key)
+        applied.push(`added ${added.map((e) => e.name).join(' and ')} to ${edit.day}`)
         break
       }
 
@@ -261,9 +265,17 @@ export function applyPlanEdits(
           errors.push(`no exercise "${edit.key}" on ${edit.day}`)
           break
         }
-        const [removed] = dayPlan.exercises.splice(idx, 1)
-        recordRemoval(dayPlan, edit.day, removed.key)
-        applied.push(`removed ${removed.name || exerciseName(removed.key)} from ${edit.day}`)
+        // Both sides of a sided pair go together (see lib/pairedSides).
+        const gone = pairKeys(
+          dayPlan.exercises.map((e) => e.key),
+          edit.key,
+        )
+        const removed = dayPlan.exercises.filter((e) => gone.includes(e.key))
+        dayPlan.exercises = dayPlan.exercises.filter((e) => !gone.includes(e.key))
+        for (const e of removed) recordRemoval(dayPlan, edit.day, e.key)
+        applied.push(
+          `removed ${removed.map((e) => e.name || exerciseName(e.key)).join(' and ')} from ${edit.day}`,
+        )
         break
       }
 
@@ -294,7 +306,9 @@ export function applyPlanEdits(
         }
         const moved = dayPlan.exercises[from]
         rest.splice(to, 0, moved)
-        dayPlan.exercises = rest
+        // Its other side, if it has one, comes along at the spacing the pair had.
+        dayPlan.exercises = keepPairsTogether(dayPlan.exercises, rest, new Set([moved.key]))
+        to = dayPlan.exercises.indexOf(moved)
         applied.push(
           `moved ${moved.name || exerciseName(moved.key)} to position ${to + 1} on ${edit.day}`,
         )
@@ -327,11 +341,13 @@ export function applyPlanEdits(
         for (const exercise of dayPlan.exercises) {
           if (!placed.has(exercise.key)) ordered.push(exercise)
         }
-        dayPlan.exercises = ordered
+        // A side named without its other half brings that half along rather than
+        // leaving it behind with the unnamed rest.
+        dayPlan.exercises = keepPairsTogether(dayPlan.exercises, ordered, placed)
         // Spelled out rather than reported as "reordered pull": this line is the
         // whole of what the approve button in the chat shows about the change.
         applied.push(
-          `reordered ${edit.day}: ${ordered.map((e) => e.name || exerciseName(e.key)).join(' → ')}`,
+          `reordered ${edit.day}: ${dayPlan.exercises.map((e) => e.name || exerciseName(e.key)).join(' → ')}`,
         )
         break
       }

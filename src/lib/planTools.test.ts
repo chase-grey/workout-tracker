@@ -195,9 +195,9 @@ describe('applyPlanEdits', () => {
 
   it('moveExercise moves to a position, clamping past the end', () => {
     const { plan: toTop } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'moveExercise', day: 'push', key: 'lateral_raise_r', toIndex: 0 },
+      { op: 'moveExercise', day: 'push', key: 'overhead_tricep_ext', toIndex: 0 },
     ])
-    expect(keys(toTop, 'push')[0]).toBe('lateral_raise_r')
+    expect(keys(toTop, 'push')[0]).toBe('overhead_tricep_ext')
 
     const { plan: toEnd, errors } = applyPlanEdits(DEFAULT_PLAN, [
       { op: 'moveExercise', day: 'push', key: 'cable_crunch', toIndex: 99 },
@@ -401,5 +401,99 @@ describe('applyPlanEdits', () => {
     const result: { plan: Plan } = applyPlanEdits(DEFAULT_PLAN, [])
     expect(result.plan.push).toBeDefined()
     expect(result.plan.pull).toBeDefined()
+  })
+
+  describe('sided pairs', () => {
+    // The arm circuit as shipped: the raise's two arms straddle a tricep station.
+    const ARMS = ['tricep_pushdown', 'lateral_raise_l', 'overhead_tricep_ext', 'lateral_raise_r']
+    const tail = (plan: Plan) => keys(plan, 'push').filter((k) => ARMS.includes(k))
+
+    it('removing one side removes both, and records both so the merge keeps them gone', () => {
+      const { plan, applied } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'removeExercise', day: 'pull', key: 'copenhagen_plank_r' },
+      ])
+      expect(keys(plan, 'pull')).not.toContain('copenhagen_plank_l')
+      expect(keys(plan, 'pull')).not.toContain('copenhagen_plank_r')
+      expect(plan.pull.removed).toEqual(expect.arrayContaining(['copenhagen_plank_l', 'copenhagen_plank_r']))
+      expect(applied[0]).toBe('removed copenhagen plank (left) and copenhagen plank (right) from pull')
+      const reloaded = withPlanDefaults(plan)
+      expect(keys(reloaded, 'pull')).not.toContain('copenhagen_plank_l')
+      expect(keys(reloaded, 'pull')).not.toContain('copenhagen_plank_r')
+    })
+
+    it('adding one side adds both, left first, and takes back both deletions', () => {
+      const { plan: gone } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'removeExercise', day: 'pull', key: 'sideways_leg_raise_l' },
+      ])
+      const { plan, applied } = applyPlanEdits(gone, [
+        { op: 'addExercise', day: 'pull', exercise: { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', sets: 2, repMin: 15, repMax: 15, restSec: 45, group: 'abductors' } },
+      ])
+      expect(keys(plan, 'pull').slice(-2)).toEqual(['sideways_leg_raise_l', 'sideways_leg_raise_r'])
+      const [l, r] = plan.pull.exercises.slice(-2)
+      expect([l.sets, r.sets]).toEqual([2, 2])
+      expect(l.name).toBe('sideways leg raise (left)')
+      expect(r.name).toBe('sideways leg raise (right)')
+      expect(plan.pull.removed ?? []).not.toContain('sideways_leg_raise_l')
+      expect(plan.pull.removed ?? []).not.toContain('sideways_leg_raise_r')
+      expect(applied[0]).toBe('added sideways leg raise (left) and sideways leg raise (right) to pull')
+    })
+
+    it('adding the missing half of a lone side completes it without doubling the other', () => {
+      const lone: Plan = JSON.parse(JSON.stringify(DEFAULT_PLAN))
+      lone.pull.exercises = lone.pull.exercises.filter((e) => e.key !== 'copenhagen_plank_r')
+      const { plan } = applyPlanEdits(lone, [
+        { op: 'addExercise', day: 'pull', exercise: { key: 'copenhagen_plank_r', name: 'copenhagen plank (right)', sets: 3, repMin: 30, repMax: 30, restSec: 60, group: 'adductors' } },
+      ])
+      expect(keys(plan, 'pull').filter((k) => k.startsWith('copenhagen_plank'))).toEqual([
+        'copenhagen_plank_l',
+        'copenhagen_plank_r',
+      ])
+    })
+
+    it('removing a lone side removes just it', () => {
+      const lone: Plan = JSON.parse(JSON.stringify(DEFAULT_PLAN))
+      lone.pull.exercises = lone.pull.exercises.filter((e) => e.key !== 'copenhagen_plank_r')
+      const { plan, errors } = applyPlanEdits(lone, [
+        { op: 'removeExercise', day: 'pull', key: 'copenhagen_plank_l' },
+      ])
+      expect(errors).toHaveLength(0)
+      expect(plan.pull.exercises).toHaveLength(lone.pull.exercises.length - 1)
+    })
+
+    it('moving one side brings the other, side by side when they were', () => {
+      const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'moveExercise', day: 'pull', key: 'copenhagen_plank_r', toIndex: 0 },
+      ])
+      expect(keys(plan, 'pull').slice(0, 2)).toEqual(['copenhagen_plank_l', 'copenhagen_plank_r'])
+      expect(keys(plan, 'pull')).toHaveLength(DEFAULT_PLAN.pull.exercises.length)
+    })
+
+    it('moving one side keeps the station the pair straddles between them', () => {
+      const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'moveExercise', day: 'push', key: 'lateral_raise_l', before: 'tricep_pushdown' },
+      ])
+      expect(tail(plan)).toEqual(['lateral_raise_l', 'tricep_pushdown', 'lateral_raise_r', 'overhead_tricep_ext'])
+    })
+
+    it('moving an unpaired exercise leaves the pairs where they are', () => {
+      const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'moveExercise', day: 'push', key: 'overhead_tricep_ext', after: 'lateral_raise_r' },
+      ])
+      expect(tail(plan)).toEqual(['tricep_pushdown', 'lateral_raise_l', 'lateral_raise_r', 'overhead_tricep_ext'])
+    })
+
+    it('reorderDay brings an unnamed side along with the side it names', () => {
+      const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'reorderDay', day: 'pull', keys: ['sideways_leg_raise_l'] },
+      ])
+      expect(keys(plan, 'pull').slice(0, 2)).toEqual(['sideways_leg_raise_l', 'sideways_leg_raise_r'])
+    })
+
+    it('reorderDay naming both sides keeps the order it was given', () => {
+      const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'reorderDay', day: 'pull', keys: ['sideways_leg_raise_r', 'leg_press', 'sideways_leg_raise_l'] },
+      ])
+      expect(keys(plan, 'pull').slice(0, 3)).toEqual(['sideways_leg_raise_r', 'leg_press', 'sideways_leg_raise_l'])
+    })
   })
 })

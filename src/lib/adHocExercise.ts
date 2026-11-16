@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import { ALL_EXERCISES, DAY_TYPES, QUICK_LOG_KEY, exerciseName, type Plan, type PlannedExercise } from '../config/plan'
 import type { WorkoutRow } from '../types'
+import { leadsPair, sidePartnerKey } from './pairedSides'
 
 /**
  * The key prefix of a movement typed in for one workout only. The key is minted
@@ -122,6 +123,26 @@ export function adHocExercise(input: AdHocInput, option: ExerciseOption | null):
     restSec: 60,
     group: option ? LOGGED_GROUP : 'ad hoc',
   }
+}
+
+/**
+ * Everything an addition puts into the workout: the movement asked for and, when
+ * it's one side of a one-limb-at-a-time pair, the other side too (see
+ * lib/pairedSides), left first, with the same sets and reps. The partner comes
+ * from `options` — the sheet's own list — so a side the workout already holds
+ * isn't added twice, and adding the missing half of a lone side completes it.
+ */
+export function adHocAdditions(
+  input: AdHocInput,
+  option: ExerciseOption | null,
+  options: ExerciseOption[],
+): PlannedExercise[] {
+  const exercise = adHocExercise(input, option)
+  const partnerKey = option?.base ? sidePartnerKey(option.key) : null
+  const partner = partnerKey ? options.find((o) => o.key === partnerKey && o.base) : undefined
+  if (!partner) return [exercise]
+  const other = adHocExercise(input, partner)
+  return leadsPair(exercise.key) ? [exercise, other] : [other, exercise]
 }
 
 function clamp(n: number, lo: number, hi: number): number {

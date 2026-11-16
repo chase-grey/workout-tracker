@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { adHocExercise, exerciseOptions, isAdHocKey, LOGGED_GROUP, matchTypedName } from './adHocExercise'
+import { adHocAdditions, adHocExercise, exerciseOptions, isAdHocKey, LOGGED_GROUP, matchTypedName } from './adHocExercise'
 import { ALL_EXERCISES, DEFAULT_PLAN, QUICK_LOG_KEY, type PlannedExercise } from '../config/plan'
 import type { WorkoutRow } from '../types'
 
@@ -98,5 +98,29 @@ describe('adHocExercise', () => {
     expect(adHocExercise({ name: 'x', sets: 0, reps: 1000.4 }, null)).toMatchObject({ sets: 1, repMin: 999 })
     expect(adHocExercise({ name: 'x', sets: 99, reps: NaN }, null)).toMatchObject({ sets: 20, repMin: 1 })
     expect(adHocExercise({ name: 'x', sets: 2.6, reps: 9.5 }, null)).toMatchObject({ sets: 3, repMin: 10 })
+  })
+})
+
+describe('adHocAdditions', () => {
+  const input = { name: '', sets: 2, reps: 30 }
+
+  it('adds both sides of a sided movement, left first, with the same prescription', () => {
+    const opts = exerciseOptions(DEFAULT_PLAN, [], [])
+    const right = opts.find((o) => o.key === 'copenhagen_plank_r')!
+    const added = adHocAdditions(input, right, opts)
+    expect(added.map((e) => e.key)).toEqual(['copenhagen_plank_l', 'copenhagen_plank_r'])
+    expect(added.map((e) => [e.sets, e.repMin])).toEqual([[2, 30], [2, 30]])
+  })
+
+  it("adds only the missing side when the workout already holds the other", () => {
+    const opts = exerciseOptions(DEFAULT_PLAN, [], [ALL_EXERCISES.find((e) => e.key === 'copenhagen_plank_l')!])
+    const right = opts.find((o) => o.key === 'copenhagen_plank_r')!
+    expect(adHocAdditions(input, right, opts).map((e) => e.key)).toEqual(['copenhagen_plank_r'])
+  })
+
+  it('adds an unpaired movement or a typed name on its own', () => {
+    const opts = exerciseOptions(DEFAULT_PLAN, [], [])
+    expect(adHocAdditions(input, opts.find((o) => o.key === 'flat_bench')!, opts).map((e) => e.key)).toEqual(['flat_bench'])
+    expect(adHocAdditions({ ...input, name: 'farmer carry' }, null, opts)).toHaveLength(1)
   })
 })
