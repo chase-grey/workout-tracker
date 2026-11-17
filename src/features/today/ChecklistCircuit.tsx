@@ -7,6 +7,7 @@ import { sidesAgree } from '../../lib/sidePair'
 import { formatDuration } from '../../lib/estimate'
 import { clockText } from '../../lib/setClock'
 import { toWeight } from '../../lib/weightField'
+import { ControlWord } from '../../components/ControlWord'
 
 type Props = {
   stations: PlannedExercise[]
@@ -29,6 +30,8 @@ type Props = {
   onEdit: (key: string, round: number, patch: Pick<SetLog, 'weightLbs'> | Pick<SetLog, 'reps'>) => void
   /** One-arm pairs split into a line per side on the set screen, by leading key. */
   apart: ReadonlySet<string>
+  /** The skip mark's starter word, shared with every other skip in the checklist. */
+  skipLabel: { show: boolean; word: string; used: () => void }
 }
 
 /**
@@ -63,6 +66,7 @@ export function ChecklistCircuit({
   onRoundDone,
   onEdit,
   apart,
+  skipLabel,
 }: Props) {
   const keys = stations.map((e) => e.key)
   const onScreen = keys.includes(currentStepKey.slice(0, currentStepKey.lastIndexOf(':')))
@@ -103,11 +107,15 @@ export function ChecklistCircuit({
         )}
         {(skipped || canSkip) && (
           <button
-            onClick={onToggleSkip}
+            onClick={() => {
+              skipLabel.used()
+              onToggleSkip()
+            }}
             aria-label={skipped ? `unskip ${title}` : `skip ${title}`}
-            className="p-2 text-2xl"
+            className="flex items-center p-2 text-2xl text-neutral-500"
           >
             <MdBlock className={skipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+            <ControlWord show={skipLabel.show} word={skipLabel.word} layout="inline" />
           </button>
         )}
         {!skipped && (
@@ -146,12 +154,16 @@ export function ChecklistCircuit({
                   {/* The same mark a set has: not on a round already logged, nor
                       on the last one left in play. */}
                   <button
-                    onClick={() => onSkipRound(r, !roundSkipped)}
+                    onClick={() => {
+                      skipLabel.used()
+                      onSkipRound(r, !roundSkipped)
+                    }}
                     disabled={!roundSkipped && (roundDone || !canSkipRound(r))}
                     aria-label={roundSkipped ? `unskip round ${r + 1}` : `skip round ${r + 1}`}
-                    className="p-1 text-xl disabled:invisible"
+                    className="flex items-center p-1 text-xl text-neutral-500 disabled:invisible"
                   >
                     <MdBlock className={roundSkipped ? 'text-neutral-200' : 'text-neutral-600'} aria-hidden />
+                    <ControlWord show={skipLabel.show} word={skipLabel.word} layout="inline" />
                   </button>
                   <button
                     onClick={() => onRoundDone(r, !roundDone)}

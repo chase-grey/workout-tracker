@@ -1479,11 +1479,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                       {s.ex.repsOnly || logged.weightLbs == null ? `${logged.reps}` : `${logged.weightLbs} × ${logged.reps}`}
                     </span>
                     <button
-                      onClick={() => setHistoryKey(s.ex.key)}
+                      onClick={() => {
+                        historyLabel.used()
+                        setHistoryKey(s.ex.key)
+                      }}
                       aria-label={`recent sessions for ${s.ex.name}`}
-                      className="flex min-h-[44px] w-11 items-center justify-center rounded-xl active:bg-surface-2"
+                      className="flex min-h-[44px] w-11 flex-col items-center justify-center rounded-xl active:bg-surface-2"
                     >
                       <MdShowChart className="text-2xl" aria-hidden />
+                      <ControlWord show={historyLabel.show} word={historyLabel.word} />
                     </button>
                   </div>
                 </div>
@@ -1776,6 +1780,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                       }}
                       onEdit={(k, r, patch) => editChecklistSet(k, r, patch)}
                       apart={apart}
+                      skipLabel={skipLabel}
                     />
                   )
                 }
