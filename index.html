@@ -29,6 +29,64 @@
         if (mode === 'light') document.documentElement.dataset.mode = 'light'
       } catch (e) {}
     </script>
+    <!-- Boot watchdog. A load that mounts nothing leaves bare ground and no way
+         to say why: the app's own reporting is in the bundle that didn't run.
+         This keeps what went wrong, offers the reload, and leaves a note the
+         next load that does start sends on (src/services/screenWatch.ts). -->
+    <script>
+      ;(function () {
+        var seen = []
+        function keep(kind, detail) {
+          if (seen.length < 10) seen.push({ t: Date.now(), kind: kind, detail: String(detail).slice(0, 400) })
+        }
+        addEventListener(
+          'error',
+          function (e) {
+            var t = e.target
+            if (t && t !== window && (t.src || t.href)) keep('asset', t.src || t.href)
+            else keep('error', (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0))
+          },
+          true,
+        )
+        addEventListener('unhandledrejection', function (e) {
+          var r = e.reason
+          keep('rejection', (r && (r.stack || r.message)) || r)
+        })
+        setTimeout(function () {
+          var root = document.getElementById('root')
+          if (!root || root.childElementCount) return
+          try {
+            var nav = performance.getEntriesByType('navigation')[0]
+            localStorage.setItem(
+              'wt:boot-trouble',
+              JSON.stringify({
+                at: Date.now(),
+                navigation: nav && nav.type,
+                historyLength: history.length,
+                historyState: history.state,
+                online: navigator.onLine,
+                seen: seen,
+              }),
+            )
+          } catch (e) {}
+          var box = document.createElement('div')
+          box.style.cssText =
+            'position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;gap:16px;padding:24px;font:16px system-ui,sans-serif'
+          var h = document.createElement('h1')
+          h.textContent = 'couldn’t start'
+          h.style.cssText = 'font-size:20px;margin:0'
+          var b = document.createElement('button')
+          b.textContent = 'reload'
+          b.style.cssText = 'min-height:52px;border:0;border-radius:8px;font:inherit;font-weight:700'
+          b.onclick = function () {
+            location.reload()
+          }
+          box.appendChild(h)
+          box.appendChild(b)
+          root.appendChild(box)
+        }, 8000)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

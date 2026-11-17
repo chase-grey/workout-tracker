@@ -86,8 +86,12 @@ export function reportCrash(error: unknown, componentStack?: string | null): Pro
  * A failure the phone can't show anyone, onto the save_errors tab. Throttled
  * like a stuck write: once per distinct error per window.
  */
-async function reportDeviceFailure(route: string, message: string, payload: unknown): Promise<void> {
-  if (!api.isConfigured()) return
+export async function reportDeviceFailure(route: string, message: string, payload: unknown): Promise<void> {
+  try {
+    if (!api.isConfigured()) return
+  } catch {
+    return
+  }
   const report: SaveErrorReport = {
     build: APP_COMMIT,
     route,

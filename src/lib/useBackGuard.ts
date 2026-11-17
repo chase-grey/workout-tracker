@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { note } from '../services/screenWatch'
 
 /**
  * Stamped into each guard entry this page load pushes, so a guard of ours can be
@@ -37,9 +38,13 @@ function ownGuard(): boolean {
  */
 function sync() {
   if (claims.length > 0) {
-    if (!ownGuard()) window.history.pushState({ backGuard: PAGE_ID }, '')
+    if (!ownGuard()) {
+      window.history.pushState({ backGuard: PAGE_ID }, '')
+      note('guard+', { claims: claims.length })
+    }
   } else if (ownGuard()) {
     dropping = true
+    note('guard-')
     window.history.back()
   }
 }
@@ -48,6 +53,9 @@ function sync() {
 // who should answer depends on what's claiming back right then.
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', () => {
+    // Each pop goes on the back trail with who it was for: the trail is what a
+    // blank screen after a back press gets read from (see services/screenWatch).
+    note('back', { ours: dropping, claims: claims.length })
     if (dropping) {
       dropping = false
     } else {
@@ -82,7 +90,10 @@ export function useBackGuard(active: boolean, onBack: () => void) {
   // A guard restored from a previous document can't be popped in place, so drop
   // its marker rather than trust it — nothing else keeps history state.
   useEffect(() => {
-    if (window.history.state?.backGuard && !ownGuard()) window.history.replaceState(null, '')
+    if (window.history.state?.backGuard && !ownGuard()) {
+      note('stale-guard')
+      window.history.replaceState(null, '')
+    }
   }, [])
 
   useEffect(() => {

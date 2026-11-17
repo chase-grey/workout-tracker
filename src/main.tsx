@@ -7,7 +7,10 @@ import { trackVisualViewport } from './lib/viewport'
 import { initTheme } from './lib/themeStore'
 import { initInstallPrompt } from './lib/useInstallPrompt'
 import { watchForUpdates } from './lib/version'
+import { watchScreen } from './services/screenWatch'
 
+// First, so a throw in anything below is seen and reported.
+watchScreen()
 trackVisualViewport()
 initTheme()
 initInstallPrompt()

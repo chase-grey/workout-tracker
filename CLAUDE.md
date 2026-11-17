@@ -112,6 +112,30 @@ Then rule out a stale build: "I don't see X" on the phone usually means the
 Pages deploy didn't land (`gh run list`), or a later commit from another
 session reverted it (`git log -- <file>`).
 
+## When the phone shows a blank screen
+
+Same first move: `npm run save-errors -- --json`. The phone reports what it
+can't show, to the same `save_errors` tab, under these routes:
+
+- `crash`: a render threw (`components/CrashScreen`); stack and component stack.
+- `blank_screen`: the tree was mounted and nothing was drawn, seen twice a
+  moment apart after a back press, a load, or coming back to the app
+  (`services/screenWatch`). Carries what was under fifteen points of the screen,
+  what `AppShell` believed it was showing, and the back trail.
+- `back_reload`: a load reached by going back, or a reopen within thirty
+  seconds of a back press, which is what a blank screen the probe missed looks
+  like from here.
+- `boot_failed`: a load that never mounted anything. `index.html`'s watchdog
+  keeps the errors it saw and the next load that starts sends them.
+- `js_error`, `asset_error`: an uncaught error, or a script or stylesheet that
+  didn't arrive.
+
+The back trail (`lib/backTrail`) is the last forty events around the back
+button: each pop and whether it was the app's own, each guard entry pushed or
+dropped, each load with its navigation type, each hide and show, every one
+stamped with `history.length` and the entry's guard id. Anything new that
+touches `history` should `note()` what it did.
+
 ## UI copy
 
 No explanatory subtext, hint captions, or "how to use this" sentences under

@@ -25,6 +25,7 @@ import { storage } from './services/storage'
 import { useTrackedIssues } from './store/useTrackedIssues'
 import { issuesAwaitingAnswer } from './services/issues'
 import { useBackGuard } from './lib/useBackGuard'
+import { noteScreen } from './services/screenWatch'
 import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
@@ -222,6 +223,20 @@ function AppShell() {
   // unless they've been set aside.
   const immersive =
     (sessionActive && !minimized) || finishSummary != null || stretchSummary != null
+
+  // What this shell believes it is showing, for the report a blank screen sends
+  // (see services/screenWatch): the phone can't be asked, and the DOM alone
+  // doesn't say which of these was meant to be up.
+  useEffect(() => {
+    noteScreen({
+      tab,
+      minimized,
+      session: controls.session ? 'lift' : stretching ? `stretch:${stretching}` : null,
+      recap: finishSummary != null || stretchSummary != null,
+      review: review != null,
+      coachOn: showChat,
+    })
+  })
 
   // The keyboard shrinks the shell, and everything in it rides up — the nav and
   // the back-to-your-workout banner both, which then stack between the composer
