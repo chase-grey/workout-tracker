@@ -10,8 +10,9 @@
 //
 // This is a FALLBACK for browsers that don't shrink the layout viewport themselves.
 // Chrome/Android honours `interactive-widget=resizes-content` (see index.html) and
-// shrinks the LAYOUT viewport in lockstep with the keyboard animation, which
-// `100dvh` picks up natively with zero lag. The `visualViewport.resize` event, by
+// shrinks the LAYOUT viewport itself, which
+// `100dvh` picks up natively, though not until the keyboard has arrived (expectKeyboard
+// below covers the wait). The `visualViewport.resize` event, by
 // contrast, only fires AFTER the keyboard has finished sliding in (~0.5s) — so
 // mirroring --vvh there would override the instant native resize with a stale,
 // laggy px height. Safari ignores interactive-widget entirely and never resizes any
@@ -63,9 +64,92 @@ export function foldKeyboard(
 let keyboardOpen = false
 const keyboardListeners = new Set<() => void>()
 
-/** Whether an on-screen keyboard is currently covering the bottom of the screen. */
+// The browser only says the keyboard is up once it has arrived: Chrome resizes
+// the layout viewport when Gboard has finished sliding in, not alongside it, so
+// a composer that waits for the resize sits covered for the length of the
+// animation and then pops into place. The keyboard is the same height every
+// time, though, so remember it, and when a field that is about to raise it is
+// tapped, take that much off the shell straight away (--kb-lift, index.css) on
+// a transition the length of the keyboard's own. The measured resize then lands
+// on a shell that is already the right height: the lift is dropped in the same
+// handler, before the frame is drawn, and nothing moves.
+//
+// Only a keyboard that shrank the LAYOUT viewport is remembered. That is the
+// height the shell will lose, which is not the visual viewport's drop when the
+// app is drawn edge-to-edge behind the system bars; and it leaves iOS, where
+// the layout never shrinks and --vvh does the work, exactly as it was.
+const KEYBOARD_HEIGHT_KEY = 'keyboardHeight'
+/** How long to believe a tap before deciding no keyboard is coming. */
+const EXPECT_MS = 1000
+
+/** The height stored for a screen this wide, or 0 if there is none to trust. */
+export function rememberedKeyboardHeight(stored: string | null, width: number): number {
+  if (!stored) return 0
+  try {
+    const { w, h } = JSON.parse(stored) as { w?: unknown; h?: unknown }
+    return w === width && typeof h === 'number' && h > KEYBOARD_MIN_PX ? h : 0
+  } catch {
+    return 0
+  }
+}
+
+let expected = false
+let expectTimer = 0
+let storedHeight: string | null | undefined
+
+function readStoredHeight(): string | null {
+  if (storedHeight === undefined) {
+    try {
+      storedHeight = localStorage.getItem(KEYBOARD_HEIGHT_KEY)
+    } catch {
+      storedHeight = null
+    }
+  }
+  return storedHeight
+}
+
+function rememberKeyboardHeight(width: number, height: number): void {
+  const next = JSON.stringify({ w: width, h: Math.round(height) })
+  if (next === readStoredHeight()) return
+  storedHeight = next
+  try {
+    localStorage.setItem(KEYBOARD_HEIGHT_KEY, next)
+  } catch {
+    // Private mode or a full disk: the lift just won't survive a reload.
+  }
+}
+
+function dropExpectation(): void {
+  expected = false
+  window.clearTimeout(expectTimer)
+  document.documentElement.style.removeProperty('--kb-lift')
+}
+
+/**
+ * A field has been tapped and the keyboard is on its way: make room for it now
+ * rather than when the browser reports it. Does nothing until a keyboard has
+ * been measured on this screen once, or while one is already up.
+ */
+export function expectKeyboard(): void {
+  if (keyboardOpen || expected) return
+  const height = rememberedKeyboardHeight(readStoredHeight(), window.innerWidth)
+  if (!height) return
+  expected = true
+  document.documentElement.style.setProperty('--kb-lift', `${height}px`)
+  // A hardware keyboard, or a focus the system declined to raise one for.
+  expectTimer = window.setTimeout(() => {
+    dropExpectation()
+    for (const notify of keyboardListeners) notify()
+  }, EXPECT_MS)
+  for (const notify of keyboardListeners) notify()
+}
+
+/**
+ * Whether an on-screen keyboard is covering the bottom of the screen, or is
+ * expected to within the moment (see expectKeyboard).
+ */
 export function isKeyboardOpen(): boolean {
-  return keyboardOpen
+  return keyboardOpen || expected
 }
 
 /** Subscribe to keyboard open/close; returns the unsubscribe. */
@@ -81,6 +165,7 @@ export function trackVisualViewport(): void {
   if (!vv) return
   const root = document.documentElement
   let resting = { width: 0, rest: 0 }
+  let restingLayout = { width: 0, rest: 0 }
   const apply = () => {
     // Scale confuses the comparison (a pinch-zoomed vv is smaller for reasons that
     // have nothing to do with a keyboard), so measure at the layout's own scale.
@@ -88,10 +173,19 @@ export function trackVisualViewport(): void {
 
     const folded = foldKeyboard(resting, { width: window.innerWidth, visible })
     resting = { width: folded.width, rest: folded.rest }
-    if (folded.open !== keyboardOpen) {
-      keyboardOpen = folded.open
-      for (const notify of keyboardListeners) notify()
-    }
+    const was = isKeyboardOpen()
+    // The keyboard this was waiting for is here, and the layout has shrunk by
+    // its height: stop subtracting it a second time.
+    if (folded.open && expected) dropExpectation()
+    keyboardOpen = folded.open
+    if (isKeyboardOpen() !== was) for (const notify of keyboardListeners) notify()
+
+    const layout = foldKeyboard(restingLayout, {
+      width: window.innerWidth,
+      visible: window.innerHeight,
+    })
+    restingLayout = { width: layout.width, rest: layout.rest }
+    if (layout.open) rememberKeyboardHeight(layout.width, layout.rest - window.innerHeight)
 
     if (window.innerHeight - visible > KEYBOARD_MIN_PX) {
       // The shell is offset by --vv-top, so it can only be as tall as what's left

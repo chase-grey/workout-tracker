@@ -37,6 +37,8 @@ import {
 } from '../../config/flexRoutines'
 import { MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
 import { Markdown } from './Markdown'
+import { expectKeyboard } from '../../lib/viewport'
+import { useKeyboardOpen } from '../../lib/useKeyboardOpen'
 import { ProposalCard, type ProposalStatus } from '../../components/ProposalCard'
 import { LiveCompanion } from '../companion/CompanionFlow'
 
@@ -572,6 +574,20 @@ export function ChatTab({
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, pending, loading])
 
+  // The keyboard shrinks the thread from the bottom, a little each frame while
+  // the shell follows it up. Hold the tail against the composer the whole way
+  // rather than scrolling to where it was when the animation began.
+  const keyboardOpen = useKeyboardOpen()
+  useEffect(() => {
+    if (!keyboardOpen) return
+    const until = performance.now() + 350
+    let frame = requestAnimationFrame(function pin(now) {
+      endRef.current?.scrollIntoView()
+      if (now < until) frame = requestAnimationFrame(pin)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [keyboardOpen])
+
   // Two ways to be able to send (see services/coach): the dev proxy holds an
   // Only the owner's reports become GitHub issues; anyone else's are feedback.
   const owner = ownerFlavour(settings.profile)
@@ -937,8 +953,11 @@ export function ChatTab({
             onKeyDown={(e) => {
               if (e.key === 'Enter') void send()
             }}
-            // The keyboard opening shrinks the thread; keep its tail in view.
-            onFocus={() => endRef.current?.scrollIntoView({ behavior: 'smooth' })}
+            // Start making room the moment the field is reached for. A tap as
+            // well as a focus: the back button puts the keyboard away without
+            // blurring the field, and the next tap brings it back unannounced.
+            onFocus={expectKeyboard}
+            onClick={expectKeyboard}
             aria-label={answerTarget ? `answer #${answerTarget.number}` : 'message'}
             /* Ghost text only when the field is aimed somewhere other than the
                coach: answering an issue is the one case where an empty box is

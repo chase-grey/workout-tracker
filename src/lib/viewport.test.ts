@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foldKeyboard } from './viewport'
+import { foldKeyboard, rememberedKeyboardHeight } from './viewport'
 
 /** Feed a run of measurements through the fold, returning every `open` reading. */
 function run(samples: { width: number; visible: number }[]): boolean[] {
@@ -87,5 +87,25 @@ describe('foldKeyboard', () => {
         { width: 390, visible: 844 },
       ]),
     ).toEqual([false, false, false])
+  })
+})
+
+describe('rememberedKeyboardHeight', () => {
+  it('has nothing to offer before a keyboard has been measured', () => {
+    expect(rememberedKeyboardHeight(null, 390)).toBe(0)
+  })
+
+  it('returns the height measured on a screen this wide', () => {
+    expect(rememberedKeyboardHeight('{"w":390,"h":301}', 390)).toBe(301)
+  })
+
+  it('does not carry a portrait keyboard into landscape', () => {
+    expect(rememberedKeyboardHeight('{"w":390,"h":301}', 844)).toBe(0)
+  })
+
+  it('ignores anything too short to be a keyboard, or not a height at all', () => {
+    expect(rememberedKeyboardHeight('{"w":390,"h":48}', 390)).toBe(0)
+    expect(rememberedKeyboardHeight('{"w":390,"h":"301"}', 390)).toBe(0)
+    expect(rememberedKeyboardHeight('not json', 390)).toBe(0)
   })
 })

@@ -280,7 +280,9 @@ function AppShell() {
   }
 
   return (
-    <div className={`app-shell flex flex-col ${SHELL_WIDTH}`}>
+    <div
+      className={`app-shell flex flex-col ${SHELL_WIDTH} ${tab === 'coach' ? 'follows-keyboard' : ''}`}
+    >
       {/* min-h-0: a flex item's automatic minimum is its own content, which would
           let a tall tab push the nav off the bottom of the shell rather than
           scroll inside it. */}
