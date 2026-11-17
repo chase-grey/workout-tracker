@@ -21,6 +21,7 @@ import type { Profile } from '../lib/profile'
 import type { CardioPin, HomeLayout } from '../lib/homeTiles'
 import type { CardioEntry } from '../lib/cardio'
 import type { CalendarPins, WeekCalendarView } from '../lib/weekCalendar'
+import type { CardioPlan } from '../lib/cardioPlan'
 
 const KEYS = {
   settings: 'wt.settings',
@@ -274,6 +275,14 @@ export type Settings = {
   tourSeen?: string[]
   /** The tour is over, finished or skipped, and doesn't come back unprompted. */
   tourDone?: boolean
+  /**
+   * The cardio goal and the week-by-week plan toward it (see lib/cardioPlan).
+   * Synced with the rest. Ending a plan keeps it here with `endedAt` set rather
+   * than deleting it: a cleared field doesn't carry to the other devices (see
+   * lib/settingsSync.mergeSettings), and the weeks it planned still score the
+   * streak they were lived under.
+   */
+  cardioPlan?: CardioPlan
   /**
    * How this device stores its data (see lib/account). Device-local with the
    * token: the mode says how THIS phone reaches the backend, and a second phone

@@ -2,7 +2,8 @@
 
 import { weekStartISO, toISODate, enumerateWeeks } from './dates'
 import { profileWeeklyGoals } from './profile'
-import { activeProfile } from './profileStore'
+import { activeCardioPlan, activeProfile } from './profileStore'
+import { plannedSessionCount } from './cardioPlan'
 
 export type WeeklyGoalConfig = {
   workouts: number
@@ -37,10 +38,27 @@ export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig =
  */
 export function weeklyGoalsFor(week: string): WeeklyGoalConfig {
   const profile = activeProfile()
-  if (profile) return profileWeeklyGoals(profile, week)
+  const goals = profile ? profileWeeklyGoals(profile, week) : shippedGoalsFor(week)
+  return withPlannedCardio(goals, week)
+}
+
+function shippedGoalsFor(week: string): WeeklyGoalConfig {
   let goals = WEEKLY_GOAL_HISTORY[0].goals
   for (const g of WEEKLY_GOAL_HISTORY) if (g.from <= week) goals = g.goals
   return goals
+}
+
+/**
+ * A week the cardio plan covers is held to the sessions it plans rather than
+ * to the flat days-a-week goal (see lib/cardioPlan). Only where cardio was
+ * being tracked that week at all: the plan sets the number, the pillar decides
+ * whether there is one, read from the goal history like every other week so
+ * switching cardio off later can't re-score the weeks behind it.
+ */
+function withPlannedCardio(goals: WeeklyGoalConfig, week: string): WeeklyGoalConfig {
+  if ((goals.cardio ?? 0) <= 0) return goals
+  const planned = plannedSessionCount(activeCardioPlan(), week)
+  return planned == null ? goals : { ...goals, cardio: planned }
 }
 
 export type WeekTier = 'full' | 'short'

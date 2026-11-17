@@ -10,8 +10,22 @@
  */
 
 import { hasPillar, ownerFlavour, type DietDirection, type Pillar, type Profile } from './profile'
+import type { CardioPlan } from './cardioPlan'
 
 let active: Profile | null = null
+let cardioPlan: CardioPlan | undefined
+
+/**
+ * The cardio plan in force, held here for the same reason the profile is: it
+ * drives the weekly cardio goal, which weeklyGoalsFor reads by date alone.
+ */
+export function setActiveCardioPlan(plan: CardioPlan | undefined): void {
+  cardioPlan = plan
+}
+
+export function activeCardioPlan(): CardioPlan | undefined {
+  return cardioPlan
+}
 
 export function setActiveProfile(profile: Profile | null | undefined): void {
   active = profile ?? null

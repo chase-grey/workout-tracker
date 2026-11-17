@@ -76,7 +76,8 @@ import { goalPaceNotes, type GoalPaceNote } from '../lib/goalPace'
 import { graduationNote } from '../lib/graduation'
 import { applyNotesEdit, type NotesEdit } from '../lib/discomfort'
 import { cardioDates, mergeCardio, type CardioEntry } from '../lib/cardio'
-import { activeDietDirection, setActiveProfile } from '../lib/profileStore'
+import { activeDietDirection, setActiveCardioPlan, setActiveProfile } from '../lib/profileStore'
+import { checkpointCelebration, newlyHitCheckpoints } from '../lib/cardioPlan'
 import { ownerFlavour } from '../lib/profile'
 
 export type WeekProgress = {
@@ -278,6 +279,7 @@ const Ctx = createContext<DataContextValue | null>(null)
 // Before the first render, so the goals the very first frame computes are the
 // profile's own rather than the shipped ones (see lib/profileStore).
 setActiveProfile(storage.loadSettings().profile)
+setActiveCardioPlan(storage.loadSettings().cardioPlan)
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>(() => storage.loadWorkouts())
@@ -294,7 +296,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Kept in step on every render rather than in an effect: the memos below read
   // the profile through pure lib functions, and an effect would run after them.
   setActiveProfile(settings.profile)
+  setActiveCardioPlan(settings.cardioPlan)
   const profile = settings.profile
+  const cardioPlan = settings.cardioPlan
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
   const [flexPlans, setFlexPlans] = useState<Record<FlexRoutineKey, FlexBlock[]>>(() =>
     storage.loadFlexPlans(),
@@ -935,13 +939,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const flexDates = storage.loadFlex().map((f) => f.date)
         const cals = storage.loadCalories()
         const now = new Date()
+        // A session that meets a checkpoint of the cardio plan marks it hit.
+        const plan = storage.loadSettings().cardioPlan
+        const checkpoints = plan ? checkpointCelebration(plan, newlyHitCheckpoints(plan, prev, next)) : null
         celebrate(
-          composeCelebration(
-            weeklyCelebrations(
+          composeCelebration([
+            checkpoints,
+            ...weeklyCelebrations(
               currentWeekCounts(workoutsNow, flexDates, cals, now, cardioDates(prev)),
               currentWeekCounts(workoutsNow, flexDates, cals, now, cardioDates(next)),
             ),
-          ),
+          ]),
         )
       } catch {
         /* a missed cheer must never break a save */
@@ -1196,7 +1204,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const cardioDays = useMemo(() => cardioDates(cardioEntries), [cardioEntries])
   // Every completed week replayed, oldest first. The flame is this list's last
   // row rather than a second calculation, so the Progress breakdown always
-  // explains the number the Today tab shows.
+  // explains the number the Today tab shows. The cardio plan is a dependency
+  // the same unnamed way the profile is: it sets the weeks' cardio goals.
   const streakHistory = useMemo(
     () =>
       weeklyStreakHistory({
@@ -1206,7 +1215,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         cardioDates: cardioDays,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [workoutDates, flexDates, calHitDates, cardioDays, profile],
+    [workoutDates, flexDates, calHitDates, cardioDays, profile, cardioPlan],
   )
 
   const streaks = useMemo<StreakState>(() => {
