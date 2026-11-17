@@ -42,6 +42,7 @@ import { WholeBodyChart } from './WholeBodyChart'
 import { BulkGradePanel } from './BulkGradePanel'
 import { MuscleAvatar } from './MuscleAvatar'
 import { CardioChart } from './CardioChart'
+import { CardioPlanCard } from './CardioPlanCard'
 import { TimeSpent } from './TimeSpent'
 import { bodyFatSeries } from '../../lib/bodyComp'
 import { massTrend } from '../../lib/massSplit'
@@ -438,7 +439,12 @@ export function ProgressTab() {
         </>
       )}
 
-      {cardioOn && <CardioChart entries={cardioEntries} />}
+      {cardioOn && (
+        <>
+          <CardioChart entries={cardioEntries} />
+          <CardioPlanCard />
+        </>
+      )}
 
       <TimeSpent />
 

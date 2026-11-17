@@ -21,6 +21,8 @@ import { cardioSummary } from '../../lib/cardio'
 import { HomeTiles } from './HomeTiles'
 import { TourCard } from './TourCard'
 import { CardioLogSheet } from './CardioLogSheet'
+import { CardioGoalSheet } from './CardioGoalSheet'
+import { goalLabel, planActive, plannedDone, plannedOn } from '../../lib/cardioPlan'
 import { candidateTiles, type HomeTile } from '../../lib/homeTiles'
 import { WeekCalendar } from './WeekCalendar'
 import { defaultCalendarDate, type CalendarAction, type PlannedCardio } from '../../lib/weekCalendar'
@@ -43,6 +45,12 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const [flash, setFlash] = useState<{ text: string; undo?: () => void } | null>(null)
   const flashTimer = useRef<number | undefined>(undefined)
   const [loggingCardio, setLoggingCardio] = useState(false)
+  const [settingCardioGoal, setSettingCardioGoal] = useState(false)
+  // Today's session from the cardio plan, until something's logged against it.
+  const todayISO = toISODate(new Date())
+  const cardioPlan = planActive(settings.cardioPlan, todayISO) ? settings.cardioPlan : undefined
+  const plannedCardio =
+    cardioPlan && !plannedDone(cardioPlan, cardioEntries, todayISO) ? plannedOn(cardioPlan, todayISO) : null
   const [photoDismissed, setPhotoDismissed] = useState(false)
   const [habitWeek, setHabitWeek] = useState<string | null>(null)
   const habitsRef = useRef<HTMLDivElement>(null)
@@ -151,7 +159,11 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     }
   }
   const tileDetail = (t: HomeTile) =>
-    t.type === 'pin' ? cardioSummary({ minutes: t.pin.minutes, distanceMi: t.pin.distanceMi }) : undefined
+    t.type === 'pin'
+      ? cardioSummary({ minutes: t.pin.minutes, distanceMi: t.pin.distanceMi })
+      : t.type === 'cardio' && plannedCardio
+        ? `today: ${plannedCardio.label}`
+        : undefined
   const tileDimmed = (t: HomeTile) =>
     (t.type === 'lift' && t.day === dimmedDay) ||
     (t.type === 'stretch' && t.routine === dimmedStretch) ||
@@ -273,6 +285,19 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
           entries={cardioEntries}
           onDelete={(id) => void deleteCardio(id)}
           onClose={() => setLoggingCardio(false)}
+          planned={plannedCardio}
+          goalName={cardioPlan ? goalLabel(cardioPlan.kind, cardioPlan.goal) : undefined}
+          onGoal={() => setSettingCardioGoal(true)}
+        />
+      )}
+      {/* Over the log sheet rather than in place of it: backing out returns to
+          the log, and saving a plan closes both. */}
+      {settingCardioGoal && (
+        <CardioGoalSheet
+          onClose={(saved) => {
+            setSettingCardioGoal(false)
+            if (saved) setLoggingCardio(false)
+          }}
         />
       )}
     </div>

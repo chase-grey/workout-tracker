@@ -4,6 +4,7 @@ import { parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import { useBackGuard } from '../../lib/useBackGuard'
 import { usePressAction } from '../../lib/usePressAction'
 import type { CardioPin } from '../../lib/homeTiles'
+import type { PlannedCardio } from '../../lib/cardioPlan'
 
 const inputClass =
   'mt-1 min-h-[52px] w-full rounded-xl bg-surface-2 px-3 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent'
@@ -16,6 +17,10 @@ const PRESETS: readonly string[] = CARDIO_KINDS
  * log with the date left for the tap to fill in.
  *
  * A kind measured in time alone (soccer, tennis) never shows a distance field.
+ *
+ * With a cardio plan, today's planned session (see lib/cardioPlan) heads the
+ * sheet and fills the form, so logging it as planned is the one tap on save;
+ * done differently, the numbers are there to change first.
  */
 export function CardioLogSheet({
   onSave,
@@ -23,6 +28,9 @@ export function CardioLogSheet({
   entries,
   onDelete,
   onClose,
+  planned,
+  onGoal,
+  goalName,
 }: {
   onSave?: (entry: Omit<CardioEntry, 'id'>) => void
   onPin?: (pin: Omit<CardioPin, 'id'>) => void
@@ -30,13 +38,21 @@ export function CardioLogSheet({
   entries?: CardioEntry[]
   onDelete?: (id: string) => void
   onClose: () => void
+  /** Today's session from the cardio plan, not yet done. */
+  planned?: PlannedCardio | null
+  /** Opens the cardio goal, from the button at the head of the sheet. */
+  onGoal?: () => void
+  /** What that button says: the plan's goal, or nothing for "set a goal". */
+  goalName?: string
 }) {
   const pinning = !!onPin
   const today = toISODate(new Date())
-  const [preset, setPreset] = useState<string>(pinning ? 'soccer' : 'run')
-  const [name, setName] = useState('')
-  const [minutes, setMinutes] = useState('')
-  const [distance, setDistance] = useState('')
+  const plan = pinning ? null : planned ?? null
+  const planPreset = plan && PRESETS.includes(plan.kind) ? plan.kind : null
+  const [preset, setPreset] = useState<string>(pinning ? 'soccer' : plan ? planPreset ?? 'other' : 'run')
+  const [name, setName] = useState(plan && !planPreset ? plan.kind : '')
+  const [minutes, setMinutes] = useState(plan?.minutes != null ? String(plan.minutes) : '')
+  const [distance, setDistance] = useState(plan?.distanceMi != null ? String(plan.distanceMi) : '')
   const [date, setDate] = useState(today)
   const [confirmId, setConfirmId] = useState<string | null>(null)
 
@@ -73,7 +89,18 @@ export function CardioLogSheet({
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
       >
-        <h2 className="mb-4 text-lg font-bold">{pinning ? 'pin cardio' : 'log cardio'}</h2>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold">{pinning ? 'pin cardio' : 'log cardio'}</h2>
+          {onGoal && (
+            <button
+              onClick={onGoal}
+              className="min-h-[44px] min-w-0 truncate rounded-xl px-2 text-sm font-medium text-accent active:opacity-80"
+            >
+              {goalName ?? 'set a goal'}
+            </button>
+          )}
+        </div>
+        {plan && <p className="-mt-2 mb-3 text-sm text-accent-2">today: {plan.label}</p>}
         <div className="mb-4 flex flex-wrap gap-2">
           {PRESETS.map((k) => (
             <button
