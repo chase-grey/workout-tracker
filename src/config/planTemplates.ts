@@ -188,6 +188,11 @@ const PROGRAMMES: Record<Equipment, PlannedExercise[][]> = {
 const SLOTS: DayType[] = ['push', 'pull', 'fullbody']
 const LETTERS = ['a', 'b', 'c']
 
+/** How many distinct days a starter plan writes for a week of `daysPerWeek`: never more than the plan has slots. */
+export function starterDays(daysPerWeek: number): number {
+  return Math.min(SLOTS.length, daysPerWeek)
+}
+
 /**
  * A fresh full-body plan for `setup`. All three day slots are always present
  * (the plan model has exactly three); a two-day week leaves the third empty,
@@ -197,7 +202,7 @@ export function starterPlan(setup: StrengthSetup): Plan {
   const programme = PROGRAMMES[setup.equipment] ?? PROGRAMMES.gym
   const plan = {} as Plan
   SLOTS.forEach((type, i) => {
-    const used = i < setup.daysPerWeek
+    const used = i < starterDays(setup.daysPerWeek)
     const day: DayPlan = {
       type,
       label: used ? `full body ${LETTERS[i]}` : 'full body',

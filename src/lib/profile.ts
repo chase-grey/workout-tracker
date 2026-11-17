@@ -85,8 +85,12 @@ export type WorkoutMinutes = 30 | 45 | 60 | 75
 
 export const WORKOUT_MINUTES: WorkoutMinutes[] = [30, 45, 60, 75]
 
+/** Lifting days a week the welcome flow offers. */
+export const LIFT_DAYS = [2, 3, 4, 5, 6] as const
+export type LiftDays = (typeof LIFT_DAYS)[number]
+
 export type StrengthSetup = {
-  daysPerWeek: 2 | 3
+  daysPerWeek: LiftDays
   equipment: Equipment
   /**
    * The muscles they most want to grow, in the order they were picked — which

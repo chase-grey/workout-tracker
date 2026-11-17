@@ -316,7 +316,8 @@ function credit(weekly: Record<Muscle, number>, row: Row, sets: number) {
 
 function draft(setup: StrengthSetup, grow: Muscle[], level: Level): Draft {
   const library = LIBRARY[setup.equipment] ?? LIBRARY.gym
-  const dayCount = setup.daysPerWeek
+  // Past three days the plan has no more slots to hold: the three come round again.
+  const dayCount = Math.min(SLOTS.length, setup.daysPerWeek)
   const days: Row[][] = Array.from({ length: dayCount }, () => [])
   const weekly = emptyWeekly()
   const load = (d: number) => days[d].reduce((n, r) => n + r.sets, 0)
@@ -487,7 +488,7 @@ export function buildPlan(setup: StrengthSetup): PlanBuild {
     unfitted: focus.filter((m) => !fitted.includes(m)),
     unmaintained: MUSCLES.filter((m) => !fitted.includes(m) && weekly[m] < KEEP_FLOOR_SETS),
     weekly,
-    daySecs: SLOTS.slice(0, setup.daysPerWeek).map((t) => priceDay(plan[t].exercises)),
+    daySecs: SLOTS.slice(0, Math.min(SLOTS.length, setup.daysPerWeek)).map((t) => priceDay(plan[t].exercises)),
     budgetSec,
   }
 }

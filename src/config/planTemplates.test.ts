@@ -19,7 +19,7 @@ const FORBIDDEN = [
 ] as const
 
 const SETUPS: StrengthSetup[] = []
-for (const daysPerWeek of [2, 3] as const) {
+for (const daysPerWeek of [2, 3, 4, 5, 6] as const) {
   for (const equipment of ['gym', 'dumbbells', 'bodyweight'] as const) {
     SETUPS.push({ daysPerWeek, equipment })
   }
@@ -38,7 +38,7 @@ describe.each(SETUPS)('starterPlan %o', (setup) => {
     })
   })
 
-  it('labels the days full body a/b(/c), leaving the third empty on a two-day week', () => {
+  it('labels the days full body a/b(/c), leaving the third empty on a two-day week and rotating the three on longer ones', () => {
     expect(plan.push.label).toBe('full body a')
     expect(plan.pull.label).toBe('full body b')
     if (setup.daysPerWeek === 2) {
@@ -180,5 +180,24 @@ describe('rebuildPlan', () => {
     current.push.exercises.push(added)
     const next = { ...was, focus: [...was.focus] }
     expect(rebuildPlan(current, undefined, next).push.exercises.at(-1)).toEqual(added)
+  })
+})
+
+describe('starterPlan for a long lifting week', () => {
+  it('writes the same three days for four, five and six days as for three', () => {
+    for (const equipment of ['gym', 'dumbbells', 'bodyweight'] as const) {
+      const three = starterPlan({ daysPerWeek: 3, equipment })
+      for (const daysPerWeek of [4, 5, 6] as const) {
+        expect(starterPlan({ daysPerWeek, equipment })).toEqual(three)
+      }
+    }
+  })
+
+  it('builds the same three days for a built plan too, so no volume goes to a day that does not exist', () => {
+    const answers = { equipment: 'gym', focus: ['arms' as const], minutes: 45 as const }
+    const three = planFor({ daysPerWeek: 3, ...answers })
+    for (const daysPerWeek of [4, 5, 6] as const) {
+      expect(planFor({ daysPerWeek, ...answers })).toEqual(three)
+    }
   })
 })
