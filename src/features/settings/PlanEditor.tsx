@@ -314,10 +314,22 @@ function DayRow({
  * With no draft open the editor renders the live plan, so a coach edit approved in
  * the meantime just appears.
  */
-export function PlanEditor() {
+export function PlanEditor({
+  focusDay,
+  onDirty,
+  onSaved,
+}: {
+  /** The day to open straight away, for an editor reached from one day's button. */
+  focusDay?: DayType
+  /** Told whenever a draft opens or closes, so a host can say what leaving costs. */
+  onDirty?: (dirty: boolean) => void
+  /** Called once a draft has been written to the plan. */
+  onSaved?: () => void
+} = {}) {
   const { plan, updatePlan } = useData()
   const [draft, setDraft] = useState<Plan | null>(null)
-  const [openDay, setOpenDay] = useState<DayType | null>(null)
+  const [openDay, setOpenDay] = useState<DayType | null>(focusDay ?? null)
+  useEffect(() => onDirty?.(draft != null), [draft, onDirty])
   /** The expanded exercise, as `day:key` — one at a time, across all days. */
   const [openExercise, setOpenExercise] = useState<string | null>(null)
 
@@ -374,6 +386,7 @@ export function PlanEditor() {
             onClick={() => {
               updatePlan(draft)
               setDraft(null)
+              onSaved?.()
             }}
             className="min-h-[44px] flex-1 rounded-xl bg-accent font-semibold text-on-accent active:bg-accent-deep"
           >

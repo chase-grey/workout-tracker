@@ -33,6 +33,8 @@ import {
 } from '../../lib/homeTiles'
 import { useBackGuard } from '../../lib/useBackGuard'
 import { CardioLogSheet } from './CardioLogSheet'
+import { PlanEditorSheet } from '../settings/PlanEditorSheet'
+import type { DayType } from '../../types'
 
 const tileButton =
   'min-h-[52px] w-full rounded-2xl bg-surface px-2 text-lg font-bold leading-tight active:bg-surface-2'
@@ -105,6 +107,8 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
   const [editing, setEditing] = useState(false)
   const [adding, setAdding] = useState(false)
   const [pinning, setPinning] = useState(false)
+  /** The lift day whose plan is open in the editor sheet. */
+  const [planDay, setPlanDay] = useState<DayType | null>(null)
   const [question, setQuestion] = useState<Question | null>(null)
   const [drag, setDragState] = useState<Drag | null>(null)
   const dragRef = useRef<Drag | null>(null)
@@ -322,6 +326,18 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
                 {label(t)}
                 {sub && <span className="block text-xs font-medium text-neutral-400">{sub}</span>}
               </button>
+              {editing && !dragged && t.type === 'lift' && (
+                <button
+                  aria-label={`edit plan for ${label(t)}`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setPlanDay(t.day)}
+                  className="absolute -left-3 -top-3 flex h-11 w-11 items-center justify-center"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-on-accent">
+                    <MdEdit aria-hidden />
+                  </span>
+                </button>
+              )}
               {editing && !dragged && (
                 <button
                   aria-label={`remove ${label(t)}`}
@@ -389,6 +405,8 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
           onClose={() => setAdding(false)}
         />
       )}
+
+      {planDay && <PlanEditorSheet day={planDay} onClose={() => setPlanDay(null)} />}
 
       {pinning && <CardioLogSheet onPin={pin} onClose={() => setPinning(false)} />}
 
