@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mirrorSidedEdit, sidePairPeer, type SidedMember } from './sidePair'
+import { foldSides, mirrorSidedEdit, roundCards, sidePairPeer, sidesAgree, type SidedMember } from './sidePair'
 import { DEFAULT_PLAN } from '../config/plan'
 import type { ExerciseLog } from '../types'
 
@@ -123,5 +123,63 @@ describe('mirrorSidedEdit', () => {
   it('does nothing for an exercise with no pair', () => {
     const before = logs()
     expect(mirrorSidedEdit({ logs: before, exercises: ARMS, exKey: 'tricep_pushdown', index: 0, patch: { reps: 15 } })).toBe(before)
+  })
+})
+
+describe('sidesAgree', () => {
+  const set = (weightLbs: number | null, reps: number) => ({ setNumber: 1, weightLbs, reps })
+  it('is the same weight and reps on both, and nothing against a missing set', () => {
+    expect(sidesAgree(set(8, 15), set(8, 15))).toBe(true)
+    expect(sidesAgree(set(8, 15), set(8, 14))).toBe(false)
+    expect(sidesAgree(set(8, 15), set(9, 15))).toBe(false)
+    expect(sidesAgree(set(null, 15), set(null, 15))).toBe(true)
+    expect(sidesAgree(set(8, 15), undefined)).toBe(false)
+  })
+})
+
+describe('roundCards', () => {
+  const round = ARMS.slice(0, 4).map((ex) => ({ ex }))
+
+  it('gives both arms one card at the leading arm, and an echo where the other arm goes', () => {
+    const cards = roundCards(round, () => true)
+    expect(cards.map((c) => c.kind)).toEqual(['one', 'pair', 'one', 'echo'])
+    const pair = cards[1]
+    expect(pair.kind === 'pair' && [pair.lead.ex.key, pair.follow.ex.key]).toEqual(['lateral_raise_l', 'lateral_raise_r'])
+    const echo = cards[3]
+    expect(echo.kind === 'echo' && echo.lead.ex.key).toBe('lateral_raise_l')
+  })
+
+  it('leads with whichever arm the round puts first', () => {
+    const rightFirst = [round[0], round[3], round[2], round[1]]
+    const cards = roundCards(rightFirst, () => true)
+    expect(cards[1].kind === 'pair' && cards[1].lead.ex.key).toBe('lateral_raise_r')
+  })
+
+  it('keeps two cards when the sides are kept apart', () => {
+    expect(roundCards(round, () => false).map((c) => c.kind)).toEqual(['one', 'one', 'one', 'one'])
+  })
+
+  it('merges nothing when only one side is on the screen', () => {
+    expect(roundCards(round.slice(0, 3), () => true).map((c) => c.kind)).toEqual(['one', 'one', 'one'])
+  })
+})
+
+describe('foldSides', () => {
+  const name = (s: string) => s
+  it('folds a pair that says the same thing into its side-less name', () => {
+    expect(foldSides(['tricep pushdown', 'lateral raise (left)', 'lateral raise (right)'], name, (_, n) => n)).toEqual([
+      'tricep pushdown',
+      'lateral raise',
+    ])
+  })
+
+  it('keeps sides that differ, and a lone side', () => {
+    const prs = [
+      { exercise: 'lateral raise (left)', est1RM: 10 },
+      { exercise: 'lateral raise (right)', est1RM: 12 },
+      { exercise: 'copenhagen plank (right)', est1RM: 0 },
+    ]
+    const out = foldSides(prs, (p) => p.exercise, (p, exercise) => ({ ...p, exercise }), (a, b) => a.est1RM === b.est1RM)
+    expect(out).toEqual(prs)
   })
 })

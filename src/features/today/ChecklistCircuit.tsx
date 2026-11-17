@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { MdBlock, MdCheckCircle, MdKeyboardArrowDown, MdRadioButtonUnchecked } from 'react-icons/md'
 import type { PlannedExercise } from '../../config/plan'
 import type { ExerciseLog, SetLog } from '../../types'
-import { circuitRounds, circuitTitle, membersLine, roundsLabel, roundTally } from '../../lib/circuitEntry'
+import { circuitMembers, circuitRounds, circuitTitle, membersLine, roundsLabel, roundTally } from '../../lib/circuitEntry'
+import { sidesAgree } from '../../lib/sidePair'
 import { formatDuration } from '../../lib/estimate'
 import { clockText } from '../../lib/setClock'
 import { toWeight } from '../../lib/weightField'
@@ -26,6 +27,8 @@ type Props = {
   canSkipRound: (round: number) => boolean
   onRoundDone: (round: number, done: boolean) => void
   onEdit: (key: string, round: number, patch: Pick<SetLog, 'weightLbs'> | Pick<SetLog, 'reps'>) => void
+  /** One-arm pairs split into a line per side on the set screen, by leading key. */
+  apart: ReadonlySet<string>
 }
 
 /**
@@ -37,6 +40,10 @@ type Props = {
  * It opens (already open when it's the circuit on screen) into its rounds, each
  * with every station's numbers in it, and a round is struck off, put back or
  * ticked as one: a round is what one tap logs.
+ *
+ * A one-arm pair is one line in a round, as it is one card on the set screen:
+ * what's typed is both sides' number. It's a line a side when the two sides'
+ * sets of the round differ, or when the set screen split them.
  */
 export function ChecklistCircuit({
   stations,
@@ -55,6 +62,7 @@ export function ChecklistCircuit({
   canSkipRound,
   onRoundDone,
   onEdit,
+  apart,
 }: Props) {
   const keys = stations.map((e) => e.key)
   const onScreen = keys.includes(currentStepKey.slice(0, currentStepKey.lastIndexOf(':')))
@@ -159,20 +167,45 @@ export function ChecklistCircuit({
                   </button>
                 </div>
                 {!roundSkipped &&
-                  stations.map((e, i) => {
-                    const set = roundSets[i]
-                    if (!set) return null
-                    return (
-                      <StationFields
-                        key={e.key}
-                        name={e.name}
-                        exercise={e}
-                        set={set}
-                        round={r}
-                        field={field}
-                        onEdit={(patch) => onEdit(e.key, r, patch)}
-                      />
-                    )
+                  circuitMembers(stations).flatMap((m) => {
+                    const at = m.keys.map((k) => roundSets[keys.indexOf(k)])
+                    const [a, b] = at
+                    const one =
+                      m.keys.length === 2 &&
+                      !apart.has(m.keys[0]) &&
+                      sidesAgree(a, b) &&
+                      !!a?.done === !!b?.done &&
+                      !!a?.skipped === !!b?.skipped
+                    if (one && a) {
+                      return [
+                        <StationFields
+                          key={m.keys[0]}
+                          name={m.name}
+                          exercise={m.stations[0]}
+                          set={a}
+                          round={r}
+                          field={field}
+                          onEdit={(patch) => {
+                            for (const k of m.keys) onEdit(k, r, patch)
+                          }}
+                        />,
+                      ]
+                    }
+                    return m.stations.map((e, i) => {
+                      const set = at[i]
+                      if (!set) return null
+                      return (
+                        <StationFields
+                          key={e.key}
+                          name={e.name}
+                          exercise={e}
+                          set={set}
+                          round={r}
+                          field={field}
+                          onEdit={(patch) => onEdit(e.key, r, patch)}
+                        />
+                      )
+                    })
                   })}
               </div>
             )

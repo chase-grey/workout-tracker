@@ -94,3 +94,97 @@ export function mirrorSidedEdit<T extends ExerciseLog>(params: {
   })
   return changed ? out : logs
 }
+
+/**
+ * Whether the two sides' sets read the same numbers — the condition for showing
+ * them as one entry. A missing set agrees with nothing.
+ */
+export function sidesAgree(a: SetLog | undefined, b: SetLog | undefined): boolean {
+  return !!a && !!b && (a.weightLbs ?? null) === (b.weightLbs ?? null) && a.reps === b.reps
+}
+
+/**
+ * How the sets on one round screen are entered, card by card.
+ *
+ * Both arms of a one-arm pair are on the screen together when a circuit runs a
+ * round at a time, and they're one dumbbell, one pin and the same reps — so they
+ * take ONE card: a single weight and a single reps field, written to both sides'
+ * sets so each side's history, progression and chart go on reading their own
+ * rows. The card sits at the leading arm's place in the round; the other arm's
+ * place keeps a slim `echo` of it, because which station it follows is the
+ * round's pacing — the raise's arms straddle a tricep station so neither works
+ * twice in a row — and the echo is what says "the other arm now".
+ *
+ * `together(lead, follow)` decides whether a pair is shown as one: the caller's
+ * own "sides differ" choice, and whether the two sets still read alike. Sides
+ * prescribed differently — a weaker arm the progression is holding back (see
+ * progression.nextTargets, which prescribes each side off its own history) —
+ * stay as two cards, the way they were, since that difference is the point of
+ * logging them apart.
+ *
+ * A pair only merges when both its steps are on this screen; a side whose set is
+ * already logged or struck off is just a card.
+ */
+export type RoundCard<S> =
+  | { kind: 'one'; step: S }
+  | { kind: 'pair'; lead: S; follow: S }
+  | { kind: 'echo'; step: S; lead: S }
+
+export function roundCards<S extends { ex: SidedMember }>(
+  steps: readonly S[],
+  together: (lead: S, follow: S) => boolean,
+): RoundCard<S>[] {
+  const members = steps.map((s) => s.ex)
+  const followOf = new Map<S, S>()
+  const leadOf = new Map<S, S>()
+  for (const s of steps) {
+    if (leadOf.has(s) || followOf.has(s)) continue
+    const peer = sidePairPeer(members, s.ex.key)
+    const other = peer == null ? undefined : steps.find((o) => o !== s && o.ex.key === peer)
+    if (!other || !together(s, other)) continue
+    followOf.set(s, other)
+    leadOf.set(other, s)
+  }
+  return steps.map((s): RoundCard<S> => {
+    const follow = followOf.get(s)
+    if (follow) return { kind: 'pair', lead: s, follow }
+    const lead = leadOf.get(s)
+    if (lead) return { kind: 'echo', step: s, lead }
+    return { kind: 'one', step: s }
+  })
+}
+
+/**
+ * A list of per-exercise lines with each pair whose two sides say the same thing
+ * folded into one, under the side-less name — the finish recap's "new baseline:
+ * lateral raise (left)" and "(right)" from one entry made for both. Sides that
+ * differ (`same` false) keep their own lines.
+ */
+export function foldSides<T>(
+  items: readonly T[],
+  nameOf: (item: T) => string,
+  rename: (item: T, name: string) => T,
+  same: (a: T, b: T) => boolean = () => true,
+): T[] {
+  const sideOf = (name: string) => /\s*\((left|right)\)\s*$/i.exec(name)
+  const out: T[] = []
+  const used = new Set<number>()
+  items.forEach((item, i) => {
+    if (used.has(i)) return
+    const m = sideOf(nameOf(item))
+    if (m) {
+      const base = nameOf(item).slice(0, m.index)
+      const want = m[1].toLowerCase() === 'left' ? 'right' : 'left'
+      const j = items.findIndex(
+        (o, k) => k !== i && !used.has(k) && nameOf(o).toLowerCase() === `${base} (${want})`.toLowerCase(),
+      )
+      if (j >= 0 && same(item, items[j])) {
+        used.add(j)
+        out.push(rename(item, base))
+        return
+      }
+    }
+    out.push(item)
+  })
+  return out
+}

@@ -31,7 +31,8 @@ import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
 import { allInPlayDone, landingStep, resumeSkipped, setsInPlay, toSkippedRecord } from '../../lib/skipped'
 import { pairKeys } from '../../lib/pairedSides'
-import { circuitRunKeys, dayEntries, roundTally } from '../../lib/circuitEntry'
+import { circuitRunKeys, dayEntries, roundTally, sidelessName } from '../../lib/circuitEntry'
+import { roundCards, sidePairPeer, sidesAgree } from '../../lib/sidePair'
 import { ChecklistCircuit } from './ChecklistCircuit'
 import {
   bankRest,
@@ -191,6 +192,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // screen whichever station's trend button was pressed.
   const [historyKey, setHistoryKey] = useState<string | null>(null)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
+  // The one-arm pairs split back into a card per side ("sides differ"), by the
+  // key of the side that leads. Only the choice is held here: sides whose numbers
+  // already differ are shown apart without it (see lib/sidePair.roundCards).
+  const [apart, setApart] = useState<ReadonlySet<string>>(() => new Set())
   // The rest the last tap cut short, held so Android back can step into it again
   // (see lib/leftRest), with the set its seconds were running up on the set clock.
   const [leftRest, setLeftRest] = useState<(LeftRest<ActiveRest> & { clockKey: SetKeys | null }) | null>(null)
@@ -623,9 +628,31 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
   // clock starts the wait over instead of logging a half-typed number.
-  const editSet = (patch: Partial<SetLog>, at: SetStep = step) => {
-    controls.updateSet(at.ex.key, at.setIndex, patch)
+  //
+  // `alone` keeps the number on this side only — a side split from its pair.
+  const editSet = (patch: Partial<SetLog>, at: SetStep = step, alone = false) => {
+    controls.updateSet(at.ex.key, at.setIndex, patch, { alone })
     setEdits((n) => n + 1)
+  }
+
+  // A pair shown as one: what's typed is both sides' number for this round.
+  const editPair = (patch: Partial<SetLog>, lead: SetStep, follow: SetStep) => {
+    editSet(patch, lead)
+    editSet(patch, follow)
+  }
+
+  // Whether a pair's two sets are shown as one: not split by hand, and reading
+  // the same numbers (see lib/sidePair.roundCards).
+  const sidesTogether = (lead: SetStep, follow: SetStep) =>
+    !apart.has(lead.ex.key) &&
+    sidesAgree(logFor(lead.ex.key)?.sets[lead.setIndex], logFor(follow.ex.key)?.sets[follow.setIndex])
+
+  const splitSides = (leadKey: string) => setApart(new Set([...apart, leadKey]))
+  // Back to one entry: the other side takes the leading side's numbers.
+  const joinSides = (lead: SetStep, follow: SetStep) => {
+    const set = logFor(lead.ex.key)?.sets[lead.setIndex]
+    if (set) editSet({ weightLbs: set.weightLbs, reps: set.reps }, follow, true)
+    setApart(new Set([...apart].filter((k) => k !== lead.ex.key && k !== follow.ex.key)))
   }
 
   const setExerciseComplete = (key: string, complete: boolean) => {
@@ -1181,8 +1208,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   )
 
   // The weight × reps entry for one set: the set on screen, or one station of a
-  // round, which sits four to a screen and so takes a shorter field.
-  const setFields = (at: SetStep, logged: SetLog, compact = false) => {
+  // round, which sits four to a screen and so takes a shorter field. `edit` is
+  // where a typed number goes — this set, unless the card stands for both sides.
+  const setFields = (
+    at: SetStep,
+    logged: SetLog,
+    compact = false,
+    edit: (patch: Partial<SetLog>) => void = (patch) => editSet(patch, at),
+  ) => {
     const field = `${compact ? 'min-h-[52px] text-2xl' : 'min-h-[64px] text-3xl'} w-full rounded-xl bg-surface-2 px-2 text-center font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-accent`
     return (
       <div className="flex items-end justify-center gap-3">
@@ -1202,7 +1235,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 inputMode={at.ex.stackSetting ? 'numeric' : 'decimal'}
                 placeholder={at.ex.bodyweight ? 'bw' : at.ex.stackSetting ? `1–${at.ex.weightCapLbs}` : 'lbs'}
                 value={logged.weightLbs ?? ''}
-                onChange={(e) => editSet({ weightLbs: toWeight(e.target.value) }, at)}
+                onChange={(e) => edit({ weightLbs: toWeight(e.target.value) })}
                 className={field}
               />
             </label>
@@ -1216,7 +1249,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             inputMode="numeric"
             placeholder="reps"
             value={logged.reps || ''}
-            onChange={(e) => editSet({ reps: Number(e.target.value) || 0 }, at)}
+            onChange={(e) => edit({ reps: Number(e.target.value) || 0 })}
             className={field}
           />
         </label>
@@ -1426,17 +1459,75 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
       {/* A round of the circuit: every station's set on one screen, entered as you
           go and logged together by the one tap that ends the round. */}
+      {/* Both arms of a one-arm pair take one card, written to both sides, at
+          the leading arm's place in the round; the other arm's place keeps a
+          slim echo of it, since where it falls in the round is the pacing (see
+          lib/sidePair.roundCards). "sides differ" splits it back into a card a
+          side for the day they genuinely don't match. */}
       {roundMode && (
         <div className="flex flex-col gap-3">
-          {roundOnScreen.map((s, i) => {
+          {roundCards(roundOnScreen, sidesTogether).map((card) => {
+            if (card.kind === 'echo') {
+              const s = card.step
+              const logged = logFor(s.ex.key)?.sets[s.setIndex]
+              if (!logged) return null
+              return (
+                <div key={s.stepKey} className="flex items-center justify-between gap-2 rounded-2xl bg-surface px-4 py-1 text-neutral-400" {...TAP_SHIELD}>
+                  <h3 className="min-w-0 truncate font-semibold">{s.ex.name}</h3>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="text-sm tabular-nums">
+                      {s.ex.repsOnly || logged.weightLbs == null ? `${logged.reps}` : `${logged.weightLbs} × ${logged.reps}`}
+                    </span>
+                    <button
+                      onClick={() => setHistoryKey(s.ex.key)}
+                      aria-label={`recent sessions for ${s.ex.name}`}
+                      className="flex min-h-[44px] w-11 items-center justify-center rounded-xl active:bg-surface-2"
+                    >
+                      <MdShowChart className="text-2xl" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              )
+            }
+            const s = card.kind === 'pair' ? card.lead : card.step
+            const i = roundOnScreen.indexOf(s)
             const logged = logFor(s.ex.key)?.sets[s.setIndex]
             if (!logged) return null
             const { hint: cue, challenging: stepUp, goal } = roundCues[i] ?? {}
+            // A side shown on its own card while its other side is on this screen
+            // too: the pair was split, so it can be put back together.
+            const peer = card.kind === 'one' ? sidePairPeer(roundOnScreen.map((o) => o.ex), s.ex.key) : null
+            const mate = peer == null ? undefined : roundOnScreen.find((o) => o.ex.key === peer)
+            const leadsMate = !!mate && roundOnScreen.indexOf(mate) > i
+            const edit =
+              card.kind === 'pair'
+                ? (patch: Partial<SetLog>) => editPair(patch, card.lead, card.follow)
+                : mate
+                  ? (patch: Partial<SetLog>) => editSet(patch, s, true)
+                  : undefined
             return (
               <div key={s.stepKey} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 pb-4 pt-1" {...TAP_SHIELD}>
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="min-w-0 truncate font-semibold">{s.ex.name}</h3>
+                  <h3 className="min-w-0 truncate font-semibold">
+                    {card.kind === 'pair' ? `${sidelessName(s.ex.name)} · both sides` : s.ex.name}
+                  </h3>
                   <div className="flex shrink-0 items-center gap-1">
+                    {card.kind === 'pair' && (
+                      <button
+                        onClick={() => splitSides(s.ex.key)}
+                        className="min-h-[44px] rounded-xl px-2 text-xs font-medium text-neutral-400 active:bg-surface-2"
+                      >
+                        sides differ
+                      </button>
+                    )}
+                    {leadsMate && mate && (
+                      <button
+                        onClick={() => joinSides(s, mate)}
+                        className="min-h-[44px] rounded-xl px-2 text-xs font-medium text-neutral-400 active:bg-surface-2"
+                      >
+                        same both sides
+                      </button>
+                    )}
                     {cue && (
                       <span
                         className={`flex items-center gap-1 text-xs font-medium ${
@@ -1472,7 +1563,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                     {goal.weightLbs} × {goal.reps}
                   </p>
                 )}
-                {setFields(s, logged, true)}
+                {setFields(s, logged, true, edit)}
               </div>
             )
           })}
@@ -1684,6 +1775,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                         }
                       }}
                       onEdit={(k, r, patch) => editChecklistSet(k, r, patch)}
+                      apart={apart}
                     />
                   )
                 }

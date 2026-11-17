@@ -3,6 +3,7 @@ import type { WorkoutFinishSummary } from '../store/DataContext'
 import { Confetti } from './Confetti'
 import { SessionTimeCard } from './SessionTimeCard'
 import { currentPalette } from '../lib/themeStore'
+import { foldSides } from '../lib/sidePair'
 
 const GOLDS = ['#fbbf24', '#f59e0b', '#fde68a']
 
@@ -21,7 +22,11 @@ export function WorkoutFinishOverlay({
   summary: WorkoutFinishSummary
   onClose: () => void
 }) {
-  const { prs, baselines, totalSec, activeSec, restSec, projected, goalPace, notes } = summary
+  const { totalSec, activeSec, restSec, projected, goalPace, notes } = summary
+  // Both sides of a one-arm movement entered as one say the same thing, so they
+  // read as one line here too; sides that came out differently keep theirs.
+  const prs = foldSides(summary.prs, (p) => p.exercise, (p, exercise) => ({ ...p, exercise }), (a, b) => a.est1RM === b.est1RM)
+  const baselines = foldSides(summary.baselines, (n) => n, (_, n) => n)
   const hasPRs = prs.length > 0
 
   return (

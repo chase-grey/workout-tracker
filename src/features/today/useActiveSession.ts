@@ -198,8 +198,12 @@ export function useActiveSession() {
   }, [])
 
   const updateSet = useCallback(
-    (exKey: string, index: number, patch: Partial<SetLog>) => {
+    // `alone` writes this set and nothing else: a side whose numbers were split
+    // from its other side's on purpose ("sides differ"), where carrying the number
+    // across is exactly what isn't wanted.
+    (exKey: string, index: number, patch: Partial<SetLog>, opts?: { alone?: boolean }) => {
       mutateExercise(exKey, (sets) => sets.map((s, i) => (i === index ? { ...s, ...patch } : s)))
+      if (opts?.alone) return
       setSession((prev) => {
         if (!prev) return prev
         const exercises = plan[prev.dayType]?.exercises ?? []
