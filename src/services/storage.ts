@@ -268,6 +268,12 @@ export type Settings = {
   /** Single weeks given days of their own, by Monday (see lib/weekCalendar WeekPins). */
   calendarWeeks?: WeekPins
   /**
+   * Whether the schedule is kept in step with a Google calendar (see
+   * lib/calendarSync). The account's, not the phone's: the link to Google is
+   * held by the backend, so any device signed in can run the sync.
+   */
+  gcalSync?: boolean
+  /**
    * Guide mode: labels and explanations the app otherwise leaves out, and the
    * first-run tour (see lib/tour). On for accounts the welcome flow makes,
    * unset (off) for everyone who was here before it. Synced with the account.

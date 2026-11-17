@@ -15,6 +15,7 @@ import { PoseCheck } from './PoseCheck'
 import { AccountSection } from './AccountSection'
 import { ProfileSection } from './ProfileSection'
 import { WeekCalendarSetting } from './WeekCalendarSetting'
+import { CalendarExportSection } from './CalendarExportSection'
 import { PasteCoachSection, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
@@ -461,6 +462,7 @@ export function SettingsTab({
       <ButtonLabels />
 
       <WeekCalendarSetting />
+      <CalendarExportSection />
 
       <AccountSection />
 

@@ -15,6 +15,7 @@ import { UpdateToast } from './components/UpdateToast'
 import { useAppUpdate } from './lib/version'
 import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
+import { CalendarSync } from './features/today/CalendarSync'
 import { ProgressTab } from './features/progress/ProgressTab'
 import { ChatTab } from './features/chat/ChatTab'
 import { SettingsTab } from './features/settings/SettingsTab'
@@ -80,7 +81,12 @@ function Gate() {
   if (cred) return <SignInLanding cred={cred} onDone={() => setCred(undefined)} />
   if (!settings.accountMode) return <WelcomeGate />
   if (needsAccount(settings)) return <AccountGate />
-  return <AppShell />
+  return (
+    <>
+      <CalendarSync />
+      <AppShell />
+    </>
+  )
 }
 
 function AppShell() {

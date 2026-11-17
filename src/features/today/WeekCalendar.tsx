@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { dayOrder } from '../../config/plan'
-import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
-import { calorieGoalOn } from '../../lib/calories'
-import { parseISODate, toISODate, weekStartISO } from '../../lib/dates'
-import { hasPillar, ownerFlavour, PILLARS, type Pillar } from '../../lib/profile'
-import { nextStretchRoutine, otherStretchRoutine } from '../../lib/stretchRotation'
+import { parseISODate, weekStartISO } from '../../lib/dates'
+import type { Pillar } from '../../lib/profile'
 import { pillarColours } from '../../lib/theme'
 import { useTheme } from '../../lib/themeStore'
 import {
@@ -24,6 +20,7 @@ import {
 } from '../../lib/weekCalendar'
 import { CalendarItemSheet } from './CalendarItemSheet'
 import { ScheduleSheet } from './ScheduleSheet'
+import { useCalendarInput } from './useCalendarInput'
 
 type Props = {
   /** The Monday shown. */
@@ -73,59 +70,16 @@ function weekTitle(weekStart: string, today: string): string {
  * picked here and says them once. A day's target shows only as its mark.
  */
 export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plannedCardio, onAction }: Props) {
-  const { workouts, plan, flexEntries, cardioEntries, calorieEntries, settings, updateSettings } = useData()
+  const { settings, updateSettings } = useData()
   const colours = pillarColours(useTheme())
-  const profile = settings.profile
   const kept = settings.weekCalendarView === 'full'
   const [expanded, setExpanded] = useState(kept)
   const [detail, setDetail] = useState<{ day: CalendarDay; item: CalendarItem } | null>(null)
   const [scheduling, setScheduling] = useState(false)
 
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(id)
-  }, [])
-  const today = toISODate(now)
-
-  const pillars = useMemo(() => PILLARS.filter((p) => hasPillar(profile, p)), [profile])
-  const days = useMemo(() => {
-    // The same "up next" Today's buttons show: the owner's focus is head to
-    // toe; anyone else's two routines take turns.
-    const next: FlexRoutineKey = ownerFlavour(profile) ? 'head_to_toe' : nextStretchRoutine(flexEntries)
-    const liftDays = dayOrder(plan).filter((t) => plan[t].exercises.length > 0)
-    return weekCalendar({
-      weekStart,
-      today,
-      pillars,
-      workouts,
-      liftDays,
-      liftLabels: { push: plan.push.label, pull: plan.pull.label, fullbody: plan.fullbody.label },
-      flexEntries,
-      stretchRotation: ownerFlavour(profile) ? [next] : [next, otherStretchRoutine(next)],
-      stretchLabels: { side_split: FLEX_ROUTINES.side_split.label, head_to_toe: FLEX_ROUTINES.head_to_toe.label },
-      cardioEntries,
-      plannedCardio,
-      calorieEntries,
-      calorieGoalOn,
-      dietDirection: profile?.dietDirection ?? 'gain',
-      pins: settings.calendarPins,
-      weekPins: settings.calendarWeeks,
-    })
-  }, [
-    weekStart,
-    today,
-    pillars,
-    workouts,
-    plan,
-    flexEntries,
-    cardioEntries,
-    plannedCardio,
-    calorieEntries,
-    profile,
-    settings.calendarPins,
-    settings.calendarWeeks,
-  ])
+  const input = useCalendarInput()
+  const { today, pillars } = input
+  const days = useMemo(() => weekCalendar({ ...input, weekStart, plannedCardio }), [input, weekStart, plannedCardio])
 
   const furthest = shiftWeek(today, 1)
   const title = weekTitle(weekStart, today)
