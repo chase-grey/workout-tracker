@@ -133,11 +133,14 @@ export const timeXAxis = {
  * axis and trusts its own text measuring to hide the overlaps — which it does
  * not reliably do on a phone. Pass these as `ticks` with `interval={0}` and the
  * axis is simply told what to draw: every point when there are few, every
- * second, third… when there are more, the first always among them.
+ * second, third… when there are more, counted back from the last so the newest
+ * is always among them: that is the point a fresh entry moves, and a week that
+ * arrives without a date under it reads as a chart that did not change.
  */
 export function spacedTicks(ts: number[], max = 6): number[] {
   const stride = Math.ceil(ts.length / max) || 1
-  return ts.filter((_, i) => i % stride === 0)
+  const last = ts.length - 1
+  return ts.filter((_, i) => (last - i) % stride === 0)
 }
 
 /** Days at or above the calorie goal that earn a week a bright mark, and a dim one. */

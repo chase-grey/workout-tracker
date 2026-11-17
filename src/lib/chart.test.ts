@@ -75,8 +75,16 @@ describe('spacedTicks', () => {
     expect(spacedTicks([], 6)).toEqual([])
   })
 
-  it('strides evenly from the first once they would collide', () => {
+  it('strides evenly back from the last once they would collide', () => {
     expect(spacedTicks([1, 2, 3, 4, 5, 6, 7], 6)).toEqual([1, 3, 5, 7])
-    expect(spacedTicks(Array.from({ length: 20 }, (_, i) => i), 6)).toEqual([0, 4, 8, 12, 16])
+    expect(spacedTicks(Array.from({ length: 20 }, (_, i) => i), 6)).toEqual([3, 7, 11, 15, 19])
+  })
+
+  it('labels the newest point however many there are', () => {
+    for (let n = 1; n <= 40; n++) {
+      const ts = Array.from({ length: n }, (_, i) => i)
+      expect(spacedTicks(ts, 6).at(-1)).toBe(n - 1)
+      expect(spacedTicks(ts, 6).length).toBeLessThanOrEqual(6)
+    }
   })
 })
