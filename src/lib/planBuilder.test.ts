@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { GROW_FLOOR_SETS, KEEP_FLOOR_SETS, buildPlan, fitStatus, priceDay } from './planBuilder'
-import { MUSCLES, WORKOUT_MINUTES, type Muscle, type StrengthSetup } from './profile'
+import { DROP_ORDER, GROW_FLOOR_SETS, KEEP_FLOOR_SETS, buildPlan, fitStatus, priceDay } from './planBuilder'
+import { MUSCLES, MUSCLE_LABELS, WORKOUT_MINUTES, type Muscle, type StrengthSetup } from './profile'
 import { DAY_TYPES, PLAN_REVISION, shortExercises, withPlanDefaults, type PlannedExercise } from '../config/plan'
 import { hasShortForm } from './sessionLength'
 import { WORK_PER_SET_SEC } from './estimate'
@@ -10,7 +10,9 @@ const EQUIPMENT = ['gym', 'dumbbells', 'bodyweight'] as const
 const FOCI: Muscle[][] = [
   [],
   ['chest'],
+  ['back'],
   ['glutes', 'quads'],
+  ['arms', 'shoulders'],
   ['chest', 'back', 'shoulders', 'arms', 'glutes'],
   ['calves', 'abs', 'hamstrings'],
   [...MUSCLES],
@@ -127,6 +129,13 @@ describe.each(SETUPS)('buildPlan %o', (setup) => {
     expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
+  it('gives up a pick only after the unpicked muscles have started giving way', () => {
+    const first = DROP_ORDER.find((m) => !setup.focus!.includes(m))
+    if (!build.unfitted.length || !first) return
+    const direct = used(setup).flatMap((t) => plan[t].exercises.map((e) => e.group))
+    expect(direct.some((g) => GROUPS[first].test(g))).toBe(false)
+  })
+
   it('maintains whatever it does not name as unmaintained', () => {
     for (const m of MUSCLES) {
       if (build.fitted.includes(m) || build.unmaintained.includes(m)) continue
@@ -189,10 +198,41 @@ describe('buildPlan', () => {
     const s: StrengthSetup = {
       daysPerWeek: 3,
       equipment: 'gym',
-      minutes: 45,
-      focus: ['glutes', 'quads', 'hamstrings', 'abs', 'calves'],
+      minutes: 30,
+      focus: ['chest', 'back', 'shoulders', 'arms', 'glutes'],
     }
     expect(fitStatus(s)).toMatch(/^fits \d of your 5 focus muscles — add time$/)
+  })
+
+  it('leaves unpicked muscles untrained before it gives up a pick, and says which', () => {
+    for (const equipment of EQUIPMENT) {
+      for (const focus of [['chest'], ['back'], ['glutes', 'quads'], ['chest', 'back'], ['arms', 'shoulders']] as Muscle[][]) {
+        const s: StrengthSetup = { daysPerWeek: 2, equipment, minutes: 30, focus }
+        const b = buildPlan(s)
+        expect(b.fitted).toEqual(focus)
+        expect(b.unmaintained.length).toBeGreaterThan(0)
+        for (const m of b.unmaintained) expect(focus).not.toContain(m)
+        expect(fitStatus(s, b)).toBe(
+          `about ${Math.round(Math.max(...b.daySecs) / 60)} min · ${b.unmaintained.map((m) => MUSCLE_LABELS[m]).join(', ')} untrained`,
+        )
+      }
+    }
+  })
+
+  it('drops the small isolation muscles first', () => {
+    const b = buildPlan({ daysPerWeek: 2, equipment: 'gym', minutes: 30, focus: ['chest'] })
+    expect(b.unmaintained).toEqual(['calves', 'abs'])
+  })
+
+  it('maintains the whole body when nothing is picked', () => {
+    for (const equipment of EQUIPMENT)
+      for (const daysPerWeek of [2, 3] as const)
+        for (const minutes of WORKOUT_MINUTES) {
+          const s: StrengthSetup = { daysPerWeek, equipment, minutes, focus: [] }
+          const b = buildPlan(s)
+          expect(b.unmaintained).toEqual([])
+          expect(fitStatus(s, b)).toMatch(/^about \d+ min a session$/)
+        }
   })
 
   it('suggests nothing when the longest week still will not hold them', () => {

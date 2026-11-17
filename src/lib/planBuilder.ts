@@ -17,12 +17,13 @@
  * Every day is priced the way a session prices itself on day one (see
  * {@link priceDay}) and has to come in at or under the chosen length. When the
  * picks won't fit, the build gives ground in a fixed order — maintenance down
- * to its floor, then the picked muscles' volume down to theirs, then whichever
- * picks still won't fit, later picks first — and says what it gave up
- * ({@link PlanBuild}).
- * Only when nothing is picked and the maintenance floor still won't fit are the
- * days trimmed from the end. It never hands back a day longer than the time it
- * was given.
+ * to its floor, then the picked muscles' volume down to theirs, then the
+ * unpicked muscles' direct work one muscle at a time ({@link DROP_ORDER}), and
+ * only once none is left whichever picks still won't fit, later picks first —
+ * and says what it gave up ({@link PlanBuild}). The muscles someone asked for
+ * outrank the ones they didn't.
+ * Only when even that won't fit are the days trimmed from the end. It never
+ * hands back a day longer than the time it was given.
  *
  * Pure and deterministic: the same answers always build the same plan.
  */
@@ -218,16 +219,41 @@ const SCHEDULE: Muscle[] = ['quads', 'hamstrings', 'chest', 'back', 'shoulders',
 type Level = { grow: number; keep: number }
 
 /**
- * What the build gives up, in order, when the time won't hold it all. The
- * maintenance floor is never among them: a pick is given up before the rest of
- * the body goes untrained, or five leg picks at 45 minutes would build a week
- * with no upper body in it.
+ * What the build gives up first, in order, when the time won't hold it all:
+ * maintenance volume to its floor, then the picks' volume to theirs.
  */
 const LEVELS: Level[] = [
   { grow: GROW_SETS, keep: KEEP_SETS },
   { grow: GROW_SETS, keep: KEEP_FLOOR_SETS },
   { grow: GROW_FLOOR_SETS, keep: KEEP_FLOOR_SETS },
 ]
+const FLOOR = LEVELS[LEVELS.length - 1]
+
+/**
+ * The order unpicked muscles lose their direct work in when even the floors
+ * won't hold the picks: the small isolation-only muscles first, then those the
+ * compounds already half-train (arms from every press and row, glutes from the
+ * squat and hinge), and the big compound movers last. A dropped muscle keeps
+ * whatever credit the remaining compounds give it.
+ */
+export const DROP_ORDER: Muscle[] = ['calves', 'abs', 'arms', 'glutes', 'shoulders', 'hamstrings', 'back', 'chest', 'quads']
+
+/** One way of building the week: how much volume, and which unpicked muscles get no direct work. */
+type Attempt = { level: Level; skip: Muscle[] }
+
+/**
+ * Every attempt, most generous first: each level with the whole body kept,
+ * then — only when there are picks to make room for — the floor with one more
+ * unpicked muscle dropped each time.
+ */
+function attempts(focus: Muscle[]): Attempt[] {
+  const out: Attempt[] = LEVELS.map((level) => ({ level, skip: [] }))
+  if (focus.length) {
+    const spare = DROP_ORDER.filter((m) => !focus.includes(m))
+    for (let k = 1; k <= spare.length; k++) out.push({ level: FLOOR, skip: spare.slice(0, k) })
+  }
+  return out
+}
 
 type Row = { muscle: Muscle; option: Option; sets: number }
 
@@ -236,7 +262,7 @@ export type PlanBuild = {
   /** The picked muscles the plan grows, and the ones the time couldn't hold. */
   fitted: Muscle[]
   unfitted: Muscle[]
-  /** Muscles not picked and left under maintenance volume. */
+  /** Muscles not grown and left under maintenance volume, in {@link DROP_ORDER}. */
   unmaintained: Muscle[]
   /** Weekly hard sets per muscle, compounds' fractional credit included. */
   weekly: Record<Muscle, number>
@@ -314,7 +340,7 @@ function credit(weekly: Record<Muscle, number>, row: Row, sets: number) {
   for (const [m, f] of Object.entries(row.option.credit ?? {})) weekly[m as Muscle] += sets * (f ?? 0)
 }
 
-function draft(setup: StrengthSetup, grow: Muscle[], level: Level): Draft {
+function draft(setup: StrengthSetup, grow: Muscle[], { level, skip }: Attempt): Draft {
   const library = LIBRARY[setup.equipment] ?? LIBRARY.gym
   // Past three days the plan has no more slots to hold: the three come round again.
   const dayCount = Math.min(SLOTS.length, setup.daysPerWeek)
@@ -346,7 +372,7 @@ function draft(setup: StrengthSetup, grow: Muscle[], level: Level): Draft {
       // Every lifting day, so a picked muscle is trained at least twice a week.
       const perDay = Math.min(MAX_SETS_PER_SESSION, Math.max(MIN_SETS_PER_EXPOSURE, Math.ceil(deficit / dayCount)))
       for (let d = 0; d < dayCount; d++) add(muscle, d, perDay)
-    } else if (deficit > 0) {
+    } else if (deficit > 0 && !skip.includes(muscle)) {
       const exposures = deficit >= 2 * MIN_SETS_PER_EXPOSURE ? Math.min(2, dayCount) : 1
       const perDay = Math.max(MIN_SETS_PER_EXPOSURE, Math.ceil(deficit / exposures))
       // On the lightest days, so the week stays even.
@@ -445,24 +471,26 @@ function focusOf(setup: StrengthSetup): Muscle[] {
 /**
  * The plan for `setup` and an honest account of it.
  *
- * At each of the {@link LEVELS}, from the most generous down, the picks are
+ * At each of the {@link attempts}, from the most generous down, the picks are
  * taken in the order they were made and each one kept if the days still fit
  * with it, so a pick that won't fit doesn't cost the cheaper ones after it.
- * Whichever level keeps the most picks wins, the more generous one on a tie.
- * If even the maintenance floor with no picks won't fit, the days are trimmed
- * from the end until they do.
+ * The first attempt to keep every pick wins; failing that, whichever keeps the
+ * most, the more generous one on a tie — so an unpicked muscle is dropped only
+ * when that buys a pick. If even the leanest attempt with no picks won't fit,
+ * the days are trimmed from the end until they do.
  */
 export function buildPlan(setup: StrengthSetup): PlanBuild {
   const budgetSec = (setup.minutes ?? DEFAULT_MINUTES) * 60
   const focus = focusOf(setup)
+  const tries = attempts(focus)
   let chosen: Draft | null = null
   let fitted: Muscle[] = []
-  for (const level of LEVELS) {
+  for (const attempt of tries) {
     let kept: Muscle[] = []
-    let best = draft(setup, kept, level)
+    let best = draft(setup, kept, attempt)
     if (!fits(best, budgetSec)) continue
     for (const m of focus) {
-      const d = draft(setup, [...kept, m], level)
+      const d = draft(setup, [...kept, m], attempt)
       if (fits(d, budgetSec)) {
         kept = [...kept, m]
         best = d
@@ -475,7 +503,7 @@ export function buildPlan(setup: StrengthSetup): PlanBuild {
     if (kept.length === focus.length) break
   }
   if (!chosen) {
-    chosen = draft(setup, [], LEVELS[LEVELS.length - 1])
+    chosen = draft(setup, [], tries[tries.length - 1])
     trimToFit(chosen.days, chosen.weekly, budgetSec)
   }
   const weekly = Object.fromEntries(
@@ -486,7 +514,7 @@ export function buildPlan(setup: StrengthSetup): PlanBuild {
     plan,
     fitted,
     unfitted: focus.filter((m) => !fitted.includes(m)),
-    unmaintained: MUSCLES.filter((m) => !fitted.includes(m) && weekly[m] < KEEP_FLOOR_SETS),
+    unmaintained: DROP_ORDER.filter((m) => !fitted.includes(m) && weekly[m] < KEEP_FLOOR_SETS),
     weekly,
     daySecs: SLOTS.slice(0, Math.min(SLOTS.length, setup.daysPerWeek)).map((t) => priceDay(plan[t].exercises)),
     budgetSec,
@@ -499,24 +527,22 @@ function better(a: PlanBuild, b: PlanBuild): boolean {
 }
 
 /**
- * The one-line status the plan questions show: how long a session runs when it
- * all fits, and otherwise what doesn't, with the change that would help — a
- * third day, a longer workout, or both. Picking fewer muscles always helps, and
- * goes unsaid.
+ * The one-line status the plan questions show. When every pick fits it's how
+ * long a session runs, and which unpicked muscles, if any, the time left with
+ * no work. When a pick itself doesn't fit it's how many do, with the change
+ * that would help — a third day, a longer workout, or both. Picking fewer
+ * muscles always helps, and goes unsaid.
  */
 export function fitStatus(setup: StrengthSetup, build: PlanBuild = buildPlan(setup)): string {
   const focus = focusOf(setup)
-  const short = build.unfitted.length > 0 || build.unmaintained.length > 0
-  if (!short) {
-    const longest = Math.max(0, ...build.daySecs)
-    return `about ${Math.round(longest / 60)} min a session`
+  if (build.unfitted.length === 0) {
+    const minutes = `about ${Math.round(Math.max(0, ...build.daySecs) / 60)} min`
+    if (build.unmaintained.length === 0) return `${minutes} a session`
+    return `${minutes} · ${build.unmaintained.map((m) => MUSCLE_LABELS[m]).join(', ')} untrained`
   }
   const moreDays = setup.daysPerWeek < 3 && better(build, buildPlan({ ...setup, daysPerWeek: 3 }))
   const longer = WORKOUT_MINUTES.find((m) => m > (setup.minutes ?? DEFAULT_MINUTES))
   const moreTime = longer != null && better(build, buildPlan({ ...setup, minutes: longer }))
   const help = moreDays && moreTime ? ' — add a day or time' : moreDays ? ' — add a day' : moreTime ? ' — add time' : ''
-  if (build.unfitted.length > 0) {
-    return `fits ${build.fitted.length} of your ${focus.length} focus muscles${help}`
-  }
-  return `no time left for ${build.unmaintained.map((m) => MUSCLE_LABELS[m]).join(', ')}${help}`
+  return `fits ${build.fitted.length} of your ${focus.length} focus muscles${help}`
 }
