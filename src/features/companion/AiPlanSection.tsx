@@ -12,24 +12,28 @@ export const pastesToAi = (s: Settings) => Boolean(s.coachPaste) && !s.coachEnab
 /**
  * The way into the copy-paste companion, and the undo for its last change while
  * that is still open (see lib/companion/undo). `primary` dresses the open
- * button as the section's main action.
+ * button as the section's main action. The undo shows without the strength
+ * pillar too, since the change may have been to the cardio plan.
  */
 export function AiPlanButtons({ primary }: { primary?: boolean }) {
   const { settings } = useData()
   const { last, undo } = useCompanion()
   const [open, setOpen] = useState(false)
-  if (!hasPillar(settings.profile, 'strength')) return null
+  const lifts = hasPillar(settings.profile, 'strength')
+  if (!lifts && !last) return null
   const when = last
     ? new Date(last.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : null
   return (
     <>
-      <PressButton
-        onPress={() => setOpen(true)}
-        className={primary ? 'min-h-[44px] rounded-xl bg-accent font-semibold text-on-accent active:opacity-80' : SETTINGS_BUTTON}
-      >
-        edit plan with your AI
-      </PressButton>
+      {lifts && (
+        <PressButton
+          onPress={() => setOpen(true)}
+          className={primary ? 'min-h-[44px] rounded-xl bg-accent font-semibold text-on-accent active:opacity-80' : SETTINGS_BUTTON}
+        >
+          edit plan with your AI
+        </PressButton>
+      )}
       {last && (
         <PressButton onPress={undo} className={`${SETTINGS_BUTTON} text-neutral-300`}>
           undo AI change · {when}
@@ -47,7 +51,9 @@ export function AiPlanButtons({ primary }: { primary?: boolean }) {
  */
 export function AiPlanSection() {
   const { settings } = useData()
-  if (!hasPillar(settings.profile, 'strength') || pastesToAi(settings)) return null
+  const { last } = useCompanion()
+  if (pastesToAi(settings)) return null
+  if (!hasPillar(settings.profile, 'strength') && !last) return null
   return (
     <section className="flex flex-col gap-2">
       <AiPlanButtons />

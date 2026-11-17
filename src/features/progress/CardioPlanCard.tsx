@@ -28,6 +28,7 @@ import { CHART_SURFACE, CHART_SURFACE_2, LINE_GOAL, LINE_PRIMARY, fmtTick, niceS
 import { parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import { usePressAction } from '../../lib/usePressAction'
 import { CardioGoalSheet } from '../today/CardioGoalSheet'
+import { LiveCompanion } from '../companion/CompanionFlow'
 import { goalLineMarks } from './goalLineMarks'
 
 const axisTick = { fill: '#737373', fontSize: 11 }
@@ -51,10 +52,12 @@ function checkpointValue(c: CardioCheckpoint, plan: CardioPlan): number | null {
  * strength goal is, the plan dashed in the goal colour like a committed curve
  * and the log solid over it. Below it, this week's sessions, the checkpoints
  * (editable), and the plan's own controls. With no plan, the way to set one.
+ * Either way the copy-paste companion, opened on cardio, is a press away.
  */
 export function CardioPlanCard() {
   const { settings, cardioEntries, updateSettings } = useData()
   const [setting, setSetting] = useState(false)
+  const [withAi, setWithAi] = useState(false)
   const today = toISODate(new Date())
   const plan = planActive(settings.cardioPlan, today) ? settings.cardioPlan : undefined
 
@@ -66,6 +69,7 @@ export function CardioPlanCard() {
           plan={plan}
           today={today}
           onEdit={() => setSetting(true)}
+          onAi={() => setWithAi(true)}
           onChange={(next) => updateSettings({ ...settings, cardioPlan: next })}
           entries={cardioEntries}
         />
@@ -77,7 +81,16 @@ export function CardioPlanCard() {
           set a cardio goal
         </button>
       )}
+      {!plan && (
+        <button
+          onClick={() => setWithAi(true)}
+          className="min-h-[44px] w-full rounded-xl bg-surface text-sm font-semibold text-neutral-300 active:opacity-80"
+        >
+          plan with your AI
+        </button>
+      )}
       {setting && <CardioGoalSheet onClose={() => setSetting(false)} />}
+      {withAi && <LiveCompanion sheet focus="cardio" onClose={() => setWithAi(false)} />}
     </>
   )
 }
@@ -87,12 +100,14 @@ function PlanBlock({
   today,
   entries,
   onEdit,
+  onAi,
   onChange,
 }: {
   plan: CardioPlan
   today: string
   entries: CardioEntry[]
   onEdit: () => void
+  onAi: () => void
   onChange: (plan: CardioPlan) => void
 }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
@@ -182,6 +197,12 @@ function PlanBlock({
         {editing && <AddCheckpoint plan={plan} onAdd={(c) => onChange(addCheckpoint(plan, c))} />}
       </ul>
 
+      <button
+        onClick={onAi}
+        className="min-h-[44px] w-full rounded-xl bg-surface text-sm font-semibold text-neutral-300 active:opacity-80"
+      >
+        edit with your AI
+      </button>
       <div className="flex gap-2">
         <button
           onClick={onEdit}

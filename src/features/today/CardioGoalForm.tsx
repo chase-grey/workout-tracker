@@ -21,6 +21,8 @@ import {
 import { parseISODate, toISODate } from '../../lib/dates'
 import { trainingDates } from '../../lib/session'
 import { currentWeeklyGoals } from '../../lib/weeklyStreak'
+import { hasPillar } from '../../lib/profile'
+import { LiveCompanion } from '../companion/CompanionFlow'
 import { usePressAction } from '../../lib/usePressAction'
 
 const KINDS = CARDIO_KINDS.filter((k) => k !== 'other')
@@ -60,12 +62,15 @@ const round1 = (n: number) => String(Math.round(n * 10) / 10)
  * date works the same way against the suggested one.
  *
  * Just the form, so it can sit in the goal sheet (CardioGoalSheet) or on a
- * page of its own, like the welcome's cardio step.
+ * page of its own, like the welcome's cardio step. Its other way to a plan is
+ * the copy-paste companion opened on cardio, whose reply builds the plan
+ * through the same generator (lib/companion/cardio); `onSaved` follows either.
  */
 export function CardioGoalForm({ onSaved }: { onSaved: () => void }) {
   const { settings, cardioEntries, workouts, updateSettings } = useData()
   const today = toISODate(new Date())
   const existing = planActive(settings.cardioPlan, today) ? settings.cardioPlan : undefined
+  const [withAi, setWithAi] = useState(false)
 
   const [kind, setKind] = useState<string>(existing?.kind ?? 'run')
   const [goalType, setGoalType] = useState<CardioGoalType>(existing?.goal.type ?? 'distance')
@@ -329,6 +334,24 @@ export function CardioGoalForm({ onSaved }: { onSaved: () => void }) {
       >
         {existing ? 'save plan' : 'build plan'}
       </button>
+      {hasPillar(settings.profile, 'cardio') && (
+        <button
+          onClick={() => setWithAi(true)}
+          className="mt-2 min-h-[44px] w-full rounded-2xl bg-surface-2 text-sm font-semibold text-neutral-300 active:opacity-80"
+        >
+          plan with your AI
+        </button>
+      )}
+      {withAi && (
+        <LiveCompanion
+          sheet
+          focus="cardio"
+          onClose={() => setWithAi(false)}
+          onApplied={(next) => {
+            if (next.cardioPlan !== settings.cardioPlan) onSaved()
+          }}
+        />
+      )}
     </div>
   )
 }

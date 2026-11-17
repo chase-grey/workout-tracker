@@ -3,6 +3,7 @@ import type { WorkoutRow } from '../../types'
 import type { Profile } from '../../lib/profile'
 import { copyText } from '../../lib/clipboard'
 import { applyCompanionOps, type CompanionState } from '../../lib/companion/apply'
+import type { CardioContext } from '../../lib/companion/cardio'
 import { companionStatus, parseCompanionReply } from '../../lib/companion/parse'
 import { BOOTSTRAP_LINE, buildCompanionPrompt, buildRepairPrompt } from '../../lib/companion/prompt'
 import { giveCompanionConsent, hasCompanionConsent } from '../../lib/companion/undo'
@@ -21,6 +22,12 @@ const OPENERS = [
 
 type Pending = { kind: 'copy' } | { kind: 'open'; url: string }
 
+/** What the AI is shown, said once before the first copy. */
+const CONSENT = {
+  lifts: 'your plan, recent lifts and body details go to the AI you paste into',
+  cardio: 'your cardio log, cardio plan and body details go to the AI you paste into',
+} as const
+
 /**
  * The copy-paste companion, start to finish: copy a prompt out to any chat AI,
  * paste its reply back, see what it would change, apply it.
@@ -32,6 +39,10 @@ type Pending = { kind: 'copy' } | { kind: 'open'; url: string }
  * the wrong plan — and the fix-up message it offers instead quotes each bad
  * line back to the AI for a whole new block. A reply cut off before END, or
  * one holding questions, applies nothing either.
+ *
+ * With `cardio` the reply may change the cardio plan too, and the prompt says
+ * where the running stands; `focus` 'cardio' makes the prompt about the cardio
+ * plan alone (lib/companion/prompt).
  */
 export function CompanionFlow({
   state,
@@ -39,6 +50,8 @@ export function CompanionFlow({
   profile,
   heightIn,
   workouts,
+  cardio,
+  focus = 'lifts',
   onApply,
 }: {
   state: CompanionState
@@ -46,6 +59,8 @@ export function CompanionFlow({
   profile?: Profile | null
   heightIn?: number
   workouts: WorkoutRow[]
+  cardio?: CardioContext
+  focus?: 'lifts' | 'cardio'
   onApply: (next: CompanionState, summary: string) => void
 }) {
   const [consentAsk, setConsentAsk] = useState<Pending | null>(null)
@@ -65,17 +80,26 @@ export function CompanionFlow({
 
   const prompt = useMemo(
     () =>
-      buildCompanionPrompt({ today, plan: state.plan, profile, heightIn, workouts, weeklyWorkouts: state.weeklyWorkouts }),
-    [today, state, profile, heightIn, workouts],
+      buildCompanionPrompt({
+        today,
+        plan: state.plan,
+        profile,
+        heightIn,
+        workouts,
+        weeklyWorkouts: state.weeklyWorkouts,
+        ...(cardio ? { cardio: { entries: cardio.entries, plan: state.cardioPlan, liftDays: cardio.liftDays } } : {}),
+        focus,
+      }),
+    [today, state, profile, heightIn, workouts, cardio, focus],
   )
   const parse = useMemo(
-    () => parseCompanionReply(reply, { plan: state.plan, canSetWeekly: state.weeklyWorkouts != null }),
-    [reply, state],
+    () => parseCompanionReply(reply, { plan: state.plan, canSetWeekly: state.weeklyWorkouts != null, cardio: !!cardio }),
+    [reply, state, cardio],
   )
   const status = reply.trim() ? companionStatus(parse) : null
   const preview = useMemo(
-    () => (status === 'ready' ? applyCompanionOps(state, parse.ops) : null),
-    [status, state, parse],
+    () => (status === 'ready' ? applyCompanionOps(state, parse.ops, cardio) : null),
+    [status, state, parse, cardio],
   )
   const blocked = status === 'none' || status === 'truncated' || status === 'errors' || (preview?.errors.length ?? 0) > 0
 
@@ -112,7 +136,7 @@ export function CompanionFlow({
     <div className="flex flex-col gap-3">
       {consentAsk ? (
         <div role="alertdialog" aria-label="share with an AI" className="flex flex-col gap-2 rounded-xl bg-surface p-3">
-          <p className="text-sm text-neutral-100">your plan, recent lifts and body details go to the AI you paste into</p>
+          <p className="text-sm text-neutral-100">{CONSENT[focus]}</p>
           <div className="flex gap-2">
             <Press
               onPress={() => {
@@ -217,7 +241,7 @@ export function CompanionFlow({
           <ProposalCard
             title={parse.summary}
             changes={preview.applied}
-            notes={parse.adjusted}
+            notes={[...parse.adjusted, ...preview.notes]}
             status="pending"
             approveLabel="apply changes"
             rejectLabel="discard"
@@ -266,9 +290,21 @@ export function CompanionSheet({
 
 /**
  * The companion wired to the live plan: what the coach tab shows without an
- * API key, and what the Settings sheet opens.
+ * API key, what the Settings sheet opens, and, on cardio, what the cardio goal
+ * form and the plan on Progress open. `onApplied` follows a reply's changes
+ * being saved.
  */
-export function LiveCompanion({ sheet, onClose }: { sheet?: boolean; onClose?: () => void }) {
+export function LiveCompanion({
+  sheet,
+  onClose,
+  focus,
+  onApplied,
+}: {
+  sheet?: boolean
+  onClose?: () => void
+  focus?: 'lifts' | 'cardio'
+  onApplied?: (next: CompanionState) => void
+}) {
   const c = useCompanion()
   const [today] = useState(() => new Date())
   const props = {
@@ -277,7 +313,12 @@ export function LiveCompanion({ sheet, onClose }: { sheet?: boolean; onClose?: (
     profile: c.profile,
     heightIn: c.heightIn,
     workouts: c.workouts,
-    onApply: c.commit,
+    cardio: c.cardio,
+    focus: c.cardio ? focus : 'lifts',
+    onApply: (next: CompanionState, summary: string) => {
+      c.commit(next, summary)
+      onApplied?.(next)
+    },
   }
   return sheet ? <CompanionSheet {...props} onClose={onClose ?? (() => {})} /> : <CompanionFlow {...props} />
 }
