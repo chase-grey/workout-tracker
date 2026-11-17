@@ -3,6 +3,8 @@ import { planFor } from '../../config/planTemplates'
 import { PLAN } from '../../config/plan'
 import type { WorkoutRow } from '../../types'
 import type { Profile } from '../profile'
+import type { CardioEntry } from '../cardio'
+import { buildCardioPlan, MI_5K } from '../cardioPlan'
 import { BOOTSTRAP_LINE, PROMPT_MAX_CHARS, buildCompanionPrompt, buildRepairPrompt } from './prompt'
 import { parseCompanionReply } from './parse'
 
@@ -101,6 +103,77 @@ describe('buildCompanionPrompt', () => {
     const long = buildCompanionPrompt({ ...input, plan: PLAN, profile: null, workouts: many })
     expect(long.length).toBeLessThanOrEqual(PROMPT_MAX_CHARS)
     for (const e of PLAN.pull.exercises) expect(long).toContain(e.key)
+  })
+})
+
+const runs: CardioEntry[] = [
+  { id: 'r1', date: '2026-11-01', kind: 'run', minutes: 18, distanceMi: 1.6 },
+  { id: 'r2', date: '2026-11-08', kind: 'run', minutes: 20, distanceMi: 1.8 },
+  { id: 'r3', date: '2026-11-11', kind: 'walk', minutes: 40 },
+  { id: 'r4', date: '2026-11-15', kind: 'run', minutes: 22, distanceMi: 2 },
+]
+const cardioProfile: Profile = { ...profile, pillars: ['strength', 'cardio'] }
+const withCardio = { ...input, profile: cardioProfile, cardio: { entries: runs, liftDays: [0, 3] } }
+
+describe('cardio in the prompt', () => {
+  it('opened on cardio, is about the cardio plan alone', () => {
+    const text = buildCompanionPrompt({ ...withCardio, focus: 'cardio' })
+    expect(text.length).toBeLessThanOrEqual(PROMPT_MAX_CHARS)
+    expect(text).toMatch(/^You are my running and cardio coach/)
+    expect(text).toContain('Today is 2026-11-16.')
+    expect(text).toContain('CARDIO NOW (run, from my log, last 6 weeks): longest 22 min / 2 mi')
+    expect(text).toContain('CARDIO PLAN: none yet.')
+    expect(text).toContain('I usually lift on mon/thu')
+    expect(text).toContain('cardio goal kind=run|walk')
+    expect(text).toContain('cardio checkpoint')
+    expect(text).toMatch(/at most 10% more a week/)
+    expect(text).not.toContain('lift add')
+    expect(text).not.toContain('PLAN (exercise key')
+  })
+
+  it("carries an example the parser reads as a plan", () => {
+    const text = buildCompanionPrompt({ ...withCardio, focus: 'cardio' })
+    const p = parseCompanionReply(text, { plan, cardio: true })
+    expect(p.errors).toEqual([])
+    expect(p.ops.map((o) => o.op)).toEqual(['summary', 'cardio.goal', 'cardio.level'])
+  })
+
+  it('shows the plan being followed as the coach reads it', () => {
+    const cardioPlan = buildCardioPlan(
+      { kind: 'run', goal: { type: 'distance', distanceMi: MI_5K }, level: { longestMin: 20, longestMi: 1.8, weeklyMin: 40 }, days: [1, 3, 5], targetDate: '2027-02-06' },
+      '2026-11-16',
+    )
+    const text = buildCompanionPrompt({ ...withCardio, cardio: { ...withCardio.cardio, plan: cardioPlan }, focus: 'cardio' })
+    expect(text).toContain('CARDIO PLAN (run 5k):')
+    expect(text).toContain('Goal: run 5k by 2027-02-06')
+    expect(text).toMatch(/This week: tue easy run/)
+  })
+
+  it('rides along with the lift plan, and still fits', () => {
+    const text = buildCompanionPrompt(withCardio)
+    expect(text.length).toBeLessThanOrEqual(PROMPT_MAX_CHARS)
+    expect(text).toContain('lift add day=')
+    expect(text).toContain('CARDIO NOW')
+    expect(text).toContain('cardio goal kind=')
+    expect(text).not.toContain('cardio checkpoint')
+    expect(parseCompanionReply(text, { plan, cardio: true }).errors).toEqual([])
+  })
+
+  it('leaves cardio out without the pillar', () => {
+    expect(buildCompanionPrompt(input)).not.toContain('cardio')
+  })
+
+  it('stays under the cap with a long cardio log', () => {
+    const many: CardioEntry[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `m${i}`,
+      date: `2026-11-${String(1 + (i % 15)).padStart(2, '0')}`,
+      kind: i % 2 ? 'run' : 'bike',
+      minutes: 30 + i,
+      distanceMi: 3 + i / 10,
+    }))
+    const big = { ...withCardio, plan: PLAN, cardio: { entries: many, liftDays: [0, 2, 4] } }
+    expect(buildCompanionPrompt(big).length).toBeLessThanOrEqual(PROMPT_MAX_CHARS)
+    expect(buildCompanionPrompt({ ...big, focus: 'cardio' }).length).toBeLessThanOrEqual(PROMPT_MAX_CHARS)
   })
 })
 

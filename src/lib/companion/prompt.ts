@@ -10,6 +10,15 @@
  * because a plan written before it knows the schedule or the injuries is a plan
  * the user has to send back.
  *
+ * With cardio among the person's pillars it carries cardio too: where the log
+ * says they are, the last four weeks' minutes and latest sessions (the coach's
+ * own renderers, lib/contextPack), the plan being followed (describeCardioPlan,
+ * as the coach reads it) and the cardio ops. Opened on cardio — from the goal
+ * sheet, or the plan on Progress — the prompt is about the cardio plan alone:
+ * a running coach's opening, today's date for `by=`, the lifting days to keep
+ * clear, and the cardio ops without the lift ones, which a free model would
+ * otherwise reach for.
+ *
  * Nothing in it names the person: the consent the sheet asks for covers
  * training and body data going to a third-party AI, and a name adds nothing a
  * plan needs.
@@ -19,7 +28,18 @@
 
 import type { WorkoutRow } from '../../types'
 import { DAY_TYPES, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
-import { bodyFacts, recentTopSets, sessionsByWeek, strengthFacts } from '../contextPack'
+import type { CardioEntry } from '../cardio'
+import {
+  cardioLevelFrom,
+  describeCardioPlan,
+  fmtClock,
+  fmtDistance,
+  goalLabel,
+  planActive,
+  WEEKDAY_NAMES,
+  type CardioPlan,
+} from '../cardioPlan'
+import { bodyFacts, cardioWeeks, recentCardio, recentTopSets, sessionsByWeek, strengthFacts } from '../contextPack'
 import { parseDiscomfort } from '../discomfort'
 import { toISODate } from '../dates'
 import { hasPillar, type Profile } from '../profile'
@@ -37,6 +57,10 @@ export type CompanionPromptInput = {
   workouts: WorkoutRow[]
   /** The weekly workouts goal, or null where a reply can't change it. */
   weeklyWorkouts: number | null
+  /** Cardio, where it's one of the person's pillars: the log, the plan in settings, the weekdays they lift on. */
+  cardio?: { entries: CardioEntry[]; plan?: CardioPlan; liftDays: number[] }
+  /** What the prompt is about: the lift plan (cardio alongside it), or the cardio plan alone. */
+  focus?: 'lifts' | 'cardio'
 }
 
 const unslug = (key: string) => key.replace(/_/g, ' ')
@@ -95,7 +119,62 @@ function historyLines(input: CompanionPromptInput, maxTopSets: number): string[]
   return lines
 }
 
-function formatLines(plan: Plan, weekly: boolean): string[] {
+/** The kind cardio is read for: the plan's, else the most logged lately, else run. */
+function cardioKind(cardio: NonNullable<CompanionPromptInput['cardio']>, today: string): string {
+  if (cardio.plan && planActive(cardio.plan, today)) return cardio.plan.kind
+  const counts = new Map<string, number>()
+  for (const e of cardio.entries) counts.set(e.kind, (counts.get(e.kind) ?? 0) + 1)
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? 'run'
+}
+
+/**
+ * Where the log says cardio is, the weeks' minutes, the latest sessions (as
+ * many as `latest` allows) and the plan being followed.
+ */
+function cardioLines(input: CompanionPromptInput, latest: number): string[] {
+  const cardio = input.cardio!
+  const today = toISODate(input.today)
+  const kind = cardioKind(cardio, today)
+  const active = planActive(cardio.plan, today) ? cardio.plan : undefined
+  const level = cardioLevelFrom(cardio.entries, kind, active?.goal, today)
+  const lines: string[] = []
+  if (!level) lines.push(`CARDIO NOW: no ${kind} logged in the last 6 weeks.`)
+  else {
+    const now = [
+      `longest ${level.longestMin} min${level.longestMi ? ` / ${fmtDistance(level.longestMi)}` : ''}`,
+      `${level.weeklyMin} min a week`,
+      ...(level.paceMinPerMi ? [`easy pace ${fmtClock(level.paceMinPerMi)}/mi`] : []),
+      ...(active && active.goal.type === 'time' && level.timeMin ? [`${fmtDistance(active.goal.distanceMi)} now ~${fmtClock(level.timeMin)}`] : []),
+    ]
+    lines.push(`CARDIO NOW (${kind}, from my log, last 6 weeks): ${now.join(', ')}.`)
+  }
+  const weeks = cardioWeeks(cardio.entries, input.today)
+  if (weeks.some((w) => w.minutes > 0)) {
+    lines.push(`Cardio minutes per week ${weeks.map((w) => w.minutes).join(', ')} (oldest first).`)
+  }
+  const recent = recentCardio(cardio.entries, input.today, latest)
+  if (recent.length) lines.push(`Latest: ${recent.join('; ')}.`)
+  if (active) lines.push(`CARDIO PLAN (${goalLabel(active.kind, active.goal)}):`, ...describeCardioPlan(active, cardio.entries, today))
+  else lines.push('CARDIO PLAN: none yet.')
+  return lines
+}
+
+/** The cardio ops, for a prompt about lifts (`full` false: the main ones) or about cardio. */
+function cardioFormatLines(full: boolean): string[] {
+  const [lo, hi] = LIMITS.cardioDays
+  return [
+    'cardio goal kind=run|walk|hike|bike|swim|row dist=5k|10k|half|marathon|<N>mi [time=MM:SS] [days=tue,thu,sat] [by=YYYY-MM-DD]   (or min=<minutes a week> instead of dist)',
+    'cardio level [longest=MIN] [longestmi=MI] [weekly=MIN] [pace=MM:SS per mi] [now=MM:SS at the goal distance]   (only where my answers differ from my log)',
+    'cardio days tue,thu,sat',
+    'cardio date YYYY-MM-DD',
+    ...(full ? ['cardio checkpoint dist=2mi | min=25 | dist=5k time=30:00 | week=90'] : []),
+    'cardio replan   (rebuild the weeks ahead from my log)',
+    'cardio end',
+    `The app builds every session itself: ${lo}-${hi} days, at most 10% more a week, every 4th week lighter, a taper. A date sooner than that allows is moved later.`,
+  ]
+}
+
+function formatLines(plan: Plan, weekly: boolean, cardio: boolean): string[] {
   const days = DAY_TYPES.filter((d) => (plan[d]?.exercises.length ?? 0) > 0)
   const first = plan[days[0]]?.exercises[0]
   const exampleKey = first?.key ?? 'flat_bench'
@@ -109,6 +188,7 @@ function formatLines(plan: Plan, weekly: boolean): string[] {
     'lift move day=<day> ex=<key> before=<key> | after=<key> | to=<position, 1 is first>',
     ...(weekly ? ['weekly workouts=N'] : []),
     `Days: ${days.join(', ')}. Use the exact keys above. Limits: sets ${LIMITS.sets.join('-')}, reps ${LIMITS.reps.join('-')}, rest ${LIMITS.restSec.join('-')}s. To swap an exercise, remove it and add the new one.`,
+    ...(cardio ? cardioFormatLines(false) : []),
     'Example:',
     '```wt',
     `WT v${COMPANION_VERSION}`,
@@ -120,12 +200,49 @@ function formatLines(plan: Plan, weekly: boolean): string[] {
   ]
 }
 
+/** The prompt about the cardio plan alone. Fitted by giving up the latest sessions, oldest first. */
+function buildCardioPrompt(input: CompanionPromptInput): string {
+  const cardio = input.cardio!
+  const liftDays = cardio.liftDays.length ? cardio.liftDays.map((d) => WEEKDAY_NAMES[d]).join('/') : null
+  const write = (latest: number) =>
+    [
+      'You are my running and cardio coach, helping me set a cardio goal in my workout tracker app. The app builds the week-by-week plan from the goal, days, date and where I am now; you choose those.',
+      'First ask me up to 4 short questions, all in one message, then wait for my answers.',
+      'After I answer, reply with a short explanation and ONE code block in exactly the format below. Nothing after END.',
+      '',
+      `Today is ${toISODate(input.today)}.`,
+      meLine(input),
+      ...cardioLines(input, latest),
+      ...(liftDays ? [`I usually lift on ${liftDays}; keep the long session off those days if you can.`] : []),
+      '',
+      `FORMAT (WT v${COMPANION_VERSION}). One op per line, key=value fields:`,
+      'summary: <one sentence on the goal and why>   (required)',
+      'ask: <question>   (only if you still need an answer)',
+      ...cardioFormatLines(true),
+      'Example:',
+      '```wt',
+      `WT v${COMPANION_VERSION}`,
+      'summary: a first 5k, three runs a week around lifting',
+      'cardio goal kind=run dist=5k days=tue,thu,sat',
+      'cardio level longest=20 weekly=60',
+      'END',
+      '```',
+    ].join('\n')
+  for (let latest = 6; latest >= 0; latest -= 2) {
+    const text = write(latest)
+    if (text.length <= PROMPT_MAX_CHARS) return text
+  }
+  return write(0)
+}
+
 /**
  * The prompt to paste into a chat AI. Fitted under {@link PROMPT_MAX_CHARS} by
  * giving up, in order, the tail of the top-set list, then the exercise names
- * (the keys stay — a reply can't be read without them).
+ * (the keys stay — a reply can't be read without them), then the latest
+ * cardio sessions.
  */
 export function buildCompanionPrompt(input: CompanionPromptInput): string {
+  if (input.focus === 'cardio' && input.cardio) return buildCardioPrompt(input)
   const head = [
     'You are my strength coach, helping me change my lifting plan in my workout tracker app.',
     'First ask me up to 4 short questions, all in one message, then wait for my answers.',
@@ -133,23 +250,26 @@ export function buildCompanionPrompt(input: CompanionPromptInput): string {
     '',
     meLine(input),
   ]
-  const write = (withNames: boolean, maxTopSets: number) =>
+  const cardio = !!input.cardio
+  const write = (withNames: boolean, maxTopSets: number, latestCardio: number) =>
     [
       ...head,
+      ...(cardio ? [`Today is ${toISODate(input.today)}.`] : []),
       'PLAN (exercise key, name, sets x reps, rest):',
       ...planLines(input.plan, withNames),
       ...historyLines(input, maxTopSets),
+      ...(cardio ? cardioLines(input, latestCardio) : []),
       '',
-      ...formatLines(input.plan, input.weeklyWorkouts != null),
+      ...formatLines(input.plan, input.weeklyWorkouts != null, cardio),
     ].join('\n')
 
   for (const withNames of [true, false]) {
     for (let tops = 12; tops >= 0; tops -= 4) {
-      const text = write(withNames, tops)
+      const text = write(withNames, tops, 3)
       if (text.length <= PROMPT_MAX_CHARS) return text
     }
   }
-  return write(false, 0)
+  return write(false, 0, 0)
 }
 
 /** The one line sent in an "open ChatGPT" link, where the full prompt won't fit in a URL. */

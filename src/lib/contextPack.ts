@@ -8,6 +8,7 @@
  */
 
 import type { WorkoutRow } from '../types'
+import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
 import { parseISODate, toISODate, weekStartISO } from './dates'
 import { ACTIVITY_LABELS, EQUIPMENT_LABELS, SEX_LABELS, ageOf, type Profile, type StrengthSetup } from './profile'
 
@@ -55,6 +56,32 @@ export function recentTopSets(workouts: WorkoutRow[], today: Date, days = 28): T
     if (heavier) latest.set(w.exercise, { exercise: w.exercise, date: w.date, weightLbs: w.weight_lbs, reps: w.reps })
   }
   return [...latest.values()].sort((a, b) => b.date.localeCompare(a.date) || a.exercise.localeCompare(b.exercise))
+}
+
+/** Cardio minutes in each of the last `weeks` Monday weeks, this one included, oldest first. */
+export function cardioWeeks(entries: CardioEntry[], today: Date, weeks = 4): { week: string; minutes: number }[] {
+  const thisWeek = weekStartISO(toISODate(today))
+  const minutes = cardioMinutesByWeek(entries)
+  const out: { week: string; minutes: number }[] = []
+  for (let i = weeks - 1; i >= 0; i--) {
+    const monday = parseISODate(thisWeek)
+    monday.setDate(monday.getDate() - 7 * i)
+    const week = toISODate(monday)
+    out.push({ week, minutes: Math.round(minutes.get(week) ?? 0) })
+  }
+  return out
+}
+
+/** The latest `n` cardio sessions since three weeks before this one, newest first: "2026-11-15: run, 20 min · 1.8 mi". */
+export function recentCardio(entries: CardioEntry[], today: Date, n = 6): string[] {
+  const cutoff = parseISODate(weekStartISO(toISODate(today)))
+  cutoff.setDate(cutoff.getDate() - 21)
+  const from = toISODate(cutoff)
+  return entries
+    .filter((e) => e.date >= from)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, n)
+    .map((e) => `${e.date}: ${e.kind}, ${cardioSummary(e)}`)
 }
 
 /** Workouts (distinct sessions) in each of the last `weeks` Monday weeks, oldest first. */

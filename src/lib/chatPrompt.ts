@@ -1,11 +1,11 @@
 import type { BodyWeightEntry, DayType, StreakState, WorkoutRow } from '../types'
 import { DAY_TYPES, DUMBBELL_MAX_LBS, exerciseName, repRangeLabel, type Plan } from '../config/plan'
 import { planFor } from '../config/planTemplates'
-import { toISODate, parseISODate, weekStartISO } from './dates'
+import { toISODate, parseISODate } from './dates'
 import { parseDiscomfort } from './discomfort'
 import { calorieGoalOn } from './calories'
 import { currentWeeklyGoals } from './weeklyStreak'
-import { bodyFacts, strengthFacts } from './contextPack'
+import { bodyFacts, cardioWeeks, recentCardio, strengthFacts } from './contextPack'
 import {
   DIET_LABELS,
   hasPillar,
@@ -14,7 +14,7 @@ import {
   weighsIn,
   type Profile,
 } from './profile'
-import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
+import type { CardioEntry } from './cardio'
 import { circuitRounds, circuitTitle, dayEntries, roundsLabel } from './circuitEntry'
 import { describeCardioPlan, planActive, type CardioPlan } from './cardioPlan'
 
@@ -316,22 +316,8 @@ function goalParts(today: Date): string[] {
 
 /** Per-week minutes for the last four weeks, then the last few sessions. */
 function renderCardio(entries: CardioEntry[], today: Date): string[] {
-  const thisWeek = weekStartISO(toISODate(today))
-  const minutes = cardioMinutesByWeek(entries)
-  const lines: string[] = []
-  for (let i = 3; i >= 0; i--) {
-    const monday = parseISODate(thisWeek)
-    monday.setDate(monday.getDate() - 7 * i)
-    const key = toISODate(monday)
-    lines.push(`week of ${key}: ${Math.round(minutes.get(key) ?? 0)} min`)
-  }
-  const cutoff = parseISODate(thisWeek)
-  cutoff.setDate(cutoff.getDate() - 21)
-  const recent = entries
-    .filter((e) => parseISODate(e.date) >= cutoff)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 6)
-    .map((e) => `${e.date}: ${e.kind}, ${cardioSummary(e)}`)
+  const lines = cardioWeeks(entries, today).map((w) => `week of ${w.week}: ${w.minutes} min`)
+  const recent = recentCardio(entries, today)
   return recent.length > 0 ? [...lines, 'Latest sessions:', ...recent] : lines
 }
 
