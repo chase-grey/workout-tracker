@@ -1,5 +1,6 @@
-import { MdClose, MdInstallMobile, MdIosShare } from 'react-icons/md'
+import { MdClose, MdInstallMobile } from 'react-icons/md'
 import { useInstallPrompt } from '../lib/useInstallPrompt'
+import { InstallSteps } from './InstallSteps'
 
 /** Offers installing the app to the home screen, until it's installed or waved off. */
 export function InstallBanner() {
@@ -16,10 +17,7 @@ export function InstallBanner() {
           install app
         </button>
       ) : (
-        <p className="flex flex-1 items-center justify-center gap-1.5 text-sm text-neutral-300">
-          <MdIosShare className="text-lg" aria-label="Share" />
-          <span>→ Add to Home Screen</span>
-        </p>
+        <InstallSteps compact />
       )}
       <button
         onClick={dismiss}

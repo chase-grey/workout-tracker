@@ -32,3 +32,33 @@ export function isIOS(userAgent: string, maxTouchPoints: number): boolean {
   if (/iPhone|iPad|iPod/.test(userAgent)) return true
   return /Macintosh/.test(userAgent) && maxTouchPoints > 1
 }
+
+/** Where Safari's share button sits: the bottom bar, or the top right corner. */
+export type ShareSpot = 'bottom' | 'top' | 'both'
+
+/**
+ * Where the share button is on this iOS browser. An iPad's bar is at the top
+ * for both Safari and Chrome; an iPhone's Safari is at the bottom, and Chrome
+ * there puts it top right. Anything else (Firefox, Edge, a web view) isn't
+ * known, so both places are named.
+ */
+export function iosShareSpot(userAgent: string, maxTouchPoints: number): ShareSpot {
+  const ipad = /iPad/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1)
+  if (ipad) return 'top'
+  if (/CriOS/.test(userAgent)) return 'top'
+  if (/FxiOS|EdgiOS|OPiOS/.test(userAgent)) return 'both'
+  if (/Safari\//.test(userAgent)) return 'bottom'
+  return 'both'
+}
+
+/**
+ * Whether this is an iOS app's own web view (Instagram, Facebook, Gmail and the
+ * like) rather than a browser. Those have no Add to Home Screen, so the page has
+ * to be opened in Safari first.
+ */
+export function isIosInAppBrowser(userAgent: string, maxTouchPoints: number): boolean {
+  if (!isIOS(userAgent, maxTouchPoints)) return false
+  return /FBAN|FBAV|Instagram|Messenger|\bLine\/|GSA\/|Twitter|Snapchat|LinkedInApp|Pinterest|BytedanceWebview|musical_ly/.test(
+    userAgent,
+  )
+}

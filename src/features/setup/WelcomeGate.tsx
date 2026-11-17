@@ -11,6 +11,7 @@ import { stashResumeTab } from '../../lib/resumeTab'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
 import { credentialFromText } from '../../lib/signInLink'
 import { useSignIn } from './SignInLanding'
+import { InstallSteps } from '../../components/InstallSteps'
 
 /** The plan a new account starts on when it didn't set strength up for itself. */
 const DEFAULT_STRENGTH: StrengthSetup = { daysPerWeek: 3, equipment: 'gym' }
@@ -118,11 +119,7 @@ export function WelcomeGate() {
       <div className="app-shell overflow-y-auto">
         <div className={`flex min-h-full flex-col bg-bg ${SHELL_WIDTH} w-full ${SHELL_PAD_X} ${SHELL_PAD_TOP}`}>
           <h1 className="mb-6 mt-2 text-2xl font-bold">install first</h1>
-          <ol className="flex flex-1 list-decimal flex-col gap-3 pl-5 text-base text-neutral-300">
-            <li>tap share</li>
-            <li>add to home screen</li>
-            <li>open workout tracker from the home screen</li>
-          </ol>
+          <InstallSteps />
           <button
             type="button"
             onClick={() => setInstallFirst(false)}
