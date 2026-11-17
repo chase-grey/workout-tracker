@@ -356,3 +356,16 @@ describe('withWorkoutGoal', () => {
     expect(derive(withWorkoutGoal(filled(), 9, NOW), NOW).goals.workouts).toBe(7)
   })
 })
+
+describe('the cardio goal section', () => {
+  it('shows right after the strength plan when cardio is tracked, and never blocks the form', () => {
+    const f = filled({ pillars: ['strength', 'cardio'] })
+    const shown = visibleSections(f, { account: true })
+    expect(shown.indexOf('cardio')).toBe(shown.indexOf('strength') + 1)
+    expect(invalidSections(f, { account: true })).not.toContain('cardio')
+  })
+
+  it('stays away without the cardio pillar', () => {
+    expect(visibleSections(filled({ pillars: ['strength'] }), { account: true })).not.toContain('cardio')
+  })
+})

@@ -40,6 +40,7 @@ export type SectionId =
   | 'track'
   | 'about'
   | 'strength'
+  | 'cardio'
   | 'diet'
   | 'goals'
   | 'schedule'
@@ -52,6 +53,7 @@ export const SECTION_ORDER: SectionId[] = [
   'track',
   'about',
   'strength',
+  'cardio',
   'diet',
   'goals',
   'schedule',
@@ -318,6 +320,7 @@ export function toggleScheduleDay(
 export function visibleSections(f: FormState, opts: { account: boolean; coach?: boolean }): SectionId[] {
   return SECTION_ORDER.filter((s) => {
     if (s === 'strength') return f.pillars.includes('strength')
+    if (s === 'cardio') return f.pillars.includes('cardio')
     if (s === 'diet') return f.pillars.includes('diet')
     if (s === 'goals') return f.pillars.length > 0
     if (s === 'schedule') return PINNABLE.some((p) => f.pillars.includes(p))
@@ -355,6 +358,7 @@ export function invalidSections(
     track: f.pillars.length > 0,
     about: aboutOk,
     strength: true,
+    cardio: true,
     diet: dietOk,
     goals: true,
     schedule: true,

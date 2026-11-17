@@ -24,6 +24,7 @@ import { buildPlan, fitStatus } from '../../lib/planBuilder'
 import { planFor } from '../../config/planTemplates'
 import type { Plan } from '../../config/plan'
 import { CompanionSheet } from '../companion/CompanionFlow'
+import { CardioGoalForm } from '../today/CardioGoalForm'
 import { PROVIDERS, providerOf, type ProviderId } from '../../lib/aiProvider'
 import { ACCENTS, MODES, palette } from '../../lib/theme'
 import { setTheme, useTheme } from '../../lib/themeStore'
@@ -207,6 +208,7 @@ const SECTION_TITLES: Record<SectionId, string> = {
   track: 'what to track',
   about: 'about you',
   strength: 'strength plan',
+  cardio: 'cardio goal',
   diet: 'diet',
   goals: 'weekly goals',
   schedule: 'your week',
@@ -744,6 +746,8 @@ function SetupForm({
                 )}
               </>
             )}
+
+            {id === 'cardio' && <CardioGoalForm onSaved={() => {}} daysPerWeek={d.goals.cardio || undefined} />}
 
             {id === 'diet' && (
               <>

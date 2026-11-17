@@ -65,7 +65,8 @@ const round1 = (n: number) => String(Math.round(n * 10) / 10)
  * the copy-paste companion opened on cardio, whose reply builds the plan
  * through the same generator (lib/companion/cardio); `onSaved` follows either.
  */
-export function CardioGoalForm({ onSaved }: { onSaved: () => void }) {
+/** `daysPerWeek` seeds a new plan's day count where the weekly goals aren't saved yet (the welcome page). */
+export function CardioGoalForm({ onSaved, daysPerWeek }: { onSaved: () => void; daysPerWeek?: number }) {
   const { settings, cardioEntries, workouts, updateSettings } = useData()
   const today = toISODate(new Date())
   const existing = planActive(settings.cardioPlan, today) ? settings.cardioPlan : undefined
@@ -84,7 +85,7 @@ export function CardioGoalForm({ onSaved }: { onSaved: () => void }) {
 
   const liftDays = useMemo(() => liftingWeekdays(trainingDates(workouts), today), [workouts, today])
   const [days, setDays] = useState<number[]>(
-    () => existing?.days ?? startingCardioDays(currentWeeklyGoals().cardio, liftDays),
+    () => existing?.days ?? startingCardioDays(daysPerWeek ?? currentWeeklyGoals().cardio, liftDays),
   )
 
   // Fields left untouched show the log's reading; typing over one keeps what was typed.
