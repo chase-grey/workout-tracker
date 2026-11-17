@@ -21,6 +21,7 @@ import { recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
 import { PressButton, SETTINGS_BUTTON, SETTINGS_FIELD, SETTINGS_LABEL } from './PressButton'
 import { PlanSetupSection } from './PlanSetupSection'
+import { AiPlanSection } from '../companion/AiPlanSection'
 
 const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[] = [
   { pillar: 'strength', key: 'workouts', label: 'workouts' },
@@ -44,6 +45,7 @@ export function ProfileSection() {
     <>
       <TrackingSection />
       <PlanSetupSection />
+      <AiPlanSection />
     </>
   )
 }

@@ -84,8 +84,14 @@ type UpdateState = {
   /** A check is in flight from the Settings button. */
   checking: boolean
   /** The one-line answer to show, keyed so the same text twice re-shows. */
-  toast: { id: number; text: string } | null
+  toast: Toast | null
 }
+
+/**
+ * A toast, and optionally the one thing it lets you do about what it reports
+ * ("undo" after an AI's plan change). Only a toast with an action takes taps.
+ */
+export type Toast = { id: number; text: string; action?: { label: string; run: () => void } }
 
 let state: UpdateState = { ready: false, checking: false, toast: null }
 const listeners = new Set<() => void>()
@@ -94,8 +100,8 @@ function set(patch: Partial<UpdateState>) {
   listeners.forEach((l) => l())
 }
 let toastId = 0
-export function showUpdateToast(text: string) {
-  set({ toast: { id: ++toastId, text } })
+export function showUpdateToast(text: string, action?: Toast['action']) {
+  set({ toast: { id: ++toastId, text, ...(action ? { action } : {}) } })
 }
 export function dismissUpdateToast(id: number) {
   if (state.toast?.id === id) set({ toast: null })

@@ -34,9 +34,10 @@ import {
   FLEX_ROUTINE_KEYS,
   type FlexRoutineKey,
 } from '../../config/flexRoutines'
-import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
+import { MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
 import { Markdown } from './Markdown'
 import { ProposalCard, type ProposalStatus } from '../../components/ProposalCard'
+import { LiveCompanion } from '../companion/CompanionFlow'
 
 /**
  * A change the coach wants to make, held until the user says yes.
@@ -764,11 +765,12 @@ export function ChatTab({
     }
   }
 
+  // Without a key the coach is any chat AI you already have, by copy and paste.
   if (!hasKey) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 pb-24 pt-24 text-center">
-        <MdVpnKey className="text-5xl" aria-hidden />
-        <h2 className="text-xl font-bold">add your api key</h2>
+      <div className="flex flex-col gap-3 pb-24 pt-2">
+        <h2 className="text-xl font-bold">coach with your AI</h2>
+        <LiveCompanion />
       </div>
     )
   }
