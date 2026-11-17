@@ -155,8 +155,9 @@ export type CoachSkills = {
   planEdits: boolean
   /**
    * report_issue for the owner, send_feedback for everyone else (see
-   * reportToolName). On by default: anything the app can't do has to reach the
-   * developer.
+   * reportToolName). Off by default, like the plan tools: a report is an
+   * occasional thing, and with the tool on its belt the coach reaches for it
+   * unasked. With it off the prompt names the button that turns it on.
    */
   issues: boolean
 }

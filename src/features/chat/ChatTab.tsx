@@ -73,12 +73,13 @@ type Turn = {
 // toggles and the thread outlive the component — otherwise "keep context" would
 // forget itself the moment you looked at anything else.
 //
-// Plan editing starts off and issue filing starts on: most days nothing about
-// the plan changes, and the two plan tools are by far the largest schemas we
-// send, so they are worth their weight only when they're wanted.
+// Plan editing and reporting both start off: most days nothing about the plan
+// changes and nothing needs writing up, the two plan tools are by far the
+// largest schemas we send, and a report tool that is always there gets used
+// when nobody asked for a report.
 const session: { keepContext: boolean; skills: CoachSkills; turns: Turn[] } = {
   keepContext: false,
-  skills: { planEdits: false, issues: true },
+  skills: { planEdits: false, issues: false },
   turns: [],
 }
 
