@@ -21,6 +21,9 @@ import {
 } from '../../lib/profile'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
 import { buildPlan, fitStatus } from '../../lib/planBuilder'
+import { planFor } from '../../config/planTemplates'
+import type { Plan } from '../../config/plan'
+import { CompanionSheet } from '../companion/CompanionFlow'
 import { PROVIDERS, providerOf, type ProviderId } from '../../lib/aiProvider'
 import { ACCENTS, MODES, palette } from '../../lib/theme'
 import { setTheme, useTheme } from '../../lib/themeStore'
@@ -34,8 +37,13 @@ import { QrScanner } from './QrScanner'
 import { signInLink } from '../../lib/signInLink'
 import { MdQrCodeScanner } from 'react-icons/md'
 import {
+  aiPlanEdit,
+  aiPlanFor,
   buildProfile,
   derive,
+  strengthOf,
+  withWorkoutGoal,
+  type AiPlanEdit,
   emptyForm,
   invalidSections,
   togglePillar,
@@ -59,6 +67,8 @@ export type WelcomeAccount =
 /** What the form itself answers, with or without an account to go with it. */
 export type SetupResult = {
   profile: Profile
+  /** The plan as an AI changed it in the strength section; absent, the plan is built from the answers. */
+  plan?: Plan
   heightIn: number | null
   weightLbs: number | null
   ai: { provider: ProviderId; key: string } | null
@@ -405,6 +415,13 @@ function SetupForm({
   const toggleFocus = (m: Muscle) =>
     set({ focus: f.focus.includes(m) ? f.focus.filter((x) => x !== m) : [...f.focus, m] })
 
+  // A plan an AI changed on top of the built one, offered on first setup only.
+  // It holds while the answers it was built on do (see lib/welcomeForm aiPlanFor).
+  const [aiEdit, setAiEdit] = useState<AiPlanEdit | null>(null)
+  const aiPlan = account ? aiPlanFor(f, aiEdit) : null
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiToday] = useState(() => new Date())
+
   const accountOk = signingIn
     ? /^https?:\/\//i.test(email.trim()) || (emailOk(email) && password !== '')
     : loginOk(email, password)
@@ -435,6 +452,7 @@ function SetupForm({
       await onSubmit(
         {
           profile: buildProfile(form),
+          ...(form === f && aiPlan ? { plan: aiPlan } : {}),
           heightIn: fd.heightIn !== null && fd.heightOk ? fd.heightIn : null,
           weightLbs: fd.weightLbs !== null && fd.weightLbs >= 50 && fd.weightLbs <= 700 ? fd.weightLbs : null,
           ai: coach && form.wantCoach && form.coachPath === 'key' && key ? { provider: form.provider, key } : null,
@@ -678,6 +696,45 @@ function SetupForm({
                     {fit.status}
                   </p>
                 </div>
+                {account &&
+                  (aiPlan ? (
+                    <div className="flex min-h-[44px] items-center gap-2 rounded-xl bg-surface pl-3 pr-1">
+                      <span className="flex-1 text-sm font-medium">built with your AI</span>
+                      <PressButton
+                        onPress={() => setAiOpen(true)}
+                        className="min-h-[44px] rounded-lg px-3 text-sm font-medium text-neutral-300"
+                      >
+                        edit
+                      </PressButton>
+                      <PressButton
+                        onPress={() => setAiEdit(null)}
+                        className="min-h-[44px] rounded-lg px-3 text-sm font-medium text-neutral-300"
+                      >
+                        undo
+                      </PressButton>
+                    </div>
+                  ) : (
+                    <PressButton
+                      onPress={() => setAiOpen(true)}
+                      className="min-h-[44px] rounded-xl bg-surface px-3 text-sm font-semibold active:bg-surface-2"
+                    >
+                      build with your AI
+                    </PressButton>
+                  ))}
+                {aiOpen && (
+                  <CompanionSheet
+                    state={{ plan: aiPlan ?? planFor(strengthOf(f)), weeklyWorkouts: d.goals.workouts || null }}
+                    today={aiToday}
+                    profile={buildProfile(f, aiToday)}
+                    heightIn={d.heightIn !== null && d.heightOk ? d.heightIn : undefined}
+                    workouts={[]}
+                    onApply={(next) => {
+                      setAiEdit(aiPlanEdit(f, next.plan))
+                      setF((cur) => withWorkoutGoal(cur, next.weeklyWorkouts))
+                    }}
+                    onClose={() => setAiOpen(false)}
+                  />
+                )}
               </>
             )}
 

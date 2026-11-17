@@ -10,9 +10,13 @@ import {
   togglePillar,
   visibleSections,
   withDays,
+  aiPlanEdit,
+  aiPlanFor,
+  withWorkoutGoal,
   type FormState,
 } from './welcomeForm'
 import { PILLARS, type Profile } from './profile'
+import { planFor } from '../config/planTemplates'
 
 const NOW = new Date(2026, 10, 18, 12) // a Wednesday
 
@@ -256,3 +260,55 @@ describe('the plan answers in the form', () => {
   })
 })
 
+describe('an AI-built plan on the welcome form', () => {
+  const form = filled({ days: 4, focus: ['chest'] })
+  const plan = planFor({ daysPerWeek: 4, equipment: 'gym' })
+
+  it('holds while the answers it was built on do', () => {
+    const edit = aiPlanEdit(form, plan)
+    expect(aiPlanFor(form, edit)).toBe(plan)
+    expect(aiPlanFor({ ...form, name: 'alex', weight: '160' }, edit)).toBe(plan)
+  })
+
+  it('is dropped once a plan answer moves', () => {
+    const edit = aiPlanEdit(form, plan)
+    expect(aiPlanFor(withDays(form, 5), edit)).toBeNull()
+    expect(aiPlanFor({ ...form, equipment: 'dumbbells' }, edit)).toBeNull()
+    expect(aiPlanFor({ ...form, minutes: 60 }, edit)).toBeNull()
+    expect(aiPlanFor({ ...form, focus: ['chest', 'back'] }, edit)).toBeNull()
+  })
+
+  it('comes back if the answers return to what it was built on', () => {
+    const edit = aiPlanEdit(form, plan)
+    expect(aiPlanFor({ ...form, minutes: 60 }, edit)).toBeNull()
+    expect(aiPlanFor({ ...form, minutes: 45 }, edit)).toBe(plan)
+  })
+
+  it('is not used with strength switched off', () => {
+    const edit = aiPlanEdit(form, plan)
+    expect(aiPlanFor({ ...form, pillars: ['diet'] }, edit)).toBeNull()
+  })
+
+  it('is none when there is none', () => {
+    expect(aiPlanFor(form, null)).toBeNull()
+  })
+})
+
+describe('withWorkoutGoal', () => {
+  it('sets the workouts goal and keeps the rest as they stand', () => {
+    const f = filled({ pillars: ['strength', 'flexibility'], days: 3 })
+    const before = derive(f, NOW).goals
+    const after = derive(withWorkoutGoal(f, 5, NOW), NOW).goals
+    expect(after).toEqual({ ...before, workouts: 5 })
+  })
+
+  it('leaves the form alone for no goal, or the one already set', () => {
+    const f = filled({ days: 3 })
+    expect(withWorkoutGoal(f, null, NOW)).toBe(f)
+    expect(withWorkoutGoal(f, derive(f, NOW).goals.workouts, NOW)).toBe(f)
+  })
+
+  it('keeps the goal on the steppers’ scale', () => {
+    expect(derive(withWorkoutGoal(filled(), 9, NOW), NOW).goals.workouts).toBe(7)
+  })
+})

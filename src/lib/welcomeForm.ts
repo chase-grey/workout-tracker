@@ -31,6 +31,7 @@ import { toISODate, weekStartISO } from './dates'
 import { starterDays } from '../config/planTemplates'
 import { PROVIDERS, type ProviderId } from './aiProvider'
 import { DEFAULT_MINUTES } from './planBuilder'
+import type { Plan } from '../config/plan'
 
 /** The form's sections, top to bottom. */
 export type SectionId = 'you' | 'track' | 'about' | 'strength' | 'diet' | 'goals' | 'theme' | 'coach' | 'account'
@@ -396,4 +397,37 @@ export function planNeedsReplacing(before: StrengthSetup | undefined, after: Str
     (before.minutes ?? DEFAULT_MINUTES) !== (after.minutes ?? DEFAULT_MINUTES) ||
     focus(before) !== focus(after)
   )
+}
+
+/**
+ * A plan an AI changed on top of the one a form's answers build, with the
+ * answers it was built on. It is the plan only while those answers stand.
+ */
+export type AiPlanEdit = { answers: string; plan: Plan }
+
+/** The answers a built plan comes from, as one comparable string. */
+export function planAnswersKey(f: FormState): string {
+  return JSON.stringify(strengthOf(f))
+}
+
+/** `plan` as an AI edit of the plan this form's answers build. */
+export function aiPlanEdit(f: FormState, plan: Plan): AiPlanEdit {
+  return { answers: planAnswersKey(f), plan }
+}
+
+/**
+ * The AI's plan, if it still belongs to this form: strength is tracked and no
+ * answer the plan is built from has moved since. Otherwise null, and the plan
+ * is built from the answers again.
+ */
+export function aiPlanFor(f: FormState, edit: AiPlanEdit | null): Plan | null {
+  if (!edit || !f.pillars.includes('strength')) return null
+  return edit.answers === planAnswersKey(f) ? edit.plan : null
+}
+
+/** The form with the weekly workouts goal an AI's reply set, the other goals as they stand. */
+export function withWorkoutGoal(f: FormState, workouts: number | null, now: Date = new Date()): FormState {
+  const goals = derive(f, now).goals
+  if (workouts == null || workouts < 1 || workouts === goals.workouts) return f
+  return { ...f, goalEdits: { ...goals, workouts: Math.min(7, Math.round(workouts)) } }
 }

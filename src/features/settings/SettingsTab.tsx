@@ -15,7 +15,7 @@ import { PoseCheck } from './PoseCheck'
 import { AccountSection } from './AccountSection'
 import { ProfileSection } from './ProfileSection'
 import { WeekCalendarSetting } from './WeekCalendarSetting'
-import { CopyTrainingSummary, RestartAccount, UpdateGoals } from './SetupSection'
+import { PasteCoachSection, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
 import { ownerFlavour } from '../../lib/profile'
@@ -533,7 +533,7 @@ export function SettingsTab({
         </section>
       )}
 
-      <CopyTrainingSummary />
+      <PasteCoachSection />
 
       {!owner && <FeedbackSection />}
 

@@ -7,6 +7,7 @@ import { emptyForm, formFromProfile, mergeSetup, planNeedsReplacing } from '../.
 import { DEFAULT_STRENGTH, planFor, rebuildPlan } from '../../config/planTemplates'
 import { SetupEditor, type SetupResult } from '../setup/Welcome'
 import { PressButton, SETTINGS_BUTTON, SETTINGS_FIELD, SETTINGS_LABEL } from './PressButton'
+import { AiPlanButtons, pastesToAi } from '../companion/AiPlanSection'
 
 /** The setup form over the whole app, in the shell's own sizing so the keyboard shrinks it as it does everywhere. */
 function Overlay({ children }: { children: ReactNode }) {
@@ -176,13 +177,16 @@ export function RestartAccount() {
 }
 
 /**
- * For someone who chose to take their training to another AI app at setup:
- * the coach's own briefing, plan and recent history included, to paste in.
+ * The coach section for someone who chose to take their training to another AI
+ * app at setup. Its main action is the two-way companion, which changes the
+ * plan from the AI's reply. The training summary stays under it for everything
+ * else: the coach's own briefing, plan and recent history, for an open
+ * conversation the companion's plan-change format doesn't hold.
  */
-export function CopyTrainingSummary() {
+export function PasteCoachSection() {
   const { settings, plan, workouts, bodyWeights, streaks, cardioEntries } = useData()
   const [copied, setCopied] = useState(false)
-  if (!settings.coachPaste || settings.coachEnabled) return null
+  if (!pastesToAi(settings)) return null
 
   const copy = async () => {
     const text = [
@@ -212,6 +216,7 @@ export function CopyTrainingSummary() {
   return (
     <section className="flex flex-col gap-2">
       <label className={SETTINGS_LABEL}>ai coach</label>
+      <AiPlanButtons primary />
       <PressButton onPress={() => void copy()} className={SETTINGS_BUTTON}>
         {copied ? 'copied ✓' : 'copy my training summary'}
       </PressButton>

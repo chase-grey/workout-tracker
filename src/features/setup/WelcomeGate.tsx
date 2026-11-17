@@ -96,8 +96,9 @@ export function WelcomeGate() {
     // Always a starter plan, even with strength switched off: the plan a device
     // falls back to otherwise is the owner's own programme, which would be
     // waiting for them the day they switched strength on. Built from the plan
-    // answers when there are some (see lib/planBuilder).
-    updatePlan(planFor(r.profile.strength ?? DEFAULT_STRENGTH))
+    // answers when there are some (see lib/planBuilder), or the one an AI changed
+    // on top of that build.
+    updatePlan(r.plan ?? planFor(r.profile.strength ?? DEFAULT_STRENGTH))
     if (r.weightLbs != null) void logBodyWeight(r.weightLbs)
   }
 
