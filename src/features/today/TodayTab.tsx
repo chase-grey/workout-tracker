@@ -19,6 +19,7 @@ import { hasPillar, ownerFlavour, readsBodyFat, weighsIn } from '../../lib/profi
 import { lastStretchRoutine } from '../../lib/stretchRotation'
 import { cardioSummary } from '../../lib/cardio'
 import { HomeTiles } from './HomeTiles'
+import { TourCard } from './TourCard'
 import { CardioLogSheet } from './CardioLogSheet'
 import { candidateTiles, type HomeTile } from '../../lib/homeTiles'
 
@@ -202,16 +203,19 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         </div>
       )}
 
+      <TourCard anchor="week" />
       <ThisWeek onSelectWeek={showHabitWeek} />
 
       {hasPillar(profile, 'diet') && (
         <div ref={habitsRef}>
+          <TourCard anchor="habits" />
           <DailyHabits weekStart={habitWeek} onShowCurrentWeek={() => setHabitWeek(null)} />
         </div>
       )}
 
       {(weighsIn(profile) || readsBodyFat(profile)) && <WeightCard />}
 
+      <TourCard anchor="tiles" />
       <HomeTiles
         candidates={candidates}
         label={tileLabel}

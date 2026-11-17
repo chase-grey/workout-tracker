@@ -252,6 +252,16 @@ export type Settings = {
   /** Cardio sessions pinned to Today as one-tap logs. */
   cardioPins?: CardioPin[]
   /**
+   * Guide mode: labels and explanations the app otherwise leaves out, and the
+   * first-run tour (see lib/tour). On for accounts the welcome flow makes,
+   * unset (off) for everyone who was here before it. Synced with the account.
+   */
+  guideMode?: boolean
+  /** The tour steps already shown, by id, so each is shown once. */
+  tourSeen?: string[]
+  /** The tour is over, finished or skipped, and doesn't come back unprompted. */
+  tourDone?: boolean
+  /**
    * How this device stores its data (see lib/account). Device-local with the
    * token: the mode says how THIS phone reaches the backend, and a second phone
    * signs in for itself.

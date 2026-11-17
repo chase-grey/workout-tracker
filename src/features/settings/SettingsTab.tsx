@@ -18,6 +18,7 @@ import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
 import { ownerFlavour } from '../../lib/profile'
 import { PlanEditor } from './PlanEditor'
+import { GuideSection } from './GuideSection'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate, showUpdateToast, useAppUpdate } from '../../lib/version'
 import { LABEL_MODES, labelModeFor } from '../../lib/controlLabels'
 import { discardPendingUses } from '../../lib/useControlLabel'
@@ -458,6 +459,8 @@ export function SettingsTab({
       <AccountSection />
 
       <ProfileSection />
+
+      <GuideSection />
 
       <InstallLink />
 

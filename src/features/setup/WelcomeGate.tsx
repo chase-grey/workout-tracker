@@ -99,6 +99,7 @@ export function WelcomeGate() {
       ...coach,
       ...account,
       profile: r.profile,
+      guideMode: true,
       setupComplete: true,
       ...(r.heightIn != null && { heightIn: r.heightIn }),
     })
