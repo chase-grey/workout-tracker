@@ -7,12 +7,18 @@
  * whole plan, so an edit made by hand after the AI's is undone with it; the
  * Settings row says when the change was made so that isn't a surprise.
  *
+ * A change to the cardio plan is undone the same way, from the plan as it was.
+ * Where there was none, undoing ends the one the AI made rather than clearing
+ * the field, because a cleared settings field never reaches the other devices
+ * (lib/cardioPlan keeps ended plans for the same reason).
+ *
  * Kept in localStorage rather than synced settings: it's a safety net for the
  * phone that pasted the reply, and a plan's worth of JSON has no business in
  * every settings sync.
  */
 
 import type { Plan } from '../../config/plan'
+import { endCardioPlan, planActive, type CardioPlan } from '../cardioPlan'
 import type { Profile } from '../profile'
 
 export type AiChangeSnapshot = {
@@ -23,6 +29,25 @@ export type AiChangeSnapshot = {
   plan: Plan
   /** The weekly-goal history before the change, when the change touched it. */
   weeklyGoals?: Profile['weeklyGoals']
+  /** The cardio plan before the change, when the change touched it; null when there was none. */
+  cardioPlan?: CardioPlan | null
+  /** The change left the lift plan alone, so undoing it leaves later lift edits alone too. */
+  liftsUntouched?: boolean
+}
+
+/**
+ * The cardio plan undoing `snap` leaves, or undefined when the change didn't
+ * touch it: the plan from before, or the AI's own plan ended where there was
+ * none before it.
+ */
+export function undoneCardioPlan(
+  snap: AiChangeSnapshot,
+  current: CardioPlan | undefined,
+  today: string,
+): CardioPlan | undefined {
+  if (snap.cardioPlan === undefined) return undefined
+  if (snap.cardioPlan) return snap.cardioPlan
+  return planActive(current, today) ? endCardioPlan(current, today) : undefined
 }
 
 /** How long an AI change can be undone. */

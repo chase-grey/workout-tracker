@@ -10,19 +10,26 @@
  * a sided pair is applied to both, since a movement trained harder on one arm is
  * never what's meant.
  *
+ * The cardio ops go to lib/companion/cardio, which builds the cardio plan
+ * through lib/cardioPlan's generator once every cardio line is read.
+ *
  * Pure module — no React/DOM, no storage.
  */
 
 import { ALL_EXERCISES, repRangeLabel, type Plan, type PlannedExercise } from '../../config/plan'
 import { applyPlanEdits, type PlanEdit } from '../planTools'
 import { sidePartnerKey } from '../pairedSides'
-import { isChangeOp, type CompanionOp, type LiftOp } from './ops'
+import type { CardioPlan } from '../cardioPlan'
+import { applyCardioOps, type CardioContext } from './cardio'
+import { isCardioOp, isChangeOp, type CardioOp, type CompanionOp, type LiftOp } from './ops'
 
-/** What a companion can change: the lift plan and the weekly workouts goal. */
+/** What a companion can change: the lift plan, the weekly workouts goal and the cardio plan. */
 export type CompanionState = {
   plan: Plan
   /** The weekly workouts goal, or null where there's none to change. */
   weeklyWorkouts: number | null
+  /** The cardio plan as settings hold it, ended or not; absent where there's never been one. */
+  cardioPlan?: CardioPlan
 }
 
 /** Settings an added exercise inherits from the shipped exercise its name matched. */
@@ -109,20 +116,30 @@ function describeSet(before: Plan, after: Plan, op: Extract<LiftOp, { op: 'lift.
 }
 
 /**
- * The state `ops` produce, with one line per change for the preview and one per
- * op that couldn't be applied. `state` is never mutated. Ops apply in order, each
- * against the plan the ones before it left, so a remove-then-add swap works.
+ * The state `ops` produce, with one line per change for the preview, notes on
+ * what the rules moved, and one line per op that couldn't be applied. `state`
+ * is never mutated. Lift ops apply in order, each against the plan the ones
+ * before it left, so a remove-then-add swap works; the cardio ops are gathered
+ * and built into one cardio plan, and need `cardio` to read the log against
+ * (without it they can't be applied).
  */
 export function applyCompanionOps(
   state: CompanionState,
   ops: CompanionOp[],
-): { next: CompanionState; applied: string[]; errors: string[] } {
+  cardio?: CardioContext,
+): { next: CompanionState; applied: string[]; notes: string[]; errors: string[] } {
   let plan = state.plan
   let weeklyWorkouts = state.weeklyWorkouts
   const applied: string[] = []
+  const notes: string[] = []
   const errors: string[] = []
+  const cardioOps: CardioOp[] = []
   for (const op of ops) {
     if (!isChangeOp(op)) continue
+    if (isCardioOp(op)) {
+      cardioOps.push(op)
+      continue
+    }
     if (op.op === 'weekly') {
       if (weeklyWorkouts == null) {
         errors.push("the weekly goal can't be changed here")
@@ -144,5 +161,22 @@ export function applyCompanionOps(
     plan = res.plan
     errors.push(...res.errors)
   }
-  return { next: { plan, weeklyWorkouts }, applied, errors }
+  let cardioPlan = state.cardioPlan
+  if (cardioOps.length) {
+    if (!cardio) {
+      errors.push("cardio isn't tracked in this app, so there's no cardio plan to change")
+    } else {
+      const res = applyCardioOps(cardioPlan, cardioOps, cardio)
+      cardioPlan = res.plan
+      applied.push(...res.applied)
+      notes.push(...res.notes)
+      errors.push(...res.errors)
+    }
+  }
+  return {
+    next: { plan, weeklyWorkouts, ...(cardioPlan ? { cardioPlan } : {}) },
+    applied,
+    notes,
+    errors,
+  }
 }
