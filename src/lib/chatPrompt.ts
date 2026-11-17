@@ -5,12 +5,9 @@ import { toISODate, parseISODate, weekStartISO } from './dates'
 import { parseDiscomfort } from './discomfort'
 import { calorieGoalOn } from './calories'
 import { currentWeeklyGoals } from './weeklyStreak'
+import { bodyFacts, strengthFacts } from './contextPack'
 import {
-  ACTIVITY_LABELS,
   DIET_LABELS,
-  EQUIPMENT_LABELS,
-  SEX_LABELS,
-  ageOf,
   hasPillar,
   ownerFlavour,
   readsBodyFat,
@@ -283,12 +280,7 @@ function renderAboutPerson(profile: Profile, today: Date, heightIn: number | und
   const lines = [`## About this person`]
   if (profile.name.trim()) lines.push(`Name: ${profile.name.trim()}`)
   lines.push(`Tracks: ${profile.pillars.join(', ') || 'nothing yet'}`)
-  const body: string[] = []
-  if (profile.sex) body.push(SEX_LABELS[profile.sex])
-  const age = ageOf(profile, today)
-  if (age != null) body.push(`${age} years old`)
-  if (heightIn) body.push(`${Math.floor(heightIn / 12)}'${Math.round(heightIn % 12)}" tall`)
-  if (profile.activity) body.push(`active ${ACTIVITY_LABELS[profile.activity]} days a week`)
+  const body = bodyFacts(profile, today, heightIn)
   if (body.length > 0) lines.push(`Body: ${body.join(', ')}`)
   if (hasPillar(profile, 'diet')) {
     const diet: string[] = []
@@ -303,13 +295,7 @@ function renderAboutPerson(profile: Profile, today: Date, heightIn: number | und
     `Measures: ${weighsIn(profile) ? 'has a scale' : 'no scale'}, ${readsBodyFat(profile) ? 'can read body fat %' : 'no way to read body fat %'}`,
   )
   if (hasPillar(profile, 'strength') && profile.strength) {
-    lines.push(
-      [
-        `Strength: ${profile.strength.daysPerWeek} days a week, ${EQUIPMENT_LABELS[profile.strength.equipment]}`,
-        ...(profile.strength.minutes ? [`workouts up to ${profile.strength.minutes} min`] : []),
-        ...(profile.strength.focus?.length ? [`wants to grow ${profile.strength.focus.join(', ')}`] : []),
-      ].join(', '),
-    )
+    lines.push(`Strength: ${strengthFacts(profile.strength)}`)
   }
   return lines
 }
