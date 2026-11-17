@@ -183,6 +183,13 @@ export type Settings = {
   openAiModel?: string
   /** ISO date of the last progress photo the user logged (for reminders). */
   lastProgressPhoto?: string
+  /**
+   * "Never ask me for progress photos." Silences the home-page reminder and the
+   * camera screens in the stretch routines. Synced like the rest; turning it back
+   * on is written as an explicit false (not a deleted key) so the newer copy
+   * carries a value and the merge can't resurrect the old opt-out.
+   */
+  photosOff?: boolean
   /** ISO date before which the progress-photo reminder stays hidden ("Later"). */
   photoSnoozeUntil?: string
   /** Self-timer length (seconds) for the camera angle-measurement flow. */

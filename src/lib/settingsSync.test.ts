@@ -31,6 +31,15 @@ describe('syncablePart', () => {
 })
 
 describe('mergeSettings', () => {
+  it('carries the photo opt-out across devices, and its reversal', () => {
+    const off = { ...base, photosOff: true, updatedAt: '2026-02-01T00:00:00Z' }
+    const stale = { ...base, updatedAt: '2026-01-01T00:00:00Z' }
+    expect(mergeSettings(stale, syncablePart(off)).photosOff).toBe(true)
+    const back = { ...off, photosOff: false, updatedAt: '2026-03-01T00:00:00Z' }
+    expect(mergeSettings(off, syncablePart(back)).photosOff).toBe(false)
+    expect(mergeSettings(back, syncablePart(off)).photosOff).toBe(false)
+  })
+
   it('leaves settings alone when the backend has nothing', () => {
     expect(mergeSettings(base, null)).toBe(base)
   })

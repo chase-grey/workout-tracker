@@ -7,6 +7,7 @@ import { WeightCard } from './WeightCard'
 import { BackendBanner } from '../../components/BackendBanner'
 import { PROGRESS_PHOTO_HISTORY } from '../../config/photos'
 import { photoReminder } from '../../lib/photoReminder'
+import { NeverAskPhotos } from '../../components/NeverAskPhotos'
 import { toISODate } from '../../lib/dates'
 import { dayOrder, type VariantKey } from '../../config/plan'
 import { lastTrainingSession } from '../../lib/session'
@@ -52,7 +53,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
       .filter((d): d is string => !!d)
       .sort()
       .at(-1) ?? null
-  const reminder = photoReminder({ lastPhoto, bodyWeights, workouts, plan })
+  const reminder = photoReminder({ lastPhoto, bodyWeights, workouts, plan, photosOff: settings.photosOff })
   const snoozed = !!settings.photoSnoozeUntil && toISODate(new Date()) < settings.photoSnoozeUntil
   const photoDue = !photoDismissed && !snoozed && reminder.due && (owner || strength)
 
@@ -178,6 +179,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
             >
               later
             </button>
+            <NeverAskPhotos onConfirm={() => updateSettings({ ...settings, photosOff: true })} />
           </div>
         </div>
       )}

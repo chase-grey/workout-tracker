@@ -54,15 +54,17 @@ export function shotsThisWeek(entries: FlexEntry[], today: string): Set<PhotoKin
 
 /**
  * Narrow a photo screen to the shots still owed this week, or null when the week
- * already has them all — the caller skips the screen entirely. A gate whose
+ * already has them all — the caller skips the screen entirely. Opting out of
+ * photos (`photosOff`) owes none, in any week. A gate whose
  * shots are only partly covered still shows, asking for just the missing ones.
  */
 export function dueGate(
   gate: PhotoGate | null,
   entries: FlexEntry[],
   today: string,
+  photosOff = false,
 ): PhotoGate | null {
-  if (!gate) return null
+  if (!gate || photosOff) return null
   const have = shotsThisWeek(entries, today)
   const shots = gate.shots.filter((k) => !have.has(k))
   if (shots.length === 0) return null

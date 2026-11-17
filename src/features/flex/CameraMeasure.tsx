@@ -19,6 +19,7 @@ import {
 } from '../../lib/measure'
 import { toISODate } from '../../lib/dates'
 import { AngleEditor } from './AngleEditor'
+import { NeverAskPhotos } from '../../components/NeverAskPhotos'
 import { AngleTrends } from './AngleContextCard'
 import type { AngleTrend } from '../../lib/angleContext'
 import { currentPalette } from '../../lib/themeStore'
@@ -306,6 +307,7 @@ export function CameraMeasure({
   onDone,
   onSkip,
   onSkipAll,
+  onNever,
 }: {
   mode: MeasureMode
   /** Tags the saved photo — a corner pill and a filename token — when the shot
@@ -320,6 +322,8 @@ export function CameraMeasure({
   onSkip: () => void
   /** Offered only while more than this one shot is left to skip. */
   onSkipAll?: () => void
+  /** Opt out of photo prompts for good; offered only in the stretch flow's gates. */
+  onNever?: () => void
 }) {
   const [phase, setPhase] = useState<Phase>(frame ? 'detecting' : 'setup')
   const [facing, setFacing] = useState<Facing>('user')
@@ -606,6 +610,7 @@ export function CameraMeasure({
       <header className="flex items-center justify-between gap-2 px-4 py-3 text-white">
         <h2 className="text-lg font-bold">{title}</h2>
         <div className="flex shrink-0 gap-1">
+          {onNever && <NeverAskPhotos onConfirm={onNever} className="text-neutral-500" />}
           {onSkipAll && (
             <button onClick={onSkipAll} className="min-h-[44px] px-2 text-sm text-neutral-400">
               skip all

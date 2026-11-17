@@ -274,6 +274,7 @@ export function StretchSession({
   onFinish: (summary: StretchFinishSummary) => void
 }) {
   const {
+    settings,
     flexPlans,
     workouts,
     flexEntries,
@@ -351,7 +352,7 @@ export function StretchSession({
     if (seenGates.has(cold.id) || (saved?.step ?? 0) > 0 || (saved?.done?.length ?? 0) > 0) {
       return null
     }
-    const gate = dueGate(cold, flexEntries, today)
+    const gate = dueGate(cold, flexEntries, today, settings.photosOff)
     return gate ? { gate, index: null, then: 'start' } : null
   })
   // When the routine began (persisted so a resumed session still measures its
@@ -932,7 +933,7 @@ export function StretchSession({
     setDone(nextDone)
     // A photo moment holds the flow on its own screen first: the rest clock only
     // starts once you're through with the camera.
-    const gate = dueGate(gateAfterStep(steps, safeCurrent, routine), flexEntries, today)
+    const gate = dueGate(gateAfterStep(steps, safeCurrent, routine), flexEntries, today, settings.photosOff)
     if (gate && !seenGates.has(gate.id)) {
       setPhotos({ gate, index: safeCurrent, then: 'advance' })
       return

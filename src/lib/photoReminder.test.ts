@@ -18,6 +18,13 @@ const row = (date: string, exercise: string, weight: number, reps: number): Work
 })
 
 describe('photoReminder', () => {
+  it('is never due once the person has opted out', () => {
+    expect(photoReminder({ lastPhoto: null, bodyWeights: [], workouts: [], today: TODAY, photosOff: true })).toEqual({
+      due: false,
+      reason: '',
+    })
+  })
+
   it('is due when there is no prior photo', () => {
     expect(photoReminder({ lastPhoto: null, bodyWeights: [], workouts: [], today: TODAY }).due).toBe(true)
   })

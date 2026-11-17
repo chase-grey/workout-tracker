@@ -46,6 +46,11 @@ describe('shotsThisWeek', () => {
 })
 
 describe('dueGate', () => {
+  it('owes nothing once photos are opted out', () => {
+    expect(dueGate(COLD_GATE, [], MON, true)).toBeNull()
+    expect(dueGate(WARM_GATE, [], MON, true)).toBeNull()
+  })
+
   it('asks for everything when the week has no readings yet', () => {
     expect(dueGate(COLD_GATE, [], MON)).toBe(COLD_GATE)
   })

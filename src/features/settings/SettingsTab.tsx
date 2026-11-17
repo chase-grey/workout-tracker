@@ -472,6 +472,18 @@ export function SettingsTab({
       )}
 
       {!owner && <FeedbackSection />}
+
+      {settings.photosOff && (
+        <div className="flex items-center justify-between gap-2 text-sm text-neutral-500">
+          <span>progress photos: off</span>
+          <button
+            onClick={() => updateSettings({ ...settings, photosOff: false })}
+            className="min-h-[44px] px-2 text-neutral-300 underline"
+          >
+            turn back on
+          </button>
+        </div>
+      )}
     </div>
   )
 }

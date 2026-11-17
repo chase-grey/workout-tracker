@@ -22,7 +22,10 @@ export function photoReminder(input: {
   today?: Date
   plan?: Plan
   cfg?: { days?: number; bwLbs?: number; strengthLbs?: number }
+  /** The person has opted out of progress photos: never due. */
+  photosOff?: boolean
 }): PhotoReminder {
+  if (input.photosOff) return { due: false, reason: '' }
   const today = input.today ?? new Date()
   const days = input.cfg?.days ?? 30
   const bwLbs = input.cfg?.bwLbs ?? 4

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MdCameraAlt, MdCameraswitch } from 'react-icons/md'
 import { preloadPose } from '../../lib/pose'
 import { BURST_FIRST_SEC, PHOTO_SHOT, burstLeadSec, type PhotoKind } from '../../lib/photoSteps'
+import { NeverAskPhotos } from '../../components/NeverAskPhotos'
 import { snapFrame, useCameraStream, type BurstFrame, type Facing } from './camera'
 
 /**
@@ -16,9 +17,11 @@ import { snapFrame, useCameraStream, type BurstFrame, type Facing } from './came
  */
 export function BurstCapture({
   shots,
+  onNever,
   onDone,
 }: {
   shots: PhotoKind[]
+  onNever?: () => void
   onDone: (frames: (BurstFrame | null)[]) => void
 }) {
   const [at, setAt] = useState(0)
@@ -126,6 +129,15 @@ export function BurstCapture({
       <header className="flex items-center justify-between gap-2 px-4 py-3 text-white">
         <h2 className="text-lg font-bold">{label}</h2>
         <div className="flex shrink-0 gap-1">
+          {onNever && (
+            <NeverAskPhotos
+              onConfirm={() => {
+                stopStream()
+                onNever()
+              }}
+              className="text-neutral-500"
+            />
+          )}
           {left > 1 && (
             <button
               onClick={() => {

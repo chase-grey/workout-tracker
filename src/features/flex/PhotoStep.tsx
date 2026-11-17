@@ -28,7 +28,11 @@ export function PhotoStep({
   onCapture: (kind: PhotoKind, result: MeasureResult) => void
   onDone: (tookAny: boolean) => void
 }) {
-  const { flexEntries } = useData()
+  const { flexEntries, settings, updateSettings } = useData()
+  const never = () => {
+    updateSettings({ ...settings, photosOff: true })
+    onDone(false)
+  }
   // The shots to measure, each with its frame if a burst already took it. A
   // burst's are unknown until it's done.
   const [queue, setQueue] = useState<{ kind: PhotoKind; frame?: BurstFrame }[] | null>(() =>
@@ -42,6 +46,7 @@ export function PhotoStep({
       <div className="fixed inset-0 z-70">
         <BurstCapture
           shots={gate.shots}
+          onNever={never}
           onDone={(frames) => {
             const taken = gate.shots.flatMap((kind, i) => {
               const frame = frames[i]
@@ -88,6 +93,7 @@ export function PhotoStep({
         }}
         onSkip={() => next(false)}
         onSkipAll={left > 1 ? () => onDone(tookAny) : undefined}
+        onNever={never}
       />
     </div>
   )
