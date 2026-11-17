@@ -145,6 +145,37 @@ html {
   }
 }
 
+/* Installed to an iPhone's home screen (viewport-fit=cover and a
+   black-translucent status bar, so the page is drawn behind the status bar),
+   WebKit hands the page a layout viewport that is short of the screen by the
+   top safe-area inset: `100dvh`, `100svh`, `100%` and the box `position: fixed;
+   inset: 0` resolves against all stop that far above the bottom edge — about
+   sixty pixels on a Dynamic Island phone. Only `100lvh` is the whole screen. So
+   in an installed iOS app the shell, and every fixed layer that owns the screen
+   (rest, the get-into-position count, the pause curtain, recaps, sheets' and
+   menus' backdrops, confetti), is sized in `lvh` instead. With `top` and `bottom`
+   both 0, an explicit `height` wins and `bottom` is ignored, so `inset-0` layers
+   need nothing else.
+
+   Scoped to installed iOS on purpose. In a Safari tab `lvh` is the height with
+   the toolbars retracted, taller than what's on screen, so there `dvh` stays
+   right; and `-webkit-touch-callout` is WebKit-on-iOS only, which keeps Android,
+   whose keyboard resizes the viewport through interactive-widget, out of it.
+   The keyboard is still handled: iOS never resizes a viewport unit for it, and
+   --vvh (src/lib/viewport.ts) still overrides the shell's height while one is up. */
+@media (display-mode: standalone) {
+  @supports (-webkit-touch-callout: none) {
+    .app-shell {
+      height: 100lvh;
+      height: var(--vvh, 100lvh);
+      max-height: 100lvh;
+    }
+    .fixed.inset-0 {
+      height: 100lvh;
+    }
+  }
+}
+
 /* A session is read from across the room: the phone is propped on the rack or
    the floor at the far end of a mat, and the name of the lift, the set coming,
    the rest clock and the rep count all have to carry to where you are standing.
