@@ -22,7 +22,7 @@ import { HomeTiles } from './HomeTiles'
 import { TourCard } from './TourCard'
 import { CardioLogSheet } from './CardioLogSheet'
 import { CardioGoalSheet } from './CardioGoalSheet'
-import { goalLabel, planActive, plannedDone, plannedOn } from '../../lib/cardioPlan'
+import { cardioSessionsForWeek, goalLabel, planActive, plannedDone, plannedOn } from '../../lib/cardioPlan'
 import { candidateTiles, type HomeTile } from '../../lib/homeTiles'
 import { WeekCalendar } from './WeekCalendar'
 import { defaultCalendarDate, type CalendarAction, type PlannedCardio } from '../../lib/weekCalendar'
@@ -49,7 +49,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   // Today's session from the cardio plan, until something's logged against it.
   const todayISO = toISODate(new Date())
   const cardioPlan = planActive(settings.cardioPlan, todayISO) ? settings.cardioPlan : undefined
-  const plannedCardio =
+  const todaysCardio =
     cardioPlan && !plannedDone(cardioPlan, cardioEntries, todayISO) ? plannedOn(cardioPlan, todayISO) : null
   const [photoDismissed, setPhotoDismissed] = useState(false)
   const [habitWeek, setHabitWeek] = useState<string | null>(null)
@@ -68,9 +68,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     setHabitWeek(week === weekStartISO(today) ? null : week)
     setCalendarDate(null)
   }
-  // CARDIO SEAM: the week's planned cardio. Wire in
-  // `cardioSessionsForWeek(settings.cardioPlan, shownWeek)` from lib/cardioPlan.
-  const plannedCardio: PlannedCardio[] = []
+  // The week's planned cardio, from the cardio plan (see lib/cardioPlan).
+  const plannedCardio: PlannedCardio[] = cardioSessionsForWeek(settings.cardioPlan, shownWeek)
   const runCalendarAction = (a: CalendarAction) => {
     if (a.type === 'lift') onStart(a.day)
     else if (a.type === 'stretch') onStartStretch(a.routine)
@@ -161,8 +160,8 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const tileDetail = (t: HomeTile) =>
     t.type === 'pin'
       ? cardioSummary({ minutes: t.pin.minutes, distanceMi: t.pin.distanceMi })
-      : t.type === 'cardio' && plannedCardio
-        ? `today: ${plannedCardio.label}`
+      : t.type === 'cardio' && todaysCardio
+        ? `today: ${todaysCardio.label}`
         : undefined
   const tileDimmed = (t: HomeTile) =>
     (t.type === 'lift' && t.day === dimmedDay) ||
@@ -285,7 +284,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
           entries={cardioEntries}
           onDelete={(id) => void deleteCardio(id)}
           onClose={() => setLoggingCardio(false)}
-          planned={plannedCardio}
+          planned={todaysCardio}
           goalName={cardioPlan ? goalLabel(cardioPlan.kind, cardioPlan.goal) : undefined}
           onGoal={() => setSettingCardioGoal(true)}
         />
