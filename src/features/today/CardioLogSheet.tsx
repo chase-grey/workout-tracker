@@ -102,7 +102,6 @@ export function CardioLogSheet({
           <label className="min-w-0 text-xs text-neutral-400">
             minutes
             <input
-              autoFocus={!pinning}
               type="number"
               inputMode="decimal"
               min="0"
