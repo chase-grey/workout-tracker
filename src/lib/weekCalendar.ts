@@ -286,7 +286,8 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
           pillar: 'cardio',
           status: 'planned',
           label: p.label,
-          amount: cardioAmount(p),
+          // A plan's label carries its own figure ("easy run 25 min"); don't say it twice.
+          amount: /\d/.test(p.label) ? undefined : cardioAmount(p),
           ...(isToday(p.date) ? { action: { type: 'cardio' } } : {}),
         })
       }
