@@ -36,6 +36,7 @@ import {
 } from '../../config/flexRoutines'
 import { MdVpnKey, MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
 import { Markdown } from './Markdown'
+import { ProposalCard, type ProposalStatus } from '../../components/ProposalCard'
 
 /**
  * A change the coach wants to make, held until the user says yes.
@@ -49,7 +50,7 @@ import { Markdown } from './Markdown'
 type Proposal = {
   /** What the edits do, one line each, as shown to the user. */
   changes: string[]
-  status: 'pending' | 'approved' | 'rejected'
+  status: ProposalStatus
 } & (
   // The first two carry the whole plan/routine the edits produce, saved verbatim
   // on approval; the third carries the finished note for one logged exercise
@@ -805,37 +806,15 @@ export function ChatTab({
       <div className="flex flex-1 flex-col gap-3 pb-5">
         {turns.map((t, i) =>
           t.proposal ? (
-            <div key={i} className="mx-auto w-full max-w-[85%] rounded-2xl border border-border bg-surface px-3 py-2">
-              <div className="flex items-center gap-1 text-xs text-accent-2">
-                <MdBuild aria-hidden />
-                {t.content}
-              </div>
-              <ul className="mt-1 list-disc pl-5 text-sm text-neutral-100">
-                {t.proposal.changes.map((c, j) => (
-                  <li key={j}>{c}</li>
-                ))}
-              </ul>
-              {t.proposal.status === 'pending' ? (
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => resolveProposal(i, true)}
-                    className="min-h-[44px] flex-1 rounded-xl bg-accent px-3 font-semibold text-on-accent active:opacity-80"
-                  >
-                    approve
-                  </button>
-                  <button
-                    onClick={() => resolveProposal(i, false)}
-                    className="min-h-[44px] flex-1 rounded-xl bg-bg px-3 font-medium text-neutral-300 active:opacity-80"
-                  >
-                    reject
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-2 text-xs text-neutral-500">
-                  {t.proposal.status === 'approved' ? 'approved — saved' : 'rejected — nothing changed'}
-                </div>
-              )}
-            </div>
+            <ProposalCard
+              key={i}
+              className="mx-auto w-full max-w-[85%]"
+              title={t.content}
+              changes={t.proposal.changes}
+              status={t.proposal.status}
+              onApprove={() => resolveProposal(i, true)}
+              onReject={() => resolveProposal(i, false)}
+            />
           ) : t.role === 'system' ? (
             <div key={i} className="mx-auto rounded-full bg-accent-2/15 px-3 py-1 text-xs text-accent-2">
               <MdBuild className="inline align-text-bottom mr-1" aria-hidden />
