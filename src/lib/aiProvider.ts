@@ -21,9 +21,12 @@ export type Provider = {
   wire: Wire
   /** The API root, or null when the user types one (see Settings.aiBaseUrl). */
   baseUrl: string | null
-  /** The model a fresh pick starts on. */
+  /** The model a fresh pick starts on: a cheap or middling one, never the dearest. */
   defaultModel: string
-  /** Suggestions for the model field; any id the service knows is accepted. */
+  /**
+   * The models offered in the picker, cheapest first. Settings takes any other
+   * id the service knows, typed by hand.
+   */
   models: string[]
   /** What a key from this service looks like, as the field's placeholder. */
   keyHint: string
@@ -35,8 +38,8 @@ export const PROVIDERS: readonly Provider[] = [
     label: 'anthropic',
     wire: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
-    defaultModel: 'claude-opus-5-5',
-    models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
+    defaultModel: 'claude-sonnet-5-5',
+    models: ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
     keyHint: 'sk-ant-…',
   },
   {
@@ -79,6 +82,7 @@ export type ProviderSettings = {
   openAiKey?: string
   aiBaseUrl?: string
   openAiModel?: string
+  coachModelPicked?: boolean
 }
 
 /**
@@ -115,8 +119,35 @@ export function chatCompletionsUrl(baseUrl: string): string {
   return `${trimBaseUrl(baseUrl)}/chat/completions`
 }
 
-/** The model to ask for: the typed one, else the provider's default. */
+/**
+ * What Anthropic's default was before it moved to a cheaper model. Picking the
+ * provider wrote the default into settings, so a device set up back then holds
+ * this id without anyone having asked for it.
+ */
+const FORMER_ANTHROPIC_DEFAULT = 'claude-opus-5-5'
+
+/**
+ * The model to ask for: the chosen one, else the provider's default.
+ *
+ * The former default counts as a choice only once a model has been picked by
+ * hand (`coachModelPicked`); until then it is the old default sitting in
+ * storage, and follows the default to where it is now.
+ */
 export function modelFor(s: ProviderSettings): string {
-  const typed = s.openAiModel?.trim()
-  return typed || providerOf(s.aiProvider, s.openAiKey).defaultModel
+  const provider = providerOf(s.aiProvider, s.openAiKey)
+  const stored = s.openAiModel?.trim()
+  const inherited =
+    provider.id === 'anthropic' && stored === FORMER_ANTHROPIC_DEFAULT && !s.coachModelPicked
+  return stored && !inherited ? stored : provider.defaultModel
+}
+
+/**
+ * The models to offer in a picker: the provider's list, with the one in use
+ * added when it is a hand-typed id the list doesn't hold. Empty for a custom
+ * provider with nothing typed, where there is nothing to choose between.
+ */
+export function modelChoices(s: ProviderSettings): string[] {
+  const { models } = providerOf(s.aiProvider, s.openAiKey)
+  const current = modelFor(s)
+  return !current || models.includes(current) ? models : [...models, current]
 }

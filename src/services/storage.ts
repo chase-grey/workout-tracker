@@ -185,6 +185,12 @@ export type Settings = {
   /** Model for the coach, in whatever naming the provider uses. Unset means the provider's default. */
   openAiModel?: string
   /**
+   * Set once a model has been chosen by hand, in the coach tab or in Settings.
+   * Until then a stored model may only be a default that was written for you
+   * (see lib/aiProvider.modelFor).
+   */
+  coachModelPicked?: boolean
+  /**
    * Chosen at setup instead of a key: the coach is used by copying a summary of
    * your training into another AI app (see Settings), not through this one.
    * Synced with the profile; it holds no secret.

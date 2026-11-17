@@ -6,6 +6,7 @@ import { APP_COMMIT } from '../../lib/version'
 import { api } from '../../services/api'
 import type { RawMessage, Tool } from '../../services/openai'
 import { coachTurn } from '../../services/coach'
+import { modelChoices, modelFor } from '../../lib/aiProvider'
 import { hasPillar, ownerFlavour, type Profile } from '../../lib/profile'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
 import { circuitRounds, circuitTitle, dayEntries, roundsLabel } from '../../lib/circuitEntry'
@@ -431,6 +432,7 @@ export function ChatTab({
     bodyWeights,
     streaks,
     settings,
+    updateSettings,
     cardioEntries,
     plan,
     updatePlan,
@@ -466,6 +468,12 @@ export function ChatTab({
   const toggleSkill = (name: keyof CoachSkills) => {
     session.skills = { ...session.skills, [name]: !session.skills[name] }
     setSkillsState(session.skills)
+  }
+  // The model is a setting rather than the session's: it is what the key gets
+  // billed for, so the pick should still be there tomorrow.
+  const models = modelChoices(settings)
+  const pickModel = (model: string) => {
+    updateSettings({ ...settings, openAiModel: model, coachModelPicked: true })
   }
   const endRef = useRef<HTMLDivElement>(null)
   // Answering an issue takes over the composer: what you type goes to the fixer
@@ -798,6 +806,21 @@ export function ChatTab({
           {reportToggleLabel(owner)}
         </Toggle>
       </div>
+      {models.length > 1 && (
+        <select
+          aria-label="model"
+          value={modelFor(settings)}
+          onChange={(e) => pickModel(e.target.value)}
+          disabled={loading}
+          className="mb-2 min-h-[44px] rounded-xl bg-surface px-3 text-sm text-neutral-300 focus:outline-none focus:ring-2 focus:ring-accent"
+        >
+          {models.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      )}
 
       {/* pb-5 matches the scroller's own top padding (see AppShell's main), so
           the thread ends the same distance above the composer as it starts below

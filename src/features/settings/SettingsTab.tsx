@@ -27,7 +27,7 @@ import { discardPendingUses } from '../../lib/useControlLabel'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../../config/flexRoutines'
 import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
 import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
-import { PROVIDERS, providerOf, trimBaseUrl } from '../../lib/aiProvider'
+import { PROVIDERS, modelFor, providerOf, trimBaseUrl } from '../../lib/aiProvider'
 
 const FIELD =
   'min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent'
@@ -203,7 +203,7 @@ export function SettingsTab({
   // letter would send one per letter.
   const [openAiKey, setOpenAiKey] = useState(settings.openAiKey)
   const [baseUrlDraft, setBaseUrlDraft] = useState(settings.aiBaseUrl ?? '')
-  const [modelDraft, setModelDraft] = useState(settings.openAiModel ?? '')
+  const [modelDraft, setModelDraft] = useState(modelFor(settings))
   const [keySaved, setKeySaved] = useState(false)
   const provider = providerOf(settings.aiProvider, settings.openAiKey)
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
@@ -221,11 +221,14 @@ export function SettingsTab({
   const { active, closed } = partitionIssues(issues ?? [])
 
   const saveKey = () => {
+    const model = modelDraft.trim() || provider.defaultModel
     updateSettings({
       ...settings,
       openAiKey: openAiKey.trim(),
       aiBaseUrl: trimBaseUrl(baseUrlDraft),
-      openAiModel: modelDraft.trim() || provider.defaultModel,
+      openAiModel: model,
+      // Saving the key with the model field untouched is not a choice of model.
+      coachModelPicked: settings.coachModelPicked || model !== modelFor(settings),
     })
     setKeySaved(true)
     setTimeout(() => setKeySaved(false), 1500)
@@ -236,7 +239,12 @@ export function SettingsTab({
   const pickProvider = (id: string) => {
     const next = providerOf(id)
     setModelDraft(next.defaultModel)
-    updateSettings({ ...settings, aiProvider: next.id, openAiModel: next.defaultModel })
+    updateSettings({
+      ...settings,
+      aiProvider: next.id,
+      openAiModel: next.defaultModel,
+      coachModelPicked: false,
+    })
   }
 
   const saveChatToken = () => {
