@@ -22,6 +22,9 @@ import { HomeTiles } from './HomeTiles'
 import { TourCard } from './TourCard'
 import { CardioLogSheet } from './CardioLogSheet'
 import { candidateTiles, type HomeTile } from '../../lib/homeTiles'
+import { WeekCalendar } from './WeekCalendar'
+import { defaultCalendarDate, type CalendarAction, type PlannedCardio } from '../../lib/weekCalendar'
+import { weekStartISO } from '../../lib/dates'
 
 type Props = {
   onStart: (dayType: DayType, variant?: VariantKey) => void
@@ -44,9 +47,32 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const [habitWeek, setHabitWeek] = useState<string | null>(null)
   const habitsRef = useRef<HTMLDivElement>(null)
 
+  // The week calendar and the calorie card show the same week, and with the
+  // calendar up its day is the one the calorie card logs to — the card's own
+  // Mon–Sun strip steps aside for it.
+  const showCalendar = settings.showWeekCalendar !== false
+  const calendarRef = useRef<HTMLDivElement>(null)
+  const [calendarDate, setCalendarDate] = useState<string | null>(null)
+  const today = toISODate(new Date())
+  const shownWeek = habitWeek ?? weekStartISO(today)
+  const pickedDate = calendarDate ?? defaultCalendarDate(shownWeek, today)
+  const showWeek = (week: string) => {
+    setHabitWeek(week === weekStartISO(today) ? null : week)
+    setCalendarDate(null)
+  }
+  // CARDIO SEAM: the week's planned cardio. Wire in
+  // `cardioSessionsForWeek(settings.cardioPlan, shownWeek)` from lib/cardioPlan.
+  const plannedCardio: PlannedCardio[] = []
+  const runCalendarAction = (a: CalendarAction) => {
+    if (a.type === 'lift') onStart(a.day)
+    else if (a.type === 'stretch') onStartStretch(a.routine)
+    else setLoggingCardio(true)
+  }
+
   const showHabitWeek = (week: string) => {
-    setHabitWeek(week)
-    requestAnimationFrame(() => habitsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    showWeek(week)
+    const target = showCalendar ? calendarRef : habitsRef
+    requestAnimationFrame(() => target.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
   }
 
   const lastPhoto =
@@ -206,10 +232,27 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
       <TourCard anchor="week" />
       <ThisWeek onSelectWeek={showHabitWeek} />
 
+      {showCalendar && (
+        <div ref={calendarRef}>
+          <WeekCalendar
+            weekStart={shownWeek}
+            onWeekChange={showWeek}
+            selected={pickedDate}
+            onSelect={setCalendarDate}
+            plannedCardio={plannedCardio}
+            onAction={runCalendarAction}
+          />
+        </div>
+      )}
+
       {hasPillar(profile, 'diet') && (
         <div ref={habitsRef}>
           <TourCard anchor="habits" />
-          <DailyHabits weekStart={habitWeek} onShowCurrentWeek={() => setHabitWeek(null)} />
+          <DailyHabits
+            weekStart={habitWeek}
+            onShowCurrentWeek={() => showWeek(weekStartISO(today))}
+            {...(showCalendar ? { date: pickedDate, onSelectDate: setCalendarDate } : {})}
+          />
         </div>
       )}
 

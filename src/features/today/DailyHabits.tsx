@@ -30,10 +30,16 @@ type Props = {
   /** A Monday selected from streak history; null keeps following the current week. */
   weekStart: string | null
   onShowCurrentWeek: () => void
+  /**
+   * The day being logged, when the week calendar above picks it. The card then
+   * leaves out its own Mon–Sun strip, which the calendar already is.
+   */
+  date?: string
+  onSelectDate?: (date: string) => void
 }
 
 /** The daily food log and its editable Mon-Sun timeline. */
-export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
+export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }: Props) {
   const { calorieEntries, logCalories, bodyWeights, settings } = useData()
 
   const [now, setNow] = useState(() => new Date())
@@ -43,7 +49,10 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
   }, [])
 
   const today = toISODate(now)
-  const [selDate, setSelDate] = useState(today)
+  const [ownDate, setOwnDate] = useState(today)
+  const picked = date !== undefined
+  const selDate = date ?? ownDate
+  const setSelDate = onSelectDate ?? setOwnDate
   const currentWeek = weekStartISO(today)
   const historical = weekStart != null && weekStart !== currentWeek
   const monday = weekStart ? parseISODate(weekStart) : mondayOf(now)
@@ -57,9 +66,9 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
     if (historical && weekStart) {
       const sunday = parseISODate(weekStart)
       sunday.setDate(sunday.getDate() + 6)
-      setSelDate(toISODate(sunday))
+      setOwnDate(toISODate(sunday))
     } else {
-      setSelDate(today)
+      setOwnDate(today)
     }
   }, [weekStart, historical, today])
 
@@ -175,29 +184,31 @@ export function DailyHabits({ weekStart, onShowCurrentWeek }: Props) {
         </ul>
       )}
 
-      <div className="mt-2 flex gap-1">
-        {week.map((date, i) => {
-          const hit = totalForDate(calorieEntries, date) >= calorieGoalOn(date)
-          return (
-            <button
-              key={date}
-              onClick={() => setSelDate(date)}
-              aria-label={date}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1 ${
-                date === selDate ? 'bg-surface-2 ring-1 ring-accent' : ''
-              }`}
-            >
-              <span className={`text-[10px] leading-none ${date === today ? 'text-accent' : 'text-neutral-500'}`}>
-                {DOW[i]}
-              </span>
-              <MdCheck
-                className={`text-sm ${hit ? 'text-accent' : date > today ? 'text-neutral-800' : 'text-neutral-700'}`}
-                aria-hidden
-              />
-            </button>
-          )
-        })}
-      </div>
+      {!picked && (
+        <div className="mt-2 flex gap-1">
+          {week.map((day, i) => {
+            const hit = totalForDate(calorieEntries, day) >= calorieGoalOn(day)
+            return (
+              <button
+                key={day}
+                onClick={() => setSelDate(day)}
+                aria-label={day}
+                className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1 ${
+                  day === selDate ? 'bg-surface-2 ring-1 ring-accent' : ''
+                }`}
+              >
+                <span className={`text-[10px] leading-none ${day === today ? 'text-accent' : 'text-neutral-500'}`}>
+                  {DOW[i]}
+                </span>
+                <MdCheck
+                  className={`text-sm ${hit ? 'text-accent' : day > today ? 'text-neutral-800' : 'text-neutral-700'}`}
+                  aria-hidden
+                />
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {meals.length > 0 && (
         <div className="mt-2 flex gap-1.5">

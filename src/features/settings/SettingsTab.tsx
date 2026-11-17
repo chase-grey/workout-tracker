@@ -14,6 +14,7 @@ import { InstallLink } from './InstallLink'
 import { PoseCheck } from './PoseCheck'
 import { AccountSection } from './AccountSection'
 import { ProfileSection } from './ProfileSection'
+import { WeekCalendarSetting } from './WeekCalendarSetting'
 import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
 import { ownerFlavour } from '../../lib/profile'
@@ -455,6 +456,8 @@ export function SettingsTab({
       <ThemePicker />
 
       <ButtonLabels />
+
+      <WeekCalendarSetting />
 
       <AccountSection />
 
