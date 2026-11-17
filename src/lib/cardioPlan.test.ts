@@ -15,6 +15,7 @@ import {
   checkpointStatuses,
   defaultCardioDays,
   describeCardioPlan,
+  earliestTargetDate,
   editCheckpoint,
   endCardioPlan,
   firstPlanWeek,
@@ -44,6 +45,9 @@ import {
   replanCardio,
   riegel,
   sessionMeets,
+  snapDistance,
+  startingCardioDays,
+  startingLevel,
   suggestTargetDate,
   weekdayOf,
   weeksNeeded,
@@ -160,6 +164,33 @@ describe('days', () => {
     expect(firstPlanWeek([1, 3, 5], MON)).toBe(MON)
     expect(firstPlanWeek([1, 3, 5], '2026-11-17')).toBe(MON)
     expect(firstPlanWeek([1, 3, 5], '2026-11-18')).toBe('2026-11-23')
+  })
+
+  it("starts a new plan on the weekly cardio goal's count, three without one", () => {
+    expect(startingCardioDays(2, [0, 2, 4])).toEqual(defaultCardioDays(2, [0, 2, 4]))
+    expect(startingCardioDays(0)).toHaveLength(3)
+    expect(startingCardioDays(9)).toHaveLength(6)
+  })
+
+  it('takes a target no earlier than the first plan week, nor today', () => {
+    expect(earliestTargetDate([1, 3, 5], MON)).toBe(MON)
+    expect(earliestTargetDate([0, 3, 5], '2026-11-18')).toBe('2026-11-23')
+    expect(earliestTargetDate([], '2026-11-18')).toBe('2026-11-18')
+  })
+})
+
+describe('starting points', () => {
+  it("reads the log, else the plan's own start, else nothing", () => {
+    const fromLog = startingLevel([entry({ date: '2026-11-10', minutes: 22, distanceMi: 2 })], 'run', FIVE_K, MON)
+    expect(fromLog.longestMin).toBe(22)
+    expect(startingLevel([], 'run', FIVE_K, MON, RUNNER)).toBe(RUNNER)
+    expect(startingLevel([], 'run', FIVE_K, MON)).toEqual({ longestMin: 0, longestMi: 0, weeklyMin: 0 })
+  })
+
+  it('snaps a rounded race distance to the race', () => {
+    expect(snapDistance(3.1)).toBe(MI_5K)
+    expect(snapDistance(13.1)).toBe(MI_HALF)
+    expect(snapDistance(4)).toBe(4)
   })
 })
 

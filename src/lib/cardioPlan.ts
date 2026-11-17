@@ -340,10 +340,45 @@ export function defaultCardioDays(n: number, liftDays: number[] = []): number[] 
   return best
 }
 
+/**
+ * The days a new plan starts on when none were chosen: as many as the weekly
+ * cardio goal asks for (three when it asks for none), laid out by
+ * {@link defaultCardioDays}.
+ */
+export function startingCardioDays(weeklyCardioGoal: number | undefined, liftDays: number[] = []): number[] {
+  return defaultCardioDays(Math.max(1, Math.min(6, weeklyCardioGoal || 3)), liftDays)
+}
+
 /** The Monday the plan starts on: this week if every chosen day is still ahead, else next week. */
 export function firstPlanWeek(days: number[], today: string): string {
   const monday = weekStartISO(today)
   return Math.min(...days) >= weekdayOf(today) ? monday : plusDays(monday, 7)
+}
+
+/** The earliest target date a plan on `days` can take: its first week's Monday, or today if that's later. */
+export function earliestTargetDate(days: number[], today: string): string {
+  const first = days.length ? firstPlanWeek(days, today) : today
+  return first > today ? first : today
+}
+
+/**
+ * Where a new or edited plan starts from when nobody has said: the log's
+ * reading for `kind` toward `goal`, else what the plan being replaced started
+ * from, else nothing at all.
+ */
+export function startingLevel(
+  entries: CardioEntry[],
+  kind: string,
+  goal: CardioGoal,
+  today: string,
+  fallback?: CardioLevel,
+): CardioLevel {
+  return cardioLevelFrom(entries, kind, goal, today) ?? fallback ?? { longestMin: 0, longestMi: 0, weeklyMin: 0 }
+}
+
+/** `mi` as the race it's within a logging rounding of, so 3.1 reads "5k" and plans to the 5k's own length. */
+export function snapDistance(mi: number): number {
+  return [MI_5K, MI_10K, MI_HALF, MI_MARATHON].find((race) => sameDistance(mi, race)) ?? mi
 }
 
 // ---------------------------------------------------------------------------
