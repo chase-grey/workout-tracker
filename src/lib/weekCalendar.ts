@@ -7,7 +7,8 @@
  * remaining weekly goal is spread over the days still open, starting today, and
  * the strength days take the rotation in turn from whichever was trained last.
  * A weekday pinned to a pillar (see {@link CalendarPins}) is planned whatever
- * the goal says, and the rest of the goal spreads round it.
+ * the goal says, and the rest of the goal spreads round it. A week given days
+ * of its own (see {@link WeekPins}) is planned on exactly those and no others.
  *
  * Past days only ever show what happened. A day that was "planned" and passed
  * empty is not marked missed: the projection was the app's guess, not a promise
@@ -30,6 +31,7 @@ import { trainingSessions } from './session'
 import { completedRoutinesOf } from './stretchRotation'
 import type { WeeklyGoalConfig } from './weeklyStreak'
 import { parseISODate, toISODate, weekStartISO } from './dates'
+import { defaultCardioDays } from './cardioPlan'
 
 /**
  * One planned cardio session. Mirrors `PlannedCardio` in src/lib/cardioPlan.ts
@@ -46,12 +48,27 @@ export type PlannedCardio = {
 
 /**
  * Weekdays (0 = Monday … 6 = Sunday) pinned to a pillar: "I lift on Mondays".
- * Only the two pillars whose sessions the app runs take pins — cardio has a
- * plan of its own, and the calorie target is every day already.
+ * The calorie target takes none, being every day already, and cardio's are
+ * read only in a week its own plan has nothing to say about.
  */
-export type CalendarPins = Partial<Record<'strength' | 'flexibility', number[]>>
+export type CalendarPins = Partial<Record<'strength' | 'flexibility' | 'cardio', number[]>>
 
 export type PinnablePillar = keyof CalendarPins
+
+export const PINNABLE: PinnablePillar[] = ['strength', 'flexibility', 'cardio']
+
+/** What a schedule row calls each pillar's sessions. */
+export const PIN_LABEL: Record<PinnablePillar, string> = { strength: 'lift', flexibility: 'stretch', cardio: 'cardio' }
+
+export const WEEKDAY_SHORT = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+
+/**
+ * One week's own days, by its Monday: "this week I'm lifting Tuesday instead".
+ * A pillar named here is planned on exactly these weekdays that week — the
+ * standing pins and the goal's spread both step aside — and a pillar left out
+ * keeps its usual projection.
+ */
+export type WeekPins = Record<string, CalendarPins>
 
 /** done: it happened. planned: still ahead. missed: a calorie day that passed under target. */
 export type CalendarStatus = 'done' | 'planned' | 'missed'
@@ -62,6 +79,12 @@ export type CalendarAction =
   | { type: 'stretch'; routine: FlexRoutineKey }
   | { type: 'cardio' }
 
+/** What a session item is, enough to show its details without starting it. */
+export type CalendarWhat =
+  | { type: 'lift'; day: DayType }
+  | { type: 'stretch'; routine: FlexRoutineKey }
+  | { type: 'cardio'; kind?: string; minutes?: number; distanceMi?: number }
+
 export type CalendarItem = {
   pillar: Pillar
   status: CalendarStatus
@@ -71,6 +94,8 @@ export type CalendarItem = {
   amount?: string
   /** Set only on today's planned items. */
   action?: CalendarAction
+  /** Set on a session whose contents are known: a lift day, a routine, a cardio session. */
+  what?: CalendarWhat
 }
 
 export type CalendarDay = {
@@ -106,6 +131,7 @@ export type WeekCalendarInput = {
   calorieGoalOn: (date: string) => number
   dietDirection?: DietDirection
   pins?: CalendarPins
+  weekPins?: WeekPins
 }
 
 function addDays(date: string, n: number): string {
@@ -170,7 +196,8 @@ function doneByDate(input: WeekCalendarInput): Done {
  * The days in the week of `weekStart` that `pillar` is projected onto: pinned
  * weekdays still open, then the rest of the weekly goal spread across the
  * unpinned open days. A day is open from today on, and today only while the
- * pillar hasn't been done today.
+ * pillar hasn't been done today. A week with days of its own takes exactly
+ * those that are still open.
  */
 function projectedDates(
   input: WeekCalendarInput,
@@ -182,9 +209,11 @@ function projectedDates(
   const dates = weekDates(weekStart)
   const doneOn = done[pillar]
   const open = dates.filter((d) => d > input.today || (d === input.today && !doneOn.has(d)))
+  const exact = input.weekPins?.[weekStart]?.[pillar]
+  if (exact) return open.filter((d) => exact.includes(dates.indexOf(d)))
   const doneCount = dates.filter((d) => doneOn.has(d)).length
   const remaining = Math.max(0, goal - doneCount)
-  const pinned = pillar === 'cardio' ? [] : (input.pins?.[pillar] ?? [])
+  const pinned = input.pins?.[pillar] ?? []
   const pinnedOpen = open.filter((d) => pinned.includes(dates.indexOf(d)))
   const unpinned = open.filter((d) => !pinnedOpen.includes(d))
   const extra = spreadDays(unpinned, remaining - pinnedOpen.length)
@@ -227,7 +256,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
   if (tracked('strength')) {
     for (const d of dates) {
       for (const day of done.strength.get(d) ?? []) {
-        push(d, { pillar: 'strength', status: 'done', label: input.liftLabels[day] })
+        push(d, { pillar: 'strength', status: 'done', label: input.liftLabels[day], what: { type: 'lift', day } })
       }
     }
     const planned = projectedDates(input, done, weekStart, 'strength', goals.workouts)
@@ -244,6 +273,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
         pillar: 'strength',
         status: 'planned',
         label: day ? input.liftLabels[day] : 'workout',
+        ...(day ? { what: { type: 'lift', day } } : {}),
         ...(day && isToday(d) ? { action: { type: 'lift', day } } : {}),
       })
     })
@@ -252,7 +282,12 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
   if (tracked('flexibility')) {
     for (const d of dates) {
       for (const r of done.flexibility.get(d) ?? []) {
-        push(d, { pillar: 'flexibility', status: 'done', label: r ? input.stretchLabels[r] : 'stretch' })
+        push(d, {
+          pillar: 'flexibility',
+          status: 'done',
+          label: r ? input.stretchLabels[r] : 'stretch',
+          ...(r ? { what: { type: 'stretch', routine: r } } : {}),
+        })
       }
     }
     const planned = projectedDates(input, done, weekStart, 'flexibility', goals.flex)
@@ -264,6 +299,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
         pillar: 'flexibility',
         status: 'planned',
         label: routine ? input.stretchLabels[routine] : 'stretch',
+        ...(routine ? { what: { type: 'stretch', routine } } : {}),
         ...(routine && isToday(d) ? { action: { type: 'stretch', routine } } : {}),
       })
     })
@@ -272,7 +308,13 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
   if (tracked('cardio')) {
     for (const d of dates) {
       for (const e of done.cardio.get(d) ?? []) {
-        push(d, { pillar: 'cardio', status: 'done', label: e.kind, amount: cardioAmount(e) })
+        push(d, {
+          pillar: 'cardio',
+          status: 'done',
+          label: e.kind,
+          amount: cardioAmount(e),
+          what: { type: 'cardio', kind: e.kind, minutes: e.minutes, distanceMi: e.distanceMi },
+        })
       }
     }
     const inWeek = (input.plannedCardio ?? []).filter((p) => dates.includes(p.date))
@@ -288,6 +330,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
           label: p.label,
           // A plan's label carries its own figure ("easy run 25 min"); don't say it twice.
           amount: /\d/.test(p.label) ? undefined : cardioAmount(p),
+          what: { type: 'cardio', kind: p.kind, minutes: p.minutes, distanceMi: p.distanceMi },
           ...(isToday(p.date) ? { action: { type: 'cardio' } } : {}),
         })
       }
@@ -298,6 +341,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
           pillar: 'cardio',
           status: 'planned',
           label: 'cardio',
+          what: { type: 'cardio' },
           ...(isToday(d) ? { action: { type: 'cardio' } } : {}),
         })
       }
@@ -350,9 +394,69 @@ export function pillarMarks(day: CalendarDay, pillars: Pillar[]): Record<Pillar,
 
 /** `pins` with `weekday` added to or taken off `pillar`. */
 export function togglePin(pins: CalendarPins | undefined, pillar: PinnablePillar, weekday: number): CalendarPins {
-  const cur = pins?.[pillar] ?? []
-  const next = cur.includes(weekday) ? cur.filter((d) => d !== weekday) : [...cur, weekday].sort((a, b) => a - b)
-  return { ...pins, [pillar]: next }
+  return setPins(pins, pillar, toggleWeekday(pins?.[pillar] ?? [], weekday))
+}
+
+/** `weekdays` with `weekday` added or taken off. */
+export function toggleWeekday(weekdays: number[], weekday: number): number[] {
+  return weekdays.includes(weekday) ? weekdays.filter((d) => d !== weekday) : [...weekdays, weekday]
+}
+
+/** `pins` with `pillar` on exactly `weekdays`. */
+export function setPins(pins: CalendarPins | undefined, pillar: PinnablePillar, weekdays: number[]): CalendarPins {
+  return { ...pins, [pillar]: [...new Set(weekdays)].sort((a, b) => a - b) }
+}
+
+/**
+ * The weekdays `pillar` stands on in a laid-out week, done or still planned:
+ * what the schedule editor opens showing for that week.
+ */
+export function scheduledWeekdays(days: CalendarDay[], pillar: PinnablePillar): number[] {
+  return days.filter((d) => d.items.some((i) => i.pillar === pillar)).map((d) => d.weekday)
+}
+
+/**
+ * `weekPins` with one week's days for `pillar` set, and the weeks before
+ * `today`'s dropped: a week behind you shows only what happened, so its days
+ * have nothing left to say and would only ride along in every sync.
+ */
+export function withWeekPins(
+  weekPins: WeekPins | undefined,
+  weekStart: string,
+  pillar: PinnablePillar,
+  weekdays: number[],
+  today: string,
+): WeekPins {
+  const week = weekStartISO(weekStart)
+  const current = weekStartISO(today)
+  const kept = Object.fromEntries(Object.entries(weekPins ?? {}).filter(([w]) => w >= current))
+  return { ...kept, [week]: setPins(kept[week], pillar, weekdays) }
+}
+
+/** `weekPins` without the week of `weekStart`: back to the usual projection. */
+export function withoutWeekPins(weekPins: WeekPins | undefined, weekStart: string): WeekPins {
+  const week = weekStartISO(weekStart)
+  return Object.fromEntries(Object.entries(weekPins ?? {}).filter(([w]) => w !== week))
+}
+
+/**
+ * The days a new schedule opens on for these weekly counts: lifts spread from
+ * Monday, stretches from Tuesday so the two don't stack where the week has
+ * room, and cardio clear of the lifting days with a weekend day held for the
+ * long one (see cardioPlan.defaultCardioDays). A count of 0 gets no days.
+ */
+export function defaultSchedule(goals: { workouts: number; flex: number; cardio?: number }): CalendarPins {
+  const week = [0, 1, 2, 3, 4, 5, 6]
+  const spread = (n: number, from: number) =>
+    Array.from({ length: Math.min(7, Math.max(0, n)) }, (_, i) => (Math.floor((i * 7) / Math.min(7, n)) + from) % 7)
+      .sort((a, b) => a - b)
+  const strength = spread(goals.workouts, 0)
+  const cardio = goals.cardio ?? 0
+  return {
+    strength,
+    flexibility: spread(goals.flex, 1),
+    cardio: cardio >= 7 ? week : cardio > 0 ? defaultCardioDays(cardio, strength) : [],
+  }
 }
 
 /**
@@ -365,5 +469,8 @@ export function defaultCalendarDate(weekStart: string, today: string): string {
   return dates[0] > today ? dates[0] : dates[6]
 }
 
-/** The calendar's two forms: a row per day, or one strip of marks. */
+/**
+ * The calendar's two forms: one strip of marks with the picked day's sessions
+ * under it, or a row per day. `simple` is how it opens unless `full` was kept.
+ */
 export type WeekCalendarView = 'full' | 'simple'

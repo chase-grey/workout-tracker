@@ -4,12 +4,16 @@ import type { FlexEntry } from './flex'
 import type { WeeklyGoalConfig } from './weeklyStreak'
 import {
   defaultCalendarDate,
+  defaultSchedule,
   pillarMarks,
+  scheduledWeekdays,
   shiftWeek,
   spreadDays,
   togglePin,
   weekCalendar,
   weekDates,
+  withWeekPins,
+  withoutWeekPins,
   type WeekCalendarInput,
 } from './weekCalendar'
 
@@ -163,9 +167,24 @@ describe('weekCalendar', () => {
         { date: '2026-11-21', kind: 'bike', distanceMi: 10, label: 'long ride' },
       ],
     }))
-    expect(days[0].items).toEqual([{ pillar: 'cardio', status: 'done', label: 'run', amount: '30m' }])
+    expect(days[0].items).toEqual([
+      {
+        pillar: 'cardio',
+        status: 'done',
+        label: 'run',
+        amount: '30m',
+        what: { type: 'cardio', kind: 'run', minutes: 30, distanceMi: 3 },
+      },
+    ])
     expect(days[2].items).toEqual([
-      { pillar: 'cardio', status: 'planned', label: 'easy run', amount: '25m', action: { type: 'cardio' } },
+      {
+        pillar: 'cardio',
+        status: 'planned',
+        label: 'easy run',
+        amount: '25m',
+        what: { type: 'cardio', kind: 'run', minutes: 25, distanceMi: undefined },
+        action: { type: 'cardio' },
+      },
     ])
     expect(days[5].items[0].amount).toBe('10mi')
   })
@@ -244,5 +263,122 @@ describe('defaultCalendarDate', () => {
     expect(defaultCalendarDate(MON, WED)).toBe(WED)
     expect(defaultCalendarDate(shiftWeek(MON, -1), WED)).toBe('2026-11-15')
     expect(defaultCalendarDate(shiftWeek(MON, 1), WED)).toBe('2026-11-23')
+  })
+})
+
+describe('a week with days of its own', () => {
+  it('plans a pillar on exactly those days, whatever the goal and the pins say', () => {
+    const days = weekCalendar(input({
+      pillars: ['strength', 'flexibility'],
+      pins: { strength: [0, 2, 4] },
+      weekPins: { [MON]: { strength: [1] } },
+    }))
+    expect(scheduledWeekdays(days, 'strength')).toEqual([1])
+    // A pillar the week doesn't name keeps its usual spread.
+    expect(scheduledWeekdays(days, 'flexibility')).toEqual([0, 3])
+  })
+
+  it('leaves the other weeks to the standing schedule', () => {
+    const days = weekCalendar(input({
+      weekStart: shiftWeek(MON, 1),
+      pillars: ['strength'],
+      pins: { strength: [0, 2] },
+      weekPins: { [MON]: { strength: [1] } },
+    }))
+    expect(scheduledWeekdays(days, 'strength')).toEqual([0, 2])
+  })
+
+  it('shows what is behind you as it happened, and only the days still open', () => {
+    const days = weekCalendar(input({
+      pillars: ['strength'],
+      today: WED,
+      workouts: [lift(MON, 'push')],
+      weekPins: { [MON]: { strength: [1, 4] } },
+    }))
+    expect(of(days, 'strength').map((d) => d[0] ?? null)).toEqual([
+      'done:push', null, null, null, 'planned:pull', null, null,
+    ])
+  })
+
+  it('can be left empty: nothing more planned that week', () => {
+    const days = weekCalendar(input({ pillars: ['strength'], weekPins: { [MON]: { strength: [] } } }))
+    expect(scheduledWeekdays(days, 'strength')).toEqual([])
+  })
+})
+
+describe('cardio pins', () => {
+  it('plan the pinned days when the week has no cardio plan', () => {
+    const days = weekCalendar(input({ pillars: ['cardio'], pins: { cardio: [1, 5] } }))
+    expect(scheduledWeekdays(days, 'cardio')).toEqual([1, 5])
+  })
+
+  it('step aside for a week the cardio plan lays out', () => {
+    const days = weekCalendar(input({
+      pillars: ['cardio'],
+      pins: { cardio: [1, 5] },
+      plannedCardio: [{ date: WED, kind: 'run', minutes: 25, label: 'easy run' }],
+    }))
+    expect(scheduledWeekdays(days, 'cardio')).toEqual([2])
+  })
+})
+
+describe('what an item is', () => {
+  it('names the lift day and the routine on done and planned sessions alike', () => {
+    const days = weekCalendar(input({
+      pillars: ['strength', 'flexibility'],
+      today: WED,
+      workouts: [lift(MON, 'push')],
+    }))
+    expect(days[0].items[0].what).toEqual({ type: 'lift', day: 'push' })
+    const planned = days.flatMap((d) => d.items).filter((i) => i.status === 'planned')
+    expect(planned.every((i) => i.what)).toBe(true)
+    // Only today's can be started; a later day's can still be looked at.
+    expect(planned.filter((i) => i.action).length).toBeLessThan(planned.length)
+  })
+})
+
+describe('withWeekPins', () => {
+  it('sets one pillar of one week and keeps the rest', () => {
+    const a = withWeekPins(undefined, WED, 'strength', [4, 1, 1], MON)
+    expect(a).toEqual({ [MON]: { strength: [1, 4] } })
+    const b = withWeekPins(a, MON, 'flexibility', [2], MON)
+    expect(b).toEqual({ [MON]: { strength: [1, 4], flexibility: [2] } })
+  })
+
+  it('drops the weeks already behind you', () => {
+    const old = { '2026-11-09': { strength: [0] }, [MON]: { strength: [1] } }
+    expect(withWeekPins(old, shiftWeek(MON, 1), 'strength', [3], WED)).toEqual({
+      [MON]: { strength: [1] },
+      '2026-11-23': { strength: [3] },
+    })
+  })
+
+  it('is undone by withoutWeekPins', () => {
+    const a = withWeekPins(undefined, MON, 'strength', [1], MON)
+    expect(withoutWeekPins(a, WED)).toEqual({})
+  })
+})
+
+describe('defaultSchedule', () => {
+  it('spreads lifts from monday and stretches from tuesday', () => {
+    const s = defaultSchedule({ workouts: 3, flex: 2, cardio: 0 })
+    expect(s.strength).toEqual([0, 2, 4])
+    expect(s.flexibility).toEqual([1, 4])
+    expect(s.cardio).toEqual([])
+  })
+
+  it('keeps cardio off the lifting days where the week has room', () => {
+    const s = defaultSchedule({ workouts: 3, flex: 0, cardio: 2 })
+    expect(s.cardio).toHaveLength(2)
+    expect(s.cardio!.some((d) => s.strength!.includes(d))).toBe(false)
+  })
+
+  it('gives every count its number of days, up to the whole week', () => {
+    for (let n = 0; n <= 7; n++) {
+      const s = defaultSchedule({ workouts: n, flex: n, cardio: n })
+      expect(new Set(s.strength).size).toBe(n)
+      expect(new Set(s.flexibility).size).toBe(n)
+      expect(new Set(s.cardio).size).toBe(n)
+    }
   })
 })

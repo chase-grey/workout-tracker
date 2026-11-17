@@ -1,11 +1,12 @@
 import { useData } from '../../store/DataContext'
 
-const CHOICES = ['full', 'simple', 'off'] as const
+const CHOICES = ['simple', 'full', 'off'] as const
+const LABELS: Record<(typeof CHOICES)[number], string> = { simple: 'minimal', full: 'expanded', off: 'off' }
 
-/** Today's week calendar: which form it takes, or none. */
+/** Today's week calendar: how it opens, or not at all. */
 export function WeekCalendarSetting() {
   const { settings, updateSettings } = useData()
-  const current = settings.showWeekCalendar === false ? 'off' : (settings.weekCalendarView ?? 'full')
+  const current = settings.showWeekCalendar === false ? 'off' : (settings.weekCalendarView ?? 'simple')
   const choose = (c: (typeof CHOICES)[number]) =>
     updateSettings(
       c === 'off'
@@ -25,7 +26,7 @@ export function WeekCalendarSetting() {
               current === c ? 'bg-accent text-on-accent' : 'text-neutral-400'
             }`}
           >
-            {c}
+            {LABELS[c]}
           </button>
         ))}
       </div>

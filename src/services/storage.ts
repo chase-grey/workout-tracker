@@ -20,7 +20,7 @@ import type { SkippedExercises } from '../lib/skipped'
 import type { Profile } from '../lib/profile'
 import type { CardioPin, HomeLayout } from '../lib/homeTiles'
 import type { CardioEntry } from '../lib/cardio'
-import type { CalendarPins, WeekCalendarView } from '../lib/weekCalendar'
+import type { CalendarPins, WeekCalendarView, WeekPins } from '../lib/weekCalendar'
 import type { CardioPlan } from '../lib/cardioPlan'
 
 const KEYS = {
@@ -261,10 +261,12 @@ export type Settings = {
   cardioPins?: CardioPin[]
   /** Whether Today shows the week calendar (see lib/weekCalendar). Unset is shown. */
   showWeekCalendar?: boolean
-  /** The week calendar's form: a row per day, or one strip of marks. Unset is full. */
+  /** How the week calendar opens: one strip of marks, or kept open at a row per day. Unset is the strip. */
   weekCalendarView?: WeekCalendarView
-  /** Weekdays pinned to lifting or stretching, which the calendar plans first. */
+  /** The standing schedule: weekdays pinned to lifting, stretching or cardio, which the calendar plans first. */
   calendarPins?: CalendarPins
+  /** Single weeks given days of their own, by Monday (see lib/weekCalendar WeekPins). */
+  calendarWeeks?: WeekPins
   /**
    * Guide mode: labels and explanations the app otherwise leaves out, and the
    * first-run tour (see lib/tour). On for accounts the welcome flow makes,

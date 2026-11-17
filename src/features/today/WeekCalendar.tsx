@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { MdAdd, MdChevronLeft, MdChevronRight, MdPlayArrow, MdViewAgenda, MdViewWeek } from 'react-icons/md'
+import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { dayOrder } from '../../config/plan'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
@@ -11,21 +11,19 @@ import { pillarColours } from '../../lib/theme'
 import { useTheme } from '../../lib/themeStore'
 import { weeklyGoalsFor } from '../../lib/weeklyStreak'
 import {
+  PINNABLE,
+  WEEKDAY_SHORT as DOW,
   pillarMarks,
   shiftWeek,
-  togglePin,
   weekCalendar,
   type CalendarAction,
   type CalendarDay,
   type CalendarItem,
   type CalendarStatus,
-  type PinnablePillar,
   type PlannedCardio,
-  type WeekCalendarView,
 } from '../../lib/weekCalendar'
-
-const DOW = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-const PIN_VERB: Record<PinnablePillar, string> = { strength: 'lift', flexibility: 'stretch' }
+import { CalendarItemSheet } from './CalendarItemSheet'
+import { ScheduleSheet } from './ScheduleSheet'
 
 type Props = {
   /** The Monday shown. */
@@ -59,15 +57,26 @@ function weekTitle(weekStart: string, today: string): string {
 
 /**
  * Today's week, a day at a time: what each pillar did and what's still ahead
- * (see lib/weekCalendar). Two forms, swapped from the card's own header — a row
- * per day naming everything, or one strip of coloured marks.
+ * (see lib/weekCalendar).
+ *
+ * It opens small — one strip of coloured marks, and under it the sessions of
+ * the day picked — because most looks at it are "what's today". The chevron
+ * opens the whole week at a row per day, and `keep open` there makes that the
+ * way it opens from then on. Either way a session is a button that shows what
+ * it holds (CalendarItemSheet) rather than one that starts it, and which days
+ * the sessions fall on is set from the header (ScheduleSheet).
+ *
+ * The calorie figures stay off it: the calorie card below logs to the day
+ * picked here and says them once. A day's target shows only as its mark.
  */
 export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plannedCardio, onAction }: Props) {
   const { workouts, plan, flexEntries, cardioEntries, calorieEntries, settings, updateSettings } = useData()
   const colours = pillarColours(useTheme())
   const profile = settings.profile
-  const view: WeekCalendarView = settings.weekCalendarView ?? 'full'
-  const [open, setOpen] = useState<string | null>(null)
+  const kept = settings.weekCalendarView === 'full'
+  const [expanded, setExpanded] = useState(kept)
+  const [detail, setDetail] = useState<{ day: CalendarDay; item: CalendarItem } | null>(null)
+  const [scheduling, setScheduling] = useState(false)
 
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -99,90 +108,120 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
       calorieGoalOn,
       dietDirection: profile?.dietDirection ?? 'gain',
       pins: settings.calendarPins,
+      weekPins: settings.calendarWeeks,
     })
-  }, [weekStart, today, pillars, workouts, plan, flexEntries, cardioEntries, plannedCardio, calorieEntries, profile, settings.calendarPins])
+  }, [
+    weekStart,
+    today,
+    pillars,
+    workouts,
+    plan,
+    flexEntries,
+    cardioEntries,
+    plannedCardio,
+    calorieEntries,
+    profile,
+    settings.calendarPins,
+    settings.calendarWeeks,
+  ])
 
   const furthest = shiftWeek(today, 1)
-  const setView = (v: WeekCalendarView) => updateSettings({ ...settings, weekCalendarView: v })
-  const pinnable = (['strength', 'flexibility'] as const).filter((p) => pillars.includes(p))
-  const pick = (date: string) => {
-    onSelect(date)
-    setOpen((o) => (o === date && date === selected ? null : date))
-  }
+  const title = weekTitle(weekStart, today)
+  // A week the cardio plan lays out takes its days from the plan, not from here.
+  const schedulable = PINNABLE.filter((p) => pillars.includes(p) && !(p === 'cardio' && plannedCardio.length > 0))
+  const open = (day: CalendarDay, item: CalendarItem) => setDetail({ day, item })
+  const picked = days.find((d) => d.date === selected)
 
-  const iconButton = 'flex h-9 w-9 items-center justify-center rounded-lg text-xl active:opacity-60 disabled:opacity-30'
+  const iconButton =
+    'flex h-9 w-9 items-center justify-center rounded-lg text-xl text-neutral-400 active:opacity-60 disabled:opacity-30'
 
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-1 flex items-center justify-between gap-1">
-        <h2 className="text-sm font-semibold tracking-wide text-neutral-500">{weekTitle(weekStart, today)}</h2>
+        <h2 className="text-sm font-semibold tracking-wide text-neutral-500">{title}</h2>
         <div className="-mr-1 flex items-center">
-          <button
-            onClick={() => onWeekChange(shiftWeek(weekStart, -1))}
-            aria-label="previous week"
-            className={`${iconButton} text-neutral-400`}
-          >
+          <button onClick={() => onWeekChange(shiftWeek(weekStart, -1))} aria-label="previous week" className={iconButton}>
             <MdChevronLeft aria-hidden />
           </button>
           <button
             onClick={() => onWeekChange(shiftWeek(weekStart, 1))}
             disabled={weekStart >= furthest}
             aria-label="next week"
-            className={`${iconButton} text-neutral-400`}
+            className={iconButton}
           >
             <MdChevronRight aria-hidden />
           </button>
-          <div className="ml-1 flex rounded-lg bg-surface-2 p-0.5">
-            {(
-              [
-                ['full', MdViewAgenda, 'full calendar'],
-                ['simple', MdViewWeek, 'simple calendar'],
-              ] as const
-            ).map(([v, Icon, label]) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                aria-label={label}
-                aria-pressed={view === v}
-                className={`flex h-8 w-8 items-center justify-center rounded-md text-base ${
-                  view === v ? 'bg-accent text-on-accent' : 'text-neutral-400'
-                }`}
-              >
-                <Icon aria-hidden />
-              </button>
-            ))}
-          </div>
+          {schedulable.length > 0 && (
+            <button onClick={() => setScheduling(true)} aria-label="schedule" className={iconButton}>
+              <MdEditCalendar aria-hidden />
+            </button>
+          )}
+          <button
+            onClick={() => setExpanded((e) => !e)}
+            aria-label={expanded ? 'show less' : 'show the whole week'}
+            aria-expanded={expanded}
+            className={iconButton}
+          >
+            {expanded ? <MdExpandLess aria-hidden /> : <MdExpandMore aria-hidden />}
+          </button>
         </div>
       </div>
 
-      {view === 'simple' ? (
-        <SimpleStrip days={days} pillars={pillars} colours={colours} selected={selected} onSelect={onSelect} />
-      ) : (
-        <ul className="flex flex-col">
-          {days.map((day) => (
-            <li key={day.date}>
-              <DayRow
-                day={day}
-                colours={colours}
-                selected={day.date === selected}
-                expanded={open === day.date}
-                onTap={() => pick(day.date)}
-              />
-              {open === day.date && (
-                <DayDetail
+      {expanded ? (
+        <>
+          <ul className="flex flex-col">
+            {days.map((day) => (
+              <li key={day.date}>
+                <DayRow
                   day={day}
                   colours={colours}
-                  pinnable={pinnable}
-                  pinned={(p) => settings.calendarPins?.[p]?.includes(day.weekday) ?? false}
-                  onPin={(p) =>
-                    updateSettings({ ...settings, calendarPins: togglePin(settings.calendarPins, p, day.weekday) })
-                  }
-                  onAction={onAction}
+                  selected={day.date === selected}
+                  onSelect={() => onSelect(day.date)}
+                  onOpen={(item) => open(day, item)}
                 />
-              )}
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end">
+            <button
+              onClick={() => updateSettings({ ...settings, weekCalendarView: kept ? 'simple' : 'full' })}
+              aria-pressed={kept}
+              className={`min-h-[36px] rounded-lg px-2 text-xs font-medium ${kept ? 'text-accent' : 'text-neutral-500'}`}
+            >
+              keep open
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <SimpleStrip days={days} pillars={pillars} colours={colours} selected={selected} onSelect={onSelect} />
+          {picked && (
+            <div className="mt-2 flex min-h-[36px] flex-wrap items-center gap-1.5">
+              <Sessions day={picked} colours={colours} onOpen={(item) => open(picked, item)} chip />
+            </div>
+          )}
+        </>
+      )}
+
+      {detail && (
+        <CalendarItemSheet
+          day={detail.day}
+          item={detail.item}
+          colour={colours[detail.item.pillar]}
+          onAction={onAction}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {scheduling && (
+        <ScheduleSheet
+          weekStart={weekStart}
+          weekLabel={title}
+          today={today}
+          days={days}
+          pillars={schedulable}
+          colours={colours}
+          onClose={() => setScheduling(false)}
+        />
       )}
     </div>
   )
@@ -192,108 +231,81 @@ function itemText(i: CalendarItem): string {
   return i.amount ? `${i.label} ${i.amount}` : i.label
 }
 
+/**
+ * A day's sessions, each a button onto its details. `chip` gives them the
+ * filled, thumb-sized form the small calendar shows for the one day picked;
+ * a row of the open week sets them as plain text.
+ */
+function Sessions({
+  day,
+  colours,
+  onOpen,
+  chip,
+}: {
+  day: CalendarDay
+  colours: Record<Pillar, string>
+  onOpen: (item: CalendarItem) => void
+  chip?: boolean
+}) {
+  const sessions = day.items.filter((i) => i.pillar !== 'diet')
+  if (sessions.length === 0) return <span className={`text-sm text-neutral-600 ${chip ? 'px-1' : ''}`}>rest</span>
+  return (
+    <>
+      {sessions.map((i, n) => (
+        <button
+          key={n}
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpen(i)
+          }}
+          className={`flex items-center gap-1.5 text-left text-sm active:opacity-70 ${
+            chip ? 'min-h-[36px] rounded-lg bg-surface-2 px-2.5' : 'min-h-[32px]'
+          } ${i.status === 'done' ? 'text-neutral-100' : 'text-neutral-400'}`}
+        >
+          <Mark colour={colours[i.pillar]} status={i.status} />
+          {itemText(i)}
+        </button>
+      ))}
+    </>
+  )
+}
+
 function DayRow({
   day,
   colours,
   selected,
-  expanded,
-  onTap,
+  onSelect,
+  onOpen,
 }: {
   day: CalendarDay
   colours: Record<Pillar, string>
   selected: boolean
-  expanded: boolean
-  onTap: () => void
+  onSelect: () => void
+  onOpen: (item: CalendarItem) => void
 }) {
-  const sessions = day.items.filter((i) => i.pillar !== 'diet')
   const diet = day.items.find((i) => i.pillar === 'diet')
   const isToday = day.when === 'today'
   return (
-    <button
-      onClick={onTap}
-      aria-expanded={expanded}
-      className={`flex min-h-[40px] w-full items-center gap-2 rounded-lg px-2 py-1 text-left ${
-        isToday ? 'bg-surface-2' : ''
-      } ${selected ? 'ring-1 ring-accent' : ''}`}
+    // The row picks the day; a session inside it opens that session instead.
+    <div
+      onClick={onSelect}
+      className={`flex min-h-[40px] w-full items-center gap-2 rounded-lg px-2 ${isToday ? 'bg-surface-2' : ''} ${
+        selected ? 'ring-1 ring-accent' : ''
+      } ${day.when === 'past' && !selected ? 'opacity-60' : ''}`}
     >
-      <span className={`flex w-12 shrink-0 items-baseline gap-1 text-xs ${isToday ? 'text-accent' : 'text-neutral-500'}`}>
+      <button
+        aria-pressed={selected}
+        className={`flex min-h-[40px] w-12 shrink-0 items-center gap-1 text-xs ${
+          isToday ? 'text-accent' : 'text-neutral-500'
+        }`}
+      >
         <span className="font-semibold">{DOW[day.weekday]}</span>
         <span className="tabular-nums">{parseISODate(day.date).getDate()}</span>
+      </button>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3">
+        <Sessions day={day} colours={colours} onOpen={onOpen} />
       </span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
-        {sessions.length === 0 ? (
-          <span className="text-neutral-600">rest</span>
-        ) : (
-          sessions.map((i, n) => (
-            <span
-              key={n}
-              className={`flex items-center gap-1.5 ${i.status === 'done' ? 'text-neutral-100' : 'text-neutral-400'}`}
-            >
-              <Mark colour={colours[i.pillar]} status={i.status} />
-              {itemText(i)}
-            </span>
-          ))
-        )}
-      </span>
-      {diet && (
-        <span
-          className={`flex shrink-0 items-center gap-1 text-xs tabular-nums ${
-            diet.status === 'done' ? 'text-neutral-200' : 'text-neutral-500'
-          }`}
-        >
-          <Mark colour={colours.diet} status={diet.status} size={6} />
-          {diet.amount}
-        </span>
-      )}
-    </button>
-  )
-}
-
-function DayDetail({
-  day,
-  colours,
-  pinnable,
-  pinned,
-  onPin,
-  onAction,
-}: {
-  day: CalendarDay
-  colours: Record<Pillar, string>
-  pinnable: PinnablePillar[]
-  pinned: (p: PinnablePillar) => boolean
-  onPin: (p: PinnablePillar) => void
-  onAction: (a: CalendarAction) => void
-}) {
-  const startable = day.items.filter((i) => i.action)
-  return (
-    <div className="flex flex-col gap-1.5 px-2 pb-2 pt-1.5">
-      {startable.map((i, n) => (
-        <button
-          key={n}
-          onClick={() => i.action && onAction(i.action)}
-          className="flex min-h-[44px] items-center gap-2 rounded-xl bg-surface-2 px-3 text-sm font-semibold active:opacity-80"
-        >
-          <Mark colour={colours[i.pillar]} status="planned" />
-          <span className="flex-1 text-left">{itemText(i)}</span>
-          {i.action?.type === 'cardio' ? <MdAdd aria-hidden /> : <MdPlayArrow aria-hidden />}
-        </button>
-      ))}
-      {pinnable.length > 0 && (
-        <div className="flex gap-1.5">
-          {pinnable.map((p) => (
-            <button
-              key={p}
-              onClick={() => onPin(p)}
-              aria-pressed={pinned(p)}
-              className={`min-h-[36px] flex-1 rounded-lg px-2 text-xs font-medium ${
-                pinned(p) ? 'bg-accent text-on-accent' : 'bg-surface-2 text-neutral-400'
-              }`}
-            >
-              {PIN_VERB[p]} every {DOW[day.weekday]}
-            </button>
-          ))}
-        </div>
-      )}
+      {diet && <Mark colour={colours.diet} status={diet.status} size={6} />}
     </div>
   )
 }
@@ -319,10 +331,7 @@ function SimpleStrip({
     <div className="flex gap-1">
       {days.map((day) => {
         const marks = pillarMarks(day, pillars)
-        const label = [
-          DOW[day.weekday],
-          ...day.items.map((i) => `${i.label} ${i.status}`),
-        ].join(', ')
+        const label = [DOW[day.weekday], ...day.items.map((i) => `${i.label} ${i.status}`)].join(', ')
         return (
           <button
             key={day.date}
