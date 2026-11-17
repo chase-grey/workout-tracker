@@ -17,6 +17,8 @@ import {
   type Pillar,
   type Profile,
 } from '../../lib/profile'
+import { MACROS, type Macro } from '../../lib/calories'
+import { MACRO_LABELS, trackedMacros } from '../../lib/macros'
 import { recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
 import { PressButton, SETTINGS_BUTTON, SETTINGS_FIELD, SETTINGS_LABEL } from './PressButton'
@@ -31,6 +33,9 @@ const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[
 ]
 
 const DIRECTIONS: DietDirection[] = ['lose', 'maintain', 'gain']
+
+/** Where each macro's own daily target lives on the profile. */
+const MACRO_GOAL_KEYS = { protein: 'proteinGoal', carbs: 'carbGoal', fat: 'fatGoal' } as const
 
 const goalsInForce = (p: Profile): WeeklyGoalConfig => {
   const g = p.weeklyGoals[p.weeklyGoals.length - 1]?.goals
@@ -64,7 +69,8 @@ function TrackingSection() {
   const [pillarsDraft, setPillars] = useState<Pillar[] | null>(null)
   const [goalsDraft, setGoals] = useState<WeeklyGoalConfig | null>(null)
   const [caloriesDraft, setCalories] = useState<string | null>(null)
-  const [proteinDraft, setProtein] = useState<string | null>(null)
+  const [macrosDraft, setMacros] = useState<Macro[] | null>(null)
+  const [macroGoalDrafts, setMacroGoals] = useState<Partial<Record<Macro, string>>>({})
   const [directionDraft, setDirection] = useState<DietDirection | null>(null)
   const [scaleDraft, setScale] = useState<boolean | null>(null)
   const [bodyFatDraft, setBodyFat] = useState<boolean | null>(null)
@@ -73,8 +79,10 @@ function TrackingSection() {
   const pillars = pillarsDraft ?? profile.pillars
   const goals = goalsDraft ?? goalsInForce(profile)
   const caloriesText = caloriesDraft ?? (baseCalories ? String(baseCalories) : '')
-  const baseProtein = profile.proteinGoal ?? null
-  const proteinText = proteinDraft ?? (baseProtein ? String(baseProtein) : '')
+  const baseMacros = trackedMacros(profile)
+  const macros = macrosDraft ?? baseMacros
+  const baseMacroGoal = (m: Macro) => profile[MACRO_GOAL_KEYS[m]] ?? null
+  const macroGoalText = (m: Macro) => macroGoalDrafts[m] ?? (baseMacroGoal(m) ? String(baseMacroGoal(m)) : '')
   const direction = directionDraft ?? baseDirection
   const scale = scaleDraft ?? weighsIn(profile)
   const bodyFat = bodyFatDraft ?? readsBodyFat(profile)
@@ -86,14 +94,26 @@ function TrackingSection() {
     pillars.length !== profile.pillars.length || pillars.some((p) => !profile.pillars.includes(p))
   const goalsChanged = !sameGoals(maskGoals(goals, pillars), baseGoals)
   const caloriesChanged = on('diet') && caloriesValid && Math.round(calories) !== baseCalories
-  // Blank hands the protein target back to body weight.
-  const proteinNum = proteinText.trim() === '' ? null : Math.round(Number(proteinText))
-  const proteinValid = proteinNum === null || (Number.isFinite(proteinNum) && proteinNum > 0)
-  const proteinChanged = on('diet') && proteinValid && proteinNum !== baseProtein
+  const macrosChanged =
+    on('diet') && (macros.length !== baseMacros.length || macros.some((m) => !baseMacros.includes(m)))
+  // Blank hands a macro's target back to the one worked out for it.
+  const macroGoalNum = (m: Macro) => (macroGoalText(m).trim() === '' ? null : Math.round(Number(macroGoalText(m))))
+  const macroGoalChanged = (m: Macro) => {
+    const num = macroGoalNum(m)
+    const valid = num === null || (Number.isFinite(num) && num > 0)
+    return on('diet') && macros.includes(m) && valid && num !== baseMacroGoal(m)
+  }
+  const macroGoalsChanged = MACROS.some(macroGoalChanged)
   const directionChanged = on('diet') && !ownerFlavour(profile) && direction !== baseDirection
   const measuresChanged = scale !== weighsIn(profile) || bodyFat !== readsBodyFat(profile)
   const changed =
-    pillarsChanged || goalsChanged || caloriesChanged || proteinChanged || directionChanged || measuresChanged
+    pillarsChanged ||
+    goalsChanged ||
+    caloriesChanged ||
+    macrosChanged ||
+    macroGoalsChanged ||
+    directionChanged ||
+    measuresChanged
 
   const togglePillar = (p: Pillar) => {
     if (!on(p)) {
@@ -114,9 +134,12 @@ function TrackingSection() {
     let next: Profile = { ...profile, pillars, scale, bodyFatReading: bodyFat }
     if (goalsChanged) next = withWeeklyGoals(next, maskGoals(goals, pillars), weekStartISO(today))
     if (caloriesChanged) next = withCalorieGoal(next, Math.round(calories), today)
-    if (proteinChanged) {
-      const { proteinGoal: _dropped, ...rest } = next
-      next = proteinNum === null ? rest : { ...rest, proteinGoal: proteinNum }
+    if (macrosChanged) next = { ...next, macros }
+    for (const m of MACROS) {
+      if (!macroGoalChanged(m)) continue
+      const { [MACRO_GOAL_KEYS[m]]: _dropped, ...rest } = next
+      const num = macroGoalNum(m)
+      next = num === null ? rest : { ...rest, [MACRO_GOAL_KEYS[m]]: num }
     }
     if (on('diet') && !ownerFlavour(profile)) next = { ...next, dietDirection: direction }
     void updateSettings({ ...settings, profile: next })
@@ -127,7 +150,8 @@ function TrackingSection() {
     setPillars(null)
     setGoals(null)
     setCalories(null)
-    setProtein(null)
+    setMacros(null)
+    setMacroGoals({})
     setDirection(null)
     setScale(null)
     setBodyFat(null)
@@ -212,17 +236,34 @@ function TrackingSection() {
             aria-label="daily calories"
             className={SETTINGS_FIELD}
           />
-          <input
-            type="number"
-            inputMode="numeric"
-            min="0"
-            step="1"
-            value={proteinText}
-            onChange={(e) => setProtein(e.target.value)}
-            placeholder="daily protein (g)"
-            aria-label="daily protein in grams"
-            className={SETTINGS_FIELD}
-          />
+          <div role="group" aria-label="macros" className="flex gap-1 rounded-xl bg-surface p-1">
+            {MACROS.map((m) => (
+              <PressButton
+                key={m}
+                onPress={() => setMacros(MACROS.filter((x) => (x === m ? !macros.includes(m) : macros.includes(x))))}
+                pressed={macros.includes(m)}
+                className={`min-h-[44px] flex-1 rounded-lg px-2 text-sm font-medium ${
+                  macros.includes(m) ? 'bg-accent text-on-accent' : 'text-neutral-400'
+                }`}
+              >
+                {MACRO_LABELS[m]}
+              </PressButton>
+            ))}
+          </div>
+          {macros.map((m) => (
+            <input
+              key={m}
+              type="number"
+              inputMode="numeric"
+              min="0"
+              step="1"
+              value={macroGoalText(m)}
+              onChange={(e) => setMacroGoals({ ...macroGoalDrafts, [m]: e.target.value })}
+              placeholder={`daily ${MACRO_LABELS[m]} (g)`}
+              aria-label={`daily ${MACRO_LABELS[m]} in grams`}
+              className={SETTINGS_FIELD}
+            />
+          ))}
           {!ownerFlavour(profile) && (
             <div role="group" aria-label="diet direction" className="flex gap-1 rounded-xl bg-surface p-1">
               {DIRECTIONS.map((d) => (

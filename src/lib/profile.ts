@@ -13,6 +13,7 @@
  */
 
 import type { WeeklyGoalConfig } from './weeklyStreak'
+import type { Macro } from './calories'
 
 /** The four things the app can track. A profile switches each on or off. */
 export type Pillar = 'strength' | 'flexibility' | 'cardio' | 'diet'
@@ -146,6 +147,16 @@ export type Profile = {
    * worked out from body weight (see lib/protein).
    */
   proteinGoal?: number
+  /**
+   * The macros they count on the food card: any of protein, carbs and fat, or
+   * none. Unset is protein alone, which is what a profile from before the
+   * question always had. Counting all three works the calories out from them
+   * (see lib/macros).
+   */
+  macros?: Macro[]
+  /** Daily carbohydrate and fat targets in grams they set themselves; unset, see lib/macros. */
+  carbGoal?: number
+  fatGoal?: number
   /** ISO timestamp the profile was first saved. */
   createdAt: string
 }

@@ -14,6 +14,8 @@ function day(daysAgo: number, helpings: Omit<Helping, 'at'>[]): CalorieEntry {
   return { date, calories, loggedAt: list[list.length - 1]?.at, lastAmount: list[list.length - 1]?.amount, helpings: list }
 }
 
+const meal = (calories: number, protein = 0, carbs = 0, fat = 0) => ({ calories, protein, carbs, fat })
+
 describe('commonMeals', () => {
   it('offers the helpings that recur, most often first', () => {
     const entries = [
@@ -22,8 +24,8 @@ describe('commonMeals', () => {
       day(3, [{ amount: 600, protein: 25 }, { amount: 1200 }]),
     ]
     expect(commonMeals(entries, { now: NOW })).toEqual([
-      { calories: 600, protein: 25 },
-      { calories: 900, protein: 50 },
+      meal(600, 25),
+      meal(900, 50),
     ])
   })
 
@@ -45,7 +47,7 @@ describe('commonMeals', () => {
       day(91, [{ amount: 800 }]),
     ]
     expect(
-      commonMeals(entries, { now: NOW, exclude: [{ calories: 100, protein: 0 }, { calories: 0, protein: 25 }] }),
+      commonMeals(entries, { now: NOW, exclude: [meal(100), meal(0, 25)] }),
     ).toEqual([])
   })
 
@@ -59,6 +61,16 @@ describe('commonMeals', () => {
       const { helpings: _h, ...rest } = day(n, [{ amount: 750 }])
       return rest
     })
-    expect(commonMeals(legacy, { now: NOW })).toEqual([{ calories: 750, protein: 0 }])
+    expect(commonMeals(legacy, { now: NOW })).toEqual([meal(750)])
+  })
+
+  it('tells meals apart by every macro counted, and drops the grams of one that is not', () => {
+    const entries = [
+      day(1, [{ amount: 540, protein: 30, carbs: 60, fat: 20 }, { amount: 540, protein: 30, carbs: 40, fat: 20 }]),
+      day(2, [{ amount: 540, protein: 30, carbs: 60, fat: 20 }, { amount: 540, protein: 30, carbs: 40, fat: 20 }]),
+    ]
+    expect(commonMeals(entries, { now: NOW })).toEqual([meal(540, 30, 40, 20), meal(540, 30, 60, 20)])
+    expect(commonMeals(entries, { now: NOW, macros: ['protein'] })).toEqual([meal(540, 30)])
+    expect(commonMeals(entries, { now: NOW, macros: [] })).toEqual([meal(540)])
   })
 })
