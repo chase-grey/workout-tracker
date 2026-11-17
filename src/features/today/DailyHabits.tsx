@@ -7,24 +7,30 @@ import {
   dayHelpings,
   foodLogStatus,
   formatClock,
+  formatGrams,
   formatHelping,
-  formatProtein,
-  proteinForDate,
+  macrosForDate,
   totalForDate,
+  type Macro,
+  type MacroGrams,
 } from '../../lib/calories'
 import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
-import { proteinGoalOn } from '../../lib/protein'
-import { commonMeals } from '../../lib/commonMeals'
+import {
+  MACRO_LABELS,
+  derivesCalories,
+  formatMacros,
+  macroCalories,
+  macroGoalOn,
+  trackedMacros,
+} from '../../lib/macros'
+import { commonMeals, type Meal } from '../../lib/commonMeals'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
 const QUICK_ADDS = [100, 500]
-const PROTEIN_ADDS = [10, 25]
+/** The grams each macro's buttons add; the first is also what its minus takes off. */
+const MACRO_ADDS: Record<Macro, number[]> = { protein: [10, 25], carbs: [10, 25], fat: [5, 10] }
 const ADD_BUTTON = 'min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80'
-/** The card's own buttons, which a meal button would only repeat. */
-const BUTTON_MEALS = [
-  ...QUICK_ADDS.map((calories) => ({ calories, protein: 0 })),
-  ...PROTEIN_ADDS.map((protein) => ({ calories: 0, protein })),
-]
+const NO_MACROS = { protein: 0, carbs: 0, fat: 0 }
 
 type Props = {
   /** A Monday selected from streak history; null keeps following the current week. */
@@ -81,14 +87,39 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
   const [showHelpings, setShowHelpings] = useState(false)
   useEffect(() => setShowHelpings(false), [selDate])
 
-  const selProtein = proteinForDate(calorieEntries, selDate)
-  const proteinGoal = proteinGoalOn(selDate, bodyWeights, settings.profile ?? null)
-  const proteinPct = proteinGoal ? Math.min(selProtein / proteinGoal, 1) * 100 : 0
+  const profile = settings.profile ?? null
+  const tracked = trackedMacros(profile)
+  // Counting all three macros makes the calories their sum: each gram logs the
+  // calories it brings, and the calorie buttons would only be the same food twice.
+  const derived = derivesCalories(tracked)
+  const selMacros = macrosForDate(calorieEntries, selDate)
 
-  const meals = commonMeals(calorieEntries, { now, exclude: BUTTON_MEALS })
+  // The card's own buttons, which a meal button would only repeat.
+  const buttonMeals: Meal[] = [
+    ...(derived ? [] : QUICK_ADDS.map((calories) => ({ ...NO_MACROS, calories }))),
+    ...tracked.flatMap((macro) =>
+      MACRO_ADDS[macro].map((grams) => ({
+        ...NO_MACROS,
+        calories: derived ? macroCalories({ [macro]: grams }) : 0,
+        [macro]: grams,
+      })),
+    ),
+  ]
+  const meals = commonMeals(calorieEntries, { now, exclude: buttonMeals, macros: tracked })
 
-  const addFood = (calories: number, protein = 0) => {
-    if (calories !== 0 || protein !== 0) void logCalories(calories, selDate, protein)
+  const addFood = (calories: number, macros: MacroGrams = {}) => {
+    if (calories !== 0 || Object.values(macros).some((g) => g !== 0)) void logCalories(calories, selDate, macros)
+  }
+  const addMacro = (macro: Macro, grams: number) => {
+    // A minus takes off no more than the day has, in grams or in the calories they stood for.
+    const delta = Math.max(-selMacros[macro], grams)
+    addFood(derived ? macroCalories({ [macro]: delta }) : 0, { [macro]: delta })
+  }
+  /** A helping or a meal as the card writes it; the calories go unsaid when the macros already say them. */
+  const describe = (calories: number, macros: MacroGrams) => {
+    const grams = formatMacros(macros, tracked)
+    const showCalories = calories !== 0 && (!derived || grams === '')
+    return [showCalories && formatHelping(calories), grams].filter(Boolean).join(' · ')
   }
 
   return (
@@ -150,34 +181,13 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
         )}
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
-        <span className="text-xs tracking-wider text-neutral-500">protein</span>
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-          {proteinGoal != null && (
-            <div className="h-full bg-accent transition-all" style={{ width: `${proteinPct}%` }} />
-          )}
-        </div>
-        <p className="text-xs tabular-nums text-neutral-400">
-          <span
-            className={`font-semibold ${
-              proteinGoal != null && selProtein >= proteinGoal ? 'text-accent-2' : 'text-neutral-100'
-            }`}
-          >
-            {formatProtein(selProtein)}
-          </span>
-          {proteinGoal != null && ` / ${formatProtein(proteinGoal)}`}
-        </p>
-      </div>
-
       {showHelpings && helpings.length > 0 && (
         <ul className="mt-2 space-y-0.5 rounded-xl bg-surface-2 px-3 py-2 text-xs tabular-nums">
           {helpings.map((h) => (
             <li key={h.at} className="flex justify-between">
               <span className="text-neutral-400">{formatClock(new Date(h.at))}</span>
               <span className={h.amount < 0 ? 'text-neutral-500' : 'text-neutral-100'}>
-                {[h.amount !== 0 && formatHelping(h.amount), h.protein && formatProtein(h.protein)]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {describe(h.amount, h)}
               </span>
             </li>
           ))}
@@ -214,48 +224,76 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
         <div className="mt-2 flex gap-1.5">
           {meals.map((m) => (
             <button
-              key={`${m.calories}|${m.protein}`}
-              onClick={() => addFood(m.calories, m.protein)}
+              key={[m.calories, m.protein, m.carbs, m.fat].join('|')}
+              onClick={() => addFood(m.calories, { protein: m.protein, carbs: m.carbs, fat: m.fat })}
               className={`${ADD_BUTTON} tabular-nums`}
             >
-              {[m.calories !== 0 && formatHelping(m.calories), m.protein !== 0 && formatProtein(m.protein)]
-                .filter(Boolean)
-                .join(' · ')}
+              {describe(m.calories, m)}
             </button>
           ))}
         </div>
       )}
 
-      <div className={`${meals.length > 0 ? 'mt-1.5' : 'mt-2'} flex gap-1.5`}>
-        {QUICK_ADDS.map((calories) => (
-          <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
-            +{calories}
+      {!derived && (
+        <div className={`${meals.length > 0 ? 'mt-1.5' : 'mt-2'} flex gap-1.5`}>
+          {QUICK_ADDS.map((calories) => (
+            <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
+              +{calories}
+            </button>
+          ))}
+          {selDate < today && (
+            <button onClick={() => addFood(selGoal)} className={ADD_BUTTON}>
+              +{selGoal}
+            </button>
+          )}
+          <button onClick={() => addFood(-100)} className={ADD_BUTTON}>
+            −100
           </button>
-        ))}
-        {selDate < today && (
-          <button onClick={() => addFood(selGoal)} className={ADD_BUTTON}>
-            +{selGoal}
-          </button>
-        )}
-        <button onClick={() => addFood(-100)} className={ADD_BUTTON}>
-          −100
-        </button>
-      </div>
+        </div>
+      )}
 
-      <div className="mt-1.5 flex gap-1.5">
-        {PROTEIN_ADDS.map((grams) => (
-          <button key={grams} onClick={() => addFood(0, grams)} className={ADD_BUTTON}>
-            +{formatProtein(grams)}
-          </button>
-        ))}
-        <button
-          onClick={() => addFood(0, -10)}
-          disabled={selProtein <= 0}
-          className={`${ADD_BUTTON} disabled:text-neutral-600`}
-        >
-          −{formatProtein(10)}
-        </button>
-      </div>
+      {tracked.map((macro) => {
+        const grams = selMacros[macro]
+        const goal = macroGoalOn(macro, selDate, bodyWeights, profile, selGoal)
+        const adds = MACRO_ADDS[macro]
+        return (
+          <div key={macro} role="group" aria-label={MACRO_LABELS[macro]} className="mt-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs tracking-wider text-neutral-500">{MACRO_LABELS[macro]}</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                {goal != null && (
+                  <div
+                    className="h-full bg-accent transition-all"
+                    style={{ width: `${Math.min(grams / goal, 1) * 100}%` }}
+                  />
+                )}
+              </div>
+              <p className="text-xs tabular-nums text-neutral-400">
+                <span
+                  className={`font-semibold ${goal != null && grams >= goal ? 'text-accent-2' : 'text-neutral-100'}`}
+                >
+                  {formatGrams(grams)}
+                </span>
+                {goal != null && ` / ${formatGrams(goal)}`}
+              </p>
+            </div>
+            <div className="mt-1.5 flex gap-1.5">
+              {adds.map((g) => (
+                <button key={g} onClick={() => addMacro(macro, g)} className={ADD_BUTTON}>
+                  +{formatGrams(g)}
+                </button>
+              ))}
+              <button
+                onClick={() => addMacro(macro, -adds[0])}
+                disabled={grams <= 0}
+                className={`${ADD_BUTTON} disabled:text-neutral-600`}
+              >
+                −{formatGrams(adds[0])}
+              </button>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

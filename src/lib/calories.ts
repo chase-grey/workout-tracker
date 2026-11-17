@@ -33,13 +33,22 @@ export type CalorieEntry = {
    * protein logged rather than as a gap to fill.
    */
   protein?: number
+  /** The day's running carbohydrate and fat totals in grams, kept like the protein. */
+  carbs?: number
+  fat?: number
 }
+
+/** The macros a day can count, in the order the card lists them. */
+export const MACROS = ['protein', 'carbs', 'fat'] as const
+export type Macro = (typeof MACROS)[number]
+/** Grams of each macro; one left out is none of it. */
+export type MacroGrams = Partial<Record<Macro, number>>
 
 /**
  * One helping on a day's log: when it was eaten, how many calories, and the
- * grams of protein in it when any were logged.
+ * grams of each macro in it when any were logged.
  */
-export type Helping = { at: string; amount: number; protein?: number }
+export type Helping = { at: string; amount: number } & MacroGrams
 
 /**
  * The daily calorie target, and the day each one took effect, oldest first.
@@ -161,12 +170,20 @@ export function totalForDate(entries: CalorieEntry[], date: string): number {
  * sums calories. A day from before protein was tracked is 0.
  */
 export function proteinForDate(entries: CalorieEntry[], date: string): number {
-  let total = 0
+  return macrosForDate(entries, date).protein
+}
+
+/** Grams of every macro logged on a single date; one never logged is 0. */
+export function macrosForDate(entries: CalorieEntry[], date: string): Record<Macro, number> {
+  const totals: Record<Macro, number> = { protein: 0, carbs: 0, fat: 0 }
   for (const entry of entries) {
-    const g = entry.protein
-    if (entry.date === date && g != null && isValidCalories(g)) total += g
+    if (entry.date !== date) continue
+    for (const macro of MACROS) {
+      const g = entry[macro]
+      if (g != null && isValidCalories(g)) totals[macro] += g
+    }
   }
-  return total
+  return totals
 }
 
 /**
@@ -280,16 +297,20 @@ export function recordHelping(
   date: string,
   amount: number,
   now: Date = new Date(),
-  protein = 0,
+  macros: MacroGrams = {},
 ): Helping[] {
   const list = dayHelpings(entries, date)
   const last = list[list.length - 1]
   const joins = last != null && now.getTime() - new Date(last.at).getTime() < HELPING_MERGE_MS
   const kept = joins ? list.slice(0, -1) : list
   const total = (joins ? last.amount : 0) + amount
-  const grams = Math.max(0, (joins ? (last.protein ?? 0) : 0) + protein)
-  if (total === 0 && grams === 0) return kept
-  return [...kept, { at: now.toISOString(), amount: total, ...(grams > 0 && { protein: grams }) }]
+  const helping: Helping = { at: now.toISOString(), amount: total }
+  for (const macro of MACROS) {
+    const grams = Math.max(0, (joins ? (last[macro] ?? 0) : 0) + (macros[macro] ?? 0))
+    if (grams > 0) helping[macro] = grams
+  }
+  if (total === 0 && MACROS.every((macro) => helping[macro] == null)) return kept
+  return [...kept, helping]
 }
 
 /** A logged helping the way the card writes it: `+500`, `−100`. */
@@ -297,8 +318,8 @@ export function formatHelping(calories: number): string {
   return calories < 0 ? `−${Math.abs(calories)}` : `+${calories}`
 }
 
-/** Grams of protein the way the card writes them: `40g`. */
-export function formatProtein(grams: number): string {
+/** Grams of a macro the way the card writes them: `40g`. */
+export function formatGrams(grams: number): string {
   return `${Math.round(grams)}g`
 }
 
@@ -344,8 +365,9 @@ export function foodLogStatus(
  * time but took this tap's amount would claim a helping the day never had.
  * The day's helping list travels the same way.
  *
- * `protein` is the day's new protein total; omitted, the date keeps the one it
- * had, so a write that doesn't mention protein can't zero the grams logged.
+ * `macros` holds the day's new total for each macro it names; one it leaves
+ * out keeps the total the date had, so a write that doesn't mention protein
+ * can't zero the grams logged.
  */
 export function setDayTotal(
   entries: CalorieEntry[],
@@ -354,13 +376,15 @@ export function setDayTotal(
   loggedAt?: string,
   lastAmount?: number,
   helpings?: Helping[],
-  protein?: number,
+  macros: MacroGrams = {},
 ): CalorieEntry[] {
   const kept = loggedAt ? { at: loggedAt, amount: lastAmount } : lastLog(entries, date)
   const keptList = loggedAt ? helpings : entries.findLast((e) => e.date === date && Array.isArray(e.helpings))?.helpings
-  const grams = protein ?? entries.findLast((e) => e.date === date && Number.isFinite(e.protein))?.protein
   const entry: CalorieEntry = { date, calories: total }
-  if (grams != null && grams > 0) entry.protein = grams
+  for (const macro of MACROS) {
+    const grams = macros[macro] ?? entries.findLast((e) => e.date === date && Number.isFinite(e[macro]))?.[macro]
+    if (grams != null && grams > 0) entry[macro] = grams
+  }
   if (kept) {
     entry.loggedAt = typeof kept.at === 'string' ? kept.at : kept.at.toISOString()
     if (Number.isFinite(kept.amount)) entry.lastAmount = kept.amount
@@ -388,8 +412,8 @@ export function setDayTotal(
  * comes from the same side; a side with no list (a backend that predates it)
  * yields to the other's rather than wiping it.
  *
- * The protein total comes from the same side as the calorie total, being the
- * same kind of running figure; a side that has none (written before protein
+ * Each macro's total comes from the same side as the calorie total, being the
+ * same kind of running figure; a side that has none (written before the macro
  * was tracked, or by a backend that doesn't store it) yields to the other's.
  *
  * `serverWins` inverts the precedence for one fetch, letting the backend
@@ -416,11 +440,13 @@ export function mergeCaloriesByDate(
     const serverAt = lastLog(server, date)
     const at = !localAt || (serverAt && serverAt.at > localAt.at) ? serverAt : localAt
     const entry: CalorieEntry = { date, calories: total }
-    const proteinOf = (side: CalorieEntry[]) =>
-      side.findLast((e) => e.date === date && Number.isFinite(e.protein))?.protein
     const fromServer = preferServer || !localTotals.has(date)
-    const protein = fromServer ? (proteinOf(server) ?? proteinOf(local)) : (proteinOf(local) ?? proteinOf(server))
-    if (protein != null && protein > 0) entry.protein = protein
+    for (const macro of MACROS) {
+      const gramsOf = (side: CalorieEntry[]) =>
+        side.findLast((e) => e.date === date && Number.isFinite(e[macro]))?.[macro]
+      const grams = fromServer ? (gramsOf(server) ?? gramsOf(local)) : (gramsOf(local) ?? gramsOf(server))
+      if (grams != null && grams > 0) entry[macro] = grams
+    }
     if (at) {
       entry.loggedAt = at.at.toISOString()
       if (Number.isFinite(at.amount)) entry.lastAmount = at.amount

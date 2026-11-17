@@ -13,10 +13,10 @@
  * (+100, +25g) is left out too, being that button again.
  */
 
-import { dayHelpings, type CalorieEntry } from './calories'
+import { MACROS, dayHelpings, type CalorieEntry, type Macro } from './calories'
 import { toISODate } from './dates'
 
-export type Meal = { calories: number; protein: number }
+export type Meal = { calories: number } & Record<Macro, number>
 
 type Opts = {
   now?: Date
@@ -28,13 +28,19 @@ type Opts = {
   withinDays?: number
   /** Meals the card already has a button for. */
   exclude?: Meal[]
+  /**
+   * The macros being counted. A meal is told apart by these alone and carries
+   * no grams of the others, so a macro switched off neither splits one meal
+   * into two buttons nor gets logged by a tap that doesn't show it.
+   */
+  macros?: readonly Macro[]
 }
 
-const keyOf = (m: Meal) => `${m.calories}|${m.protein}`
+const keyOf = (m: Meal) => [m.calories, ...MACROS.map((macro) => m[macro])].join('|')
 
 /** The most-logged helpings in `entries`, most common first. */
 export function commonMeals(entries: CalorieEntry[], opts: Opts = {}): Meal[] {
-  const { now = new Date(), limit = 3, minCount = 2, withinDays = 60, exclude = [] } = opts
+  const { now = new Date(), limit = 3, minCount = 2, withinDays = 60, exclude = [], macros = MACROS } = opts
   const start = new Date(now)
   start.setDate(start.getDate() - withinDays)
   const from = toISODate(start)
@@ -44,8 +50,15 @@ export function commonMeals(entries: CalorieEntry[], opts: Opts = {}): Meal[] {
   for (const date of new Set(entries.map((e) => e.date))) {
     if (date < from) continue
     for (const h of dayHelpings(entries, date)) {
-      const meal = { calories: Math.round(h.amount), protein: Math.round(h.protein ?? 0) }
-      if (meal.calories < 0 || meal.protein < 0 || (meal.calories === 0 && meal.protein === 0)) continue
+      const grams = (macro: Macro) => (macros.includes(macro) ? Math.round(h[macro] ?? 0) : 0)
+      const meal: Meal = {
+        calories: Math.round(h.amount),
+        protein: grams('protein'),
+        carbs: grams('carbs'),
+        fat: grams('fat'),
+      }
+      const amounts = [meal.calories, ...MACROS.map((macro) => meal[macro])]
+      if (amounts.some((n) => n < 0) || amounts.every((n) => n === 0)) continue
       const key = keyOf(meal)
       if (skip.has(key)) continue
       const at = new Date(h.at).getTime()

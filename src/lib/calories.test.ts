@@ -22,6 +22,7 @@ import {
   isFoodLogStale,
   lastLoggedAt,
   proteinForDate,
+  macrosForDate,
   type CalorieEntry,
 } from './calories'
 
@@ -658,8 +659,8 @@ describe('protein', () => {
         { at: iso(12, 0), amount: 500, protein: 30 },
       ] },
     ]
-    expect(recordHelping(entries, DATE, 100, at(12, 1), 10)).toEqual([{ at: iso(12, 1), amount: 600, protein: 40 }])
-    expect(recordHelping(entries, DATE, 0, at(15, 0), 25)).toEqual([
+    expect(recordHelping(entries, DATE, 100, at(12, 1), { protein: 10 })).toEqual([{ at: iso(12, 1), amount: 600, protein: 40 }])
+    expect(recordHelping(entries, DATE, 0, at(15, 0), { protein: 25 })).toEqual([
       { at: iso(12, 0), amount: 500, protein: 30 },
       { at: iso(15, 0), amount: 0, protein: 25 },
     ])
@@ -672,7 +673,7 @@ describe('protein', () => {
   it('keeps the day\'s protein through a write that leaves it out', () => {
     const prev: CalorieEntry[] = [{ date: DATE, calories: 500, protein: 30 }]
     expect(setDayTotal(prev, DATE, 600)[0].protein).toBe(30)
-    expect(setDayTotal(prev, DATE, 600, iso(12, 0), 100, [], 45)[0].protein).toBe(45)
+    expect(setDayTotal(prev, DATE, 600, iso(12, 0), 100, [], { protein: 45 })[0].protein).toBe(45)
     expect(setDayTotal([{ date: DATE, calories: 500 }], DATE, 600)[0]).not.toHaveProperty('protein')
   })
 
@@ -683,5 +684,21 @@ describe('protein', () => {
     expect(mergeCaloriesByDate(local, server, { serverWins: true })[0].protein).toBe(30)
     expect(mergeCaloriesByDate(local, [{ date: DATE, calories: 500 }], { serverWins: true })[0].protein).toBe(40)
     expect(mergeCaloriesByDate([], server)[0].protein).toBe(30)
+  })
+
+  it('counts carbs and fat the same way, each on its own', () => {
+    const entries: CalorieEntry[] = [{ date: DATE, calories: 540, protein: 30, carbs: 60, fat: 20 }]
+    expect(macrosForDate(entries, DATE)).toEqual({ protein: 30, carbs: 60, fat: 20 })
+    expect(macrosForDate([{ date: DATE, calories: 540 }], DATE)).toEqual({ protein: 0, carbs: 0, fat: 0 })
+    // A write that names one macro leaves the other two where they were.
+    expect(setDayTotal(entries, DATE, 630, iso(12, 0), 90, [], { fat: 30 })[0]).toMatchObject({
+      protein: 30,
+      carbs: 60,
+      fat: 30,
+    })
+    expect(recordHelping([], DATE, 290, at(12, 0), { protein: 25, carbs: 25, fat: 10 })).toEqual([
+      { at: iso(12, 0), amount: 290, protein: 25, carbs: 25, fat: 10 },
+    ])
+    expect(mergeCaloriesByDate([], entries)[0]).toMatchObject({ protein: 30, carbs: 60, fat: 20 })
   })
 })

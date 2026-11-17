@@ -24,7 +24,9 @@ import {
   calorieHitDates,
   calorieGoalOn,
   coalesceHelping,
-  proteinForDate,
+  macrosForDate,
+  MACROS,
+  type MacroGrams,
   recordHelping,
   mergeCaloriesByDate,
   setDayTotal,
@@ -237,8 +239,8 @@ type DataContextValue = {
    * (see `finishStretch`); left to itself, a completed session cheers here.
    */
   logFlex: (measurement: FlexMeasurement, opts?: { quiet?: boolean }) => Promise<Celebration | null>
-  /** Add `calories` (and `protein` grams) to a day's log; either may be 0. */
-  logCalories: (calories: number, date?: string, protein?: number) => Promise<void>
+  /** Add `calories` (and grams of `macros`) to a day's log; any may be 0. */
+  logCalories: (calories: number, date?: string, macros?: MacroGrams) => Promise<void>
   /** `id` may be minted by the caller, so a one-tap log can be undone before its save lands. */
   logCardio: (entry: Omit<CardioEntry, 'id'> & { id?: string }) => Promise<void>
   deleteCardio: (id: string) => Promise<void>
@@ -865,14 +867,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const logCalories = useCallback(
     // `calories` is the amount to add; a day is stored as one running-total entry.
-    async (calories: number, date?: string, protein = 0) => {
+    async (calories: number, date?: string, macros: MacroGrams = {}) => {
       const now = new Date()
       const day = date ?? toISODate(now)
       const prevCals = storage.loadCalories()
       // `calories` may be negative (a −100 correction); never let a day go below 0.
       const newTotal = Math.max(0, totalForDate(prevCals, day) + calories)
-      // Protein is a running total beside the calories, by the same rule.
-      const newProtein = Math.max(0, proteinForDate(prevCals, day) + protein)
+      // Each macro is a running total beside the calories, by the same rule.
+      // All three go out with every write: the outbox keeps only the newest one
+      // per date, so a total left off this tap would be lost with the last.
+      const prevMacros = macrosForDate(prevCals, day)
+      const newMacros: MacroGrams = {}
+      for (const macro of MACROS) {
+        newMacros[macro] = Math.max(0, prevMacros[macro] + (macros[macro] ?? 0))
+      }
       // Stamp the log time only when logging TODAY. Backfilling an earlier day
       // says nothing about when that day's food was eaten, so it leaves the
       // existing timestamp (if any) alone rather than writing a misleading one.
@@ -883,12 +891,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // was pressed last. Backfills carry neither.
       const helping = loggedAt ? coalesceHelping(prevCals, day, calories, now) : undefined
       // The day's whole breakdown rides along too, so another device can list it.
-      const helpings = loggedAt ? recordHelping(prevCals, day, calories, now, protein) : undefined
-      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, helping, helpings, newProtein)
+      const helpings = loggedAt ? recordHelping(prevCals, day, calories, now, macros) : undefined
+      const nextCals = setDayTotal(prevCals, day, newTotal, loggedAt, helping, helpings, newMacros)
       const entry: CalorieEntry = {
         date: day,
         calories: newTotal,
-        protein: newProtein,
+        ...newMacros,
         ...(loggedAt && { loggedAt, helpings, ...(helping != null && { lastAmount: helping }) }),
       }
       persistCalories(nextCals)

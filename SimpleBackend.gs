@@ -79,11 +79,12 @@
  *   POST ?route=notes         body: { session, exercise, notes }
  *                 (rewrites the note on every set row of one logged exercise; see updateWorkoutNotes)
  *   POST ?route=bodyweight    body: { date, weightLbs }
- *   POST ?route=calories      body: { date, calories, label, loggedAt, lastAmount, helpings, protein } (upsert by date; calories = running daily total,
+ *   POST ?route=calories      body: { date, calories, label, loggedAt, lastAmount, helpings, protein, carbs, fat } (upsert by date; calories = running daily total,
  *                 loggedAt = ISO time of the last tap made ON that date and lastAmount = how many calories that tap added;
- *                 helpings = [{at, amount, protein?}] every helping logged ON that date, stored as JSON;
+ *                 helpings = [{at, amount, protein?, carbs?, fat?}] every helping logged ON that date, stored as JSON;
  *                 all three omitted on a backfill, which keeps the stored ones;
- *                 protein = running daily grams, omitted by clients that predate it, which keeps the stored value)
+ *                 protein, carbs, fat = running daily grams, each omitted by clients that predate it or by a
+ *                 write that doesn't touch it, which keeps the stored value)
  *   POST ?route=measurements  body: { date, waistIn, neckIn, note } (upsert by date)
  *   POST ?route=durations     body: { date, kind, dayType, routine, totalSec, restSec } (append)
  *   POST ?route=exercise_times body: { exercises: [{exercise,totalActiveSec,sets}], restTotalSec, restPrescribedSec, restCount }
@@ -130,7 +131,9 @@ const FLEX_HEADERS = [
   'start_sides',
 ]
 const CONFIG_HEADERS = ['key', 'value']
-const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount', 'helpings', 'protein']
+const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount', 'helpings', 'protein', 'carbs', 'fat']
+// The macro columns, by the name each travels under: grams, a running daily total.
+const CALORIE_MACROS = [['protein', 6], ['carbs', 7], ['fat', 8]]
 const MEASUREMENT_HEADERS = ['date', 'waist_in', 'neck_in', 'note', 'body_fat_pct', 'abs_visibility']
 // `routine` is which stretch routine a stretch session was, blank for a workout
 // and for a stretch logged before there were two. Appended, and the generic
@@ -161,7 +164,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 8
+const BACKEND_VERSION = 9
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -715,10 +718,13 @@ function getCalories(since) {
         /* leave it off */
       }
     }
-    // Grams of protein, a running total like the calories. Blank is a day from
-    // before protein was tracked, which the app reads as none logged.
-    if (r[6] !== '' && r[6] !== null && r[6] !== undefined && isFinite(Number(r[6]))) {
-      entry.protein = Number(r[6])
+    // Grams of each macro, a running total like the calories. Blank is a day
+    // from before it was tracked, which the app reads as none logged.
+    for (let m = 0; m < CALORIE_MACROS.length; m++) {
+      const cell = r[CALORIE_MACROS[m][1]]
+      if (cell !== '' && cell !== null && cell !== undefined && isFinite(Number(cell))) {
+        entry[CALORIE_MACROS[m][0]] = Number(cell)
+      }
     }
     out.push(entry)
   }
@@ -742,12 +748,13 @@ function appendCalories(body) {
       ? Number(e.lastAmount)
       : ''
     const helpings = Array.isArray(e.helpings) ? JSON.stringify(e.helpings) : ''
-    // Null when the client didn't send it: an app from before protein must not
+    // Null when the client didn't send it: an app from before a macro must not
     // blank the grams a newer one logged for the same day.
-    const protein = e.protein !== null && e.protein !== undefined && e.protein !== '' && isFinite(Number(e.protein))
-      ? Math.max(0, Number(e.protein))
-      : null
-    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '', lastAmount, helpings, protein)
+    const macros = CALORIE_MACROS.map(function (m) {
+      const g = e[m[0]]
+      return g !== null && g !== undefined && g !== '' && isFinite(Number(g)) ? Math.max(0, Number(g)) : null
+    })
+    upsertCalorieDate(sh, e.date, Math.max(0, Number(e.calories)), e.label || '', e.loggedAt || '', lastAmount, helpings, macros)
     saved++
   }
   if (saved === 0 && list.length) {
@@ -756,13 +763,13 @@ function appendCalories(body) {
   return { saved: saved }
 }
 
-function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount, helpings, protein) {
+function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount, helpings, macros) {
   const rows = sh.getDataRange().getValues()
   let firstRow = -1
   let storedLoggedAt = ''
   let storedLastAmount = ''
   let storedHelpings = ''
-  let storedProtein = ''
+  let storedMacros = CALORIE_MACROS.map(function () { return '' })
   const extraRows = []
   for (let r = 1; r < rows.length; r++) {
     if (rows[r][0] && isoDate(rows[r][0]) === date) {
@@ -771,12 +778,15 @@ function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount, help
         storedLoggedAt = String(rows[r][3] || '')
         storedLastAmount = rows[r][4] === undefined || rows[r][4] === null ? '' : rows[r][4]
         storedHelpings = String(rows[r][5] || '')
-        storedProtein = rows[r][6] === undefined || rows[r][6] === null ? '' : rows[r][6]
+        storedMacros = CALORIE_MACROS.map(function (m) {
+          const cell = rows[r][m[1]]
+          return cell === undefined || cell === null ? '' : cell
+        })
       } else extraRows.push(r + 1)
     }
   }
   if (firstRow === -1) {
-    sh.appendRow([date, calories, label, loggedAt, lastAmount, helpings, protein === null ? '' : protein])
+    sh.appendRow([date, calories, label, loggedAt, lastAmount, helpings].concat(macros.map(function (g) { return g === null ? '' : g })))
     return
   }
   // A backfill sends no log time; keep the time and the helping already stored
@@ -786,8 +796,8 @@ function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount, help
   const at = loggedAt ? loggedAt : storedLoggedAt
   const amount = loggedAt ? lastAmount : storedLastAmount
   const list = loggedAt ? helpings : storedHelpings
-  const grams = protein === null ? storedProtein : protein
-  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at, amount, list, grams]])
+  const grams = macros.map(function (g, m) { return g === null ? storedMacros[m] : g })
+  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at, amount, list].concat(grams)])
   // Delete leftover legacy rows bottom-up so earlier indices stay valid.
   for (let k = extraRows.length - 1; k >= 0; k--) {
     sh.deleteRow(extraRows[k])
