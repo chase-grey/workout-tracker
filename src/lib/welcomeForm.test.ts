@@ -8,11 +8,13 @@ import {
   mergeSetup,
   planNeedsReplacing,
   togglePillar,
+  toggleScheduleDay,
   visibleSections,
   withDays,
   aiPlanEdit,
   aiPlanFor,
   withWorkoutGoal,
+  withGoal,
   type FormState,
 } from './welcomeForm'
 import { PILLARS, type Profile } from './profile'
@@ -55,9 +57,51 @@ describe('a blank form', () => {
       'track',
       'about',
       'goals',
+      'schedule',
       'theme',
       'coach',
     ])
+    // The calorie target is every day: nothing to schedule.
+    expect(visibleSections(filled({ pillars: ['diet'] }), { account: false })).not.toContain('schedule')
+  })
+})
+
+describe('the schedule', () => {
+  it('opens on days suggested for the weekly goals, only for what is tracked', () => {
+    const d = derive(filled({ pillars: ['strength', 'flexibility', 'diet'] }), NOW)
+    expect(d.schedule).toEqual({ strength: [0, 2, 4], flexibility: [1, 4] })
+  })
+
+  it('moves the weekly goal with the days tapped', () => {
+    const f = toggleScheduleDay(filled(), 'strength', 5, NOW)
+    const d = derive(f, NOW)
+    expect(d.schedule.strength).toEqual([0, 2, 4, 5])
+    expect(d.goals.workouts).toBe(4)
+  })
+
+  it('keeps the last day: a pillar is switched off under what to track', () => {
+    let f = filled({ pillars: ['flexibility'] })
+    f = toggleScheduleDay(f, 'flexibility', 1, NOW)
+    expect(derive(f, NOW).schedule.flexibility).toEqual([4])
+    expect(toggleScheduleDay(f, 'flexibility', 4, NOW)).toBe(f)
+  })
+
+  it('goes back to suggested days when the goal is set by hand', () => {
+    const picked = toggleScheduleDay(filled(), 'strength', 6, NOW)
+    const d = derive(withGoal(picked, 'workouts', 2, NOW), NOW)
+    expect(d.goals.workouts).toBe(2)
+    expect(d.schedule.strength).toEqual([0, 3])
+  })
+
+  it('goes back to suggested days when the lifting days change', () => {
+    const picked = toggleScheduleDay(filled(), 'strength', 6, NOW)
+    expect(derive(withDays(picked, 2), NOW).schedule.strength).toEqual([0, 3])
+  })
+
+  it('reopens on the days already saved', () => {
+    const profile = buildProfile(filled(), NOW)
+    const f = formFromProfile(profile, { pins: { strength: [1, 3, 5] } })
+    expect(derive(f, NOW).schedule.strength).toEqual([1, 3, 5])
   })
 })
 

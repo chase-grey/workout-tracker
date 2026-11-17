@@ -47,12 +47,15 @@ import {
   emptyForm,
   invalidSections,
   togglePillar,
+  toggleScheduleDay,
   visibleSections,
   withDays,
+  withGoal,
   type CoachPath,
   type FormState,
   type SectionId,
 } from '../../lib/welcomeForm'
+import { PINNABLE, PIN_LABEL, WEEKDAY_SHORT, type CalendarPins } from '../../lib/weekCalendar'
 
 /**
  * Every device belongs to an account: a new one made here, or one signed back
@@ -74,6 +77,8 @@ export type SetupResult = {
   ai: { provider: ProviderId; key: string } | null
   /** The coach was chosen as copy-and-paste into another AI app: no key. */
   coachPaste: boolean
+  /** The weekdays each kind of session falls on, for the week calendar's standing schedule. */
+  schedule: CalendarPins
 }
 
 export type WelcomeResult = SetupResult & { account: WelcomeAccount }
@@ -204,6 +209,7 @@ const SECTION_TITLES: Record<SectionId, string> = {
   strength: 'strength plan',
   diet: 'diet',
   goals: 'weekly goals',
+  schedule: 'your week',
   theme: 'theme',
   coach: 'ai coach',
   account: 'account',
@@ -439,7 +445,7 @@ function SetupForm({
 
   const bumpGoal = (key: keyof WeeklyGoalConfig, by: number) => {
     const next = Math.min(7, Math.max(1, (d.goals[key] ?? 0) + by))
-    set({ goalEdits: { ...d.goals, [key]: next } })
+    setF((cur) => withGoal(cur, key, next))
   }
 
   const run = async (acct: WelcomeAccount | null, form: FormState = f) => {
@@ -457,6 +463,7 @@ function SetupForm({
           weightLbs: fd.weightLbs !== null && fd.weightLbs >= 50 && fd.weightLbs <= 700 ? fd.weightLbs : null,
           ai: coach && form.wantCoach && form.coachPath === 'key' && key ? { provider: form.provider, key } : null,
           coachPaste: coach && form.wantCoach === true && form.coachPath === 'paste',
+          schedule: fd.schedule,
         },
         acct,
       )
@@ -812,6 +819,31 @@ function SetupForm({
                   >
                     +
                   </PressButton>
+                </div>
+              ))}
+
+            {id === 'schedule' &&
+              PINNABLE.filter(on).map((p) => (
+                <div key={p} role="group" aria-label={PIN_LABEL[p]} className="flex flex-col gap-2">
+                  <span className={LABEL}>{PIN_LABEL[p]}</span>
+                  <div className="grid grid-cols-7 gap-1">
+                    {WEEKDAY_SHORT.map((name, w) => {
+                      const picked = d.schedule[p]?.includes(w) ?? false
+                      return (
+                        <PressButton
+                          key={w}
+                          onPress={() => setF((cur) => toggleScheduleDay(cur, p, w))}
+                          pressed={picked}
+                          label={name}
+                          className={`min-h-[44px] rounded-xl text-sm font-medium ${
+                            picked ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-400'
+                          }`}
+                        >
+                          {name[0]}
+                        </PressButton>
+                      )
+                    })}
+                  </div>
                 </div>
               ))}
 

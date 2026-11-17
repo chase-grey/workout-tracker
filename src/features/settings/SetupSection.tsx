@@ -41,7 +41,12 @@ export function UpdateGoals() {
   if (!profile || ownerFlavour(profile)) return null
 
   const apply = (merged: NonNullable<typeof settings.profile>, r: SetupResult, replacePlan: boolean) => {
-    updateSettings({ ...settings, profile: merged, ...(r.heightIn != null && { heightIn: r.heightIn }) })
+    updateSettings({
+      ...settings,
+      profile: merged,
+      calendarPins: r.schedule,
+      ...(r.heightIn != null && { heightIn: r.heightIn }),
+    })
     if (replacePlan && merged.strength) updatePlan(rebuildPlan(plan, profile?.strength, merged.strength))
     if (r.weightLbs != null && r.weightLbs !== latestWeight) void logBodyWeight(r.weightLbs)
     setConfirm(null)
@@ -62,7 +67,11 @@ export function UpdateGoals() {
       {open && (
         <Overlay>
           <SetupEditor
-            initial={formFromProfile(profile, { heightIn: settings.heightIn, weightLbs: latestWeight })}
+            initial={formFromProfile(profile, {
+              heightIn: settings.heightIn,
+              weightLbs: latestWeight,
+              pins: settings.calendarPins,
+            })}
             heading="update goals"
             submitLabel="save"
             onFinish={finish}
@@ -120,7 +129,12 @@ export function RestartAccount() {
   const armed = typed.trim().toLowerCase() === RESTART_WORD
 
   const finish = async (r: SetupResult) => {
-    updateSettings({ ...settings, profile: r.profile, ...(r.heightIn != null && { heightIn: r.heightIn }) })
+    updateSettings({
+      ...settings,
+      profile: r.profile,
+      calendarPins: r.schedule,
+      ...(r.heightIn != null && { heightIn: r.heightIn }),
+    })
     updatePlan(planFor(r.profile.strength ?? DEFAULT_STRENGTH))
     if (r.weightLbs != null) void logBodyWeight(r.weightLbs)
     setRunning(false)

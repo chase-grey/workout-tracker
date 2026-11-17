@@ -32,9 +32,20 @@ import { starterDays } from '../config/planTemplates'
 import { PROVIDERS, type ProviderId } from './aiProvider'
 import { DEFAULT_MINUTES } from './planBuilder'
 import type { Plan } from '../config/plan'
+import { defaultSchedule, PINNABLE, toggleWeekday, type CalendarPins, type PinnablePillar } from './weekCalendar'
 
 /** The form's sections, top to bottom. */
-export type SectionId = 'you' | 'track' | 'about' | 'strength' | 'diet' | 'goals' | 'theme' | 'coach' | 'account'
+export type SectionId =
+  | 'you'
+  | 'track'
+  | 'about'
+  | 'strength'
+  | 'diet'
+  | 'goals'
+  | 'schedule'
+  | 'theme'
+  | 'coach'
+  | 'account'
 
 export const SECTION_ORDER: SectionId[] = [
   'you',
@@ -43,6 +54,7 @@ export const SECTION_ORDER: SectionId[] = [
   'strength',
   'diet',
   'goals',
+  'schedule',
   'theme',
   'coach',
   'account',
@@ -72,6 +84,11 @@ export type FormState = {
   calorieText: string | null
   /** Null until a goal is nudged by hand; until then the goals follow the suggestion. */
   goalEdits: WeeklyGoalConfig | null
+  /**
+   * The weekdays picked by hand for each kind of session; a pillar not in here
+   * follows the days suggested for its weekly goal.
+   */
+  scheduleEdits: CalendarPins | null
   /** Null until answered. */
   wantCoach: boolean | null
   coachPath: CoachPath | null
@@ -100,6 +117,7 @@ export function emptyForm(): FormState {
     targetWeight: '',
     calorieText: null,
     goalEdits: null,
+    scheduleEdits: null,
     wantCoach: null,
     coachPath: null,
     provider: PROVIDERS[0].id,
@@ -131,7 +149,7 @@ export function goalsInForce(p: Profile): WeeklyGoalConfig {
 /** A form holding what `profile` says now, for editing. */
 export function formFromProfile(
   profile: Profile,
-  extra: { heightIn?: number | null; weightLbs?: number | null; today?: string } = {},
+  extra: { heightIn?: number | null; weightLbs?: number | null; today?: string; pins?: CalendarPins } = {},
 ): FormState {
   const f = emptyForm()
   const today = extra.today ?? toISODate(new Date())
@@ -157,7 +175,15 @@ export function formFromProfile(
     targetWeight: profile.targetWeightLbs ? trimNum(profile.targetWeightLbs) : '',
     calorieText: calories ? String(calories) : null,
     goalEdits: goalsInForce(profile),
+    scheduleEdits: extra.pins ?? null,
   }
+}
+
+/** The weekly goal each schedulable pillar's days count toward. */
+export const SCHEDULE_GOAL: Record<PinnablePillar, keyof WeeklyGoalConfig> = {
+  strength: 'workouts',
+  flexibility: 'flex',
+  cardio: 'cardio',
 }
 
 export type Derived = {
@@ -171,6 +197,8 @@ export type Derived = {
   calories: string
   calorieNum: number | null
   goals: WeeklyGoalConfig
+  /** The weekdays each tracked kind of session falls on: the ones picked, else the suggestion for its goal. */
+  schedule: CalendarPins
 }
 
 /** Everything the form shows or checks that is worked out from what was typed. */
@@ -209,6 +237,13 @@ export function derive(f: FormState, now: Date = new Date()): Derived {
     },
     f.pillars,
   )
+  const suggestedDays = defaultSchedule(goals)
+  const schedule: CalendarPins = {}
+  for (const p of PINNABLE) {
+    if (!f.pillars.includes(p)) continue
+    const picked = f.scheduleEdits?.[p]
+    schedule[p] = picked?.length ? picked : suggestedDays[p]
+  }
   return {
     heightFt,
     heightIn,
@@ -219,6 +254,7 @@ export function derive(f: FormState, now: Date = new Date()): Derived {
     calories,
     calorieNum: num(calories),
     goals,
+    schedule,
   }
 }
 
@@ -233,6 +269,48 @@ export function withDays(f: FormState, days: LiftDays): FormState {
     ...f,
     days,
     goalEdits: f.goalEdits ? { ...f.goalEdits, workouts: days } : null,
+    scheduleEdits: withoutPicked(f.scheduleEdits, 'strength'),
+  }
+}
+
+function withoutPicked(edits: CalendarPins | null, pillar: PinnablePillar): CalendarPins | null {
+  if (!edits) return null
+  const { [pillar]: _dropped, ...rest } = edits
+  return rest
+}
+
+/**
+ * Set one weekly goal by hand. The days picked for it no longer add up, so
+ * that pillar goes back to the days suggested for the new count.
+ */
+export function withGoal(f: FormState, key: keyof WeeklyGoalConfig, n: number, now: Date = new Date()): FormState {
+  const pillar = PINNABLE.find((p) => SCHEDULE_GOAL[p] === key)
+  return {
+    ...f,
+    goalEdits: { ...derive(f, now).goals, [key]: n },
+    scheduleEdits: pillar ? withoutPicked(f.scheduleEdits, pillar) : f.scheduleEdits,
+  }
+}
+
+/**
+ * Tap a weekday on or off for one kind of session. The weekly goal follows the
+ * count, so the days and the goal can't disagree; the last day can't be taken
+ * off, since a goal of 0 is a pillar that's off, which is the track section's
+ * to say.
+ */
+export function toggleScheduleDay(
+  f: FormState,
+  pillar: PinnablePillar,
+  weekday: number,
+  now: Date = new Date(),
+): FormState {
+  const d = derive(f, now)
+  const next = toggleWeekday(d.schedule[pillar] ?? [], weekday).sort((a, b) => a - b)
+  if (next.length === 0) return f
+  return {
+    ...f,
+    scheduleEdits: { ...f.scheduleEdits, [pillar]: next },
+    goalEdits: { ...d.goals, [SCHEDULE_GOAL[pillar]]: next.length },
   }
 }
 
@@ -242,6 +320,7 @@ export function visibleSections(f: FormState, opts: { account: boolean; coach?: 
     if (s === 'strength') return f.pillars.includes('strength')
     if (s === 'diet') return f.pillars.includes('diet')
     if (s === 'goals') return f.pillars.length > 0
+    if (s === 'schedule') return PINNABLE.some((p) => f.pillars.includes(p))
     if (s === 'coach') return opts.coach ?? true
     if (s === 'account') return opts.account
     return true
@@ -278,6 +357,7 @@ export function invalidSections(
     strength: true,
     diet: dietOk,
     goals: true,
+    schedule: true,
     theme: true,
     coach: true,
     account: opts.accountOk ?? true,
@@ -429,5 +509,6 @@ export function aiPlanFor(f: FormState, edit: AiPlanEdit | null): Plan | null {
 export function withWorkoutGoal(f: FormState, workouts: number | null, now: Date = new Date()): FormState {
   const goals = derive(f, now).goals
   if (workouts == null || workouts < 1 || workouts === goals.workouts) return f
-  return { ...f, goalEdits: { ...goals, workouts: Math.min(7, Math.round(workouts)) } }
+  // Through withGoal, so the lifting days picked for the old count don't outlive it.
+  return withGoal(f, 'workouts', Math.min(7, Math.round(workouts)), now)
 }
