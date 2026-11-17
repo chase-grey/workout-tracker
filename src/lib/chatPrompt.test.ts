@@ -63,6 +63,11 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('2026-07-01')
   })
 
+  it('heads a circuit as one block with its stations under it', () => {
+    expect(prompt).toContain('  - delts + triceps circuit: circuit · 3 rounds, its stations in the order each round runs them:')
+    expect(prompt).toContain('    - tricep pushdown: 3 x')
+  })
+
   it('includes a known exercise name from the plan', () => {
     expect(prompt).toContain('incline bench press')
   })

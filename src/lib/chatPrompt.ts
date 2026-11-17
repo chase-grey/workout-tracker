@@ -18,6 +18,7 @@ import {
   type Profile,
 } from './profile'
 import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
+import { circuitRounds, circuitTitle, dayEntries, roundsLabel } from './circuitEntry'
 
 /** Format one set as "weightxreps" (e.g. "135x8"), or "BWxreps" when weight is blank. */
 function formatSet(row: WorkoutRow): string {
@@ -35,7 +36,22 @@ function renderPlan(plan: Plan, owner: boolean): string {
     const day = plan[dayType]
     if (!day || day.exercises.length === 0) continue
     lines.push(`${day.label} (${day.type}):`)
+    // A circuit is one block of the day, headed as one with its stations under it,
+    // rather than four exercises that happen to share a tag.
+    const circuitOf = new Map<string, string>()
+    for (const entry of dayEntries(day.exercises)) {
+      if (entry.kind !== 'circuit') continue
+      const rounds = circuitRounds(entry.stations.map((e) => e.sets))
+      circuitOf.set(
+        entry.stations[0].key,
+        `  - ${circuitTitle(entry.stations)}: ${roundsLabel(rounds)}, its stations in the order each round runs them:`,
+      )
+      for (const e of entry.stations) if (!circuitOf.has(e.key)) circuitOf.set(e.key, '')
+    }
     for (const ex of day.exercises) {
+      const head = circuitOf.get(ex.key)
+      if (head) lines.push(head)
+      const indent = head == null ? '  ' : '    '
       const optional = ex.optional ? ' [optional]' : ''
       // Exercises sharing a load are prescribed one weight between them, so the
       // coach shouldn't propose a number for either of them alone.
@@ -81,7 +97,7 @@ function renderPlan(plan: Plan, owner: boolean): string {
             ? ' [full-length day only — left out of the short form]'
             : ` [${ex.shortSets} sets in the short form]`
       lines.push(
-        `  - ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}${ladder}${stack}${short}`,
+        `${indent}- ${ex.name}: ${ex.sets} x ${repRangeLabel(ex)} ${unit}, ${ex.restSec}s rest${optional}${shared}${paired}${circuit}${ladder}${stack}${short}`,
       )
     }
   }

@@ -195,9 +195,9 @@ describe('applyPlanEdits', () => {
 
   it('moveExercise moves to a position, clamping past the end', () => {
     const { plan: toTop } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'moveExercise', day: 'push', key: 'overhead_tricep_ext', toIndex: 0 },
+      { op: 'moveExercise', day: 'push', key: 'machine_overhead_press', toIndex: 0 },
     ])
-    expect(keys(toTop, 'push')[0]).toBe('overhead_tricep_ext')
+    expect(keys(toTop, 'push')[0]).toBe('machine_overhead_press')
 
     const { plan: toEnd, errors } = applyPlanEdits(DEFAULT_PLAN, [
       { op: 'moveExercise', day: 'push', key: 'cable_crunch', toIndex: 99 },
@@ -206,21 +206,20 @@ describe('applyPlanEdits', () => {
     expect(errors).toHaveLength(0)
   })
 
-  it('moveExercise one step at a time swaps neighbours, as the plan editor arrows do', () => {
-    // The editor sends the row's own index ± 1, counted in the list the exercise
-    // is still part of.
+  it('moveExercise one step at a time swaps neighbours', () => {
+    // An index ± 1, counted in the list the exercise is still part of.
     const before = keys(DEFAULT_PLAN, 'push')
-    const i = before.indexOf('machine_overhead_press')
+    const i = before.indexOf('flat_bench')
     const { plan: down } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'moveExercise', day: 'push', key: 'machine_overhead_press', toIndex: i + 1 },
+      { op: 'moveExercise', day: 'push', key: 'flat_bench', toIndex: i + 1 },
     ])
     expect(keys(down, 'push')[i]).toBe(before[i + 1])
-    expect(keys(down, 'push')[i + 1]).toBe('machine_overhead_press')
+    expect(keys(down, 'push')[i + 1]).toBe('flat_bench')
 
     const { plan: up } = applyPlanEdits(DEFAULT_PLAN, [
-      { op: 'moveExercise', day: 'push', key: 'machine_overhead_press', toIndex: i - 1 },
+      { op: 'moveExercise', day: 'push', key: 'flat_bench', toIndex: i - 1 },
     ])
-    expect(keys(up, 'push')[i - 1]).toBe('machine_overhead_press')
+    expect(keys(up, 'push')[i - 1]).toBe('flat_bench')
     expect(keys(up, 'push')[i]).toBe(before[i - 1])
   })
 
@@ -402,6 +401,80 @@ describe('applyPlanEdits', () => {
     expect(result.plan.push).toBeDefined()
     expect(result.plan.pull).toBeDefined()
   })
+
+  describe('circuits', () => {
+    const ARMS = ['tricep_pushdown', 'lateral_raise_l', 'overhead_tricep_ext', 'lateral_raise_r']
+
+    it('moving a station carries the whole circuit', () => {
+      const { plan, applied } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'moveExercise', day: 'push', key: 'overhead_tricep_ext', toIndex: 0 },
+      ])
+      expect(keys(plan, 'push').slice(0, 4)).toEqual(ARMS)
+      expect(keys(plan, 'push')).toHaveLength(DEFAULT_PLAN.push.exercises.length)
+      expect(applied[0]).toMatch(/^moved the delts \+ triceps circuit \(tricep pushdown, .*\) to position 1 on push$/)
+    })
+
+    it('moving a station within its circuit reorders the circuit', () => {
+      const { plan } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'moveExercise', day: 'push', key: 'overhead_tricep_ext', before: 'tricep_pushdown' },
+      ])
+      expect(keys(plan, 'push').slice(-4)).toEqual([
+        'overhead_tricep_ext',
+        'tricep_pushdown',
+        'lateral_raise_l',
+        'lateral_raise_r',
+      ])
+    })
+
+    it('never lands an exercise between two stations', () => {
+      const before = keys(DEFAULT_PLAN, 'push')
+      const i = before.indexOf('machine_overhead_press')
+      const { plan: down } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'moveExercise', day: 'push', key: 'machine_overhead_press', toIndex: i + 1 },
+      ])
+      // One step down past a circuit is past all of it.
+      expect(keys(down, 'push').slice(-5)).toEqual([...ARMS, 'machine_overhead_press'])
+      const { plan: anchored } = applyPlanEdits(DEFAULT_PLAN, [
+        { op: 'moveExercise', day: 'push', key: 'incline_bench', after: 'lateral_raise_l' },
+      ])
+      expect(keys(anchored, 'push').slice(-5)).toEqual([...ARMS, 'incline_bench'])
+    })
+
+    it('adding a station of a circuit the day has lost brings the whole circuit back', () => {
+      const gone: Plan = JSON.parse(JSON.stringify(DEFAULT_PLAN))
+      gone.push.exercises = gone.push.exercises.filter((e) => !ARMS.includes(e.key))
+      gone.push.removed = [...ARMS]
+      const { plan, applied } = applyPlanEdits(gone, [
+        { op: 'addExercise', day: 'push', exercise: { key: 'tricep_pushdown', name: 'tricep pushdown', sets: 4, repMin: 10, repMax: 15, restSec: 60, group: 'triceps' } },
+      ])
+      expect(keys(plan, 'push').slice(-4)).toEqual(ARMS)
+      const added = plan.push.exercises.slice(-4)
+      expect(added.every((e) => e.circuit === 'arms' && e.roundScreen)).toBe(true)
+      // What was asked for keeps its numbers; the rest come as shipped.
+      expect(added[0].sets).toBe(4)
+      expect(added[2].sets).toBe(3)
+      expect(plan.push.removed).toBeUndefined()
+      expect(applied[0]).toMatch(/^added the delts \+ triceps circuit \(/)
+    })
+
+    it('adding a station back joins the stations that are left', () => {
+      const lone: Plan = JSON.parse(JSON.stringify(DEFAULT_PLAN))
+      lone.push.exercises = lone.push.exercises.filter((e) => e.key !== 'tricep_pushdown')
+      lone.push.exercises.push({ key: 'cable_fly', name: 'cable fly', sets: 3, repMin: 10, repMax: 12, restSec: 60, group: 'chest' })
+      const { plan } = applyPlanEdits(lone, [
+        { op: 'addExercise', day: 'push', exercise: { key: 'tricep_pushdown' } as never },
+      ])
+      expect(keys(plan, 'push').slice(-5)).toEqual([
+        'lateral_raise_l',
+        'overhead_tricep_ext',
+        'lateral_raise_r',
+        'tricep_pushdown',
+        'cable_fly',
+      ])
+      expect(plan.push.exercises.find((e) => e.key === 'tricep_pushdown')?.circuit).toBe('arms')
+    })
+  })
+
 
   describe('sided pairs', () => {
     // The arm circuit as shipped: the raise's two arms straddle a tricep station.

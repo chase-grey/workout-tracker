@@ -10,6 +10,7 @@ import {
   type PlannedExercise,
 } from '../config/plan'
 import { keepPairsTogether, pairKeys, withPartner } from './pairedSides'
+import { circuitMembers, circuitRunKeys, circuitTitle } from './circuitEntry'
 
 /**
  * Structured, serializable edits to a workout {@link Plan}. The AI chat assistant
@@ -125,6 +126,67 @@ function clearRemoval(dayPlan: DayPlan, key: string): void {
   const removed = dayPlan.removed.filter((k) => k !== key)
   if (removed.length) dayPlan.removed = removed
   else delete dayPlan.removed
+}
+
+/**
+ * `to`, an insertion point into `list`, moved off any spot between two stations
+ * of one circuit: to the circuit's end when `forwards`, else to its start.
+ */
+function outsideCircuits(list: readonly PlannedExercise[], to: number, forwards: boolean): number {
+  let at = to
+  const splits = (i: number) => i > 0 && i < list.length && !!list[i].circuit && list[i - 1].circuit === list[i].circuit
+  while (splits(at)) at += forwards ? 1 : -1
+  return at
+}
+
+/**
+ * Where an addition goes and what it brings, when it's a station of a circuit the
+ * shipped day has: a circuit is added as one, the way a sided pair is.
+ *
+ * With none of the circuit left on the day, every station comes back in its
+ * shipped order and prescription — the ones asked for keeping the numbers they
+ * were asked for — at the end of the day, where the shipped circuits sit. With
+ * some of it still there, only what was asked for is added, given the circuit's
+ * structure and placed straight after the stations that are left, so it joins
+ * their rotation instead of standing apart from it. Anything else is appended
+ * as it is. Custom days ship nothing, so there's no circuit to bring.
+ */
+function shippedCircuitAddition(
+  dayPlan: DayPlan,
+  day: DayType,
+  asked: PlannedExercise[],
+): { exercises: PlannedExercise[]; at: number; label: string } {
+  const plain = { exercises: asked, at: dayPlan.exercises.length, label: asked.map((e) => e.name).join(' and ') }
+  if (dayPlan.custom) return plain
+  const shipped = DEFAULT_PLAN[day]?.exercises ?? []
+  const run = circuitRunKeys(shipped, asked[0].key)
+  if (run.length < 2) return plain
+  const defs = shipped.filter((e) => run.includes(e.key))
+  const withStructure = (e: PlannedExercise): PlannedExercise => {
+    const def = defs.find((d) => d.key === e.key)
+    if (!def) return e
+    // The group too: it's the circuit's name wherever the circuit is listed.
+    const { circuit, circuitRestSec, circuitRoundRestSec, roundScreen, sharedLoad, side, shortSets, group } = def
+    return { ...def, ...e, circuit, circuitRestSec, circuitRoundRestSec, roundScreen, sharedLoad, side, shortSets, group }
+  }
+  const present = dayPlan.exercises.map((e, i) => (run.includes(e.key) ? i : -1)).filter((i) => i >= 0)
+  if (present.length > 0) {
+    return { ...plain, exercises: asked.map(withStructure), at: present[present.length - 1] + 1 }
+  }
+  const exercises = defs.map((d) => withStructure(asked.find((e) => e.key === d.key) ?? d))
+  return { exercises, at: dayPlan.exercises.length, label: circuitPhrase(exercises) }
+}
+
+/**
+ * A circuit as the chat's approve line names it: `the delts + triceps circuit
+ * (tricep pushdown, …)`. A circuit that is only a sided pair is that pair's two
+ * names, as an addition or removal of a pair already reads.
+ */
+function circuitPhrase(stations: readonly PlannedExercise[]): string {
+  const names = stations.map((e) => e.name || exerciseName(e.key))
+  if (circuitMembers(stations).length < 2) return names.join(' and ')
+  const title = circuitTitle(stations)
+  return `the ${title}${/circuit/i.test(title) ? '' : ' circuit'} (${names.join(', ')})`
 }
 
 /** Produce a key unique within `existingKeys`, appending _2, _3, ... on collision. */
@@ -249,13 +311,14 @@ export function applyPlanEdits(
         if (typeof src.bodyweight === 'boolean') exercise.bodyweight = src.bodyweight
         if (typeof src.optional === 'boolean') exercise.optional = src.optional
         // One side of a one-limb-at-a-time movement brings the other with it (see
-        // lib/pairedSides), side by side, left first.
-        const added = withPartner(exercise, [...existingKeys])
-        dayPlan.exercises.push(...added)
+        // lib/pairedSides), side by side, left first — and a station of a shipped
+        // circuit brings the circuit (see shippedCircuitAddition).
+        const added = shippedCircuitAddition(dayPlan, edit.day, withPartner(exercise, [...existingKeys]))
+        dayPlan.exercises.splice(added.at, 0, ...added.exercises)
         // Asked for back, so the deletion no longer stands — otherwise the merge
         // would strike it out again on the next load.
-        for (const e of added) clearRemoval(dayPlan, e.key)
-        applied.push(`added ${added.map((e) => e.name).join(' and ')} to ${edit.day}`)
+        for (const e of added.exercises) clearRemoval(dayPlan, e.key)
+        applied.push(`added ${added.label} to ${edit.day}`)
         break
       }
 
@@ -305,6 +368,24 @@ export function applyPlanEdits(
           break
         }
         const moved = dayPlan.exercises[from]
+        // A station of a circuit carries the whole circuit, unless it's being
+        // moved to another place inside the circuit — that's the circuit's own
+        // order being changed. And nothing lands between two stations of a
+        // circuit, which would cut it into two: it goes past the circuit instead,
+        // in the direction it was travelling (see lib/circuitEntry).
+        const run = circuitRunKeys(dayPlan.exercises, moved.key)
+        const mates = rest.map((e, i) => (run.includes(e.key) && e.key !== moved.key ? i : -1)).filter((i) => i >= 0)
+        if (run.length > 1 && (to < mates[0] || to > mates[mates.length - 1] + 1)) {
+          const block = dayPlan.exercises.filter((e) => run.includes(e.key))
+          const others = rest.filter((e) => !run.includes(e.key))
+          others.splice(rest.slice(0, to).filter((e) => !run.includes(e.key)).length, 0, ...block)
+          dayPlan.exercises = others
+          applied.push(
+            `moved ${circuitPhrase(block)} to position ${others.indexOf(block[0]) + 1} on ${edit.day}`,
+          )
+          break
+        }
+        if (run.length === 1) to = outsideCircuits(rest, to, to > from)
         rest.splice(to, 0, moved)
         // Its other side, if it has one, comes along at the spacing the pair had.
         dayPlan.exercises = keepPairsTogether(dayPlan.exercises, rest, new Set([moved.key]))

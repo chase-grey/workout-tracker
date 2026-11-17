@@ -30,7 +30,9 @@ import { checklistSetEdit } from '../../lib/checklistEdit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
 import { allInPlayDone, landingStep, resumeSkipped, setsInPlay, toSkippedRecord } from '../../lib/skipped'
-import { canSkipPair, pairKeys, withPairSkipped } from '../../lib/pairedSides'
+import { pairKeys } from '../../lib/pairedSides'
+import { circuitRunKeys, dayEntries, roundTally } from '../../lib/circuitEntry'
+import { ChecklistCircuit } from './ChecklistCircuit'
 import {
   bankRest,
   canResumeRest,
@@ -322,14 +324,31 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // owed the moment it's skipped instead of sitting in the estimate to the end.
   const inPlay = useMemo(() => exercises.filter((e) => !skipped.has(e.key)), [exercises, skipped])
   /**
-   * Whether this exercise can be skipped — something has to be left to perform.
-   * A sided exercise is skipped with its other side (see lib/pairedSides), and a
-   * move whose every other set has been skipped one by one is no help either.
+   * What skipping `key` skips: its whole circuit when it's a station of one (see
+   * lib/circuitEntry), else it and its other side when it's one of a sided pair
+   * (see lib/pairedSides), else just it.
+   */
+  const unitKeys = (key: string) => {
+    const run = circuitRunKeys(exercises, key)
+    return run.length > 1 ? run : pairKeys(exercises.map((e) => e.key), key)
+  }
+  /**
+   * Whether this exercise can be skipped — something has to be left to perform,
+   * outside everything the skip takes with it, and a move whose every other set
+   * has been skipped one by one is no help either.
    */
   const skippable = (key: string) => {
-    const keys = exercises.map((e) => e.key)
-    const pair = pairKeys(keys, key)
-    return canSkipPair(skipped, keys, key) && steps.some((s) => !pair.includes(s.ex.key))
+    const unit = unitKeys(key)
+    return exercises.some((e) => !unit.includes(e.key) && !skipped.has(e.key)) && steps.some((s) => !unit.includes(s.ex.key))
+  }
+  /** `skipped` with `key` and everything it skips with taken out of today, or put back. */
+  const withUnitSkipped = (key: string, skip: boolean) => {
+    const next = new Set(skipped)
+    for (const k of unitKeys(key)) {
+      if (skip) next.add(k)
+      else next.delete(k)
+    }
+    return next
   }
 
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
@@ -537,13 +556,23 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const totals = useMemo(() => {
     let done = 0
     let all = 0
-    for (const e of exercises) {
-      const logged = doneCount(e.key)
-      done += logged
-      // A skipped exercise still counts whatever you'd already logged of it —
-      // those sets happened — but stops owing the ones you're not going to do.
-      // A single skipped set is owed no more than a skipped exercise is.
-      all += skipped.has(e.key) ? logged : setsOwed(e.key, e.sets)
+    for (const entry of dayEntries(exercises)) {
+      // A circuit run a round at a time counts its rounds, since a round is what
+      // one tap logs (see lib/circuitEntry.roundTally).
+      if (entry.kind === 'circuit' && entry.stations.every((e) => e.roundScreen)) {
+        const tally = roundTally(entry.stations.map((e) => logFor(e.key)?.sets ?? Array.from({ length: e.sets }, () => ({ setNumber: 0, weightLbs: null, reps: 0 }))))
+        done += tally.done
+        all += skipped.has(entry.stations[0].key) ? tally.done : tally.all
+        continue
+      }
+      for (const e of entry.kind === 'circuit' ? entry.stations : [entry.exercise]) {
+        const logged = doneCount(e.key)
+        done += logged
+        // A skipped exercise still counts whatever you'd already logged of it —
+        // those sets happened — but stops owing the ones you're not going to do.
+        // A single skipped set is owed no more than a skipped exercise is.
+        all += skipped.has(e.key) ? logged : setsOwed(e.key, e.sets)
+      }
     }
     return { done, all }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -745,7 +774,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
    */
   const setExerciseSkipped = (key: string, skip: boolean) => {
     if (skip && !skippable(key)) return
-    const pair = pairKeys(exercises.map((e) => e.key), key)
+    const pair = unitKeys(key)
     const leaving = skip && pair.includes(planned.key)
     const ahead = leaving
       ? remainingFlow(stepDone, safeCurrent).slice(1).find((i) => !pair.includes(steps[i].ex.key))
@@ -754,7 +783,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       ? (ahead != null ? steps[ahead] : steps.find((s) => !pair.includes(s.ex.key)))
       : step
     const held = leaving ? (landing?.stepKey ?? null) : step.stepKey
-    setSkipped(withPairSkipped(skipped, exercises.map((e) => e.key), key, skip))
+    setSkipped(withUnitSkipped(key, skip))
     setPendingStepKey(held)
     if (leaving) {
       // Start the active-time clock over on the set we're landing on. The seconds
@@ -768,7 +797,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
 
   /** Tapping a skipped exercise in the checklist is deciding to do it after all. */
   const unskipAndJump = (key: string) => {
-    setSkipped(withPairSkipped(skipped, exercises.map((e) => e.key), key, false))
+    setSkipped(withUnitSkipped(key, false))
     // Its steps don't exist yet, so land on it by key once they do — on the first
     // set still owed, as jumping to any other exercise does.
     // Not on a set skipped on its own, which stays out of the flow; and an
@@ -791,26 +820,34 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
    * dropped, as they are for a skipped exercise. The last set left in play can't
    * go — finishing is what ends a workout.
    */
-  const setSetSkipped = (key: string, index: number, skip: boolean) => {
-    const target = `${key}:${index}`
-    if (skip && !canSkipSet(target)) return
+  //
+  // A circuit's round is struck off the same way, as the one unit it is: every
+  // station's set of the round at once.
+  const setSetSkipped = (key: string | string[], index: number, skip: boolean) => {
+    const keys = Array.isArray(key) ? key : [key]
+    const targets = keys.map((k) => `${k}:${index}`)
+    if (skip && !canSkipSet(targets)) return
     const done = new Set(steps.filter((_, i) => stepDone[i]).map((s) => s.stepKey))
     const held = skip
-      ? landingStep(steps.map((s) => s.stepKey), (k) => k !== target, (k) => done.has(k), step.stepKey)
+      ? landingStep(steps.map((s) => s.stepKey), (k) => !targets.includes(k), (k) => done.has(k), step.stepKey)
       : step.stepKey
-    controls.updateSet(key, index, { skipped: skip })
+    for (const k of keys) if (logFor(k)?.sets[index]) controls.updateSet(k, index, { skipped: skip })
     setPendingStepKey(held)
     if (held !== step.stepKey) {
       activeStartRef.current = Date.now()
       if (rest) closeRest()
     }
   }
-  const canSkipSet = (stepKey: string) => steps.some((s) => s.stepKey !== stepKey)
+  const canSkipSet = (stepKeys: string | string[]) => {
+    const targets = Array.isArray(stepKeys) ? stepKeys : [stepKeys]
+    return steps.some((s) => !targets.includes(s.stepKey))
+  }
 
   /** Tapping a skipped set in the checklist is deciding to do it after all. */
-  const unskipSetAndJump = (key: string, index: number) => {
-    controls.updateSet(key, index, { skipped: false })
-    setPendingStepKey(`${key}:${index}`)
+  const unskipSetAndJump = (key: string | string[], index: number) => {
+    const keys = Array.isArray(key) ? key : [key]
+    for (const k of keys) if (logFor(k)?.sets[index]) controls.updateSet(k, index, { skipped: false })
+    setPendingStepKey(`${keys.find((k) => logFor(k)?.sets[index]) ?? keys[0]}:${index}`)
     activeStartRef.current = Date.now()
     if (rest) closeRest()
     setShowList(false)
@@ -1602,7 +1639,55 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               </div>
             )}
             <div className="flex flex-col gap-1">
-              {exercises.map((e) => {
+              {dayEntries(exercises).map((entry) => {
+                // A circuit is one row, opening into its rounds (see ChecklistCircuit).
+                if (entry.kind === 'circuit') {
+                  const st = entry.stations
+                  const keys = st.map((x) => x.key)
+                  const lead = keys[0]
+                  const sum = (m: Map<string, number> | null) => keys.reduce((n, k) => n + (m?.get(k) ?? 0), 0)
+                  const stepOf = (r: number) => {
+                    const owed = steps.findIndex((s, si) => keys.includes(s.ex.key) && s.setIndex === r && !stepDone[si])
+                    return owed >= 0 ? owed : steps.findIndex((s) => keys.includes(s.ex.key) && s.setIndex === r)
+                  }
+                  const circuitSkipped = keys.every((k) => skipped.has(k))
+                  const firstOwed = steps.findIndex((s, si) => keys.includes(s.ex.key) && !stepDone[si])
+                  return (
+                    <ChecklistCircuit
+                      key={entry.id}
+                      stations={st}
+                      logFor={logFor}
+                      currentStepKey={step.stepKey}
+                      skipped={circuitSkipped}
+                      canSkip={skippable(lead)}
+                      complete={keys.every((k) => isComplete(k))}
+                      timeLeftSec={sum(exerciseTimeLeft)}
+                      took={exerciseSpent ? { spentSec: sum(exerciseSpent), projectedSec: sum(exerciseProjected) } : undefined}
+                      onJump={() => {
+                        if (circuitSkipped) {
+                          unskipAndJump(lead)
+                          setShowList(false)
+                        } else jumpToStep(firstOwed >= 0 ? firstOwed : steps.findIndex((s) => keys.includes(s.ex.key)))
+                      }}
+                      onToggleSkip={() => setExerciseSkipped(lead, !circuitSkipped)}
+                      onToggleComplete={() => {
+                        const complete = keys.every((k) => isComplete(k))
+                        for (const k of keys) setExerciseComplete(k, !complete)
+                      }}
+                      onJumpRound={(r) => jumpToStep(stepOf(r))}
+                      onSkipRound={(r, skip) => (skip ? setSetSkipped(keys, r, true) : unskipSetAndJump(keys, r))}
+                      canSkipRound={(r) => canSkipSet(keys.map((k) => `${k}:${r}`))}
+                      onRoundDone={(r, done) => {
+                        for (const k of keys) {
+                          const s = logFor(k)?.sets[r]
+                          if (s && !s.skipped) controls.updateSet(k, r, { done })
+                        }
+                      }}
+                      onEdit={(k, r, patch) => editChecklistSet(k, r, patch)}
+                    />
+                  )
+                }
+                const e = entry.exercise
                 const isSkipped = skipped.has(e.key)
                 const complete = isComplete(e.key)
                 const exerciseLog = logFor(e.key)

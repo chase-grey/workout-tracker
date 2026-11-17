@@ -8,6 +8,7 @@ import type { RawMessage, Tool } from '../../services/openai'
 import { coachTurn } from '../../services/coach'
 import { hasPillar, ownerFlavour, type Profile } from '../../lib/profile'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
+import { circuitRounds, circuitTitle, dayEntries, roundsLabel } from '../../lib/circuitEntry'
 import { applyFlexPlanEdits, type FlexEdit } from '../../lib/flexTools'
 import {
   answerIssue,
@@ -87,7 +88,8 @@ const UPDATE_PLAN_TOOL: Tool = {
       "Propose an edit to the user's Push/Pull workout plan: change an exercise's sets/rep range/rest/name/group, add or remove an exercise, reorder the exercises in a day, reorder the days themselves, or rename a day. Only call when the user asks to change their plan. Nothing is saved until the user approves the proposal in the app. This tool cannot create or change goals — pass those to the developer with report_issue or send_feedback, whichever you have. " +
       'The order of a day is the order it is performed in, and you can change it: moveExercise puts one exercise before/after another (or at toIndex, the 1-based positions shown in the snapshot minus one), and reorderDay takes the whole day as a list of keys front to back. Reordering is never a reason to remove and re-add an exercise — that would lose its history. ' +
       'The days have an order of their own — the order the app offers them in, shown in the snapshot — and reorderDays sets it, listing the day types front to back. It takes `days` and no `day`; every other op needs `day`. ' +
-      'Exercises marked circuit=<id> in the snapshot are performed as a rotation, one set at each station in turn, and their rest is per station: circuitRestSec on an exercise is the rest taken AFTER each of its sets in the rotation, where 0 rolls straight on to the next station and null hands the station back to the default timing. restSec is not what the user feels inside a circuit — to rest only after one station, set circuitRestSec on every station of that circuit, 0 on the ones to roll through.',
+      'Exercises marked circuit=<id> in the snapshot are performed as a rotation, one set at each station in turn, and their rest is per station: circuitRestSec on an exercise is the rest taken AFTER each of its sets in the rotation, where 0 rolls straight on to the next station and null hands the station back to the default timing. restSec is not what the user feels inside a circuit — to rest only after one station, set circuitRestSec on every station of that circuit, 0 on the ones to roll through. ' +
+      'A circuit is one block of the day and the app shows it as one: moving any station of it with moveExercise carries the whole circuit (unless it lands inside the circuit, which reorders the stations), nothing can be moved in between two of its stations, and adding a station of a shipped circuit the day has lost brings the whole circuit back. Removing a station removes just that station. Its rounds are its stations\' sets — to change them, set sets on every station.',
     parameters: {
       type: 'object',
       properties: {
@@ -323,11 +325,26 @@ function planSnapshot(
   for (const d of days) {
     if (plan[d].exercises.length === 0) continue
     lines.push(`${plan[d].label} (${d}), listed in the order it is performed:`)
-    plan[d].exercises.forEach((e, i) => {
-      lines.push(
-        `  ${i + 1}. key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s${circuitNote(e)}${capNote(e)}`,
-      )
-    })
+    // A circuit is headed as the one block it is, with its stations numbered under
+    // it — still one number per exercise, since those are the positions toIndex
+    // counts in.
+    let n = 0
+    for (const entry of dayEntries(plan[d].exercises)) {
+      const indent = entry.kind === 'circuit' ? '    ' : '  '
+      if (entry.kind === 'circuit') {
+        const rounds = circuitRounds(entry.stations.map((e) => e.sets))
+        const roundRest = entry.stations[0].circuitRoundRestSec
+        lines.push(
+          `  ${circuitTitle(entry.stations)} — ${roundsLabel(rounds)}${entry.stations.every((e) => e.roundScreen) ? ', done a round at a time (every station back to back on one screen, then one rest)' : ''}${roundRest == null ? '' : `, ${roundRest}s rest after each round`}; its stations, in the order each round runs them:`,
+        )
+      }
+      for (const e of entry.kind === 'circuit' ? entry.stations : [entry.exercise]) {
+        n += 1
+        lines.push(
+          `${indent}${n}. key=${e.key} — ${e.name}, ${e.sets}x${repRangeLabel(e)}, rest ${e.restSec}s${circuitNote(e)}${capNote(e)}`,
+        )
+      }
+    }
   }
   // Someone who doesn't track flexibility has no use for the routines.
   if (!hasPillar(profile, 'flexibility')) return lines.join('\n')

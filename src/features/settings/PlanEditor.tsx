@@ -9,6 +9,7 @@ import {
   type PlannedExercise,
 } from '../../config/plan'
 import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
+import { circuitRounds, circuitTitle, dayEntries, membersLine, moveEntry, roundsLabel } from '../../lib/circuitEntry'
 import { useDragSort, type Sortable } from '../../lib/useDragSort'
 import type { DayType } from '../../types'
 
@@ -120,7 +121,14 @@ function DragHandle({ sort, id, label }: { sort: Sortable; id: string; label: st
   )
 }
 
-/** One exercise: its summary line, the grip that moves it, and its open fields. */
+type ExerciseFields = Extract<PlanEdit, { op: 'setExercise' }>['fields']
+
+/**
+ * One exercise: its summary line, the grip that moves it, and its open fields.
+ *
+ * A station inside an open circuit is the same row without the grip or the ✕:
+ * the circuit moves and goes as one (see CircuitRow).
+ */
 function ExerciseRow({
   exercise,
   sort,
@@ -130,16 +138,16 @@ function ExerciseRow({
   onRemove,
 }: {
   exercise: PlannedExercise
-  sort: Sortable
+  sort?: Sortable
   open: boolean
   onToggle: () => void
-  onEdit: (fields: Extract<PlanEdit, { op: 'setExercise' }>['fields']) => void
-  onRemove: () => void
+  onEdit: (fields: ExerciseFields) => void
+  onRemove?: () => void
 }) {
   return (
     <div
-      {...sort.row(exercise.key)}
-      className={`rounded-xl bg-surface-2 ${sort.draggingId === exercise.key ? LIFTED : ''}`}
+      {...sort?.row(exercise.key)}
+      className={`rounded-xl ${sort ? 'bg-surface-2' : 'bg-surface'} ${sort?.draggingId === exercise.key ? LIFTED : ''}`}
     >
       <div className="flex items-center">
         <button
@@ -152,16 +160,18 @@ function ExerciseRow({
             {exercise.sets}×{repRangeLabel(exercise)}
           </span>
         </button>
-        <DragHandle sort={sort} id={exercise.key} label={exercise.name} />
+        {sort && <DragHandle sort={sort} id={exercise.key} label={exercise.name} />}
         {/* One tap, no confirmation: nothing is on the plan until save, and
             discard puts back everything this session removed. */}
-        <button
-          onClick={onRemove}
-          aria-label={`remove ${exercise.name}`}
-          className={REMOVE_BUTTON}
-        >
-          <MdClose aria-hidden />
-        </button>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            aria-label={`remove ${exercise.name}`}
+            className={REMOVE_BUTTON}
+          >
+            <MdClose aria-hidden />
+          </button>
+        )}
       </div>
 
       {open && (
@@ -207,6 +217,79 @@ function ExerciseRow({
 }
 
 /**
+ * A whole circuit as one row: its name, how many rounds it runs and what's in
+ * it, one grip that moves it and one ✕ that drops it (see lib/circuitEntry).
+ *
+ * Open, it sets the rounds for every station at once — a round is a set at each
+ * of them — and lists the stations, each of which opens to its own fields the
+ * way an exercise row does. The stations don't move or go on their own here: a
+ * circuit with a station dragged out of it is two circuits.
+ */
+function CircuitRow({
+  id,
+  stations,
+  sort,
+  open,
+  onToggle,
+  onEditStation,
+  onRemove,
+}: {
+  id: string
+  stations: PlannedExercise[]
+  sort: Sortable
+  open: boolean
+  onToggle: () => void
+  onEditStation: (key: string, fields: ExerciseFields) => void
+  onRemove: () => void
+}) {
+  const [openStation, setOpenStation] = useState<string | null>(null)
+  const title = circuitTitle(stations)
+  const rounds = circuitRounds(stations.map((e) => e.sets))
+  return (
+    <div {...sort.row(id)} className={`rounded-xl bg-surface-2 ${sort.draggingId === id ? LIFTED : ''}`}>
+      <div className="flex items-center">
+        <button
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-h-[44px] min-w-0 flex-1 flex-col justify-center px-3 py-1 text-left"
+        >
+          <span className="flex w-full items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm">{title}</span>
+            <span className="shrink-0 text-xs text-neutral-500">{roundsLabel(rounds)}</span>
+          </span>
+          <span className="w-full truncate text-xs text-neutral-500">{membersLine(stations)}</span>
+        </button>
+        <DragHandle sort={sort} id={id} label={title} />
+        <button onClick={onRemove} aria-label={`remove ${title}`} className={REMOVE_BUTTON}>
+          <MdClose aria-hidden />
+        </button>
+      </div>
+
+      {open && (
+        <div className="flex flex-col gap-2 px-3 pb-3">
+          <NumberField
+            label="rounds"
+            value={rounds}
+            onChange={(sets) => {
+              for (const e of stations) onEditStation(e.key, { sets })
+            }}
+          />
+          {stations.map((exercise) => (
+            <ExerciseRow
+              key={exercise.key}
+              exercise={exercise}
+              open={openStation === exercise.key}
+              onToggle={() => setOpenStation(openStation === exercise.key ? null : exercise.key)}
+              onEdit={(fields) => onEditStation(exercise.key, fields)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * One day: its summary line, the grip that moves it up and down the week, and —
  * once open — its name and the exercises it's made of.
  *
@@ -237,9 +320,12 @@ function DayRow({
   onAdd: () => void
 }) {
   const exercises = dayPlan.exercises
+  // A circuit is one row, so the drag reorders rows and the day is written back
+  // in the order they land in.
+  const entries = dayEntries(exercises)
   const exerciseSort = useDragSort(
-    exercises.map((e) => e.key),
-    (from, to) => onEdit({ op: 'moveExercise', day, key: exercises[from].key, toIndex: to }),
+    entries.map((e) => e.id),
+    (from, to) => onEdit({ op: 'reorderDay', day, keys: moveEntry(exercises, from, to).map((e) => e.key) }),
   )
 
   return (
@@ -254,7 +340,7 @@ function DayRow({
           className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 px-3 text-left"
         >
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{dayPlan.label}</span>
-          <span className="shrink-0 text-xs text-neutral-500">{exercises.length} exercises</span>
+          <span className="shrink-0 text-xs text-neutral-500">{entries.length} exercises</span>
           <MdKeyboardArrowDown className={`text-lg ${open ? 'rotate-180' : ''}`} aria-hidden />
         </button>
         <div className="pr-1">
@@ -270,7 +356,26 @@ function DayRow({
             // A blank box is a name being retyped, not a day called nothing.
             onChange={(label) => label.trim() && onEdit({ op: 'setDayLabel', day, label })}
           />
-          {exercises.map((exercise) => {
+          {entries.map((entry) => {
+            if (entry.kind === 'circuit') {
+              const id = `${day}:${entry.id}`
+              return (
+                <CircuitRow
+                  key={entry.id}
+                  id={entry.id}
+                  stations={entry.stations}
+                  sort={exerciseSort}
+                  open={openExercise === id}
+                  onToggle={() => onOpenExercise(openExercise === id ? null : id)}
+                  onEditStation={(key, fields) => onEdit({ op: 'setExercise', day, key, fields })}
+                  onRemove={() => {
+                    if (openExercise === id) onOpenExercise(null)
+                    onEdit(...entry.stations.map((e): PlanEdit => ({ op: 'removeExercise', day, key: e.key })))
+                  }}
+                />
+              )
+            }
+            const exercise = entry.exercise
             const id = `${day}:${exercise.key}`
             return (
               <ExerciseRow
