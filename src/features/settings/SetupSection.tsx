@@ -113,7 +113,7 @@ export function UpdateGoals() {
 }
 
 /**
- * The bottom of Settings' more page: a folded-away way to run setup from the
+ * The bottom of Settings' plan page: a folded-away way to run setup from the
  * top. Nothing is erased on confirming: the blank form opens, and only
  * finishing it replaces the profile, weekly goals, calorie target and workout
  * plan. Logged workouts, weigh-ins and meals live in the account and stay, as

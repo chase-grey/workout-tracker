@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { MdArrowBack, MdKeyboardArrowDown, MdMoreHoriz } from 'react-icons/md'
+import { useState, type ReactNode } from 'react'
+import { MdKeyboardArrowDown } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { SaveStatus } from '../../components/SaveStatus'
 import { BackendBanner } from '../../components/BackendBanner'
@@ -13,7 +13,9 @@ import { PhoneLink } from './PhoneLink'
 import { InstallLink } from './InstallLink'
 import { PoseCheck } from './PoseCheck'
 import { AccountSection } from './AccountSection'
-import { ProfileSection } from './ProfileSection'
+import { TrackingSection } from './ProfileSection'
+import { PlanSetupSection } from './PlanSetupSection'
+import { AiPlanSection } from '../companion/AiPlanSection'
 import { WeekCalendarSetting } from './WeekCalendarSetting'
 import { PasteCoachSection, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
@@ -175,6 +177,37 @@ function IssueRow({ issue, onAnswer }: { issue: TrackedIssue; onAnswer: (n: numb
   )
 }
 
+/**
+ * Settings is two pages. `plan` is the content of the app: what you track and
+ * the goals for it, the workouts, the stretch routines. `app` is the app
+ * itself: how it looks, the account and its devices, the coach, the build. The
+ * owner's own plumbing gets a third.
+ */
+type SettingsPage = 'plan' | 'app' | 'owner'
+
+const PAGE_KEY = 'wt:settingsPage'
+
+/** The page last open, so Settings comes back where you left it. */
+function lastPage(): SettingsPage {
+  try {
+    const saved = localStorage.getItem(PAGE_KEY)
+    if (saved === 'plan' || saved === 'app' || saved === 'owner') return saved
+  } catch {
+    /* no storage: open on the plan */
+  }
+  return 'plan'
+}
+
+/** A run of related sections under one heading. */
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <h3 className="border-b border-surface-2 pb-2 text-base font-bold">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
 const SYNC_LABEL: Record<string, string> = {
   idle: 'synced',
   syncing: 'syncing…',
@@ -212,10 +245,15 @@ export function SettingsTab({
   // Closed issues fold away by default — they're history, and the live ones are
   // what you came here for. Opening them lasts only as long as the visit.
   const [showClosed, setShowClosed] = useState(false)
-  // The ⋯ page: what most people never need, or need once — the build and its
-  // update check, sync detail, the plan editor, restoring a routine, the coach's
-  // model — and the owner's own plumbing.
-  const [advanced, setAdvanced] = useState(false)
+  const [page, setPage] = useState<SettingsPage>(lastPage)
+  const choosePage = (p: SettingsPage) => {
+    setPage(p)
+    try {
+      localStorage.setItem(PAGE_KEY, p)
+    } catch {
+      /* no storage: the choice lasts the visit */
+    }
+  }
 
   const owner = ownerFlavour(settings.profile)
   const { active, closed } = partitionIssues(issues ?? [])
@@ -253,308 +291,316 @@ export function SettingsTab({
     setTimeout(() => setChatTokenSaved(false), 1500)
   }
 
-  if (advanced) {
-    return (
-      <div className="flex flex-col gap-6 pb-4">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAdvanced(false)}
-            aria-label="back"
-            className="-ml-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-xl text-neutral-300 active:opacity-60"
-          >
-            <MdArrowBack aria-hidden />
-          </button>
-          <h2 className="text-xl font-bold">more</h2>
-        </div>
-
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">build</label>
-        <p className="text-xs text-neutral-500">
-          version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
-          {new Date(APP_BUILD_TIME).toLocaleString()}
-        </p>
-        {/* One button, three states, like any app's updater: a newer build
-            already in hand is a restart away and wears the accent (and the tab's
-            dot); otherwise it checks, and only reloads if there is something to
-            reload onto. Waiting on the new worker takes a moment, and an
-            unchanged button invites the second tap this is meant to remove. */}
-        <button
-          onClick={() => void checkForUpdate()}
-          disabled={update.checking}
-          className={`relative min-h-[44px] rounded-xl font-medium disabled:text-neutral-500 ${
-            update.ready
-              ? 'bg-accent text-on-accent active:opacity-80'
-              : 'bg-surface active:bg-surface-2'
-          }`}
-        >
-          {update.checking
-            ? 'checking…'
-            : update.ready
-              ? 'update ready · restart'
-              : 'check for updates'}
-        </button>
-      </section>
-
-
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">sync</label>
-        <p className="text-xs text-neutral-500">
-          status: {SYNC_LABEL[sync] ?? sync}
-          {pendingWrites > 0 && ` · ${pendingWrites} write${pendingWrites === 1 ? '' : 's'} queued`}
-        </p>
-        <p className="text-xs text-neutral-500">
-          last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
-        </p>
-        <button
-          onClick={() => void refresh()}
-          disabled={sync === 'syncing'}
-          className="min-h-[44px] rounded-xl bg-surface text-sm font-semibold active:bg-surface-2 disabled:text-neutral-600"
-        >
-          {sync === 'syncing' ? 'syncing…' : 'sync now'}
-        </button>
-      </section>
-
-      <PlanEditor />
-
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">stretch routines</label>
-        {FLEX_ROUTINE_KEYS.map((r) => (
-          <button
-            key={r}
-            onClick={() => {
-              if (confirmRestore !== r) {
-                setConfirmRestore(r)
-                return
-              }
-              updateFlexPlan(r, FLEX_ROUTINES[r].blocks)
-              setConfirmRestore(null)
-            }}
-            onBlur={() => setConfirmRestore(null)}
-            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-          >
-            {confirmRestore === r
-              ? 'tap again to restore'
-              : `restore default ${FLEX_ROUTINES[r].label} routine`}
-          </button>
-        ))}
-      </section>
-
-
-      {settings.coachEnabled && (
-        <section className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-300">coach model</label>
-          {/* Free text with the provider's models as suggestions: a service
-              adds models faster than a list here would follow, and OpenRouter
-              alone has hundreds. */}
-          <input
-            list="coach-models"
-            value={modelDraft}
-            onChange={(e) => setModelDraft(e.target.value)}
-            placeholder={provider.defaultModel || 'model'}
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            className={FIELD}
-          />
-          <datalist id="coach-models">
-            {provider.models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-          <button
-            onClick={saveKey}
-            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-          >
-            {keySaved ? 'saved ✓' : 'save'}
-          </button>
-        </section>
-      )}
-
-      {owner && (
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">issue token</label>
-        <input
-          type="password"
-          value={chatTokenDraft}
-          onChange={(e) => setChatTokenDraft(e.target.value)}
-          placeholder="the CHAT_SHARED_SECRET script property"
-          autoComplete="off"
-          className="min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-        <button
-          onClick={saveChatToken}
-          className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-        >
-          {chatTokenSaved ? 'saved ✓' : 'save token'}
-        </button>
-      </section>
-      )}
-
-
-      {owner && <PoseCheck />}
-
-      <PhoneLink />
-
-      <RestartAccount />
-      </div>
-    )
-  }
+  const pages: SettingsPage[] = owner ? ['plan', 'app', 'owner'] : ['plan', 'app']
+  const shown = pages.includes(page) ? page : 'plan'
+  const coachOn = settings.coachEnabled ?? false
 
   return (
     <div className="flex flex-col gap-6 pb-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">settings</h2>
-        <button
-          onClick={() => setAdvanced(true)}
-          aria-label="more settings"
-          className="-mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl text-neutral-300 active:opacity-60"
-        >
-          <MdMoreHoriz aria-hidden />
-        </button>
+      <h2 className="text-xl font-bold">settings</h2>
+      <div role="tablist" className="flex gap-1 rounded-xl bg-surface p-1">
+        {pages.map((p) => (
+          <button
+            key={p}
+            role="tab"
+            aria-selected={shown === p}
+            onClick={() => choosePage(p)}
+            className={`relative min-h-[44px] flex-1 rounded-lg px-2 text-sm font-semibold ${
+              shown === p ? 'bg-accent text-on-accent' : 'text-neutral-400'
+            }`}
+          >
+            {p}
+            {/* The waiting build's dot, on the page its restart button is on. */}
+            {p === 'app' && update.ready && shown !== 'app' && (
+              <span aria-hidden className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent" />
+            )}
+          </button>
+        ))}
       </div>
       <BackendBanner />
       <SaveStatus />
 
-      {owner && <PeopleSection />}
+      {shown === 'plan' && (
+        <>
+          <Group title="tracking & goals">
+            <TrackingSection />
+            <UpdateGoals />
+            {settings.photosOff && (
+              <div className="flex items-center justify-between gap-2 text-sm text-neutral-500">
+                <span>progress photos: off</span>
+                <button
+                  onClick={() => updateSettings({ ...settings, photosOff: false })}
+                  className="min-h-[44px] px-2 text-neutral-300 underline"
+                >
+                  turn back on
+                </button>
+              </div>
+            )}
+          </Group>
 
-      {owner && settings.chatToken.trim() && (
-        <section className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-300">reported issues</label>
-          {/* A failed refresh still shows the cached list, but it says so: an issue
-              closed since the last read would otherwise sit here reading "open". */}
-          {issuesFailed && issues !== null && (
-            <p className="text-xs text-neutral-500">couldn’t reach the issue tracker — showing the last read</p>
-          )}
-          {issues === null ? (
-            issuesFailed ? (
-              <p className="text-xs text-neutral-500">couldn’t reach the issue tracker</p>
-            ) : (
-              <p className="text-xs text-neutral-500">loading…</p>
-            )
-          ) : issues.length === 0 ? (
-            <p className="text-xs text-neutral-500">no issues filed yet</p>
-          ) : (
-            <>
-              {active.map((issue) => (
-                <IssueRow key={issue.number} issue={issue} onAnswer={onAnswer} />
+          <Group title="workouts">
+            <PlanSetupSection />
+            <AiPlanSection />
+            <PasteCoachSection />
+            <PlanEditor />
+          </Group>
+
+          <Group title="stretching">
+            <section className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-neutral-300">stretch routines</label>
+              {FLEX_ROUTINE_KEYS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => {
+                    if (confirmRestore !== r) {
+                      setConfirmRestore(r)
+                      return
+                    }
+                    updateFlexPlan(r, FLEX_ROUTINES[r].blocks)
+                    setConfirmRestore(null)
+                  }}
+                  onBlur={() => setConfirmRestore(null)}
+                  className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+                >
+                  {confirmRestore === r
+                    ? 'tap again to restore'
+                    : `restore default ${FLEX_ROUTINES[r].label} routine`}
+                </button>
               ))}
-              {active.length === 0 && <p className="text-xs text-neutral-500">nothing open</p>}
-              {closed.length > 0 && (
-                <>
+            </section>
+          </Group>
+
+          <RestartAccount />
+        </>
+      )}
+
+      {shown === 'app' && (
+        <>
+          <Group title="look">
+            <ThemePicker />
+            <ButtonLabels />
+            <WeekCalendarSetting />
+          </Group>
+
+          <Group title="account & devices">
+            <AccountSection />
+            <InstallLink />
+            <PhoneLink />
+          </Group>
+
+          {/* Flipping the switch on is what brings the provider and key up
+              underneath, and the tab appears in the nav at the same moment. */}
+          <Group title="coach">
+            <section className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-neutral-300">coach</label>
+              <div className="flex gap-1 rounded-xl bg-surface p-1">
+                {([false, true] as const).map((on) => (
                   <button
-                    onClick={() => setShowClosed(!showClosed)}
-                    aria-expanded={showClosed}
-                    className="flex min-h-[44px] items-center gap-1 self-start text-sm text-neutral-400 active:text-neutral-200"
+                    key={String(on)}
+                    onClick={() => updateSettings({ ...settings, coachEnabled: on })}
+                    aria-pressed={coachOn === on}
+                    className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
+                      coachOn === on ? 'bg-accent text-on-accent' : 'text-neutral-400'
+                    }`}
                   >
-                    closed ({closed.length})
-                    <MdKeyboardArrowDown
-                      className={`text-lg ${showClosed ? 'rotate-180' : ''}`}
-                      aria-hidden
-                    />
+                    {on ? 'on' : 'off'}
                   </button>
-                  {showClosed &&
-                    closed.map((issue) => (
-                      <IssueRow key={issue.number} issue={issue} onAnswer={onAnswer} />
-                    ))}
+                ))}
+              </div>
+            </section>
+
+            {coachOn && (
+              <section className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-neutral-300">ai provider</label>
+                <select
+                  value={provider.id}
+                  onChange={(e) => pickProvider(e.target.value)}
+                  aria-label="ai provider"
+                  className={FIELD}
+                >
+                  {PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                {provider.baseUrl === null && (
+                  <input
+                    type="url"
+                    value={baseUrlDraft}
+                    onChange={(e) => setBaseUrlDraft(e.target.value)}
+                    placeholder="https://host/v1"
+                    aria-label="base url"
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    className={FIELD}
+                  />
+                )}
+                <input
+                  type="password"
+                  value={openAiKey}
+                  onChange={(e) => setOpenAiKey(e.target.value)}
+                  placeholder={provider.keyHint}
+                  aria-label="api key"
+                  autoComplete="off"
+                  className={FIELD}
+                />
+                <label className="text-sm font-medium text-neutral-300">model</label>
+                {/* Free text with the provider's models as suggestions: a service
+                    adds models faster than a list here would follow, and OpenRouter
+                    alone has hundreds. */}
+                <input
+                  list="coach-models"
+                  value={modelDraft}
+                  onChange={(e) => setModelDraft(e.target.value)}
+                  placeholder={provider.defaultModel || 'model'}
+                  aria-label="model"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  className={FIELD}
+                />
+                <datalist id="coach-models">
+                  {provider.models.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+                <button
+                  onClick={saveKey}
+                  className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+                >
+                  {keySaved ? 'saved ✓' : 'save'}
+                </button>
+              </section>
+            )}
+          </Group>
+
+          <Group title="help">
+            <GuideSection />
+            {!owner && <FeedbackSection />}
+          </Group>
+
+          <Group title="about">
+            <section className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-neutral-300">build</label>
+              <p className="text-xs text-neutral-500">
+                version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
+                {new Date(APP_BUILD_TIME).toLocaleString()}
+              </p>
+              {/* One button, three states, like any app's updater: a newer build
+                  already in hand is a restart away and wears the accent (and the tab's
+                  dot); otherwise it checks, and only reloads if there is something to
+                  reload onto. Waiting on the new worker takes a moment, and an
+                  unchanged button invites the second tap this is meant to remove. */}
+              <button
+                onClick={() => void checkForUpdate()}
+                disabled={update.checking}
+                className={`relative min-h-[44px] rounded-xl font-medium disabled:text-neutral-500 ${
+                  update.ready
+                    ? 'bg-accent text-on-accent active:opacity-80'
+                    : 'bg-surface active:bg-surface-2'
+                }`}
+              >
+                {update.checking
+                  ? 'checking…'
+                  : update.ready
+                    ? 'update ready · restart'
+                    : 'check for updates'}
+              </button>
+            </section>
+
+            <section className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-neutral-300">sync</label>
+              <p className="text-xs text-neutral-500">
+                status: {SYNC_LABEL[sync] ?? sync}
+                {pendingWrites > 0 && ` · ${pendingWrites} write${pendingWrites === 1 ? '' : 's'} queued`}
+              </p>
+              <p className="text-xs text-neutral-500">
+                last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'never'}
+              </p>
+              <button
+                onClick={() => void refresh()}
+                disabled={sync === 'syncing'}
+                className="min-h-[44px] rounded-xl bg-surface text-sm font-semibold active:bg-surface-2 disabled:text-neutral-600"
+              >
+                {sync === 'syncing' ? 'syncing…' : 'sync now'}
+              </button>
+            </section>
+          </Group>
+        </>
+      )}
+
+      {shown === 'owner' && (
+        <>
+          <PeopleSection />
+
+          {settings.chatToken.trim() && (
+            <section className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-neutral-300">reported issues</label>
+              {/* A failed refresh still shows the cached list, but it says so: an issue
+                  closed since the last read would otherwise sit here reading "open". */}
+              {issuesFailed && issues !== null && (
+                <p className="text-xs text-neutral-500">couldn’t reach the issue tracker — showing the last read</p>
+              )}
+              {issues === null ? (
+                issuesFailed ? (
+                  <p className="text-xs text-neutral-500">couldn’t reach the issue tracker</p>
+                ) : (
+                  <p className="text-xs text-neutral-500">loading…</p>
+                )
+              ) : issues.length === 0 ? (
+                <p className="text-xs text-neutral-500">no issues filed yet</p>
+              ) : (
+                <>
+                  {active.map((issue) => (
+                    <IssueRow key={issue.number} issue={issue} onAnswer={onAnswer} />
+                  ))}
+                  {active.length === 0 && <p className="text-xs text-neutral-500">nothing open</p>}
+                  {closed.length > 0 && (
+                    <>
+                      <button
+                        onClick={() => setShowClosed(!showClosed)}
+                        aria-expanded={showClosed}
+                        className="flex min-h-[44px] items-center gap-1 self-start text-sm text-neutral-400 active:text-neutral-200"
+                      >
+                        closed ({closed.length})
+                        <MdKeyboardArrowDown
+                          className={`text-lg ${showClosed ? 'rotate-180' : ''}`}
+                          aria-hidden
+                        />
+                      </button>
+                      {showClosed &&
+                        closed.map((issue) => (
+                          <IssueRow key={issue.number} issue={issue} onAnswer={onAnswer} />
+                        ))}
+                    </>
+                  )}
                 </>
               )}
-            </>
+            </section>
           )}
-        </section>
-      )}
 
-
-      <ThemePicker />
-
-      <ButtonLabels />
-
-      <WeekCalendarSetting />
-
-      <AccountSection />
-
-      <ProfileSection />
-
-      <UpdateGoals />
-
-      <GuideSection />
-
-      <InstallLink />
-
-      {/* Flipping the switch on is what brings the key field up underneath,
-          and the tab appears in the nav at the same moment. */}
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-300">coach</label>
-        <div className="flex gap-1 rounded-xl bg-surface p-1">
-          {([false, true] as const).map((on) => (
-            <button
-              key={String(on)}
-              onClick={() => updateSettings({ ...settings, coachEnabled: on })}
-              aria-pressed={(settings.coachEnabled ?? false) === on}
-              className={`min-h-[36px] flex-1 rounded-lg px-2 text-sm font-medium ${
-                (settings.coachEnabled ?? false) === on
-                  ? 'bg-accent text-on-accent'
-                  : 'text-neutral-400'
-              }`}
-            >
-              {on ? 'on' : 'off'}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {settings.coachEnabled && (
-        <section className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-300">ai provider</label>
-          <select value={provider.id} onChange={(e) => pickProvider(e.target.value)} className={FIELD}>
-            {PROVIDERS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          {provider.baseUrl === null && (
+          <section className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-neutral-300">issue token</label>
             <input
-              type="url"
-              value={baseUrlDraft}
-              onChange={(e) => setBaseUrlDraft(e.target.value)}
-              placeholder="https://host/v1"
+              type="password"
+              value={chatTokenDraft}
+              onChange={(e) => setChatTokenDraft(e.target.value)}
+              placeholder="the CHAT_SHARED_SECRET script property"
               autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
               className={FIELD}
             />
-          )}
-          <input
-            type="password"
-            value={openAiKey}
-            onChange={(e) => setOpenAiKey(e.target.value)}
-            placeholder={provider.keyHint}
-            autoComplete="off"
-            className={FIELD}
-          />
-          <button
-            onClick={saveKey}
-            className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
-          >
-            {keySaved ? 'saved ✓' : 'save'}
-          </button>
-        </section>
-      )}
+            <button
+              onClick={saveChatToken}
+              className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2"
+            >
+              {chatTokenSaved ? 'saved ✓' : 'save token'}
+            </button>
+          </section>
 
-      <PasteCoachSection />
-
-      {!owner && <FeedbackSection />}
-
-      {settings.photosOff && (
-        <div className="flex items-center justify-between gap-2 text-sm text-neutral-500">
-          <span>progress photos: off</span>
-          <button
-            onClick={() => updateSettings({ ...settings, photosOff: false })}
-            className="min-h-[44px] px-2 text-neutral-300 underline"
-          >
-            turn back on
-          </button>
-        </div>
+          <PoseCheck />
+        </>
       )}
     </div>
   )
