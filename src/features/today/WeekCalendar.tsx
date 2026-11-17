@@ -9,10 +9,10 @@ import { hasPillar, ownerFlavour, PILLARS, type Pillar } from '../../lib/profile
 import { nextStretchRoutine, otherStretchRoutine } from '../../lib/stretchRotation'
 import { pillarColours } from '../../lib/theme'
 import { useTheme } from '../../lib/themeStore'
-import { weeklyGoalsFor } from '../../lib/weeklyStreak'
 import {
   PINNABLE,
   WEEKDAY_SHORT as DOW,
+  hasSchedule,
   pillarMarks,
   shiftWeek,
   weekCalendar,
@@ -59,6 +59,9 @@ function weekTitle(weekStart: string, today: string): string {
  * Today's week, a day at a time: what each pillar did and what's still ahead
  * (see lib/weekCalendar).
  *
+ * Left alone it is a record of what was done; days ahead appear only once
+ * some are chosen from the header (ScheduleSheet), or a cardio plan sets them.
+ *
  * It opens small — one strip of coloured marks, and under it the sessions of
  * the day picked — because most looks at it are "what's today". The chevron
  * opens the whole week at a row per day, and `keep open` there makes that the
@@ -95,7 +98,6 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
       weekStart,
       today,
       pillars,
-      goalsFor: weeklyGoalsFor,
       workouts,
       liftDays,
       liftLabels: { push: plan.push.label, pull: plan.pull.label, fullbody: plan.fullbody.label },
@@ -131,6 +133,9 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
   const schedulable = PINNABLE.filter((p) => pillars.includes(p) && !(p === 'cardio' && plannedCardio.length > 0))
   const open = (day: CalendarDay, item: CalendarItem) => setDetail({ day, item })
   const picked = days.find((d) => d.date === selected)
+  // "rest" is a word for a day off from a plan. With no days chosen and no
+  // cardio plan there is no plan to be off from, and an empty day is just empty.
+  const planned = plannedCardio.length > 0 || hasSchedule(settings.calendarPins, settings.calendarWeeks, weekStart)
 
   const iconButton =
     'flex h-9 w-9 items-center justify-center rounded-lg text-xl text-neutral-400 active:opacity-60 disabled:opacity-30'
@@ -178,6 +183,7 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
                   selected={day.date === selected}
                   onSelect={() => onSelect(day.date)}
                   onOpen={(item) => open(day, item)}
+                  rest={planned}
                 />
               </li>
             ))}
@@ -195,9 +201,9 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
       ) : (
         <>
           <SimpleStrip days={days} pillars={pillars} colours={colours} selected={selected} onSelect={onSelect} />
-          {picked && (
+          {picked && (planned || picked.items.some((i) => i.pillar !== 'diet')) && (
             <div className="mt-2 flex min-h-[36px] flex-wrap items-center gap-1.5">
-              <Sessions day={picked} colours={colours} onOpen={(item) => open(picked, item)} chip />
+              <Sessions day={picked} colours={colours} onOpen={(item) => open(picked, item)} rest={planned} chip />
             </div>
           )}
         </>
@@ -240,14 +246,18 @@ function Sessions({
   day,
   colours,
   onOpen,
+  rest,
   chip,
 }: {
   day: CalendarDay
   colours: Record<Pillar, string>
   onOpen: (item: CalendarItem) => void
+  /** Whether an empty day says so. */
+  rest: boolean
   chip?: boolean
 }) {
   const sessions = day.items.filter((i) => i.pillar !== 'diet')
+  if (sessions.length === 0 && !rest) return null
   if (sessions.length === 0) return <span className={`text-sm text-neutral-600 ${chip ? 'px-1' : ''}`}>rest</span>
   return (
     <>
@@ -276,12 +286,14 @@ function DayRow({
   selected,
   onSelect,
   onOpen,
+  rest,
 }: {
   day: CalendarDay
   colours: Record<Pillar, string>
   selected: boolean
   onSelect: () => void
   onOpen: (item: CalendarItem) => void
+  rest: boolean
 }) {
   const diet = day.items.find((i) => i.pillar === 'diet')
   const isToday = day.when === 'today'
@@ -303,7 +315,7 @@ function DayRow({
         <span className="tabular-nums">{parseISODate(day.date).getDate()}</span>
       </button>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3">
-        <Sessions day={day} colours={colours} onOpen={onOpen} />
+        <Sessions day={day} colours={colours} onOpen={onOpen} rest={rest} />
       </span>
       {diet && <Mark colour={colours.diet} status={diet.status} size={6} />}
     </div>

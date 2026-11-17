@@ -3,19 +3,22 @@
  * still planned, for the pillars this person tracks.
  *
  * Nothing in the app binds a workout to a weekday — the plan is a rotation and
- * the week is a count to reach — so "planned" is a projection. Each pillar's
- * remaining weekly goal is spread over the days still open, starting today, and
- * the strength days take the rotation in turn from whichever was trained last.
- * A weekday pinned to a pillar (see {@link CalendarPins}) is planned whatever
- * the goal says, and the rest of the goal spreads round it. A week given days
- * of its own (see {@link WeekPins}) is planned on exactly those and no others.
+ * the week is a count to reach — and the calendar doesn't pretend otherwise.
+ * Left alone it is a record: each day shows what was lifted, stretched, run.
+ * Only someone who chooses days gets days ahead: a weekday pinned to a pillar
+ * (see {@link CalendarPins}) is planned every week, a week given days of its
+ * own (see {@link WeekPins}) is planned on exactly those, and a cardio plan's
+ * sessions fall where the plan put them. The strength days planned take the
+ * rotation in turn from whichever was trained last.
  *
- * Past days only ever show what happened. A day that was "planned" and passed
- * empty is not marked missed: the projection was the app's guess, not a promise
- * the user made, and red on the week behind you is a poor reason to open the app.
- * The calorie target is the exception, since it really is every day's target —
- * a past day that didn't hit it reads as missed, which is what the calorie
- * week's empty check always said.
+ * It used to guess, spreading each weekly goal over the days still open. That
+ * read as a schedule nobody had made, and moved every time a day went by.
+ *
+ * Past days only ever show what happened. A day that was planned and passed
+ * empty is not marked missed: red on the week behind you is a poor reason to
+ * open the app. The calorie target is the exception, since it really is every
+ * day's target — a past day that didn't hit it reads as missed, which is what
+ * the calorie week's empty check always said.
  *
  * Pure module: plain data in, seven cells out.
  */
@@ -29,9 +32,7 @@ import type { FlexEntry } from './flex'
 import { calorieDayHit, PILLARS, type DietDirection, type Pillar } from './profile'
 import { trainingSessions } from './session'
 import { completedRoutinesOf } from './stretchRotation'
-import type { WeeklyGoalConfig } from './weeklyStreak'
 import { parseISODate, toISODate, weekStartISO } from './dates'
-import { defaultCardioDays } from './cardioPlan'
 
 /**
  * One planned cardio session. Mirrors `PlannedCardio` in src/lib/cardioPlan.ts
@@ -64,9 +65,8 @@ export const WEEKDAY_SHORT = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 /**
  * One week's own days, by its Monday: "this week I'm lifting Tuesday instead".
- * A pillar named here is planned on exactly these weekdays that week — the
- * standing pins and the goal's spread both step aside — and a pillar left out
- * keeps its usual projection.
+ * A pillar named here is planned on exactly these weekdays that week, the
+ * standing pins stepping aside, and a pillar left out keeps its standing days.
  */
 export type WeekPins = Record<string, CalendarPins>
 
@@ -112,8 +112,6 @@ export type WeekCalendarInput = {
   weekStart: string
   today: string
   pillars: Pillar[]
-  /** The weekly goals in force for the week starting on a given Monday. */
-  goalsFor: (week: string) => WeeklyGoalConfig
   workouts: WorkoutRow[]
   /** The lift days in rotation order, empty days already dropped. */
   liftDays: DayType[]
@@ -157,17 +155,6 @@ export function cardioAmount(e: { minutes?: number; distanceMi?: number }): stri
   return undefined
 }
 
-/**
- * Which of `open` days to plan `count` sessions on, spread as evenly as the
- * days allow and starting with the first — so a goal of two from Monday lands
- * on Monday and Thursday, and the session that can be done today is today's.
- */
-export function spreadDays(open: string[], count: number): string[] {
-  if (count <= 0 || open.length === 0) return []
-  if (count >= open.length) return [...open]
-  return Array.from({ length: count }, (_, i) => open[Math.floor((i * open.length) / count)])
-}
-
 type Done = {
   strength: Map<string, DayType[]>
   flexibility: Map<string, (FlexRoutineKey | null)[]>
@@ -193,41 +180,26 @@ function doneByDate(input: WeekCalendarInput): Done {
 }
 
 /**
- * The days in the week of `weekStart` that `pillar` is projected onto: pinned
- * weekdays still open, then the rest of the weekly goal spread across the
- * unpinned open days. A day is open from today on, and today only while the
- * pillar hasn't been done today. A week with days of its own takes exactly
- * those that are still open.
+ * The days in the week of `weekStart` that `pillar` is planned on: the week's
+ * own days if it has any, else the standing pins, and of those only the ones
+ * still open. A day is open from today on, and today only while the pillar
+ * hasn't been done today. With no days chosen there are none.
  */
-function projectedDates(
+function plannedDates(
   input: WeekCalendarInput,
   done: Done,
   weekStart: string,
-  pillar: 'strength' | 'flexibility' | 'cardio',
-  goal: number,
+  pillar: PinnablePillar,
 ): string[] {
   const dates = weekDates(weekStart)
-  const doneOn = done[pillar]
-  const open = dates.filter((d) => d > input.today || (d === input.today && !doneOn.has(d)))
-  const exact = input.weekPins?.[weekStart]?.[pillar]
-  if (exact) return open.filter((d) => exact.includes(dates.indexOf(d)))
-  const doneCount = dates.filter((d) => doneOn.has(d)).length
-  const remaining = Math.max(0, goal - doneCount)
-  const pinned = input.pins?.[pillar] ?? []
-  const pinnedOpen = open.filter((d) => pinned.includes(dates.indexOf(d)))
-  const unpinned = open.filter((d) => !pinnedOpen.includes(d))
-  const extra = spreadDays(unpinned, remaining - pinnedOpen.length)
-  return [...pinnedOpen, ...extra].sort()
-}
-
-function goalOf(goals: WeeklyGoalConfig, pillar: 'strength' | 'flexibility' | 'cardio'): number {
-  if (pillar === 'strength') return goals.workouts
-  if (pillar === 'flexibility') return goals.flex
-  return goals.cardio ?? 0
+  const chosen = input.weekPins?.[weekStart]?.[pillar] ?? input.pins?.[pillar] ?? []
+  return dates.filter(
+    (d, weekday) => chosen.includes(weekday) && (d > input.today || (d === input.today && !done[pillar].has(d))),
+  )
 }
 
 /**
- * How many sessions of `pillar` are projected between this week and the week
+ * How many sessions of `pillar` are planned between this week and the week
  * before `weekStart` — what a later week's rotation has to skip past.
  */
 function plannedBefore(
@@ -238,7 +210,7 @@ function plannedBefore(
 ): number {
   let n = 0
   for (let wk = weekStartISO(input.today); wk < weekStart; wk = shiftWeek(wk, 1)) {
-    n += projectedDates(input, done, wk, pillar, goalOf(input.goalsFor(wk), pillar)).length
+    n += plannedDates(input, done, wk, pillar).length
   }
   return n
 }
@@ -247,7 +219,6 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
   const weekStart = weekStartISO(input.weekStart)
   const dates = weekDates(weekStart)
   const tracked = (p: Pillar) => input.pillars.includes(p)
-  const goals = input.goalsFor(weekStart)
   const done = doneByDate(input)
   const items = new Map<string, CalendarItem[]>(dates.map((d) => [d, []]))
   const push = (date: string, item: CalendarItem) => items.get(date)?.push(item)
@@ -259,7 +230,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
         push(d, { pillar: 'strength', status: 'done', label: input.liftLabels[day], what: { type: 'lift', day } })
       }
     }
-    const planned = projectedDates(input, done, weekStart, 'strength', goals.workouts)
+    const planned = plannedDates(input, done, weekStart, 'strength')
     // The rotation picks up after the last session trained by today.
     const last = trainingSessions(input.workouts)
       .filter((s) => s.date <= input.today)
@@ -290,7 +261,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
         })
       }
     }
-    const planned = projectedDates(input, done, weekStart, 'flexibility', goals.flex)
+    const planned = plannedDates(input, done, weekStart, 'flexibility')
     const rot = input.stretchRotation
     const offset = plannedBefore(input, done, weekStart, 'flexibility')
     planned.forEach((d, i) => {
@@ -335,8 +306,8 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
         })
       }
     } else {
-      // No plan for the week: spread the weekly cardio goal like the others.
-      for (const d of projectedDates(input, done, weekStart, 'cardio', goals.cardio ?? 0)) {
+      // No plan for the week: the days chosen for cardio, if any were.
+      for (const d of plannedDates(input, done, weekStart, 'cardio')) {
         push(d, {
           pillar: 'cardio',
           status: 'planned',
@@ -433,30 +404,16 @@ export function withWeekPins(
   return { ...kept, [week]: setPins(kept[week], pillar, weekdays) }
 }
 
-/** `weekPins` without the week of `weekStart`: back to the usual projection. */
+/** `weekPins` without the week of `weekStart`: back to the standing schedule. */
 export function withoutWeekPins(weekPins: WeekPins | undefined, weekStart: string): WeekPins {
   const week = weekStartISO(weekStart)
   return Object.fromEntries(Object.entries(weekPins ?? {}).filter(([w]) => w !== week))
 }
 
-/**
- * The days a new schedule opens on for these weekly counts: lifts spread from
- * Monday, stretches from Tuesday so the two don't stack where the week has
- * room, and cardio clear of the lifting days with a weekend day held for the
- * long one (see cardioPlan.defaultCardioDays). A count of 0 gets no days.
- */
-export function defaultSchedule(goals: { workouts: number; flex: number; cardio?: number }): CalendarPins {
-  const week = [0, 1, 2, 3, 4, 5, 6]
-  const spread = (n: number, from: number) =>
-    Array.from({ length: Math.min(7, Math.max(0, n)) }, (_, i) => (Math.floor((i * 7) / Math.min(7, n)) + from) % 7)
-      .sort((a, b) => a - b)
-  const strength = spread(goals.workouts, 0)
-  const cardio = goals.cardio ?? 0
-  return {
-    strength,
-    flexibility: spread(goals.flex, 1),
-    cardio: cardio >= 7 ? week : cardio > 0 ? defaultCardioDays(cardio, strength) : [],
-  }
+/** Whether any day has been chosen for any pillar, standing or for the week of `weekStart`. */
+export function hasSchedule(pins: CalendarPins | undefined, weekPins: WeekPins | undefined, weekStart: string): boolean {
+  const any = (p: CalendarPins | undefined) => PINNABLE.some((k) => (p?.[k]?.length ?? 0) > 0)
+  return any(pins) || any(weekPins?.[weekStartISO(weekStart)])
 }
 
 /**

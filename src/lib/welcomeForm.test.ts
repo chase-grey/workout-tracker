@@ -67,35 +67,31 @@ describe('a blank form', () => {
 })
 
 describe('the schedule', () => {
-  it('opens on days suggested for the weekly goals, only for what is tracked', () => {
+  it('opens with no days chosen', () => {
     const d = derive(filled({ pillars: ['strength', 'flexibility', 'diet'] }), NOW)
-    expect(d.schedule).toEqual({ strength: [0, 2, 4], flexibility: [1, 4] })
+    expect(d.schedule).toEqual({ strength: [], flexibility: [] })
   })
 
-  it('moves the weekly goal with the days tapped', () => {
-    const f = toggleScheduleDay(filled(), 'strength', 5, NOW)
-    const d = derive(f, NOW)
-    expect(d.schedule.strength).toEqual([0, 2, 4, 5])
-    expect(d.goals.workouts).toBe(4)
+  it('takes the days tapped, and gives them back', () => {
+    let f = toggleScheduleDay(filled(), 'strength', 5)
+    f = toggleScheduleDay(f, 'strength', 1)
+    expect(derive(f, NOW).schedule.strength).toEqual([1, 5])
+    f = toggleScheduleDay(toggleScheduleDay(f, 'strength', 1), 'strength', 5)
+    expect(derive(f, NOW).schedule.strength).toEqual([])
   })
 
-  it('keeps the last day: a pillar is switched off under what to track', () => {
-    let f = filled({ pillars: ['flexibility'] })
-    f = toggleScheduleDay(f, 'flexibility', 1, NOW)
-    expect(derive(f, NOW).schedule.flexibility).toEqual([4])
-    expect(toggleScheduleDay(f, 'flexibility', 4, NOW)).toBe(f)
+  it('leaves the weekly goals where they were set', () => {
+    const before = derive(filled(), NOW).goals
+    const f = toggleScheduleDay(filled(), 'strength', 5)
+    expect(derive(f, NOW).goals).toEqual(before)
+    // And a goal set by hand leaves the days.
+    expect(derive(withGoal(f, 'workouts', 2, NOW), NOW).schedule.strength).toEqual([5])
+    expect(derive(withDays(f, 2), NOW).schedule.strength).toEqual([5])
   })
 
-  it('goes back to suggested days when the goal is set by hand', () => {
-    const picked = toggleScheduleDay(filled(), 'strength', 6, NOW)
-    const d = derive(withGoal(picked, 'workouts', 2, NOW), NOW)
-    expect(d.goals.workouts).toBe(2)
-    expect(d.schedule.strength).toEqual([0, 3])
-  })
-
-  it('goes back to suggested days when the lifting days change', () => {
-    const picked = toggleScheduleDay(filled(), 'strength', 6, NOW)
-    expect(derive(withDays(picked, 2), NOW).schedule.strength).toEqual([0, 3])
+  it('drops the days of a pillar that is switched off', () => {
+    const f = toggleScheduleDay(filled({ pillars: ['strength', 'cardio'] }), 'cardio', 2)
+    expect(derive({ ...f, pillars: ['strength'] }, NOW).schedule).toEqual({ strength: [] })
   })
 
   it('reopens on the days already saved', () => {

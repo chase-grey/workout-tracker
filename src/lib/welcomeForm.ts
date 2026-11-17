@@ -32,7 +32,7 @@ import { starterDays } from '../config/planTemplates'
 import { PROVIDERS, type ProviderId } from './aiProvider'
 import { DEFAULT_MINUTES } from './planBuilder'
 import type { Plan } from '../config/plan'
-import { defaultSchedule, PINNABLE, toggleWeekday, type CalendarPins, type PinnablePillar } from './weekCalendar'
+import { PINNABLE, toggleWeekday, type CalendarPins, type PinnablePillar } from './weekCalendar'
 
 /** The form's sections, top to bottom. */
 export type SectionId =
@@ -87,8 +87,8 @@ export type FormState = {
   /** Null until a goal is nudged by hand; until then the goals follow the suggestion. */
   goalEdits: WeeklyGoalConfig | null
   /**
-   * The weekdays picked by hand for each kind of session; a pillar not in here
-   * follows the days suggested for its weekly goal.
+   * The weekdays picked for each kind of session. Null, or a pillar left out,
+   * is no days: the week is planned only by someone who wants it planned.
    */
   scheduleEdits: CalendarPins | null
   /** Null until answered. */
@@ -181,12 +181,6 @@ export function formFromProfile(
   }
 }
 
-/** The weekly goal each schedulable pillar's days count toward. */
-export const SCHEDULE_GOAL: Record<PinnablePillar, keyof WeeklyGoalConfig> = {
-  strength: 'workouts',
-  flexibility: 'flex',
-  cardio: 'cardio',
-}
 
 export type Derived = {
   heightFt: number | null
@@ -199,7 +193,7 @@ export type Derived = {
   calories: string
   calorieNum: number | null
   goals: WeeklyGoalConfig
-  /** The weekdays each tracked kind of session falls on: the ones picked, else the suggestion for its goal. */
+  /** The weekdays picked for each tracked kind of session; empty where none were. */
   schedule: CalendarPins
 }
 
@@ -239,12 +233,9 @@ export function derive(f: FormState, now: Date = new Date()): Derived {
     },
     f.pillars,
   )
-  const suggestedDays = defaultSchedule(goals)
   const schedule: CalendarPins = {}
   for (const p of PINNABLE) {
-    if (!f.pillars.includes(p)) continue
-    const picked = f.scheduleEdits?.[p]
-    schedule[p] = picked?.length ? picked : suggestedDays[p]
+    if (f.pillars.includes(p)) schedule[p] = f.scheduleEdits?.[p] ?? []
   }
   return {
     heightFt,
@@ -271,49 +262,22 @@ export function withDays(f: FormState, days: LiftDays): FormState {
     ...f,
     days,
     goalEdits: f.goalEdits ? { ...f.goalEdits, workouts: days } : null,
-    scheduleEdits: withoutPicked(f.scheduleEdits, 'strength'),
   }
 }
 
-function withoutPicked(edits: CalendarPins | null, pillar: PinnablePillar): CalendarPins | null {
-  if (!edits) return null
-  const { [pillar]: _dropped, ...rest } = edits
-  return rest
-}
-
-/**
- * Set one weekly goal by hand. The days picked for it no longer add up, so
- * that pillar goes back to the days suggested for the new count.
- */
+/** Set one weekly goal by hand; the others stay as they stand. */
 export function withGoal(f: FormState, key: keyof WeeklyGoalConfig, n: number, now: Date = new Date()): FormState {
-  const pillar = PINNABLE.find((p) => SCHEDULE_GOAL[p] === key)
-  return {
-    ...f,
-    goalEdits: { ...derive(f, now).goals, [key]: n },
-    scheduleEdits: pillar ? withoutPicked(f.scheduleEdits, pillar) : f.scheduleEdits,
-  }
+  return { ...f, goalEdits: { ...derive(f, now).goals, [key]: n } }
 }
 
 /**
- * Tap a weekday on or off for one kind of session. The weekly goal follows the
- * count, so the days and the goal can't disagree; the last day can't be taken
- * off, since a goal of 0 is a pillar that's off, which is the track section's
- * to say.
+ * Tap a weekday on or off for one kind of session. The days are a plan laid
+ * over the weekly goal, not a second way of setting it: someone can aim for
+ * four lifts and fix only the two they always make, or fix none.
  */
-export function toggleScheduleDay(
-  f: FormState,
-  pillar: PinnablePillar,
-  weekday: number,
-  now: Date = new Date(),
-): FormState {
-  const d = derive(f, now)
-  const next = toggleWeekday(d.schedule[pillar] ?? [], weekday).sort((a, b) => a - b)
-  if (next.length === 0) return f
-  return {
-    ...f,
-    scheduleEdits: { ...f.scheduleEdits, [pillar]: next },
-    goalEdits: { ...d.goals, [SCHEDULE_GOAL[pillar]]: next.length },
-  }
+export function toggleScheduleDay(f: FormState, pillar: PinnablePillar, weekday: number): FormState {
+  const next = toggleWeekday(f.scheduleEdits?.[pillar] ?? [], weekday).sort((a, b) => a - b)
+  return { ...f, scheduleEdits: { ...f.scheduleEdits, [pillar]: next } }
 }
 
 /** Which sections the form shows for these answers. */
@@ -513,6 +477,5 @@ export function aiPlanFor(f: FormState, edit: AiPlanEdit | null): Plan | null {
 export function withWorkoutGoal(f: FormState, workouts: number | null, now: Date = new Date()): FormState {
   const goals = derive(f, now).goals
   if (workouts == null || workouts < 1 || workouts === goals.workouts) return f
-  // Through withGoal, so the lifting days picked for the old count don't outlive it.
   return withGoal(f, 'workouts', Math.min(7, Math.round(workouts)), now)
 }

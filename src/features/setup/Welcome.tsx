@@ -211,7 +211,7 @@ const SECTION_TITLES: Record<SectionId, string> = {
   cardio: 'cardio goal',
   diet: 'diet',
   goals: 'weekly goals',
-  schedule: 'your week',
+  schedule: 'set days (optional)',
   theme: 'theme',
   coach: 'ai coach',
   account: 'account',
