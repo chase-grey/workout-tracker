@@ -51,7 +51,7 @@ export function lastStretchRoutine(entries: FlexEntry[]): FlexRoutineKey | null 
  * measurement is logged with `note: 'measurement'` (see DataContext.logFlex),
  * and a session with the note it was finished under.
  */
-function completedRoutinesOf(e: FlexEntry): FlexRoutineKey[] {
+export function completedRoutinesOf(e: FlexEntry): FlexRoutineKey[] {
   if (e.routines?.length) return e.routines
   return e.note === 'measurement' ? [] : ['side_split']
 }
