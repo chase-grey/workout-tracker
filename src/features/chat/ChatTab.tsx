@@ -597,6 +597,7 @@ export function ChatTab({
           skills,
           profile: settings.profile,
           cardio: cardioEntries,
+          cardioPlan: settings.cardioPlan,
           heightIn: settings.heightIn,
         }),
       },

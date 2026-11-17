@@ -5,6 +5,7 @@ import { starterPlan } from '../config/planTemplates'
 import { setActiveProfile } from './profileStore'
 import type { Profile } from './profile'
 import type { CardioEntry } from './cardio'
+import { buildCardioPlan, MI_5K } from './cardioPlan'
 import type { BodyWeightEntry, StreakState, WorkoutRow } from '../types'
 
 const today = new Date(2026, 6, 1) // 2026-07-01 (local)
@@ -290,6 +291,20 @@ describe('buildSystemPrompt for someone other than the owner', () => {
     expect(off).not.toContain('bike')
     // The owner's device has no cardio pillar either.
     expect(build({ profile: null })).not.toContain('## Cardio')
+  })
+
+  it('shows the cardio plan and its checkpoints while one is followed', () => {
+    const cardioPlan = buildCardioPlan(
+      { kind: 'run', goal: { type: 'distance', distanceMi: MI_5K }, level: { longestMin: 10, longestMi: 1, weeklyMin: 30 }, days: [2, 4, 6], targetDate: '2026-09-27' },
+      '2026-06-29',
+    )
+    const p = build({ cardioPlan })
+    expect(p).toContain('## Cardio plan')
+    expect(p).toContain('Goal: run 5k by 2026-09-27')
+    expect(p).toMatch(/This week: wed easy run \d+ min/)
+    expect(p).toMatch(/Checkpoints: .*5k \(goal\) — due 2026-09-27/)
+    expect(build()).not.toContain('## Cardio plan')
+    expect(build({ cardioPlan, profile: { ...profile, pillars: ['strength'] } })).not.toContain('## Cardio plan')
   })
 
   it('asks a newcomer on the starter plan to be interviewed first', () => {

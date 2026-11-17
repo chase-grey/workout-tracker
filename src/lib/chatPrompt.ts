@@ -19,6 +19,7 @@ import {
 } from './profile'
 import { cardioMinutesByWeek, cardioSummary, type CardioEntry } from './cardio'
 import { circuitRounds, circuitTitle, dayEntries, roundsLabel } from './circuitEntry'
+import { describeCardioPlan, planActive, type CardioPlan } from './cardioPlan'
 
 /** Format one set as "weightxreps" (e.g. "135x8"), or "BWxreps" when weight is blank. */
 function formatSet(row: WorkoutRow): string {
@@ -376,6 +377,8 @@ export function buildSystemPrompt(input: {
   skills: CoachSkills
   profile?: Profile | null
   cardio?: CardioEntry[]
+  /** The cardio goal and its plan, when one is being followed (see lib/cardioPlan). */
+  cardioPlan?: CardioPlan
   heightIn?: number
 }): string {
   const { today, plan, workouts, bodyWeights, streaks, skills, profile } = input
@@ -432,6 +435,9 @@ export function buildSystemPrompt(input: {
     renderBodyWeights(recentWeights),
     ``,
     ...(cardioOn ? [`## Cardio (last 4 weeks)`, ...renderCardio(input.cardio ?? [], today), ``] : []),
+    ...(cardioOn && planActive(input.cardioPlan, todayISO)
+      ? [`## Cardio plan`, ...describeCardioPlan(input.cardioPlan, input.cardio ?? [], todayISO), ``]
+      : []),
     `## Streaks`,
     streakLine,
     `Streak freezes available: ${streaks.freezes}`,
