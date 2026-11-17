@@ -164,26 +164,38 @@ function dice(a: string, b: string): number {
   return (2 * inter) / (A.size + B.size)
 }
 
-export function matchExercise(raw: string): ExerciseMatch {
+/**
+ * How well a typed exercise name matches one candidate name, 0 to 1: bigram
+ * overlap, lifted to 0.9 when every word typed is one of the candidate's. Below
+ * {@link NAME_MATCH_MIN} it is not a match.
+ */
+export function nameScore(raw: string, candidate: string): number {
   const n = norm(raw)
   const rawTokens = n.split(' ').map(singular).filter(Boolean)
+  const cn = norm(candidate)
+  const candTokens = new Set(cn.split(' ').map(singular))
+  const contained = rawTokens.length > 0 && rawTokens.every((t) => candTokens.has(t))
+  return Math.max(dice(n, cn), contained ? 0.9 : 0)
+}
+
+/** The least {@link nameScore} that counts as naming the exercise. */
+export const NAME_MATCH_MIN = 0.55
+
+export function matchExercise(raw: string): ExerciseMatch {
   let best = { key: null as string | null, name: raw, score: 0 }
   for (const e of ALL_EXERCISES) {
     // Each exercise is matched against its display name plus any aliases (an old
     // log may use a name the exercise has since been renamed away from), but a
     // hit on any of them still resolves to the current display name.
     for (const candidate of [e.name, ...(EXERCISE_ALIASES[e.key] ?? [])]) {
-      const cn = norm(candidate)
-      const candTokens = new Set(cn.split(' ').map(singular))
-      const contained = rawTokens.length > 0 && rawTokens.every((t) => candTokens.has(t))
-      const score = Math.max(dice(n, cn), contained ? 0.9 : 0)
+      const score = nameScore(raw, candidate)
       if (score > best.score) best = { key: e.key, name: e.name, score }
     }
   }
   // Confident matches come from token containment (0.9); bare bigram overlap
   // below this is treated as "new" so e.g. "prayer curls" isn't forced onto
   // "hammer curl" just for sharing "curl".
-  const isNew = best.score < 0.55
+  const isNew = best.score < NAME_MATCH_MIN
   return {
     key: isNew ? null : best.key,
     name: isNew ? titleCase(raw) : best.name,
