@@ -17,6 +17,7 @@ import { TrackingSection } from './ProfileSection'
 import { PlanSetupSection } from './PlanSetupSection'
 import { AiPlanSection } from '../companion/AiPlanSection'
 import { WeekCalendarSetting } from './WeekCalendarSetting'
+import { CalendarExportSection } from './CalendarExportSection'
 import { PasteCoachSection, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
@@ -383,6 +384,7 @@ export function SettingsTab({
             <ThemePicker />
             <ButtonLabels />
             <WeekCalendarSetting />
+            <CalendarExportSection />
           </Group>
 
           <Group title="account & devices">

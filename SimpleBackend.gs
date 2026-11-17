@@ -164,7 +164,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 9
+const BACKEND_VERSION = 10
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -190,6 +190,9 @@ const SIGN_IN_ROUTES = { join: true, register: true, login: true }
 function doGet(e) {
   try {
     const route = e.parameter.route
+    // Google sending someone back from its consent page: no route, no account
+    // key, only the one-time `state` this backend handed out (see gcalConnect).
+    if (!route && e.parameter.state) return gcalCallback(e.parameter)
     if (route !== 'version' && !OWNER_SECRET_ROUTES[route]) useAccount(e.parameter.user)
     switch (route) {
       case 'version':
@@ -299,6 +302,18 @@ function doPost(e) {
         return json(withLock(function () { return savePlan(body.plan) }))
       case 'settings':
         return json(withLock(function () { return saveSettings(body.settings) }))
+      // The calendar routes take no lock: they change nothing in the sheet, and
+      // they wait on Google, which would hold every other write up behind them.
+      case 'gcal_status':
+        return json(gcalStatus())
+      case 'gcal_connect':
+        return json(gcalConnect(body))
+      case 'gcal_state':
+        return json(gcalState(body))
+      case 'gcal_apply':
+        return json(gcalApply(body))
+      case 'gcal_disconnect':
+        return json(gcalDisconnect())
       case 'save_error':
         // Not under withLock: "Backend busy" is one of the failures this exists
         // to report, and queueing on the same lock would lose exactly that one.
@@ -1877,6 +1892,355 @@ function isoDate(value) {
   const d = new Date(s) // reparse long/locale date strings from the sheet
   if (!isNaN(d.getTime())) return Utilities.formatDate(d, tz, 'yyyy-MM-dd')
   return s
+}
+
+/* ------------------------------------------------- google calendar sync */
+
+// Two-way sync of someone's schedule with a calendar in their own Google
+// account. The app decides what changes (src/lib/calendarSync.ts does the
+// merge); this end holds the one thing a browser can't keep - the account's
+// refresh token - and makes the Google calls it is told to. So it is a proxy
+// with a narrow menu: read our calendar's events in a window, make, retitle and
+// delete events in it, and remember the set both sides last agreed on.
+//
+// The link lives in script properties (`gcal_<account id>`), not in a sheet tab:
+// it holds a credential, and the sheet is a book a person opens.
+//
+// The scope is the narrowest Google offers: calendars this app made, and the
+// events on them. It can't read anyone's own calendar. Sync is off for everyone
+// until GCAL_CLIENT_ID and GCAL_CLIENT_SECRET are set (see BACKEND.md).
+const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created'
+const GCAL_API = 'https://www.googleapis.com/calendar/v3'
+const GCAL_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const GCAL_CALENDAR_NAME = 'Workout Tracker'
+const GCAL_PILLARS = { strength: true, flexibility: true, cardio: true }
+const GCAL_DATE = /^\d{4}-\d{2}-\d{2}$/
+// The most one request may ask for: eight weeks of three pillars is 168.
+const GCAL_MAX_OPS = 200
+
+function gcalConfig() {
+  const id = scriptProp('GCAL_CLIENT_ID')
+  const secret = scriptProp('GCAL_CLIENT_SECRET')
+  if (!id || !secret) return null
+  // The address Google sends the person back to must be the one registered
+  // with the OAuth client, character for character, so it can be pinned.
+  const redirect = scriptProp('GCAL_REDIRECT_URI') || ScriptApp.getService().getUrl()
+  return { id: id, secret: secret, redirect: redirect }
+}
+
+function gcalKey() {
+  return 'gcal_' + (ACCOUNT.id || 'owner')
+}
+
+function gcalLoad(key) {
+  const raw = PropertiesService.getScriptProperties().getProperty(key)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch (err) {
+    return null
+  }
+}
+
+function gcalSave(key, link) {
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(link))
+}
+
+function gcalDrop(key) {
+  PropertiesService.getScriptProperties().deleteProperty(key)
+  CacheService.getScriptCache().remove('gcal_at_' + key)
+}
+
+function gcalQuery(params) {
+  return Object.keys(params)
+    .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]) })
+    .join('&')
+}
+
+/** Whether sync is set up on this backend, and whether this account is linked. */
+function gcalStatus() {
+  const cfg = gcalConfig()
+  return { saved: 1, available: !!cfg, connected: !!(cfg && gcalLoad(gcalKey())) }
+}
+
+/**
+ * The Google consent page to send this account to. The `state` it carries back
+ * is a one-time ticket naming the account, good for ten minutes: the callback
+ * arrives as a bare GET with no account key on it.
+ */
+function gcalConnect(body) {
+  const cfg = gcalConfig()
+  if (!cfg) throw new Error('Calendar sync is not set up')
+  const back = String((body && body.returnUrl) || '')
+  const state = Utilities.getUuid().replace(/-/g, '')
+  CacheService.getScriptCache().put(
+    'gcal_state_' + state,
+    JSON.stringify({ key: gcalKey(), back: /^https:\/\/[^\s"'<>]+$|^http:\/\/localhost[:\/][^\s"'<>]*$/.test(back) ? back : '' }),
+    600,
+  )
+  return {
+    saved: 1,
+    url: 'https://accounts.google.com/o/oauth2/v2/auth?' + gcalQuery({
+      client_id: cfg.id,
+      redirect_uri: cfg.redirect,
+      response_type: 'code',
+      scope: GCAL_SCOPE,
+      // offline + consent: the only combination that always hands back a refresh token.
+      access_type: 'offline',
+      prompt: 'consent',
+      state: state,
+    }),
+  }
+}
+
+function gcalPage(message, back) {
+  const esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;') }
+  return HtmlService.createHtmlOutput(
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<body style="font-family:system-ui,sans-serif;background:#0a0a0a;color:#f5f5f5;padding:2rem;line-height:1.5">' +
+    '<h1 style="font-size:1.25rem">' + esc(message) + '</h1>' +
+    (back ? '<p><a target="_top" style="color:#4ade80" href="' + esc(back) + '">back to the app</a></p>' : '') +
+    '</body>',
+  ).setTitle('Workout Tracker')
+}
+
+/** Google sending someone back from the consent page: trade the code for a refresh token and keep it. */
+function gcalCallback(params) {
+  const cache = CacheService.getScriptCache()
+  const raw = cache.get('gcal_state_' + String(params.state || ''))
+  if (!raw) return gcalPage('That link has expired. Start again from the app.', '')
+  cache.remove('gcal_state_' + params.state)
+  const ticket = JSON.parse(raw)
+  const cfg = gcalConfig()
+  if (!cfg || !params.code) return gcalPage('Google Calendar was not connected.', ticket.back)
+  const res = UrlFetchApp.fetch(GCAL_TOKEN_URL, {
+    method: 'post',
+    payload: {
+      code: params.code,
+      client_id: cfg.id,
+      client_secret: cfg.secret,
+      redirect_uri: cfg.redirect,
+      grant_type: 'authorization_code',
+    },
+    muteHttpExceptions: true,
+  })
+  let tokens = {}
+  try {
+    tokens = JSON.parse(res.getContentText())
+  } catch (err) { /* not JSON: treated as a refusal below */ }
+  if (!tokens.refresh_token) return gcalPage('Google Calendar was not connected.', ticket.back)
+  // A fresh link starts with no calendar and nothing agreed: the first sync makes both.
+  gcalSave(ticket.key, { refresh: tokens.refresh_token, calendarId: '', base: [] })
+  return gcalPage('Google Calendar is connected. You can close this page.', ticket.back)
+}
+
+/** An access token for the link, refreshed when the cached one has run out. Null when Google has withdrawn it. */
+function gcalAccess(key, link) {
+  const cache = CacheService.getScriptCache()
+  const held = cache.get('gcal_at_' + key)
+  if (held) return held
+  const cfg = gcalConfig()
+  if (!cfg) return null
+  const res = UrlFetchApp.fetch(GCAL_TOKEN_URL, {
+    method: 'post',
+    payload: {
+      refresh_token: link.refresh,
+      client_id: cfg.id,
+      client_secret: cfg.secret,
+      grant_type: 'refresh_token',
+    },
+    muteHttpExceptions: true,
+  })
+  let out = {}
+  try {
+    out = JSON.parse(res.getContentText())
+  } catch (err) { /* handled as a failure below */ }
+  if (out.access_token) {
+    cache.put('gcal_at_' + key, out.access_token, Math.max(60, Math.min(3000, Number(out.expires_in || 3600) - 300)))
+    return out.access_token
+  }
+  // Access taken away in the person's Google account: the link is dead, and
+  // saying so lets the app switch its setting off rather than fail forever.
+  if (out.error === 'invalid_grant') {
+    gcalDrop(key)
+    return null
+  }
+  throw new Error('Google did not answer the calendar sign-in')
+}
+
+function gcalRequest(token, method, path, body) {
+  const req = {
+    url: GCAL_API + path,
+    method: method,
+    headers: { Authorization: 'Bearer ' + token },
+    muteHttpExceptions: true,
+  }
+  if (body) {
+    req.contentType = 'application/json'
+    req.payload = JSON.stringify(body)
+  }
+  return req
+}
+
+function gcalCall(token, method, path, body) {
+  const req = gcalRequest(token, method, path, body)
+  const res = UrlFetchApp.fetch(req.url, req)
+  let data = null
+  try {
+    data = JSON.parse(res.getContentText() || 'null')
+  } catch (err) { /* an empty or non-JSON body: the code says enough */ }
+  return { code: res.getResponseCode(), data: data }
+}
+
+function gcalShiftDate(iso, days) {
+  const d = new Date(iso + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function gcalMakeCalendar(key, link, token) {
+  const made = gcalCall(token, 'post', '/calendars', { summary: GCAL_CALENDAR_NAME })
+  if (made.code !== 200 || !made.data || !made.data.id) throw new Error('Could not make the Google calendar')
+  link.calendarId = made.data.id
+  link.base = []
+  gcalSave(key, link)
+}
+
+/**
+ * The link and a token for this account, or null when it isn't linked (or
+ * Google has cut it off).
+ */
+function gcalSession() {
+  const key = gcalKey()
+  const link = gcalLoad(key)
+  if (!link) return null
+  const token = gcalAccess(key, link)
+  if (!token) return null
+  return { key: key, link: link, token: token }
+}
+
+/**
+ * Our events in the calendar between two dates, and the set last agreed on.
+ * The calendar is made on the first call, and made again if it was deleted in
+ * Google - with nothing agreed, so the app's sessions are simply written back.
+ */
+function gcalState(body) {
+  const from = String((body && body.from) || '')
+  const to = String((body && body.to) || '')
+  if (!GCAL_DATE.test(from) || !GCAL_DATE.test(to)) throw new Error('gcal_state needs from and to dates')
+  const s = gcalSession()
+  if (!s) return { saved: 1, connected: false, events: [], base: [] }
+  if (!s.link.calendarId) gcalMakeCalendar(s.key, s.link, s.token)
+
+  const list = function () {
+    // A day of slack either side: an all-day event's edges are in the
+    // calendar's time zone, and the app filters to the exact dates anyway.
+    return gcalCall(s.token, 'get', '/calendars/' + encodeURIComponent(s.link.calendarId) + '/events?' + gcalQuery({
+      timeMin: gcalShiftDate(from, -1) + 'T00:00:00Z',
+      timeMax: gcalShiftDate(to, 2) + 'T00:00:00Z',
+      singleEvents: 'true',
+      showDeleted: 'false',
+      maxResults: '2500',
+    }))
+  }
+  let res = list()
+  if (res.code === 404 || res.code === 410) {
+    gcalMakeCalendar(s.key, s.link, s.token)
+    res = list()
+  }
+  if (res.code !== 200 || !res.data) throw new Error('Google Calendar did not answer (' + res.code + ')')
+
+  const events = []
+  const items = res.data.items || []
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]
+    const pillar = it.extendedProperties && it.extendedProperties.private && it.extendedProperties.private.wt
+    // Anything without our mark was put there by hand and is none of ours.
+    if (!pillar || !GCAL_PILLARS[pillar] || !it.start) continue
+    const date = it.start.date || String(it.start.dateTime || '').slice(0, 10)
+    if (!GCAL_DATE.test(date)) continue
+    events.push({ id: it.id, pillar: pillar, date: date, title: String(it.summary || '') })
+  }
+  return { saved: 1, connected: true, events: events, base: s.link.base || [] }
+}
+
+/**
+ * Make, retitle and delete events as the app's merge decided, then remember
+ * the set it says both sides now hold. The set is only remembered when every
+ * call landed: a base that claims an event Google never took would read, next
+ * time, as that event deleted by hand.
+ */
+function gcalApply(body) {
+  const create = (body && body.create) || []
+  const update = (body && body.update) || []
+  const remove = (body && body.remove) || []
+  const base = (body && body.base) || []
+  if (create.length + update.length + remove.length > GCAL_MAX_OPS || base.length > GCAL_MAX_OPS * 2) {
+    throw new Error('Too many calendar changes in one request')
+  }
+  const s = gcalSession()
+  if (!s) return { saved: 1, connected: false, failed: 0 }
+  if (!s.link.calendarId) throw new Error('gcal_apply before gcal_state')
+  const events = '/calendars/' + encodeURIComponent(s.link.calendarId) + '/events'
+
+  const requests = []
+  for (let i = 0; i < create.length; i++) {
+    const e = create[i]
+    if (!e || !GCAL_PILLARS[e.pillar] || !GCAL_DATE.test(String(e.date))) throw new Error('Bad calendar event')
+    requests.push(gcalRequest(s.token, 'post', events, {
+      summary: String(e.title || e.pillar).slice(0, 200),
+      start: { date: e.date },
+      end: { date: gcalShiftDate(e.date, 1) },
+      // A workout doesn't make someone busy to the people booking them.
+      transparency: 'transparent',
+      extendedProperties: { private: { wt: e.pillar } },
+    }))
+  }
+  for (let i = 0; i < update.length; i++) {
+    requests.push(gcalRequest(s.token, 'patch', events + '/' + encodeURIComponent(String(update[i].id)), {
+      summary: String(update[i].title || '').slice(0, 200),
+    }))
+  }
+  for (let i = 0; i < remove.length; i++) {
+    requests.push(gcalRequest(s.token, 'delete', events + '/' + encodeURIComponent(String(remove[i]))))
+  }
+
+  let failed = 0
+  if (requests.length) {
+    const out = UrlFetchApp.fetchAll(requests)
+    for (let i = 0; i < out.length; i++) {
+      const code = out[i].getResponseCode()
+      // Deleting what is already gone is the result that was asked for.
+      const gone = requests[i].method === 'delete' && (code === 404 || code === 410)
+      if (!(code >= 200 && code < 300) && !gone) failed++
+    }
+  }
+  if (!failed) {
+    s.link.base = base.filter(function (k) { return typeof k === 'string' && k.length <= 16 })
+    gcalSave(s.key, s.link)
+  }
+  return { saved: 1, connected: true, failed: failed }
+}
+
+/**
+ * Stop syncing: take the calendar this app made out of the person's Google
+ * account, hand the access back, and forget the link. The calendar goes
+ * because a later reconnect makes a new one, and two would be left standing.
+ */
+function gcalDisconnect() {
+  const key = gcalKey()
+  const link = gcalLoad(key)
+  if (!link) return { saved: 1 }
+  try {
+    const token = gcalAccess(key, link)
+    if (token && link.calendarId) gcalCall(token, 'delete', '/calendars/' + encodeURIComponent(link.calendarId))
+    UrlFetchApp.fetch('https://oauth2.googleapis.com/revoke?' + gcalQuery({ token: link.refresh }), {
+      method: 'post',
+      muteHttpExceptions: true,
+    })
+  } catch (err) { /* Google unreachable: the link is still forgotten here */ }
+  gcalDrop(key)
+  return { saved: 1 }
 }
 
 function json(data, code) {

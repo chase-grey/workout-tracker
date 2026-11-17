@@ -128,6 +128,12 @@ the backend separately using the deployment instructions above.
 | POST | `?route=report_issue` | `{ secret, title, body, area, context }` | `{ number, url }` |
 | GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |
 | POST | `?route=answer_issue` | `{ secret, number, answer }` | `{ answered }` |
+| POST | `?route=gcal_status` | — | `{ saved, available, connected }` (see Google Calendar sync) |
+| POST | `?route=gcal_connect` | `{ returnUrl }` | `{ saved, url }`: Google's consent page for this account |
+| POST | `?route=gcal_state` | `{ from, to }` | `{ saved, connected, events: [{id, pillar, date, title}], base }` |
+| POST | `?route=gcal_apply` | `{ create, update, remove, base }` | `{ saved, connected, failed }` |
+| POST | `?route=gcal_disconnect` | — | `{ saved }` |
+| GET | `?state=…&code=…` (no `route`) | — | an HTML page: Google's redirect back from consent |
 
 Every route except `version`, `join`, `register`, `login`, `claim_owner` and the four issue routes (and `invite`)
 takes a `user` query parameter, the account key (see Accounts).
@@ -252,6 +258,51 @@ takes a reply, and `answer_issue` posts the reply and swaps the label back to `a
 the handoff that puts the issue back in front of the fixer. Both refuse any issue not carrying
 `from-app`: the token can write to every issue in the repo, and there's no reason these routes
 should reach one the app didn't file.
+
+### Google Calendar sync
+
+Someone who schedules their week can keep it in step with a calendar in their
+own Google account, both ways (`src/lib/calendarSync.ts` has the merge and says
+what "both ways" means). The backend's part is narrow: it keeps each account's
+Google refresh token, which a browser can't, and makes the calls the app's merge
+decided on. It never decides anything itself, and it runs no timer: a change
+made in Google is picked up when the app next opens, which is the only place it
+could be seen.
+
+- The link is one script property per account, `gcal_<account id>` (`gcal_owner`
+  for the owner): `{ refresh, calendarId, base }`. `base` is the set of sessions
+  both sides agreed on at the last sync. It is a property rather than a tab
+  because it holds a credential.
+- The scope is `calendar.app.created`: calendars this app made and the events on
+  them. It cannot read a person's own calendar. The app makes one calendar,
+  "Workout Tracker", on the first sync, marks its events with a private `wt`
+  property, and ignores anything in that calendar without the mark.
+- Disconnecting deletes that calendar from the person's account, revokes the
+  token and deletes the property.
+- `gcal_apply` only saves the new `base` when every Google call landed. A base
+  that claimed an event Google never took would read, next sync, as that event
+  deleted by hand, and take the day off in the app.
+
+**Setting it up (once).** Until this is done `gcal_status` answers
+`available: false` and the app doesn't offer the sync at all.
+
+1. In Google Cloud Console, make a project, enable the **Google Calendar API**,
+   and configure the OAuth consent screen: user type **External**, the scope
+   `https://www.googleapis.com/auth/calendar.app.created`.
+2. **Publish the app** ("In production"). Left in "Testing", Google expires
+   every refresh token after seven days and only listed test users can connect.
+   Unverified, it shows a "Google hasn't verified this app" screen and stops at
+   100 users; submitting it for verification lifts both.
+3. Create an **OAuth client ID** of type **Web application** whose authorised
+   redirect URI is this deployment's `/exec` URL, exactly (the value of
+   `DEFAULT_API_URL` in `src/config/backend.ts`).
+4. In the Apps Script project, **Project Settings → Script properties**, set
+   `GCAL_CLIENT_ID` and `GCAL_CLIENT_SECRET` from that client. Set
+   `GCAL_REDIRECT_URI` to the same `/exec` URL too if the consent page reports a
+   redirect mismatch; unset, the script uses its own service URL.
+
+No new manifest scope is needed: the calls go out through `UrlFetchApp`, which
+`script.external_request` already covers.
 
 ### Body fat readings
 

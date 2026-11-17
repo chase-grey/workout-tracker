@@ -101,6 +101,9 @@ async function post<T>(route: string, body: unknown): Promise<T> {
   return result
 }
 
+/** One session as the Google calendar holds it (see lib/calendarSync RemoteEvent). */
+type GcalEvent = { id: string; pillar: 'strength' | 'flexibility' | 'cardio'; date: string; title: string }
+
 /** What signing in or making an account hands back. */
 export type SignedIn = { saved: number; token: string; name: string; owner: boolean }
 
@@ -108,6 +111,22 @@ export type SignedIn = { saved: number; token: string; name: string; owner: bool
 export type Person = { name: string; email: string; createdAt: string; lastSeen: string; owner: boolean }
 
 export const api = {
+  /**
+   * Google Calendar sync (see lib/calendarSync, SimpleBackend.gs "google
+   * calendar sync"). The backend keeps the account's Google token and makes the
+   * calls; every answer carries `saved: 1` so the write check above passes.
+   */
+  gcalStatus: () => post<{ available: boolean; connected: boolean }>('gcal_status', {}),
+  gcalConnect: (returnUrl: string) => post<{ url: string }>('gcal_connect', { returnUrl }),
+  gcalDisconnect: () => post<{ saved: number }>('gcal_disconnect', {}),
+  gcalState: (from: string, to: string) =>
+    post<{ connected: boolean; events: GcalEvent[]; base: string[] }>('gcal_state', { from, to }),
+  gcalApply: (ops: {
+    create: Omit<GcalEvent, 'id'>[]
+    update: { id: string; title: string }[]
+    remove: string[]
+    base: string[]
+  }) => post<{ connected: boolean; failed: number }>('gcal_apply', ops),
   isConfigured,
   fetchWorkouts: (since?: string) => get<WorkoutRow[]>('workouts', since ? { since } : {}),
   fetchBodyWeight: (since?: string) => get<BodyWeightEntry[]>('bodyweight', since ? { since } : {}),
