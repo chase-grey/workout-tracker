@@ -242,6 +242,17 @@ html {
   --descent-arrow-size: min(32cqw, 32cqh);
 }
 
+/* Rest's boxed shapes and the get-into-position count take the biggest square
+   the space between the toolbar and the clock holds, the way the stretch guides
+   above do, rather than a share of the window's width. */
+.rest-stage {
+  container-type: size;
+}
+.rest-stage-box {
+  width: min(100cqw, 100cqh);
+  flex-shrink: 0;
+}
+
 body {
   margin: 0;
   background-color: var(--color-bg);

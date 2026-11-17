@@ -127,11 +127,22 @@ const PERIMETER_INSET = 3
  * the sides no matter how tall the viewport is.
  */
 function PerimeterFrame({ fraction }: { fraction: number }) {
+  // Measured off the frame's own box, which is the whole overlay, rather than
+  // the window: an installed iPhone app reports an innerHeight short of the
+  // screen by the status bar, while the overlay itself is sized to all of it
+  // (see index.css), and a path drawn to the window's numbers ran its bottom
+  // edge that far above the real one.
+  const host = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }))
   useEffect(() => {
-    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight })
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    const node = host.current
+    if (!node) return
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) setSize({ w: width, h: height })
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
   }, [])
 
   const { w, h } = size
@@ -168,7 +179,7 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
   }
 
   return (
-    <div className="pointer-events-none absolute inset-0 text-accent-bright" aria-hidden>
+    <div ref={host} className="pointer-events-none absolute inset-0 text-accent-bright" aria-hidden>
       <svg className="absolute inset-0" width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
         {([1, -1] as const).map((dir) => (
           <g key={dir} fill="none" stroke="currentColor" strokeWidth={6}>
@@ -1211,10 +1222,10 @@ export function RestTimer({
           (full at the start, empty when rest is up); any looping motion is just
           texture and never drives the level. A filling shape and a boxed one both
           take the space under the row above rather than running behind it. */}
-      <div className="relative flex w-full flex-1 items-center justify-center">
+      <div className="rest-stage relative flex min-h-0 w-full flex-1 basis-0 items-center justify-center">
         {fills && variant !== 'roots' && <FullBleedShape variant={variant} fraction={remainingFraction} />}
         {!full && (
-          <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
+          <div className="rest-stage-box relative flex aspect-square items-center justify-center">
             <RestShape variant={variant} fraction={remainingFraction} />
           </div>
         )}

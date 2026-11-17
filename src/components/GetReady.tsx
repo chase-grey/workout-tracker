@@ -84,8 +84,8 @@ export function GetReady({
         <div className={`${SHELL_WIDTH} ${SHELL_PAD_X}`}>{header}</div>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-6">
-        <div className="relative flex aspect-square w-[min(86vw,30rem)] items-center justify-center">
+      <div className="rest-stage flex min-h-0 w-full flex-1 basis-0 flex-col items-center justify-center gap-6">
+        <div className="rest-stage-box relative flex aspect-square items-center justify-center">
           <div className="absolute h-[62%] w-[62%] rounded-full bg-accent/15 ring-1 ring-accent/30" />
           {holding ? (
             <div className="relative text-6xl font-bold text-white">go</div>
