@@ -9,8 +9,13 @@
  * prevent. Change one of these and both move together.
  */
 
-/** Centred, and never wider than a phone. */
-export const SHELL_WIDTH = 'mx-auto max-w-md'
+/**
+ * Centred, and never wider than a phone — but on a phone, the whole phone. The
+ * cap is for a desktop or tablet window; at the root's 15px it is 420px, which a
+ * 430/440px-wide phone overruns, so at phone widths (the same 700px line the
+ * shell's fixed layout in index.css uses) it is lifted.
+ */
+export const SHELL_WIDTH = 'mx-auto max-w-md max-[701px]:max-w-none'
 
 /** The side gutters a screen's content sits inside. */
 export const SHELL_PAD_X = 'px-4'
