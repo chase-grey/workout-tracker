@@ -250,7 +250,7 @@ export function achievementCelebration(
     case 'calGoal':
       return {
         tier: 'medium',
-        title: 'weekly calorie days done',
+        title: 'weekly calorie target days done',
         subtitle: `${counts.calDays} of ${goals.calDays} days this week.`,
         icon: 'medal',
       }

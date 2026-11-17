@@ -67,7 +67,7 @@ function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | '
 const METRIC_LABELS: Record<MetricKey, string> = {
   workouts: 'workouts',
   flex: 'stretch sessions',
-  calDays: 'calorie days',
+  calDays: 'days on calorie target',
   cardio: 'cardio days',
 }
 

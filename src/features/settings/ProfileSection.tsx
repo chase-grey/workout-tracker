@@ -26,7 +26,7 @@ const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[
   { pillar: 'strength', key: 'workouts', label: 'workouts' },
   { pillar: 'flexibility', key: 'flex', label: 'stretches' },
   { pillar: 'cardio', key: 'cardio', label: 'cardio days' },
-  { pillar: 'diet', key: 'calDays', label: 'calorie days' },
+  { pillar: 'diet', key: 'calDays', label: 'days on calorie target' },
 ]
 
 const DIRECTIONS: DietDirection[] = ['lose', 'maintain', 'gain']

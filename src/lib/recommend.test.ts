@@ -107,11 +107,21 @@ describe('recommendWeeklyGoals', () => {
     expect(recommendWeeklyGoals(['strength']).workouts).toBe(2)
   })
 
+  it('sets the workout goal to exactly the lifting days chosen, two through six', () => {
+    for (const daysPerWeek of [2, 3, 4, 5, 6] as const) {
+      expect(recommendWeeklyGoals(['strength'], { daysPerWeek, equipment: 'gym' }).workouts).toBe(daysPerWeek)
+    }
+  })
+
+  it('aims for six of seven days on the calorie target', () => {
+    expect(recommendWeeklyGoals(['diet']).calDays).toBe(6)
+  })
+
   it('gives the flexibility, diet and cardio counts when those are on', () => {
     expect(recommendWeeklyGoals(['flexibility', 'diet', 'cardio'])).toEqual({
       workouts: 0,
       flex: 2,
-      calDays: 5,
+      calDays: 6,
       cardio: 2,
     })
   })

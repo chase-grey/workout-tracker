@@ -75,7 +75,7 @@ function Row({ row, onSelectWeek }: { row: WeekResult; onSelectWeek: (week: stri
               habit the week predates — so it has no count to report. */}
           {goals.workouts > 0 && <Count label="workouts" value={row.counts.workouts} goal={goals.workouts} />}
           {goals.flex > 0 && <Count label="stretch" value={row.counts.flex} goal={goals.flex} />}
-          {goals.calDays > 0 && <Count label="cal days" value={row.counts.calDays} goal={goals.calDays} />}
+          {goals.calDays > 0 && <Count label="calorie target" value={row.counts.calDays} goal={goals.calDays} />}
           {(goals.cardio ?? 0) > 0 && (
             <Count label="cardio" value={row.counts.cardio ?? 0} goal={goals.cardio ?? 0} />
           )}

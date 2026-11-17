@@ -58,7 +58,7 @@ export function recommendWeeklyGoals(pillars: Pillar[], strength?: StrengthSetup
   return {
     workouts: pillars.includes('strength') ? strength?.daysPerWeek ?? 2 : 0,
     flex: pillars.includes('flexibility') ? 2 : 0,
-    calDays: pillars.includes('diet') ? 5 : 0,
+    calDays: pillars.includes('diet') ? 6 : 0,
     cardio: pillars.includes('cardio') ? 2 : 0,
   }
 }
