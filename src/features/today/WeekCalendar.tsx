@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore } from 'react-icons/md'
+import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore, MdRestaurant } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { dayOrder } from '../../config/plan'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
@@ -20,6 +20,7 @@ import {
   type CalendarDay,
   type CalendarItem,
   type CalendarStatus,
+  type PinnablePillar,
   type PlannedCardio,
 } from '../../lib/weekCalendar'
 import { CalendarItemSheet } from './CalendarItemSheet'
@@ -36,15 +37,34 @@ type Props = {
   onAction: (action: CalendarAction) => void
 }
 
-/** A pillar's mark: filled for done, a ring for planned, a faint ring for a missed calorie day. */
+/** A session on the calendar: every item but the day's calorie target. */
+type Session = CalendarItem & { pillar: PinnablePillar }
+type Colours = Record<PinnablePillar, string>
+
+const isSession = (i: CalendarItem): i is Session => i.pillar !== 'diet'
+
+/** A session's mark: filled for done, a ring for planned. */
 function Mark({ colour, status, size = 8 }: { colour: string; status: CalendarStatus | null; size?: number }) {
   const style: CSSProperties = { width: size, height: size }
   if (status === 'done') style.background = colour
-  else if (status) {
-    style.boxShadow = `inset 0 0 0 1.5px ${colour}`
-    if (status === 'missed') style.opacity = 0.35
-  }
+  else if (status) style.boxShadow = `inset 0 0 0 1.5px ${colour}`
   return <span aria-hidden className="inline-block shrink-0 rounded-full" style={style} />
+}
+
+/**
+ * The day's calorie target: a fork and knife, lit in the accent once the day
+ * hit it and left in the ground's grey until then, the way the calorie card's
+ * own week marks a day. Not a dot, since it isn't a session, and a shape can
+ * say "food" where a fourth colour only said "something else".
+ */
+function DietMark({ status, size }: { status: CalendarStatus | null; size: number }) {
+  return (
+    <MdRestaurant
+      aria-hidden
+      className={`shrink-0 ${status === 'done' ? 'text-accent' : status ? 'text-neutral-700' : 'invisible'}`}
+      style={{ width: size, height: size }}
+    />
+  )
 }
 
 function weekTitle(weekStart: string, today: string): string {
@@ -78,7 +98,7 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
   const profile = settings.profile
   const kept = settings.weekCalendarView === 'full'
   const [expanded, setExpanded] = useState(kept)
-  const [detail, setDetail] = useState<{ day: CalendarDay; item: CalendarItem } | null>(null)
+  const [detail, setDetail] = useState<{ day: CalendarDay; item: Session } | null>(null)
   const [scheduling, setScheduling] = useState(false)
 
   const [now, setNow] = useState(() => new Date())
@@ -131,7 +151,7 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
   const title = weekTitle(weekStart, today)
   // A week the cardio plan lays out takes its days from the plan, not from here.
   const schedulable = PINNABLE.filter((p) => pillars.includes(p) && !(p === 'cardio' && plannedCardio.length > 0))
-  const open = (day: CalendarDay, item: CalendarItem) => setDetail({ day, item })
+  const open = (day: CalendarDay, item: Session) => setDetail({ day, item })
   const picked = days.find((d) => d.date === selected)
   // "rest" is a word for a day off from a plan. With no days chosen and no
   // cardio plan there is no plan to be off from, and an empty day is just empty.
@@ -201,7 +221,7 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
       ) : (
         <>
           <SimpleStrip days={days} pillars={pillars} colours={colours} selected={selected} onSelect={onSelect} />
-          {picked && (planned || picked.items.some((i) => i.pillar !== 'diet')) && (
+          {picked && (planned || picked.items.some(isSession)) && (
             <div className="mt-2 flex min-h-[36px] flex-wrap items-center gap-1.5">
               <Sessions day={picked} colours={colours} onOpen={(item) => open(picked, item)} rest={planned} chip />
             </div>
@@ -250,13 +270,13 @@ function Sessions({
   chip,
 }: {
   day: CalendarDay
-  colours: Record<Pillar, string>
-  onOpen: (item: CalendarItem) => void
+  colours: Colours
+  onOpen: (item: Session) => void
   /** Whether an empty day says so. */
   rest: boolean
   chip?: boolean
 }) {
-  const sessions = day.items.filter((i) => i.pillar !== 'diet')
+  const sessions = day.items.filter(isSession)
   if (sessions.length === 0 && !rest) return null
   if (sessions.length === 0) return <span className={`text-sm text-neutral-600 ${chip ? 'px-1' : ''}`}>rest</span>
   return (
@@ -289,10 +309,10 @@ function DayRow({
   rest,
 }: {
   day: CalendarDay
-  colours: Record<Pillar, string>
+  colours: Colours
   selected: boolean
   onSelect: () => void
-  onOpen: (item: CalendarItem) => void
+  onOpen: (item: Session) => void
   rest: boolean
 }) {
   const diet = day.items.find((i) => i.pillar === 'diet')
@@ -317,7 +337,7 @@ function DayRow({
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3">
         <Sessions day={day} colours={colours} onOpen={onOpen} rest={rest} />
       </span>
-      {diet && <Mark colour={colours.diet} status={diet.status} size={6} />}
+      {diet && <DietMark status={diet.status} size={14} />}
     </div>
   )
 }
@@ -325,6 +345,8 @@ function DayRow({
 /**
  * The week as one strip: a letter per day and, under it, a mark per pillar in
  * a fixed order, so reading along a row of marks is reading one pillar's week.
+ * The sessions are dots in their own colours; the calorie target closes the
+ * column as a fork and knife.
  */
 function SimpleStrip({
   days,
@@ -335,7 +357,7 @@ function SimpleStrip({
 }: {
   days: CalendarDay[]
   pillars: Pillar[]
-  colours: Record<Pillar, string>
+  colours: Colours
   selected: string
   onSelect: (date: string) => void
 }) {
@@ -358,9 +380,13 @@ function SimpleStrip({
               {DOW[day.weekday][0]}
             </span>
             <span className="flex flex-col items-center gap-1">
-              {pillars.map((p) => (
-                <Mark key={p} colour={colours[p]} status={marks[p]} size={7} />
-              ))}
+              {pillars.map((p) =>
+                p === 'diet' ? (
+                  <DietMark key={p} status={marks[p]} size={11} />
+                ) : (
+                  <Mark key={p} colour={colours[p]} status={marks[p]} size={7} />
+                ),
+              )}
             </span>
           </button>
         )

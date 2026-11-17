@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { useBackGuard } from '../../lib/useBackGuard'
-import type { Pillar } from '../../lib/profile'
 import {
   PIN_LABEL,
   WEEKDAY_SHORT,
@@ -42,7 +41,7 @@ export function ScheduleSheet({
   days: CalendarDay[]
   /** The pillars whose days are set here, in order. */
   pillars: PinnablePillar[]
-  colours: Record<Pillar, string>
+  colours: Record<PinnablePillar, string>
   onClose: () => void
 }) {
   const { settings, updateSettings } = useData()

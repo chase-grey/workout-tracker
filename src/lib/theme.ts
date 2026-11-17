@@ -248,11 +248,8 @@ export function rgbOf(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-/** The four things the app tracks; the same union as lib/profile's Pillar. */
-type PillarKey = 'strength' | 'flexibility' | 'cardio' | 'diet'
-
-const AMBER = '#fbbf24'
-const ROSE = '#fb7185'
+/** The pillars that are sessions; the same union as lib/weekCalendar's PinnablePillar. */
+type SessionPillarKey = 'strength' | 'flexibility' | 'cardio'
 
 /** The deeper shade each pillar colour takes on a light ground, where the 400s wash out. */
 const ON_LIGHT: Record<string, string> = {
@@ -260,23 +257,24 @@ const ON_LIGHT: Record<string, string> = {
   [VIOLET]: '#7c3aed',
   [TEAL]: '#0d9488',
   [BLUE]: '#2563eb',
-  [AMBER]: '#d97706',
-  [ROSE]: '#e11d48',
 }
 
 /**
- * One colour per pillar, for marks that sit side by side and have to be told
- * apart at a glance (the week calendar's dots). Strength wears the accent;
- * flexibility and cardio the two cool colours each accent already keeps clear
- * of itself; diet is amber, or rose when the accent is amber.
+ * One colour per kind of session, for marks that sit side by side and have to
+ * be told apart at a glance (the week calendar's dots). Strength wears the
+ * accent; flexibility and cardio the two cool colours each accent already
+ * keeps clear of itself.
+ *
+ * The calorie target has none. A fourth hue would have to come from outside
+ * the theme, and a dot in it says nothing about food; the calendar draws that
+ * day's target as a fork and knife in the accent instead.
  */
-export function pillarColours(p: Palette): Record<PillarKey, string> {
+export function pillarColours(p: Palette): Record<SessionPillarKey, string> {
   const light = p.theme.mode === 'light'
   const shade = (hex: string) => (light ? (ON_LIGHT[hex] ?? hex) : hex)
   return {
     strength: p.scale[light ? 700 : 500],
     flexibility: shade(p.cold),
     cardio: shade(p.cold2),
-    diet: shade(p.theme.accent === 'amber' ? ROSE : AMBER),
   }
 }

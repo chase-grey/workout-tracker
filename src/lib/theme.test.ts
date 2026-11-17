@@ -73,11 +73,11 @@ describe('rotateHue', () => {
 })
 
 describe('pillarColours', () => {
-  it('gives the four pillars four different colours on every theme', () => {
+  it('gives the three kinds of session three different colours on every theme', () => {
     for (const accent of ACCENTS) {
       for (const mode of MODES) {
         const c = pillarColours(palette({ accent, mode }))
-        expect(new Set(Object.values(c)).size, `${accent} ${mode}`).toBe(4)
+        expect(new Set(Object.values(c)).size, `${accent} ${mode}`).toBe(3)
       }
     }
   })
