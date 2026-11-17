@@ -17,10 +17,12 @@ import { showUpdateToast } from '../../lib/version'
  *
  * A device with no profile is the owner's, whose weekly goals are the shipped
  * history rather than anything a reply can edit, so its weekly goal is null.
- * Cardio is only offered where it's one of the person's pillars; elsewhere
- * there's no context to apply a cardio line against, and the parser says so.
+ * Cardio is offered where it's one of the person's pillars, or where the
+ * companion was opened on cardio (`cardio`), as the welcome page does before
+ * there is a profile to hold the pillar; elsewhere there's no context to
+ * apply a cardio line against, and the parser says so.
  */
-export function useCompanion() {
+export function useCompanion({ cardio: onCardio = false }: { cardio?: boolean } = {}) {
   const { plan, updatePlan, settings, updateSettings, workouts, cardioEntries } = useData()
   const [, bump] = useReducer((n: number) => n + 1, 0)
   // The toast's undo runs after this render's settings have moved on.
@@ -35,7 +37,7 @@ export function useCompanion() {
     weeklyWorkouts: profile && weekly > 0 ? weekly : null,
     ...(settings.cardioPlan ? { cardioPlan: settings.cardioPlan } : {}),
   }
-  const cardio: CardioContext | undefined = hasPillar(profile, 'cardio')
+  const cardio: CardioContext | undefined = onCardio || hasPillar(profile, 'cardio')
     ? {
         today,
         entries: cardioEntries,

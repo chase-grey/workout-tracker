@@ -21,7 +21,6 @@ import {
 import { parseISODate, toISODate } from '../../lib/dates'
 import { trainingDates } from '../../lib/session'
 import { currentWeeklyGoals } from '../../lib/weeklyStreak'
-import { hasPillar } from '../../lib/profile'
 import { LiveCompanion } from '../companion/CompanionFlow'
 import { usePressAction } from '../../lib/usePressAction'
 
@@ -334,14 +333,12 @@ export function CardioGoalForm({ onSaved }: { onSaved: () => void }) {
       >
         {existing ? 'save plan' : 'build plan'}
       </button>
-      {hasPillar(settings.profile, 'cardio') && (
-        <button
-          onClick={() => setWithAi(true)}
-          className="mt-2 min-h-[44px] w-full rounded-2xl bg-surface-2 text-sm font-semibold text-neutral-300 active:opacity-80"
-        >
-          plan with your AI
-        </button>
-      )}
+      <button
+        onClick={() => setWithAi(true)}
+        className="mt-2 min-h-[44px] w-full rounded-2xl bg-surface-2 text-sm font-semibold text-neutral-300 active:opacity-80"
+      >
+        plan with your AI
+      </button>
       {withAi && (
         <LiveCompanion
           sheet

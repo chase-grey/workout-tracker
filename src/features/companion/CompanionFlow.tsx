@@ -305,7 +305,7 @@ export function LiveCompanion({
   focus?: 'lifts' | 'cardio'
   onApplied?: (next: CompanionState) => void
 }) {
-  const c = useCompanion()
+  const c = useCompanion({ cardio: focus === 'cardio' })
   const [today] = useState(() => new Date())
   const props = {
     state: c.state,
