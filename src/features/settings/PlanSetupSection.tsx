@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useData } from '../../store/DataContext'
 import {
   EQUIPMENT_LABELS,
+  LIFT_DAYS,
   MUSCLES,
   MUSCLE_LABELS,
   WORKOUT_MINUTES,
@@ -126,10 +127,7 @@ export function PlanSetupSection() {
       <Choice
         label="lifting days a week"
         value={answers.daysPerWeek}
-        options={[
-          { value: 2 as const, label: '2' },
-          { value: 3 as const, label: '3' },
-        ]}
+        options={LIFT_DAYS.map((n) => ({ value: n, label: String(n) }))}
         onChange={(daysPerWeek) => edit({ daysPerWeek })}
       />
       <label className={SETTINGS_LABEL}>equipment</label>

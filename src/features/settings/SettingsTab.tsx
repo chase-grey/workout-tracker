@@ -15,6 +15,7 @@ import { PoseCheck } from './PoseCheck'
 import { AccountSection } from './AccountSection'
 import { ProfileSection } from './ProfileSection'
 import { WeekCalendarSetting } from './WeekCalendarSetting'
+import { CopyTrainingSummary, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
 import { ownerFlavour } from '../../lib/profile'
@@ -385,6 +386,8 @@ export function SettingsTab({
       {owner && <PoseCheck />}
 
       <PhoneLink />
+
+      <RestartAccount />
       </div>
     )
   }
@@ -463,6 +466,8 @@ export function SettingsTab({
 
       <ProfileSection />
 
+      <UpdateGoals />
+
       <GuideSection />
 
       <InstallLink />
@@ -527,6 +532,8 @@ export function SettingsTab({
           </button>
         </section>
       )}
+
+      <CopyTrainingSummary />
 
       {!owner && <FeedbackSection />}
 
