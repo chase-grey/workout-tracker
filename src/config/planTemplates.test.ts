@@ -194,7 +194,7 @@ describe('starterPlan for a long lifting week', () => {
   })
 
   it('builds the same three days for a built plan too, so no volume goes to a day that does not exist', () => {
-    const answers = { equipment: 'gym', focus: ['arms' as const], minutes: 45 as const }
+    const answers = { equipment: 'gym' as const, focus: ['arms' as const], minutes: 45 as const }
     const three = planFor({ daysPerWeek: 3, ...answers })
     for (const daysPerWeek of [4, 5, 6] as const) {
       expect(planFor({ daysPerWeek, ...answers })).toEqual(three)

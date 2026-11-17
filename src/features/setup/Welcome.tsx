@@ -3,38 +3,48 @@ import {
   ACTIVITY_LABELS,
   DIET_LABELS,
   EQUIPMENT_LABELS,
+  LIFT_DAYS,
   MUSCLES,
   MUSCLE_LABELS,
   PILLARS,
-  WORKOUT_MINUTES,
   PILLAR_LABELS,
-  maskGoals,
+  WORKOUT_MINUTES,
   type Activity,
   type DietDirection,
   type Equipment,
+  type LiftDays,
   type Muscle,
   type Pillar,
   type Profile,
   type Sex,
-  type StrengthSetup,
-  type WorkoutMinutes,
   SEX_LABELS,
 } from '../../lib/profile'
-import { buildPlan, fitStatus } from '../../lib/planBuilder'
-import { recommendCalories, recommendWeeklyGoals } from '../../lib/recommend'
 import type { WeeklyGoalConfig } from '../../lib/weeklyStreak'
+import { buildPlan, fitStatus } from '../../lib/planBuilder'
 import { PROVIDERS, providerOf, type ProviderId } from '../../lib/aiProvider'
-import { toISODate, weekStartISO } from '../../lib/dates'
 import { ACCENTS, MODES, palette } from '../../lib/theme'
 import { setTheme, useTheme } from '../../lib/themeStore'
 import { usePressAction } from '../../lib/usePressAction'
 import { useFieldInView } from '../../lib/useFieldInView'
+import { useEnterNext } from '../../lib/useEnterNext'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
 import { emailOk, loginOk } from '../../lib/login'
 import { LoginFields } from './LoginFields'
 import { QrScanner } from './QrScanner'
 import { signInLink } from '../../lib/signInLink'
 import { MdQrCodeScanner } from 'react-icons/md'
+import {
+  buildProfile,
+  derive,
+  emptyForm,
+  invalidSections,
+  togglePillar,
+  visibleSections,
+  withDays,
+  type CoachPath,
+  type FormState,
+  type SectionId,
+} from '../../lib/welcomeForm'
 
 /**
  * Every device belongs to an account: a new one made here, or one signed back
@@ -46,26 +56,31 @@ export type WelcomeAccount =
   | { kind: 'create'; email: string; password: string }
   | { kind: 'signin'; email: string; password: string }
 
-export type WelcomeResult = {
+/** What the form itself answers, with or without an account to go with it. */
+export type SetupResult = {
   profile: Profile
   heightIn: number | null
   weightLbs: number | null
   ai: { provider: ProviderId; key: string } | null
-  account: WelcomeAccount
+  /** The coach was chosen as copy-and-paste into another AI app: no key. */
+  coachPaste: boolean
 }
+
+export type WelcomeResult = SetupResult & { account: WelcomeAccount }
 
 const FIELD =
   'min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent'
 const LABEL = 'text-sm font-medium text-neutral-300'
-const STEPS = 6
 
 /**
  * A button that fires on release even when the press blurred a field and the
  * keyboard's closing reflowed the page. A disabled one stays in the tab order
- * and swallows the press instead, since a native `disabled` gets no pointer events.
+ * and swallows the press instead, since a native `disabled` gets no pointer
+ * events; `onBlocked` hears that swallowed press.
  */
 function PressButton({
   onPress,
+  onBlocked,
   disabled,
   className,
   pressed,
@@ -73,6 +88,7 @@ function PressButton({
   children,
 }: {
   onPress: () => void
+  onBlocked?: () => void
   disabled?: boolean
   className: string
   pressed?: boolean
@@ -80,7 +96,8 @@ function PressButton({
   children: ReactNode
 }) {
   const press = usePressAction(() => {
-    if (!disabled) onPress()
+    if (disabled) onBlocked?.()
+    else onPress()
   })
   return (
     <button
@@ -158,20 +175,6 @@ function NumberField({
   )
 }
 
-function num(s: string): number | null {
-  if (s.trim() === '') return null
-  const n = Number(s)
-  return Number.isFinite(n) ? n : null
-}
-
-function inRange(n: number | null, lo: number, hi: number): n is number {
-  return n !== null && n >= lo && n <= hi
-}
-
-const THIS_YEAR = new Date().getFullYear()
-const BIRTH_LO = 1920
-const BIRTH_HI = THIS_YEAR - 10
-
 const YES_NO: { value: boolean; label: string }[] = [
   { value: true, label: 'yes' },
   { value: false, label: 'no' },
@@ -181,8 +184,49 @@ const GOAL_ROWS: { pillar: Pillar; key: keyof WeeklyGoalConfig; label: string }[
   { pillar: 'strength', key: 'workouts', label: 'workouts' },
   { pillar: 'flexibility', key: 'flex', label: 'stretches' },
   { pillar: 'cardio', key: 'cardio', label: 'cardio days' },
-  { pillar: 'diet', key: 'calDays', label: 'calorie days' },
+  { pillar: 'diet', key: 'calDays', label: 'days on calorie target' },
 ]
+
+const SECTION_TITLES: Record<SectionId, string> = {
+  you: 'you',
+  track: 'what to track',
+  about: 'about you',
+  strength: 'strength plan',
+  diet: 'diet',
+  goals: 'weekly goals',
+  theme: 'theme',
+  coach: 'ai coach',
+  account: 'account',
+}
+
+/** What the in-app coach can really do, from its prompt and tools (lib/chatPrompt, features/chat). */
+const COACH_CAN = [
+  'reads your plan, workouts, weight and streaks',
+  'builds and edits your workout plan, once you approve each change',
+  'edits your stretch routines',
+  'answers from your own history',
+  'notes when a joint felt off',
+]
+
+function Section({
+  id,
+  bad,
+  children,
+}: {
+  id: SectionId
+  bad: boolean
+  children: ReactNode
+}) {
+  return (
+    <section
+      data-section={id}
+      className={`-m-3 flex scroll-mt-4 flex-col gap-4 rounded-2xl p-3 ${bad ? 'ring-1 ring-red-400/70' : ''}`}
+    >
+      <h2 className={`text-lg font-bold ${bad ? 'text-red-400' : ''}`}>{SECTION_TITLES[id]}</h2>
+      {children}
+    </section>
+  )
+}
 
 function ThemeStep() {
   const { theme } = useTheme()
@@ -220,232 +264,329 @@ function ThemeStep() {
           </PressButton>
         ))}
       </div>
+      <p className="text-xs text-neutral-500">you can change these later in settings</p>
     </div>
   )
 }
 
-export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Promise<void> }) {
+function CoachStep({ f, set }: { f: FormState; set: (patch: Partial<FormState>) => void }) {
+  const pick = (path: CoachPath) =>
+    set({ coachPath: path, ...(path === 'paste' ? { aiKey: '' } : {}) })
+  return (
+    <>
+      <Segmented
+        label="want an ai coach?"
+        value={f.wantCoach}
+        options={[
+          { value: true, label: 'yes' },
+          { value: false, label: 'not now' },
+        ]}
+        onChange={(v) => set({ wantCoach: v })}
+      />
+      {f.wantCoach === false && <p className="text-xs text-neutral-500">you can set one up any time in settings</p>}
+      {f.wantCoach && (
+        <div className="flex flex-col gap-3">
+          <PressButton
+            onPress={() => pick('key')}
+            pressed={f.coachPath === 'key'}
+            className={`flex flex-col gap-2 rounded-xl p-3 text-left ${
+              f.coachPath === 'key' ? 'bg-surface ring-2 ring-accent' : 'bg-surface'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-base font-semibold">use my own api key</span>
+              <span className="rounded-full bg-accent/20 px-2 py-0.5 text-xs font-semibold text-accent">recommended</span>
+            </span>
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-neutral-300">
+              {COACH_CAN.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          </PressButton>
+          {f.coachPath === 'key' && (
+            <>
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>ai provider</span>
+                <select
+                  value={f.provider}
+                  onChange={(e) => set({ provider: providerOf(e.target.value).id })}
+                  className={FIELD}
+                >
+                  {PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>api key</span>
+                <input
+                  type="password"
+                  value={f.aiKey}
+                  onChange={(e) => set({ aiKey: e.target.value })}
+                  placeholder={providerOf(f.provider).keyHint}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  className={FIELD}
+                />
+              </label>
+            </>
+          )}
+          <PressButton
+            onPress={() => pick('paste')}
+            pressed={f.coachPath === 'paste'}
+            className={`flex flex-col gap-1 rounded-xl p-3 text-left ${
+              f.coachPath === 'paste' ? 'bg-surface ring-2 ring-accent' : 'bg-surface'
+            }`}
+          >
+            <span className="text-base font-semibold">copy & paste into another ai app</span>
+            <span className="text-sm text-neutral-300">no key needed</span>
+          </PressButton>
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * The whole setup, one scrolling page. `account` is whether it ends in an
+ * account (first run) or not (update goals, restart); `coach` whether the coach
+ * is asked about. Submitting with something missing scrolls to and marks the
+ * first section that needs it.
+ */
+function SetupForm({
+  initial,
+  account,
+  coach,
+  heading,
+  submitLabel,
+  pendingLabel,
+  onSubmit,
+  onCancel,
+}: {
+  initial: FormState
+  account: boolean
+  coach: boolean
+  heading: string
+  submitLabel: string
+  pendingLabel: string
+  onSubmit: (result: SetupResult, account: WelcomeAccount | null) => Promise<void>
+  onCancel?: () => void
+}) {
   const rootRef = useRef<HTMLDivElement>(null)
   useFieldInView(rootRef)
-  const [step, setStep] = useState(0)
-  // Set when the account step was reached straight from the first one.
-  const [skipped, setSkipped] = useState(false)
+  const onKeyDown = useEnterNext(rootRef)
 
-  // 1 - you and what to track
-  const [name, setName] = useState('')
-  const [pillars, setPillars] = useState<Pillar[]>([...PILLARS])
+  const [f, setF] = useState<FormState>(initial)
+  const set = (patch: Partial<FormState>) => setF((cur) => ({ ...cur, ...patch }))
 
-  // 2 - about you
-  const [sex, setSex] = useState<Sex | null>(null)
-  const [birthYear, setBirthYear] = useState('')
-  const [feet, setFeet] = useState('')
-  const [inches, setInches] = useState('')
-  const [weight, setWeight] = useState('')
-  const [scale, setScale] = useState<boolean | null>(null)
-  const [bodyFatReading, setBodyFatReading] = useState<boolean | null>(null)
-
-  // 3 - plan
-  const [days, setDays] = useState<2 | 3>(3)
-  const [equipment, setEquipment] = useState<Equipment>('gym')
-  const [minutes, setMinutes] = useState<WorkoutMinutes>(45)
-  // In the order picked, which is the order they're kept in when time is short.
-  const [focus, setFocus] = useState<Muscle[]>([])
-  const [direction, setDirection] = useState<DietDirection>('lose')
-  const [activity, setActivity] = useState<Activity>('moderate')
-  const [targetWeight, setTargetWeight] = useState('')
-  // Null until typed by hand; until then the field shows the suggestion.
-  const [calorieText, setCalorieText] = useState<string | null>(null)
-  const [goalEdits, setGoalEdits] = useState<WeeklyGoalConfig | null>(null)
-
-  // 5 - coach
-  const [provider, setProvider] = useState<ProviderId>(PROVIDERS[0].id)
-  const [aiKey, setAiKey] = useState('')
-
-  // 6 - account
-  const [mode, setMode] = useState<WelcomeAccount['kind']>('create')
+  const [view, setView] = useState<'form' | 'signin'>('form')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [scanning, setScanning] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Sections are marked only once a submit has been tried.
+  const [tried, setTried] = useState(false)
+  const [serverBad, setServerBad] = useState(false)
 
-  const on = (p: Pillar) => pillars.includes(p)
-  const strengthOn = on('strength')
-  const dietOn = on('diet')
-
-  const heightFt = num(feet)
-  const heightIn = heightFt === null ? null : heightFt * 12 + (num(inches) ?? 0)
-  const weightLbs = num(weight)
-  const birth = num(birthYear)
-
-  const suggestedCalories =
-    dietOn && sex && inRange(birth, BIRTH_LO, BIRTH_HI) && heightIn !== null && weightLbs !== null
-      ? recommendCalories({
-          sex,
-          age: THIS_YEAR - birth,
-          heightIn,
-          weightLbs,
-          activity,
-          direction,
-        })
-      : null
-  const calories = calorieText ?? (suggestedCalories === null ? '' : String(suggestedCalories))
-
-  const suggestedGoals = recommendWeeklyGoals(pillars, strengthOn ? { daysPerWeek: days, equipment } : undefined)
-  // A pillar switched on after the goals were edited has no edit to keep.
-  const goals = maskGoals(
-    {
-      workouts: goalEdits?.workouts || suggestedGoals.workouts,
-      flex: goalEdits?.flex || suggestedGoals.flex,
-      calDays: goalEdits?.calDays || suggestedGoals.calDays,
-      cardio: goalEdits?.cardio || suggestedGoals.cardio,
-    },
-    pillars,
-  )
-
-  const bumpGoal = (key: keyof WeeklyGoalConfig, by: number) => {
-    const next = Math.min(7, Math.max(1, (goals[key] ?? 0) + by))
-    setGoalEdits({ ...goals, [key]: next })
-  }
-
-  const strength: StrengthSetup = { daysPerWeek: days, equipment, focus, minutes, length: 'full' }
+  const signingIn = view === 'signin'
+  const on = (p: Pillar) => f.pillars.includes(p)
+  const d = derive(f)
+  // The plan builder's own verdict on the answers so far, so a pick that won't fit shows before it's a surprise.
+  const { days, equipment, focus, minutes } = f
   const fit = useMemo(() => {
-    const setup: StrengthSetup = { daysPerWeek: days, equipment, focus, minutes }
+    const setup = { daysPerWeek: days, equipment, focus, minutes }
     const build = buildPlan(setup)
     return { unfitted: build.unfitted, status: fitStatus(setup, build) }
   }, [days, equipment, focus, minutes])
-
   const toggleFocus = (m: Muscle) =>
-    setFocus((cur) => (cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]))
+    set({ focus: f.focus.includes(m) ? f.focus.filter((x) => x !== m) : [...f.focus, m] })
 
-  const togglePillar = (p: Pillar) =>
-    setPillars((cur) => {
-      if (!cur.includes(p)) return PILLARS.filter((x) => x === p || cur.includes(x))
-      return cur.length > 1 ? cur.filter((x) => x !== p) : cur
-    })
+  const accountOk = signingIn
+    ? /^https?:\/\//i.test(email.trim()) || (emailOk(email) && password !== '')
+    : loginOk(email, password)
+  const problems = signingIn
+    ? accountOk
+      ? []
+      : (['account'] as SectionId[])
+    : invalidSections(f, { account, accountOk, coach })
+  const bad = (id: SectionId) => (tried && problems.includes(id)) || (id === 'account' && serverBad)
 
-  const heightOk = heightIn === null ? feet.trim() === '' : inRange(heightFt, 3, 8) && inRange(num(inches) ?? 0, 0, 11)
-  const measuresOk = scale !== null && bodyFatReading !== null
-  const aboutOk = !measuresOk
-    ? false
-    : dietOn
-    ? sex !== null &&
-      inRange(birth, BIRTH_LO, BIRTH_HI) &&
-      heightOk &&
-      heightIn !== null &&
-      inRange(weightLbs, 50, 700)
-    : heightOk && (weight.trim() === '' || inRange(weightLbs, 50, 700)) && (birthYear.trim() === '' || inRange(birth, BIRTH_LO, BIRTH_HI))
+  const scrollTo = (id: SectionId) =>
+    rootRef.current
+      ?.querySelector(`[data-section="${id}"]`)
+      ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
 
-  const calorieNum = num(calories)
-  const planOk =
-    !dietOn || (inRange(calorieNum, 800, 6000) && (!scale || targetWeight.trim() === '' || inRange(num(targetWeight), 50, 700)))
+  const bumpGoal = (key: keyof WeeklyGoalConfig, by: number) => {
+    const next = Math.min(7, Math.max(1, (d.goals[key] ?? 0) + by))
+    set({ goalEdits: { ...d.goals, [key]: next } })
+  }
 
-  const pastedLink = /^https?:\/\//i.test(email.trim())
-  const accountOk =
-    mode === 'create'
-      ? loginOk(email, password)
-      : pastedLink || (emailOk(email) && password !== '')
-
-  const valid = [name.trim() !== '', aboutOk, planOk, true, true, accountOk][step]
-
-  const finish = async (account: WelcomeAccount = { kind: mode, email: email.trim(), password }) => {
-    const now = new Date()
-    const profile: Profile = {
-      name: name.trim(),
-      pillars,
-      ...(sex ? { sex } : {}),
-      ...(inRange(birth, BIRTH_LO, BIRTH_HI) ? { birthYear: birth } : {}),
-      ...(dietOn ? { activity, dietDirection: direction } : {}),
-      ...(dietOn && scale && inRange(num(targetWeight), 50, 700) ? { targetWeightLbs: num(targetWeight)! } : {}),
-      scale: scale ?? true,
-      bodyFatReading: bodyFatReading ?? true,
-      ...(strengthOn ? { strength } : {}),
-      weeklyGoals: [{ from: weekStartISO(toISODate(now)), goals }],
-      calorieGoals: dietOn && calorieNum !== null ? [{ from: toISODate(now), goal: calorieNum }] : [],
-      createdAt: now.toISOString(),
-    }
-    const key = aiKey.trim()
+  const run = async (acct: WelcomeAccount | null, form: FormState = f) => {
+    const fd = derive(form)
+    const key = form.aiKey.trim()
     setPending(true)
     setError(null)
+    setServerBad(false)
     try {
-      await onFinish({
-        profile,
-        heightIn: heightIn !== null && heightOk ? heightIn : null,
-        weightLbs: inRange(weightLbs, 50, 700) ? weightLbs : null,
-        ai: key ? { provider, key } : null,
-        account,
-      })
+      await onSubmit(
+        {
+          profile: buildProfile(form),
+          heightIn: fd.heightIn !== null && fd.heightOk ? fd.heightIn : null,
+          weightLbs: fd.weightLbs !== null && fd.weightLbs >= 50 && fd.weightLbs <= 700 ? fd.weightLbs : null,
+          ai: coach && form.wantCoach && form.coachPath === 'key' && key ? { provider: form.provider, key } : null,
+          coachPaste: coach && form.wantCoach === true && form.coachPath === 'paste',
+        },
+        acct,
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'something went wrong')
+      setServerBad(true)
+      if (account) requestAnimationFrame(() => scrollTo('account'))
     } finally {
       setPending(false)
     }
   }
 
-  const last = step === STEPS - 1
-  const next = () => {
-    if (pending || !valid) return
-    if (last) void finish()
-    else setStep(step + 1)
+  const submit = () => {
+    if (pending) return
+    if (problems.length > 0) {
+      setTried(true)
+      scrollTo(problems[0])
+      return
+    }
+    if (signingIn) void run({ kind: 'signin', email: email.trim(), password }, emptyForm())
+    else void run(account ? { kind: 'create', email: email.trim(), password } : null)
   }
-  const nextLabel = last
-    ? mode === 'signin'
-      ? pending ? 'signing in…' : 'sign in'
-      : pending ? 'starting…' : 'start'
-    : step === 4 && !aiKey.trim() ? 'skip' : 'next'
 
-  const heading = ['welcome', 'about you', 'your plan', 'theme', 'coach', 'account'][step]
+  const label = signingIn ? (pending ? 'signing in…' : 'sign in') : pending ? pendingLabel : submitLabel
+  const showAccount = account && !signingIn
+  const sections = visibleSections(f, { account: false, coach })
 
-  return (
-    <div ref={rootRef} className={`flex min-h-full flex-col bg-bg ${SHELL_WIDTH} w-full ${SHELL_PAD_X} ${SHELL_PAD_TOP}`}>
-      <div className="flex min-h-[44px] items-center justify-between">
-        {step > 0 ? (
+  const submitBar = (
+    <div className="sticky bottom-0 mt-6 flex flex-col gap-2 bg-bg pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
+      {error && (
+        <p role="alert" className="text-sm text-red-400">
+          {error}
+        </p>
+      )}
+      <PressButton
+        onPress={submit}
+        onBlocked={submit}
+        disabled={problems.length > 0 || pending}
+        className="min-h-[48px] w-full rounded-xl bg-accent font-semibold text-on-accent aria-disabled:opacity-50"
+      >
+        {label}
+      </PressButton>
+    </div>
+  )
+
+  const scanner = scanning && (
+    <QrScanner
+      onCredential={(cred) => {
+        setScanning(false)
+        void run({ kind: 'signin', email: signInLink(location.href, cred), password: '' }, emptyForm())
+      }}
+      onClose={() => setScanning(false)}
+    />
+  )
+
+  const rootClass = `flex min-h-full flex-col bg-bg ${SHELL_WIDTH} w-full ${SHELL_PAD_X} ${SHELL_PAD_TOP}`
+
+  if (signingIn) {
+    return (
+      <div ref={rootRef} onKeyDown={onKeyDown} className={rootClass}>
+        <div className="flex min-h-[44px] items-center">
           <PressButton
             onPress={() => {
               if (pending) return
-              if (skipped) {
-                setSkipped(false)
-                setStep(0)
-              } else setStep(step - 1)
+              setView('form')
+              setError(null)
             }}
             className="min-h-[44px] pr-4 text-sm font-medium text-neutral-400"
           >
             back
           </PressButton>
-        ) : (
-          <span />
-        )}
-        <div className="flex gap-1.5" role="img" aria-label={`step ${step + 1} of ${STEPS}`}>
-          {Array.from({ length: STEPS }, (_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 w-1.5 rounded-full ${i === step ? 'bg-accent' : 'bg-surface-2'}`}
-            />
-          ))}
         </div>
+        <h1 className="mb-6 mt-2 text-2xl font-bold">sign in</h1>
+        <div className="flex flex-1 flex-col gap-5" data-section="account">
+          <LoginFields
+            email={email}
+            password={password}
+            onEmail={setEmail}
+            onPassword={setPassword}
+            fresh={false}
+            fieldClass={FIELD}
+            labelClass={LABEL}
+          />
+          <PressButton
+            onPress={() => {
+              if (pending) return
+              setError(null)
+              setScanning(true)
+            }}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-surface font-semibold active:bg-surface-2"
+          >
+            <MdQrCodeScanner className="text-xl" aria-hidden />
+            scan QR code
+          </PressButton>
+          {scanner}
+        </div>
+        {submitBar}
       </div>
+    )
+  }
 
+  return (
+    <div ref={rootRef} onKeyDown={onKeyDown} className={rootClass}>
+      <div className="flex min-h-[44px] items-center">
+        {onCancel && (
+          <PressButton
+            onPress={() => !pending && onCancel()}
+            className="min-h-[44px] pr-4 text-sm font-medium text-neutral-400"
+          >
+            cancel
+          </PressButton>
+        )}
+      </div>
       <h1 className="mb-6 mt-2 text-2xl font-bold">{heading}</h1>
 
-      <div className="flex flex-1 flex-col gap-5">
-        {step === 0 && (
-          <>
-            <label className="flex flex-col gap-2">
-              <span className={LABEL}>name</span>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="given-name"
-                className={FIELD}
-              />
-            </label>
-            <div role="group" aria-label="track" className="flex flex-col gap-2">
-              <span className={LABEL}>track</span>
-              <div className="grid grid-cols-2 gap-2">
+      {account && (
+        <PressButton
+          onPress={() => {
+            setError(null)
+            setView('signin')
+          }}
+          className="mb-8 min-h-[48px] w-full rounded-xl bg-surface font-semibold active:bg-surface-2"
+        >
+          i already have an account
+        </PressButton>
+      )}
+
+      <div className="flex flex-1 flex-col gap-10">
+        {sections.map((id) => (
+          <Section key={id} id={id} bad={bad(id)}>
+            {id === 'you' && (
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>name</span>
+                <input
+                  value={f.name}
+                  onChange={(e) => set({ name: e.target.value })}
+                  autoComplete="given-name"
+                  className={FIELD}
+                />
+              </label>
+            )}
+
+            {id === 'track' && (
+              <div role="group" aria-label="track" className="grid grid-cols-2 gap-2">
                 {PILLARS.map((p) => (
                   <PressButton
                     key={p}
-                    onPress={() => togglePillar(p)}
+                    onPress={() => set({ pillars: togglePillar(f.pillars, p, PILLARS) })}
                     pressed={on(p)}
                     className={`min-h-[72px] rounded-xl text-base font-semibold ${
                       on(p) ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-400'
@@ -455,76 +596,69 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
                   </PressButton>
                 ))}
               </div>
-            </div>
-          </>
-        )}
+            )}
 
-        {step === 1 && (
-          <>
-            <Segmented
-              label="sex"
-              value={sex}
-              options={(Object.keys(SEX_LABELS) as Sex[]).map((v) => ({ value: v, label: SEX_LABELS[v] }))}
-              onChange={setSex}
-            />
-            <div className="flex gap-3">
-              <NumberField label="birth year" value={birthYear} onChange={setBirthYear} placeholder="1990" />
-            </div>
-            <div className="flex gap-3">
-              <NumberField label="height (ft)" value={feet} onChange={setFeet} />
-              <NumberField label="height (in)" value={inches} onChange={setInches} />
-            </div>
-            <div className="flex gap-3">
-              <NumberField label="weight (lbs)" value={weight} onChange={setWeight} decimal />
-            </div>
-            <Segmented
-              label="do you have a scale?"
-              value={scale}
-              options={YES_NO}
-              onChange={setScale}
-            />
-            <Segmented
-              label="can you measure body fat %, like with a smart scale?"
-              value={bodyFatReading}
-              options={YES_NO}
-              onChange={setBodyFatReading}
-            />
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            {strengthOn && (
+            {id === 'about' && (
               <>
                 <Segmented
+                  label="sex"
+                  value={f.sex}
+                  options={(Object.keys(SEX_LABELS) as Sex[]).map((v) => ({ value: v, label: SEX_LABELS[v] }))}
+                  onChange={(v) => set({ sex: v })}
+                />
+                <div className="flex gap-3">
+                  <NumberField label="birth year" value={f.birthYear} onChange={(v) => set({ birthYear: v })} placeholder="1990" />
+                </div>
+                <div className="flex gap-3">
+                  <NumberField label="height (ft)" value={f.feet} onChange={(v) => set({ feet: v })} />
+                  <NumberField label="height (in)" value={f.inches} onChange={(v) => set({ inches: v })} />
+                </div>
+                <div className="flex gap-3">
+                  <NumberField label="weight (lbs)" value={f.weight} onChange={(v) => set({ weight: v })} decimal />
+                </div>
+                <Segmented
+                  label="do you have a scale?"
+                  value={f.scale}
+                  options={YES_NO}
+                  onChange={(v) => set({ scale: v })}
+                />
+                <Segmented
+                  label="can you measure body fat %, like with a smart scale?"
+                  value={f.bodyFat}
+                  options={YES_NO}
+                  onChange={(v) => set({ bodyFat: v })}
+                />
+              </>
+            )}
+
+            {id === 'strength' && (
+              <>
+                <Segmented<LiftDays>
                   label="lifting days a week"
-                  value={days}
-                  options={[
-                    { value: 2 as 2 | 3, label: '2' },
-                    { value: 3 as 2 | 3, label: '3' },
-                  ]}
-                  onChange={setDays}
+                  value={f.days}
+                  options={LIFT_DAYS.map((n) => ({ value: n, label: String(n) }))}
+                  onChange={(v) => setF((cur) => withDays(cur, v))}
                 />
                 <Segmented
                   label="equipment"
-                  value={equipment}
+                  value={f.equipment}
                   options={(Object.keys(EQUIPMENT_LABELS) as Equipment[]).map((v) => ({
                     value: v,
                     label: EQUIPMENT_LABELS[v],
                   }))}
-                  onChange={setEquipment}
+                  onChange={(v) => set({ equipment: v })}
                 />
                 <Segmented
                   label="workout length"
-                  value={minutes}
+                  value={f.minutes}
                   options={WORKOUT_MINUTES.map((m) => ({ value: m, label: `${m} min` }))}
-                  onChange={setMinutes}
+                  onChange={(v) => set({ minutes: v })}
                 />
                 <div role="group" aria-label="muscles to grow" className="flex flex-col gap-2">
                   <span className={LABEL}>muscles to grow</span>
                   <div className="grid grid-cols-3 gap-2">
                     {MUSCLES.map((m) => {
-                      const picked = focus.includes(m)
+                      const picked = f.focus.includes(m)
                       const left = picked && fit.unfitted.includes(m)
                       return (
                         <PressButton
@@ -546,176 +680,153 @@ export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Pro
                 </div>
               </>
             )}
-            {dietOn && (
+
+            {id === 'diet' && (
               <>
                 <Segmented
                   label="goal"
-                  value={direction}
+                  value={f.direction}
                   options={(Object.keys(DIET_LABELS) as DietDirection[]).map((v) => ({
                     value: v,
                     label: DIET_LABELS[v],
                   }))}
-                  onChange={setDirection}
+                  onChange={(v) => set({ direction: v })}
                 />
                 <Segmented
                   label="active days a week"
-                  value={activity}
+                  value={f.activity}
                   options={(Object.keys(ACTIVITY_LABELS) as Activity[]).map((v) => ({
                     value: v,
                     label: ACTIVITY_LABELS[v],
                   }))}
-                  onChange={setActivity}
+                  onChange={(v) => set({ activity: v })}
                 />
                 <div className="flex gap-3">
-                  {scale && (
-                    <NumberField label="target weight (lbs)" value={targetWeight} onChange={setTargetWeight} decimal />
+                  {f.scale && (
+                    <NumberField
+                      label="target weight (lbs)"
+                      value={f.targetWeight}
+                      onChange={(v) => set({ targetWeight: v })}
+                      decimal
+                    />
                   )}
                   <NumberField
                     label="target calories"
-                    value={calories}
-                    onChange={setCalorieText}
+                    value={d.calories}
+                    onChange={(v) => set({ calorieText: v })}
                   />
                 </div>
+                {d.suggestedCalories !== null && (
+                  <div className="flex items-center gap-3">
+                    <p className="flex-1 text-xs text-neutral-400">
+                      suggested {d.suggestedCalories} a day, from your height, weight, age, activity & goal
+                    </p>
+                    {f.calorieText !== null && f.calorieText !== String(d.suggestedCalories) && (
+                      <PressButton
+                        onPress={() => set({ calorieText: null })}
+                        className="min-h-[44px] shrink-0 rounded-lg bg-surface px-3 text-sm font-medium"
+                      >
+                        use {d.suggestedCalories}
+                      </PressButton>
+                    )}
+                  </div>
+                )}
               </>
             )}
-            <div role="group" aria-label="weekly goals" className="flex flex-col gap-2">
-              <span className={LABEL}>weekly goals</span>
-              {GOAL_ROWS.filter((r) => on(r.pillar)).map((r) => (
+
+            {id === 'goals' &&
+              GOAL_ROWS.filter((r) => on(r.pillar)).map((r) => (
                 <div key={r.key} className="flex min-h-[44px] items-center gap-3 rounded-xl bg-surface px-3">
                   <span className="flex-1 text-sm">{r.label}</span>
                   <PressButton
                     onPress={() => bumpGoal(r.key, -1)}
                     label={`fewer ${r.label}`}
-                    disabled={(goals[r.key] ?? 0) <= 1}
+                    disabled={(d.goals[r.key] ?? 0) <= 1}
                     className="h-11 w-11 rounded-lg bg-surface-2 text-lg font-semibold aria-disabled:text-neutral-600"
                   >
                     −
                   </PressButton>
-                  <span className="w-6 text-center font-semibold tabular-nums">{goals[r.key] ?? 0}</span>
+                  <span className="w-6 text-center font-semibold tabular-nums">{d.goals[r.key] ?? 0}</span>
                   <PressButton
                     onPress={() => bumpGoal(r.key, 1)}
                     label={`more ${r.label}`}
-                    disabled={(goals[r.key] ?? 0) >= 7}
+                    disabled={(d.goals[r.key] ?? 0) >= 7}
                     className="h-11 w-11 rounded-lg bg-surface-2 text-lg font-semibold aria-disabled:text-neutral-600"
                   >
                     +
                   </PressButton>
                 </div>
               ))}
-            </div>
-          </>
-        )}
 
-        {step === 3 && <ThemeStep />}
+            {id === 'theme' && <ThemeStep />}
 
-        {step === 4 && (
-          <>
-            <label className="flex flex-col gap-2">
-              <span className={LABEL}>ai provider</span>
-              <select
-                value={provider}
-                onChange={(e) => setProvider(providerOf(e.target.value).id)}
-                className={FIELD}
-              >
-                {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className={LABEL}>api key</span>
-              <input
-                type="password"
-                value={aiKey}
-                onChange={(e) => setAiKey(e.target.value)}
-                placeholder={providerOf(provider).keyHint}
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                className={FIELD}
-              />
-            </label>
-          </>
-        )}
+            {id === 'coach' && <CoachStep f={f} set={set} />}
+          </Section>
+        ))}
 
-        {step === 5 && (
-          <>
-            <Segmented
-              label="account"
-              value={mode}
-              options={[
-                { value: 'create' as WelcomeAccount['kind'], label: 'new account' },
-                { value: 'signin' as WelcomeAccount['kind'], label: 'sign in' },
-              ]}
-              onChange={(m) => {
-                setMode(m)
-                setError(null)
-              }}
-            />
+        {showAccount && (
+          <Section id="account" bad={bad('account')}>
             <LoginFields
               email={email}
               password={password}
               onEmail={setEmail}
               onPassword={setPassword}
-              fresh={mode === 'create'}
+              fresh
               fieldClass={FIELD}
               labelClass={LABEL}
             />
-            {mode === 'signin' && (
-              <PressButton
-                onPress={() => {
-                  if (pending) return
-                  setError(null)
-                  setScanning(true)
-                }}
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-surface font-semibold active:bg-surface-2"
-              >
-                <MdQrCodeScanner className="text-xl" aria-hidden />
-                scan QR code
-              </PressButton>
-            )}
-          </>
-        )}
-        {scanning && (
-          <QrScanner
-            onCredential={(cred) => {
-              setScanning(false)
-              void finish({ kind: 'signin', email: signInLink(location.href, cred), password: '' })
-            }}
-            onClose={() => setScanning(false)}
-          />
+          </Section>
         )}
       </div>
 
-      <div className="sticky bottom-0 mt-6 flex flex-col gap-2 bg-bg pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
-        {error && last && (
-          <p role="alert" className="text-sm text-red-400">
-            {error}
-          </p>
-        )}
-        <PressButton
-          onPress={next}
-          disabled={!valid || pending}
-          className="min-h-[48px] w-full rounded-xl bg-accent font-semibold text-on-accent aria-disabled:opacity-50"
-        >
-          {nextLabel}
-        </PressButton>
-        {step === 0 && (
-          <PressButton
-            onPress={() => {
-              setMode('signin')
-              setError(null)
-              setSkipped(true)
-              setStep(STEPS - 1)
-            }}
-            className="min-h-[44px] w-full rounded-xl text-sm font-medium text-neutral-400"
-          >
-            i already have an account
-          </PressButton>
-        )}
-      </div>
+      {submitBar}
     </div>
+  )
+}
+
+/** First setup: the form, then an account made or signed into. */
+export function Welcome({ onFinish }: { onFinish: (result: WelcomeResult) => Promise<void> }) {
+  return (
+    <SetupForm
+      initial={emptyForm()}
+      account
+      coach
+      heading="welcome"
+      submitLabel="start"
+      pendingLabel="starting…"
+      onSubmit={(r, account) => onFinish({ ...r, account: account! })}
+    />
+  )
+}
+
+/**
+ * The same form for an account that already exists: prefilled to amend it
+ * ("update goals") or blank to begin again ("restart"). It has no account
+ * section, and no coach section either — that lives in Settings.
+ */
+export function SetupEditor({
+  initial,
+  heading,
+  submitLabel,
+  onFinish,
+  onCancel,
+}: {
+  initial: FormState
+  heading: string
+  submitLabel: string
+  onFinish: (result: SetupResult) => Promise<void>
+  onCancel: () => void
+}) {
+  return (
+    <SetupForm
+      initial={initial}
+      account={false}
+      coach={false}
+      heading={heading}
+      submitLabel={submitLabel}
+      pendingLabel="saving…"
+      onSubmit={(r) => onFinish(r)}
+      onCancel={onCancel}
+    />
   )
 }

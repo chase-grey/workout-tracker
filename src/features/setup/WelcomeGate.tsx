@@ -5,8 +5,6 @@ import { storage, type Settings } from '../../services/storage'
 import { providerOf } from '../../lib/aiProvider'
 import { DEFAULT_STRENGTH, planFor } from '../../config/planTemplates'
 import { Welcome, type WelcomeResult } from './Welcome'
-import { stashCoachKickoff } from '../../lib/coachKickoff'
-import { stashResumeTab } from '../../lib/resumeTab'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../../lib/shell'
 import { credentialFromText } from '../../lib/signInLink'
 import { useSignIn } from './SignInLanding'
@@ -62,7 +60,9 @@ export function WelcomeGate() {
           openAiKey: r.ai.key.trim(),
           openAiModel: providerOf(r.ai.provider).defaultModel,
         }
-      : {}
+      : r.coachPaste
+        ? { coachPaste: true }
+        : {}
 
     // An existing account brings its own profile, plan and history down with
     // the first sync, so nothing typed into the form is saved over them — and
@@ -81,19 +81,8 @@ export function WelcomeGate() {
       return
     }
 
-    // With a coach to hand, setup ends in a conversation rather than on a
-    // template: the app opens on the coach with the request already typed.
-    // Stashed before the settings save below, which is what swaps this screen
-    // for the app.
-    const kickOff = () => {
-      if (!r.ai) return
-      stashCoachKickoff('plan my week')
-      stashResumeTab('coach')
-    }
-
     const made = await api.register(r.account.email.trim(), r.account.password, r.profile.name)
     const account: Partial<Settings> = { accountMode: 'hosted', accountToken: made.token, accountName: made.name }
-    kickOff()
     updateSettings({
       ...base,
       ...coach,

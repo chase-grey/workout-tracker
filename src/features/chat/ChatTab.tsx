@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { clearCoachKickoff, peekCoachKickoff } from '../../lib/coachKickoff'
 import { useData } from '../../store/DataContext'
 import { buildSystemPrompt, reportToggleLabel, type CoachSkills } from '../../lib/chatPrompt'
 import { coachFeedbackMessage } from '../../lib/coachFeedback'
@@ -419,19 +418,6 @@ export function ChatTab({
     updateFlexPlan,
     flagDiscomfort,
   } = useData()
-  // Straight out of the welcome flow with a key: the composer opens holding the
-  // request to plan the week, with the two switches that conversation needs
-  // already on — the coach asks questions first, so the thread has to be kept,
-  // and its answer is a plan edit (see lib/coachKickoff).
-  const [kickoff] = useState(() => {
-    const text = peekCoachKickoff()
-    if (text) {
-      session.keepContext = true
-      session.skills = { ...session.skills, planEdits: true }
-    }
-    return text
-  })
-  useEffect(clearCoachKickoff, [])
   // Only a kept thread comes back: with the toggle off, what's on screen has to
   // match what the coach was given, which is nothing yet.
   const [turns, setTurnsState] = useState<Turn[]>(() => {
@@ -442,7 +428,7 @@ export function ChatTab({
     session.turns = next
     setTurnsState(next)
   }
-  const [input, setInput] = useState(kickoff ?? '')
+  const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   // The reply as it streams in, before it becomes a turn.
   const [pending, setPending] = useState('')

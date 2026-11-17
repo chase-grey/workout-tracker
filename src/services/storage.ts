@@ -183,6 +183,12 @@ export type Settings = {
   aiBaseUrl?: string
   /** Model for the coach, in whatever naming the provider uses. Unset means the provider's default. */
   openAiModel?: string
+  /**
+   * Chosen at setup instead of a key: the coach is used by copying a summary of
+   * your training into another AI app (see Settings), not through this one.
+   * Synced with the profile; it holds no secret.
+   */
+  coachPaste?: boolean
   /** ISO date of the last progress photo the user logged (for reminders). */
   lastProgressPhoto?: string
   /**
