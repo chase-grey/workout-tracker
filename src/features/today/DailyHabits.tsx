@@ -23,14 +23,12 @@ import {
   macroGoalOn,
   trackedMacros,
 } from '../../lib/macros'
-import { commonMeals, type Meal } from '../../lib/commonMeals'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
 const QUICK_ADDS = [100, 500]
 /** The grams each macro's buttons add; the first is also what its minus takes off. */
 const MACRO_ADDS: Record<Macro, number[]> = { protein: [10, 25], carbs: [10, 25], fat: [5, 10] }
 const ADD_BUTTON = 'min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80'
-const NO_MACROS = { protein: 0, carbs: 0, fat: 0 }
 
 type Props = {
   /** A Monday selected from streak history; null keeps following the current week. */
@@ -94,19 +92,6 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
   const derived = derivesCalories(tracked)
   const selMacros = macrosForDate(calorieEntries, selDate)
 
-  // The card's own buttons, which a meal button would only repeat.
-  const buttonMeals: Meal[] = [
-    ...(derived ? [] : QUICK_ADDS.map((calories) => ({ ...NO_MACROS, calories }))),
-    ...tracked.flatMap((macro) =>
-      MACRO_ADDS[macro].map((grams) => ({
-        ...NO_MACROS,
-        calories: derived ? macroCalories({ [macro]: grams }) : 0,
-        [macro]: grams,
-      })),
-    ),
-  ]
-  const meals = commonMeals(calorieEntries, { now, exclude: buttonMeals, macros: tracked })
-
   const addFood = (calories: number, macros: MacroGrams = {}) => {
     if (calories !== 0 || Object.values(macros).some((g) => g !== 0)) void logCalories(calories, selDate, macros)
   }
@@ -115,7 +100,7 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
     const delta = Math.max(-selMacros[macro], grams)
     addFood(derived ? macroCalories({ [macro]: delta }) : 0, { [macro]: delta })
   }
-  /** A helping or a meal as the card writes it; the calories go unsaid when the macros already say them. */
+  /** A helping as the card writes it; the calories go unsaid when the macros already say them. */
   const describe = (calories: number, macros: MacroGrams) => {
     const grams = formatMacros(macros, tracked)
     const showCalories = calories !== 0 && (!derived || grams === '')
@@ -220,22 +205,8 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
         </div>
       )}
 
-      {meals.length > 0 && (
-        <div className="mt-2 flex gap-1.5">
-          {meals.map((m) => (
-            <button
-              key={[m.calories, m.protein, m.carbs, m.fat].join('|')}
-              onClick={() => addFood(m.calories, { protein: m.protein, carbs: m.carbs, fat: m.fat })}
-              className={`${ADD_BUTTON} tabular-nums`}
-            >
-              {describe(m.calories, m)}
-            </button>
-          ))}
-        </div>
-      )}
-
       {!derived && (
-        <div className={`${meals.length > 0 ? 'mt-1.5' : 'mt-2'} flex gap-1.5`}>
+        <div className="mt-2 flex gap-1.5">
           {QUICK_ADDS.map((calories) => (
             <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
               +{calories}
