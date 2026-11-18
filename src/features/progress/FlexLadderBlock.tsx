@@ -9,13 +9,15 @@ import {
 } from '../../lib/flex'
 import { isReached, projectGoal, type GoalSpec } from '../../lib/goals'
 import { currentPaceSeries, type LockedProjections } from '../../lib/goalLock'
-import { LINE_COLD, LINE_COLD_2, LINE_PRIMARY, LINE_SECONDARY } from '../../lib/chart'
+import { LINE_PRIMARY, LINE_SECONDARY } from '../../lib/chart'
 import { LadderChart, type LadderReading, type LadderSeries } from './LadderChart'
 
 /** Which ladder a block is drawing. */
 export type Ladder = 'split' | 'tailors' | 'toeTouch' | 'legLift'
 
-// A function so the colours are read at render: they follow the theme.
+// A function so the colours are read at render: they follow the theme. Colour
+// says which side a line is and the dash says it was taken cold, so a cold
+// reading wears the colour of the warm one it sits under.
 const ladders = (): Record<
   Ladder,
   { title: string; series: LadderSeries[]; empty: string }
@@ -23,7 +25,7 @@ const ladders = (): Record<
   split: {
     title: 'side split',
     series: [
-      { key: 'cold', name: 'cold', color: LINE_COLD, dashed: true },
+      { key: 'cold', name: 'cold', color: LINE_PRIMARY, dashed: true },
       { key: 'warm', name: 'warm', color: LINE_PRIMARY },
     ],
     empty: 'log split measurements to see progression',
@@ -31,8 +33,8 @@ const ladders = (): Record<
   tailors: {
     title: "tailor's pose",
     series: [
-      { key: 'coldLeft', name: 'cold L', color: LINE_COLD, dashed: true },
-      { key: 'coldRight', name: 'cold R', color: LINE_COLD_2, dashed: true },
+      { key: 'coldLeft', name: 'cold L', color: LINE_PRIMARY, dashed: true },
+      { key: 'coldRight', name: 'cold R', color: LINE_SECONDARY, dashed: true },
       { key: 'warmLeft', name: 'warm L', color: LINE_PRIMARY },
       { key: 'warmRight', name: 'warm R', color: LINE_SECONDARY },
     ],
@@ -44,7 +46,7 @@ const ladders = (): Record<
   toeTouch: {
     title: 'toe touch (lower is deeper)',
     series: [
-      { key: 'cold', name: 'cold', color: LINE_COLD, dashed: true },
+      { key: 'cold', name: 'cold', color: LINE_PRIMARY, dashed: true },
       { key: 'warm', name: 'warm', color: LINE_PRIMARY },
     ],
     empty: 'log toe-touch measurements to see progression',
@@ -52,8 +54,8 @@ const ladders = (): Record<
   legLift: {
     title: 'leg lift',
     series: [
-      { key: 'coldLeft', name: 'cold L', color: LINE_COLD, dashed: true },
-      { key: 'coldRight', name: 'cold R', color: LINE_COLD_2, dashed: true },
+      { key: 'coldLeft', name: 'cold L', color: LINE_PRIMARY, dashed: true },
+      { key: 'coldRight', name: 'cold R', color: LINE_SECONDARY, dashed: true },
       { key: 'warmLeft', name: 'warm L', color: LINE_PRIMARY },
       { key: 'warmRight', name: 'warm R', color: LINE_SECONDARY },
     ],

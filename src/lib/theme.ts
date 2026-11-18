@@ -58,19 +58,7 @@ interface AccentDef {
   scale: Record<Shade, string>
   /** Text on a solid accent fill: black where it reads, white where it doesn't. */
   onAccent: string
-  /**
-   * Readings that must not be mistaken for another rung of the accent ladder —
-   * the cold stretch lines. Blue and violet by default; a blue or purple accent
-   * gets other cool colours so the contrast survives.
-   */
-  cold: string
-  cold2: string
 }
-
-const SKY = '#38bdf8'
-const VIOLET = '#a78bfa'
-const TEAL = '#2dd4bf'
-const BLUE = '#60a5fa'
 
 const ACCENT_DEFS: Record<Accent, AccentDef> = {
   green: {
@@ -79,8 +67,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
       500: '#22c55e', 600: '#16a34a', 700: '#15803d', 800: '#166534', 900: '#14532d',
     },
     onAccent: '#000000',
-    cold: SKY,
-    cold2: VIOLET,
   },
   purple: {
     scale: {
@@ -88,8 +74,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
       500: '#8b7aa6', 600: '#74648e', 700: '#5f5275', 800: '#4c425e', 900: '#3b344a',
     },
     onAccent: '#ffffff',
-    cold: SKY,
-    cold2: TEAL,
   },
   blue: {
     scale: {
@@ -97,8 +81,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
       500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a',
     },
     onAccent: '#ffffff',
-    cold: TEAL,
-    cold2: VIOLET,
   },
   rose: {
     scale: {
@@ -106,8 +88,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
       500: '#f43f5e', 600: '#e11d48', 700: '#be123c', 800: '#9f1239', 900: '#881337',
     },
     onAccent: '#ffffff',
-    cold: SKY,
-    cold2: VIOLET,
   },
   amber: {
     scale: {
@@ -115,8 +95,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
       500: '#f59e0b', 600: '#d97706', 700: '#b45309', 800: '#92400e', 900: '#78350f',
     },
     onAccent: '#000000',
-    cold: SKY,
-    cold2: VIOLET,
   },
   teal: {
     scale: {
@@ -124,8 +102,6 @@ const ACCENT_DEFS: Record<Accent, AccentDef> = {
       500: '#14b8a6', 600: '#0d9488', 700: '#0f766e', 800: '#115e59', 900: '#134e4a',
     },
     onAccent: '#000000',
-    cold: BLUE,
-    cold2: VIOLET,
   },
 }
 
@@ -165,8 +141,19 @@ export interface Palette {
   theme: Theme
   scale: Record<Shade, string>
   onAccent: string
+  /**
+   * A cold stretch reading where it's set as type or a pill beside a warm one:
+   * the accent stepped away from the ground — paler on black, deeper on paper —
+   * so it is the same colour in a second weight, never a second hue.
+   */
   cold: string
-  cold2: string
+  /** Text on a solid {@link cold} fill. */
+  onCold: string
+  /**
+   * The second colour drawn over a photo — the right arm, a cold pill. A photo
+   * is neither ground, so this is the same pale step in both.
+   */
+  overPhoto: string
   ground: Ground
   /** Confetti and sparks: the accent's bright end, deepest first. */
   confetti: string[]
@@ -177,12 +164,14 @@ export interface Palette {
 export function palette(theme: Theme): Palette {
   const def = ACCENT_DEFS[theme.accent]
   const turn = hueOf(def.scale[500]) - hueOf(ACCENT_DEFS.green.scale[500])
+  const light = theme.mode === 'light'
   return {
     theme,
     scale: def.scale,
     onAccent: def.onAccent,
-    cold: def.cold,
-    cold2: def.cold2,
+    cold: def.scale[light ? 800 : 300],
+    onCold: light ? '#ffffff' : '#000000',
+    overPhoto: def.scale[200],
     ground: GROUNDS[theme.mode],
     confetti: ([600, 500, 400, 300] as const).map((s) => def.scale[s]),
     tint:
@@ -251,30 +240,21 @@ export function rgbOf(hex: string): [number, number, number] {
 /** The pillars that are sessions; the same union as lib/weekCalendar's PinnablePillar. */
 type SessionPillarKey = 'strength' | 'flexibility' | 'cardio'
 
-/** The deeper shade each pillar colour takes on a light ground, where the 400s wash out. */
-const ON_LIGHT: Record<string, string> = {
-  [SKY]: '#0284c7',
-  [VIOLET]: '#7c3aed',
-  [TEAL]: '#0d9488',
-  [BLUE]: '#2563eb',
-}
-
 /**
  * One colour per kind of session, for marks that sit side by side and have to
- * be told apart at a glance (the week calendar's dots). Strength wears the
- * accent; flexibility and cardio the two cool colours each accent already
- * keeps clear of itself.
+ * be told apart at a glance (the week calendar's dots). All three are the
+ * accent, two steps apart: strength in the middle, flexibility stepped away
+ * from the ground and cardio stepped into it.
  *
- * The calorie target has none. A fourth hue would have to come from outside
- * the theme, and a dot in it says nothing about food; the calendar draws that
- * day's target as a fork and knife in the accent instead.
+ * The calorie target has none. A fourth step would be too close to its
+ * neighbours to read, and a dot says nothing about food; the calendar draws
+ * that day's target as a fork and knife in the accent instead.
  */
 export function pillarColours(p: Palette): Record<SessionPillarKey, string> {
   const light = p.theme.mode === 'light'
-  const shade = (hex: string) => (light ? (ON_LIGHT[hex] ?? hex) : hex)
   return {
-    strength: p.scale[light ? 700 : 500],
-    flexibility: shade(p.cold),
-    cardio: shade(p.cold2),
+    strength: p.scale[light ? 600 : 500],
+    flexibility: p.scale[light ? 800 : 300],
+    cardio: p.scale[light ? 400 : 700],
   }
 }

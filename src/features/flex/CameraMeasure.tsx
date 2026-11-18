@@ -35,11 +35,11 @@ import {
 
 type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
 
-/** Pill fill per reading, matching the cold / warm colours of the charts. */
+/** Pill fill per reading: the accent warm, its pale step cold. */
 // Getters, so a reading is coloured in the theme current when it's drawn.
 const TEMP_COLOR: Record<MeasureTemp, string> = {
   get cold() {
-    return currentPalette().cold
+    return currentPalette().overPhoto
   },
   get warm() {
     return currentPalette().scale[500]

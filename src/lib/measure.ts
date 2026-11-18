@@ -69,7 +69,7 @@ export const ROLE_COLOR: Record<Segment['role'], string> = {
     return currentPalette().scale[500] // accent — left arm
   },
   get b() {
-    return currentPalette().cold // a cool colour clear of the accent — right arm
+    return currentPalette().overPhoto // the accent's pale step — right arm
   },
   ref: '#e5e5e5', // neutral — reference line
 }

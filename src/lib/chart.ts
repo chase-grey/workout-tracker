@@ -81,14 +81,6 @@ export function offSlotDot(bg: string) {
 export let MARK_OTHER_LIFT = ''
 
 /**
- * Cold stretch readings run cool against the warm ones' accent — blue for the
- * left (or only) reading, violet for the right, or whichever cool pair stays
- * clear of the accent (see theme.cold).
- */
-export let LINE_COLD = ''
-export let LINE_COLD_2 = ''
-
-/**
  * The ground a chart sits on, for the props Recharts writes straight onto SVG
  * attributes — grid lines, the axis-break mask, a tag's backing, a hollow dot's
  * middle — where a CSS variable can't reach.
@@ -98,7 +90,7 @@ export let CHART_SURFACE = ''
 export let CHART_SURFACE_2 = ''
 export let CHART_ZERO = ''
 
-function applyPalette({ scale, ground, cold, cold2, theme }: Palette) {
+function applyPalette({ scale, ground, theme }: Palette) {
   const light = theme.mode === 'light'
   LINE_PRIMARY = scale[light ? 600 : 500]
   LINE_SECONDARY = scale[light ? 400 : 700]
@@ -107,8 +99,6 @@ function applyPalette({ scale, ground, cold, cold2, theme }: Palette) {
   LINE_GOAL_LABEL = scale[light ? 500 : 700]
   LINE_CURRENT_PACE = light ? '#737373' : '#a3a3a3'
   MARK_OFF_SLOT = ground.tick
-  LINE_COLD = cold
-  LINE_COLD_2 = cold2
   MARK_OTHER_LIFT = scale[light ? 800 : 300]
   CHART_PAGE = ground.bg
   CHART_SURFACE = ground.surface

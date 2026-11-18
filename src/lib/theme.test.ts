@@ -47,13 +47,17 @@ describe('palette', () => {
     expect(r).toBeGreaterThan(g)
   })
 
-  it('keeps the cool readings clear of a cool accent', () => {
-    for (const accent of ['purple', 'blue', 'teal'] as const) {
-      const p = palette({ accent, mode: 'dark' })
-      expect([p.cold, p.cold2]).not.toContain(p.scale[400])
-      expect(p.cold).not.toBe(p.cold2)
+  it('draws the cold readings off the accent scale, in a step the warm ones do not use', () => {
+    for (const accent of ACCENTS) {
+      for (const mode of MODES) {
+        const p = palette({ accent, mode })
+        const steps = Object.values(p.scale)
+        for (const c of [p.cold, p.overPhoto]) {
+          expect(steps).toContain(c)
+          expect(c).not.toBe(p.scale[500])
+        }
+      }
     }
-    expect(palette({ accent: 'blue', mode: 'dark' }).cold).not.toBe('#38bdf8')
   })
 
   it('swaps the ground with the mode', () => {
@@ -78,6 +82,15 @@ describe('pillarColours', () => {
       for (const mode of MODES) {
         const c = pillarColours(palette({ accent, mode }))
         expect(new Set(Object.values(c)).size, `${accent} ${mode}`).toBe(3)
+      }
+    }
+  })
+
+  it('takes all three from the accent scale', () => {
+    for (const accent of ACCENTS) {
+      for (const mode of MODES) {
+        const p = palette({ accent, mode })
+        for (const c of Object.values(pillarColours(p))) expect(Object.values(p.scale)).toContain(c)
       }
     }
   })

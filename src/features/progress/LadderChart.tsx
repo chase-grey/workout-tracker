@@ -210,6 +210,9 @@ export function LadderChart({
               stroke={s.color}
               strokeWidth={2}
               strokeDasharray={s.dashed ? '4 3' : undefined}
+              // A dashed line shares its colour with a solid one, so the key
+              // has to show the dash too: 'plainline' is the one icon that does.
+              legendType={s.dashed ? 'plainline' : 'line'}
               dot={dot}
               connectNulls
             />

@@ -5,15 +5,11 @@ import { parseISODate } from '../../lib/dates'
 import type { AngleTrend } from '../../lib/angleContext'
 import { currentPalette } from '../../lib/themeStore'
 
-/** Cold readings keep the charts' cool colour; warm ones the accent. */
-// Getters, so a reading is coloured in the theme current when it's drawn.
-const TEMP_COLOR: Record<AngleTrend['temp'], string> = {
-  get cold() {
-    return currentPalette().cold
-  },
-  get warm() {
-    return currentPalette().scale[500]
-  },
+/** Warm readings wear the accent; cold ones a second weight of it. */
+// Read at render, so a reading is coloured in the theme current when it's drawn.
+function tempColor(temp: AngleTrend['temp']): { color: string; on: string } {
+  const p = currentPalette()
+  return temp === 'cold' ? { color: p.cold, on: p.onCold } : { color: p.scale[500], on: '#000000' }
 }
 
 const short = (iso: string) => fmtTick(parseISODate(iso).getTime())
@@ -23,7 +19,7 @@ const signed = (n: number) => `${n > 0 ? '+' : ''}${n}°`
 
 /** One measured angle against its own history. */
 function TrendRow({ t }: { t: AngleTrend }) {
-  const color = TEMP_COLOR[t.temp]
+  const { color, on } = tempColor(t.temp)
   const up = t.delta != null && t.delta > 0
   const down = t.delta != null && t.delta < 0
   const goalPct = t.goal ? Math.min(100, (t.value / t.goal.target) * 100) : 100
@@ -33,8 +29,8 @@ function TrendRow({ t }: { t: AngleTrend }) {
       <div className="flex items-baseline justify-between">
         <span className="font-semibold">{t.label}</span>
         <span
-          className="rounded-full px-2 py-0.5 text-xs font-bold text-black"
-          style={{ background: color }}
+          className="rounded-full px-2 py-0.5 text-xs font-bold"
+          style={{ background: color, color: on }}
         >
           {t.temp}
         </span>
