@@ -247,7 +247,9 @@ export function SettingsTab({
   // Closed issues fold away by default — they're history, and the live ones are
   // what you came here for. Opening them lasts only as long as the visit.
   const [showClosed, setShowClosed] = useState(false)
-  const [page, setPage] = useState<SettingsPage>(lastPage)
+  // A build waiting to be restarted onto outranks wherever you left off: the
+  // visit opens on the page its button is on, without rewriting the saved one.
+  const [page, setPage] = useState<SettingsPage>(() => (update.ready ? 'app' : lastPage()))
   const choosePage = (p: SettingsPage) => {
     setPage(p)
     try {
@@ -296,6 +298,36 @@ export function SettingsTab({
   const pages: SettingsPage[] = owner ? ['plan', 'app', 'owner'] : ['plan', 'app']
   const shown = pages.includes(page) ? page : 'plan'
   const coachOn = settings.coachEnabled ?? false
+
+  const buildSection = (
+    <section className="flex flex-col gap-2">
+      <label className="text-sm font-medium text-neutral-300">build</label>
+      <p className="text-xs text-neutral-500">
+        version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
+        {new Date(APP_BUILD_TIME).toLocaleString()}
+      </p>
+      {/* One button, three states, like any app's updater: a newer build
+          already in hand is a restart away, wears the accent (and the tab's
+          dot) and moves to the head of the page; otherwise it checks, and only
+          reloads if there is something to reload onto. Waiting on the new worker takes a moment, and an
+          unchanged button invites the second tap this is meant to remove. */}
+      <button
+        onClick={() => void checkForUpdate()}
+        disabled={update.checking}
+        className={`relative min-h-[44px] rounded-xl font-medium disabled:text-neutral-500 ${
+          update.ready
+            ? 'bg-accent text-on-accent active:opacity-80'
+            : 'bg-surface active:bg-surface-2'
+        }`}
+      >
+        {update.checking
+          ? 'checking…'
+          : update.ready
+            ? 'update ready · restart'
+            : 'check for updates'}
+      </button>
+    </section>
+  )
 
   return (
     <div className="flex flex-col gap-6 pb-4">
@@ -380,6 +412,7 @@ export function SettingsTab({
 
       {shown === 'app' && (
         <>
+          {update.ready && buildSection}
           <Group title="look">
             <ThemePicker />
             <ButtonLabels />
@@ -487,33 +520,7 @@ export function SettingsTab({
           </Group>
 
           <Group title="about">
-            <section className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-neutral-300">build</label>
-              <p className="text-xs text-neutral-500">
-                version <span className="font-mono text-neutral-300">{APP_COMMIT}</span> · built{' '}
-                {new Date(APP_BUILD_TIME).toLocaleString()}
-              </p>
-              {/* One button, three states, like any app's updater: a newer build
-                  already in hand is a restart away and wears the accent (and the tab's
-                  dot); otherwise it checks, and only reloads if there is something to
-                  reload onto. Waiting on the new worker takes a moment, and an
-                  unchanged button invites the second tap this is meant to remove. */}
-              <button
-                onClick={() => void checkForUpdate()}
-                disabled={update.checking}
-                className={`relative min-h-[44px] rounded-xl font-medium disabled:text-neutral-500 ${
-                  update.ready
-                    ? 'bg-accent text-on-accent active:opacity-80'
-                    : 'bg-surface active:bg-surface-2'
-                }`}
-              >
-                {update.checking
-                  ? 'checking…'
-                  : update.ready
-                    ? 'update ready · restart'
-                    : 'check for updates'}
-              </button>
-            </section>
+            {!update.ready && buildSection}
 
             <section className="flex flex-col gap-2">
               <label className="text-sm font-medium text-neutral-300">sync</label>
