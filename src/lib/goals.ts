@@ -33,6 +33,7 @@ import {
 import { LEG_LIFT_GOALS, SPLIT_GOALS, TAILORS_GOALS, TOE_TOUCH_GOALS } from './flexPredict'
 import { project, withMovingTarget, type Projection, type TrendWindow } from './predictions'
 import { toISODate, weekStartISO } from './dates'
+import { followTarget, type LockedProjections } from './goalLock'
 
 /**
  * Weekly decay of the gain rate strength projections assume (see
@@ -587,6 +588,39 @@ export function projectGoal(goal: GoalSpec, today: Date = new Date()): Projectio
     : projection
 }
 
+/**
+ * What a bodyweight-multiple goal is given for a target while there is no
+ * weigh-in to multiply: far past anything liftable, so it can't read as met.
+ */
+export const UNWEIGHED_TARGET = 999
+
+/**
+ * The committed goals as they should be read: every lock on a goal whose target
+ * moves with bodyweight re-aimed at where that target is headed now (see
+ * goalLock.followTarget), the rest as stored.
+ *
+ * Everything that reads a lock reads it through this — the goals panel and its
+ * charts, the in-session cue, the pace note after a workout — so the row, the
+ * rule on the chart and the weight the cue says to load can't quote different
+ * bodyweights. The stored lock is left alone; its target is only ever a
+ * starting guess.
+ *
+ * A goal with no weigh-in behind it keeps the target its lock was made at:
+ * UNWEIGHED_TARGET is a placeholder, not somewhere to aim a commitment.
+ */
+export function liveLocks(locked: LockedProjections, goals: GoalSpec[], today: Date = new Date()): LockedProjections {
+  let out = locked
+  for (const goal of goals) {
+    const lock = locked[goal.id]
+    if (!lock || !goal.movingTarget || goal.target >= UNWEIGHED_TARGET) continue
+    const live = followTarget(lock, { target: goal.target, targetSlopePerWeek: goal.targetSlopePerWeek ?? 0 }, today)
+    if (live === lock) continue
+    if (out === locked) out = { ...locked }
+    out[goal.id] = live
+  }
+  return out
+}
+
 export type GoalInputs = {
   workouts: WorkoutRow[]
   bodyWeights: BodyWeightEntry[]
@@ -750,9 +784,9 @@ export function buildGoals({
     window: PULLUP_TREND_WINDOW,
   }))
 
-  // 999 stands in for "no bodyweight logged yet", so a moving target can't be 0
-  // and read as already reached.
-  const bwTarget = (mult: number) => (currentBw > 0 ? Math.round(currentBw * mult * 10) / 10 : 999)
+  // UNWEIGHED_TARGET stands in for "no bodyweight logged yet", so a moving target
+  // can't be 0 and read as already reached.
+  const bwTarget = (mult: number) => (currentBw > 0 ? Math.round(currentBw * mult * 10) / 10 : UNWEIGHED_TARGET)
 
   return [
     {

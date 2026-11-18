@@ -12,7 +12,7 @@
 
 import { toISODate } from './dates'
 import { expectedAt, type LockedProjections } from './goalLock'
-import { attemptReps, attemptWeight, goalCapLbs, isReadyToAttempt, type GoalSpec } from './goals'
+import { attemptReps, attemptWeight, goalCapLbs, isReadyToAttempt, liveLocks, type GoalSpec } from './goals'
 import { repsForE1RM } from './epley'
 
 export type GoalCue = {
@@ -75,6 +75,9 @@ export function goalCueForExercise(
   reps: number,
   today: Date = new Date(),
 ): GoalCue | null {
+  // The line a bodyweight multiple is cued off climbs to the weight it follows
+  // now, not the one forecast when it was committed (see goals.liveLocks).
+  locked = liveLocks(locked, goals, today)
   let best: { goal: GoalSpec; rank: number; ready: boolean } | null = null
   for (const goal of goals) {
     if (goal.exerciseKey !== exerciseKey || goal.points.length === 0) continue

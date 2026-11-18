@@ -22,6 +22,7 @@ import {
   goalCapLbs,
   isReached,
   isReadyToAttempt,
+  liveLocks,
   projectGoal,
   reachedDate,
   type GoalSpec,
@@ -190,8 +191,9 @@ function LockChart({
           />
           {/* The target the line is climbing toward, so the goal reads off the
               chart without doing the mental math from the projected curve's end.
-              A lock committed to the weight it'll be met at, so for a target that
-              moves with bodyweight this is already where the curve lands. */}
+              For a target that moves with bodyweight the lock is already aimed
+              at the weight it'll be met at (see goals.liveLocks), so this is
+              where the curve lands. */}
           {goalLineMarks({
             target: lock.target,
             label: `goal ${lock.target}`,
@@ -713,11 +715,11 @@ function GoalRow({
   // rather than freezing the projection on its own. A goal already at its target
   // has nothing left to commit to.
   const lockable = !lock && !reached && !ready && withinHorizon(proj)
-  // A lock froze the target it committed to. Bench/squat targets track bodyweight,
-  // so the live one can drift away from it — show the number the pace reading is
-  // actually measured against, or the two would contradict each other. A reached
-  // goal shows the live target instead, since that's the one it was judged met
-  // against (see isReached).
+  // A committed goal shows the target its line lands on, which is what the pace
+  // reading is measured against. For a bench or squat multiple that is the weight
+  // the goal follows today carried to the committed date (see goals.liveLocks),
+  // so it moves with the scale. A reached goal shows today's target, since that's
+  // the one it was judged met against (see isReached).
   const shownTarget = lock && !reached ? lock.target : goal.target
   // A target the lift can't be loaded to is also said as what it comes to on the
   // lift itself: the heaviest load there is, for the reps whose estimate reaches
@@ -966,7 +968,11 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
 
   const projections = useMemo(() => new Map(goals.map((g) => [g.id, projectGoal(g)])), [goals])
 
-  const locked = useMemo(() => settings.lockedGoals ?? {}, [settings.lockedGoals])
+  // The commitments as they were stored, which is what gets written back, and as
+  // they're read: a lock on a bodyweight multiple aims at the weight it follows
+  // today rather than the one forecast when it was made (see goals.liveLocks).
+  const stored = useMemo(() => settings.lockedGoals ?? {}, [settings.lockedGoals])
+  const locked = useMemo(() => liveLocks(stored, goals), [stored, goals])
 
   // Keep existing locks drawn against the goal's current curve shape — its decay
   // and how much taper the series has left to spend (see adoptModel). Locking
@@ -984,7 +990,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
   // runs after the bend, since the span the ceiling buys depends on the taper it
   // just adopted, and only ever pushes a date later.
   useEffect(() => {
-    const next: LockedProjections = { ...locked }
+    const next: LockedProjections = { ...stored }
     let changed = false
     for (const g of goals) {
       const existing = next[g.id]
@@ -1006,7 +1012,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
   // that, with none of the checks a commitment goes through — a stalled goal could
   // be signed up to a date years out, or lose its commitment, in one tap.
   const dropCommitment = (goal: GoalSpec) => {
-    const next: LockedProjections = { ...locked }
+    const next: LockedProjections = { ...stored }
     delete next[goal.id]
     updateSettings({ ...settings, lockedGoals: next })
   }
@@ -1020,7 +1026,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     if (!proj) return
     const fresh = lockProjectionByDate(goal.id, proj, etaDate)
     if (!fresh) return
-    updateSettings({ ...settings, lockedGoals: { ...locked, [goal.id]: fresh } })
+    updateSettings({ ...settings, lockedGoals: { ...stored, [goal.id]: fresh } })
   }
 
   // The weigh-ins the two bodyweight goals are projected from — shown alongside

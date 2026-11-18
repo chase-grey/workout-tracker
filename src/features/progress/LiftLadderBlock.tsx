@@ -61,10 +61,11 @@ export function LiftLadderBlock({
     return open
       .filter((g, i) => i === 0 || locked[g.id])
       .map((g) => {
-        // A lock froze the target it committed to, and the bench and squat
-        // targets move with bodyweight — so the line comes off the lock, or for
-        // an open rung off the weight it's projected to be met at, rather than
-        // today's weight the projected curve would climb past (see targetAtEta).
+        // The bench and squat targets move with bodyweight, so the line is drawn
+        // at the weight the goal will be met at rather than today's, which the
+        // projected curve would climb past: off the lock for a committed rung
+        // (re-aimed as the scale moves, see goals.liveLocks), off targetAtEta
+        // for an open one.
         const lock = locked[g.id]
         const proj = projectGoal(g)
         const target = lock ? lock.target : targetAtEta(proj)

@@ -12,7 +12,7 @@
 
 import type { WorkoutRow } from '../types'
 import { paceAgainstLock, type LockedProjections } from './goalLock'
-import { buildGoals, projectGoal, type GoalInputs } from './goals'
+import { buildGoals, liveLocks, projectGoal, type GoalInputs } from './goals'
 
 export type GoalPaceNote = {
   goalId: string
@@ -51,9 +51,12 @@ export function goalPaceNotes(
   // keeps the two halves of the comparison in the same units.
   const goalsBefore = new Map(buildGoals({ ...inputs, workouts: prev }).map((g) => [g.id, g]))
   const notes: GoalPaceNote[] = []
+  // A lock on a bodyweight multiple is judged at the weight it follows now, not
+  // the one forecast when it was made (see goals.liveLocks).
+  const live = liveLocks(locked, goalsAfter, today)
 
   for (const goal of goalsAfter) {
-    const lock = locked[goal.id]
+    const lock = live[goal.id]
     if (!lock || goal.exerciseKey == null) continue
     const measuredOn = [goal.exerciseKey, ...(goal.alsoCounts ?? [])]
     if (!measuredOn.some((key) => trained.has(key))) continue

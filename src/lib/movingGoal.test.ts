@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildGoals, GOAL_IDS, projectGoal, type GoalSpec } from './goals'
+import { buildGoals, GOAL_IDS, liveLocks, projectGoal, UNWEIGHED_TARGET, type GoalSpec } from './goals'
 import { cumulativeGain, weeksToMovingTarget } from './predictions'
-import { currentPaceSeries, lockProjectionByDate, paceAgainstLock } from './goalLock'
+import { currentPaceSeries, followTarget, lockProjectionByDate, paceAgainstLock } from './goalLock'
 
 const today = new Date(2026, 1, 15)
 const goal: GoalSpec = {
@@ -70,5 +70,62 @@ describe('bodyweight-relative forecasts', () => {
     expect(pace.revisedEta).toBe(projection.etaDate)
     const curve = currentPaceSeries(oldLock, projection, '2026-02-15', today)
     expect(curve.at(-1)).toEqual({ date: projection.etaDate, value: 175 })
+  })
+
+  // The complaint this exists for: a committed bench or squat multiple kept
+  // quoting the bodyweight forecast on the day it was committed, however far the
+  // scale had since climbed past it.
+  describe('a committed goal follows the scale', () => {
+    const lock = lockProjectionByDate(goal.id, projectGoal(goal, today), '2026-03-29', today)!
+    const later = new Date(2026, 2, 8) // three weeks on, three weeks short of the date
+
+    it('re-aims at the weight the target is headed for on the committed date', () => {
+      expect(lock.target).toBe(176)
+      // Weighing 178 with three weeks to run at a pound a week: 181, not 176.
+      const live = followTarget(lock, { target: 178, targetSlopePerWeek: 1 }, later)
+      expect(live.target).toBe(181)
+      expect(live).toMatchObject({ lockedAt: lock.lockedAt, startValue: lock.startValue, etaDate: lock.etaDate })
+    })
+
+    it('rises with a weigh-in even when the forecast gain is nil', () => {
+      expect(followTarget(lock, { target: 178, targetSlopePerWeek: 0 }, later).target).toBe(178)
+    })
+
+    it('is today’s target once the committed date has passed', () => {
+      expect(followTarget(lock, { target: 178, targetSlopePerWeek: 1 }, new Date(2026, 4, 1)).target).toBe(178)
+    })
+
+    it('leaves a fixed target and an already-aimed lock alone', () => {
+      expect(followTarget(lock, { target: 200 }, later)).toBe(lock)
+      expect(followTarget(lock, { target: 173, targetSlopePerWeek: 1 }, later)).toBe(lock)
+    })
+
+    it('reads every bodyweight multiple through the latest weigh-in, and nothing else', () => {
+      const goals = buildGoals({ workouts: [], measurements: [], heightIn: 70, bodyWeights: [
+        { date: '2026-02-15', weightLbs: 171 },
+        { date: '2026-03-01', weightLbs: 175 },
+        { date: '2026-03-08', weightLbs: 178 },
+      ] })
+      const stale = (goalId: string, target: number) => ({ ...lock, goalId, target, etaDate: '2026-03-08' })
+      const locked = {
+        [GOAL_IDS.benchBodyweight]: stale(GOAL_IDS.benchBodyweight, 172),
+        [GOAL_IDS.squatBodyweight]: stale(GOAL_IDS.squatBodyweight, 172),
+        [GOAL_IDS.squatOneAndAHalf]: stale(GOAL_IDS.squatOneAndAHalf, 258),
+        [GOAL_IDS.benchTwoHundred]: stale(GOAL_IDS.benchTwoHundred, 200),
+      }
+      const live = liveLocks(locked, goals, later)
+      expect(live[GOAL_IDS.benchBodyweight].target).toBe(178)
+      expect(live[GOAL_IDS.squatBodyweight].target).toBe(178)
+      expect(live[GOAL_IDS.squatOneAndAHalf].target).toBe(267)
+      expect(live[GOAL_IDS.benchTwoHundred]).toBe(locked[GOAL_IDS.benchTwoHundred])
+      expect(locked[GOAL_IDS.benchBodyweight].target).toBe(172)
+    })
+
+    it('keeps the stored target while there is no weigh-in to follow', () => {
+      const goals = buildGoals({ workouts: [], measurements: [], heightIn: 70, bodyWeights: [] })
+      expect(goals.find(g => g.id === GOAL_IDS.benchBodyweight)?.target).toBe(UNWEIGHED_TARGET)
+      const locked = { [GOAL_IDS.benchBodyweight]: { ...lock, goalId: GOAL_IDS.benchBodyweight } }
+      expect(liveLocks(locked, goals, later)).toBe(locked)
+    })
   })
 })

@@ -177,6 +177,37 @@ export function relaxToCap(lock: LockedProjection, capPerWeek?: number | null): 
   return { ...lock, etaDate, slopePerWeek: round1(pace) }
 }
 
+/**
+ * A lock on a goal whose target moves with bodyweight, re-aimed at the weight
+ * that target is now headed for on the committed date.
+ *
+ * What a commitment holds still is its origin and its date. The number at the end
+ * of "bench my bodyweight" was never the lock's to hold: when it was frozen it
+ * was a forecast of a weigh-in months out, made off six weeks of scale readings
+ * and capped at a pound a week, and a forecast that is never looked at again is
+ * simply wrong by however much the bulk beat it. A lock frozen at 172 went on
+ * asking for 172 at a bodyweight of 178, on the row, the chart's rule and the
+ * in-session cue alike, because all of them read the stored number.
+ *
+ * So the target is read fresh every time: today's (`proj.target`, the latest
+ * weigh-in times the goal's multiple) carried on to the committed date at the
+ * gain the goal projects with. Past that date there is nothing left to carry it
+ * over, and it is today's target outright.
+ *
+ * A fixed target (`targetSlopePerWeek` undefined) is the lock's own and comes
+ * back untouched, as does a lock already aimed where this would aim it.
+ */
+export function followTarget(
+  lock: LockedProjection,
+  proj: Pick<Projection, 'target' | 'targetSlopePerWeek'>,
+  today: Date = new Date(),
+): LockedProjection {
+  if (proj.targetSlopePerWeek == null || !Number.isFinite(proj.target)) return lock
+  const weeks = Math.max(0, daysBetween(toISODate(today), lock.etaDate)) / 7
+  const target = round1(proj.target + proj.targetSlopePerWeek * weeks)
+  return target === lock.target ? lock : { ...lock, target }
+}
+
 /** Days from `from` to `to` (negative when `to` precedes `from`). */
 function daysBetween(from: string, to: string): number {
   return Math.round((parseISODate(to).getTime() - parseISODate(from).getTime()) / MS_PER_DAY)
