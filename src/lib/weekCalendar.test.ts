@@ -212,7 +212,7 @@ describe('weekCalendar', () => {
     expect(of(days, 'cardio').flat()).toEqual([])
   })
 
-  it('judges calorie days hit or missed behind, and shows the target ahead', () => {
+  it('judges calorie days hit or missed behind, and leaves the days ahead bare', () => {
     const days = weekCalendar(input({
       pillars: ['diet'],
       today: WED,
@@ -222,11 +222,11 @@ describe('weekCalendar', () => {
         { date: WED, calories: 800 },
       ],
     }))
-    expect(days.slice(0, 4).map((d) => [d.items[0].status, d.items[0].amount])).toEqual([
+    expect(days.slice(3).map((d) => d.items)).toEqual([[], [], [], []])
+    expect(days.slice(0, 3).map((d) => [d.items[0].status, d.items[0].amount])).toEqual([
       ['done', '3200/3000'],
       ['missed', '1200/3000'],
       ['planned', '800/3000'],
-      ['planned', '3000'],
     ])
   })
 
@@ -262,6 +262,7 @@ describe('pillarMarks', () => {
     expect(pillarMarks(days[0], ['strength', 'diet'])).toMatchObject({ strength: 'done', diet: 'missed' })
     expect(pillarMarks(days[1], ['strength', 'diet'])).toMatchObject({ strength: null, diet: 'missed' })
     expect(pillarMarks(days[2], ['strength', 'diet'])).toMatchObject({ strength: 'planned', diet: 'planned' })
+    expect(pillarMarks(days[3], ['strength', 'diet'])).toMatchObject({ strength: null, diet: null })
   })
 })
 

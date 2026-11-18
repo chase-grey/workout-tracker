@@ -18,7 +18,8 @@
  * empty is not marked missed: red on the week behind you is a poor reason to
  * open the app. The calorie target is the exception, since it really is every
  * day's target — a past day that didn't hit it reads as missed, which is what
- * the calorie week's empty check always said.
+ * the calorie week's empty check always said. A day still ahead shows no
+ * calorie mark at all: there is nothing to judge yet.
  *
  * Pure module: plain data in, seven cells out.
  */
@@ -321,7 +322,8 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
 
   if (tracked('diet')) {
     const totals = dayTotals(input.calorieEntries)
-    for (const d of dates) {
+    // A day still ahead has nothing to judge, so it carries no mark at all.
+    for (const d of dates.filter((d) => d <= input.today)) {
       const goal = input.calorieGoalOn(d)
       const total = totals.get(d) ?? 0
       const hit = calorieDayHit(total, goal, input.dietDirection ?? 'gain')
@@ -329,7 +331,7 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
         pillar: 'diet',
         status: hit ? 'done' : d < input.today ? 'missed' : 'planned',
         label: 'calories',
-        amount: d > input.today ? String(goal) : `${total}/${goal}`,
+        amount: `${total}/${goal}`,
       })
     }
   }
