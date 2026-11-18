@@ -63,7 +63,7 @@ export function SessionTimeCard({
           )}
         </div>
         <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-2 py-3 text-center">
-          <span className="text-xl font-black text-amber-400">{fmtMin(restSec)}</span>
+          <span className="text-xl font-black text-neutral-300">{fmtMin(restSec)}</span>
           <span className="mt-0.5 text-[11px] leading-tight text-neutral-400">resting</span>
           {projected && (
             <span className="mt-1 text-[10px] leading-tight text-neutral-500">
