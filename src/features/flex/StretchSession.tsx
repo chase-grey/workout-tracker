@@ -53,6 +53,7 @@ import { nextTarget, targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
+import { useEnterNext } from '../../lib/useEnterNext'
 import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { landingStep, withSkipped } from '../../lib/skipped'
@@ -634,6 +635,14 @@ export function StretchSession({
     completeSetAndAdvance()
   }, N > 0 && setLive)
 
+  // Enter in the core card's last field is the same tap, from the keyboard; in
+  // the weight field it moves on to the reps (see useEnterNext). Only the core
+  // set has fields, so there is no hold here for it to cut short.
+  const fieldsRef = useRef<HTMLDivElement>(null)
+  const fieldsEnter = useEnterNext(fieldsRef, () => {
+    if (N > 0 && setLive) completeSetAndAdvance()
+  })
+
   const fadeRef = useSessionFade(
     photos ? `photo:${photos.gate.id}` : readyToFinish ? 'finish' : !started ? 'preview' : rest ? 'rest' : preparing ? 'ready' : steps[safeCurrent]?.stepKey ?? 'empty',
   )
@@ -1158,7 +1167,7 @@ export function StretchSession({
         // The core set's card is where a tap reaches for a field, so it doesn't
         // end the set (TAP_SHIELD); the blank screen around it does. A hold or a
         // paced set has nothing to edit, so its whole screen stays the target.
-        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
+        <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
           <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
             <MdTrackChanges aria-hidden />
             {targetLabel(coreTarget)}

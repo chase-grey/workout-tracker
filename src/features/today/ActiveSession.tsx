@@ -61,6 +61,7 @@ import { toISODate } from '../../lib/dates'
 import { toWeight } from '../../lib/weightField'
 import { usePressAction } from '../../lib/usePressAction'
 import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
+import { useEnterNext } from '../../lib/useEnterNext'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
 import { useBackGuard } from '../../lib/useBackGuard'
@@ -1142,14 +1143,23 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // A hold that opens the workout is the exception: there the first tap starts its
   // clock instead (see `awaitingStart`), so the plank isn't timed from the moment
   // the screen came up.
-  const screenTap = useScreenTap(() => {
+  const tapAdvance = () => {
     if (atLast || !setScreenLive) return
     if (awaitingStart) {
       start()
       return
     }
     completeSetAndAdvance()
-  }, !atLast && setScreenLive)
+  }
+  const screenTap = useScreenTap(tapAdvance, !atLast && setScreenLive)
+
+  // Enter in the card's last field is the same tap, from the keyboard: the number
+  // just typed is the set, and the thumb is already on the key. In an earlier
+  // field it moves on to the next one (see useEnterNext). The last set of all
+  // only closes the keyboard, as a tap there does nothing: ending the workout
+  // keeps its button.
+  const fieldsRef = useRef<HTMLDivElement>(null)
+  const fieldsEnter = useEnterNext(fieldsRef, atLast ? undefined : tapAdvance)
 
   // The stations of the circuit in play, in the order they're rotated through —
   // the whole circuit rather than just the station on screen, because "rest only
@@ -1372,7 +1382,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {/* The card is where a tap reaches for a field, so it doesn't advance the
           set (TAP_SHIELD); the blank screen around it does. */}
       {!roundMode && set && (
-        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
+        <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
           {/* What to go for on this set. */}
           {challenging && targetNumbers ? (
             <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
@@ -1467,7 +1477,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           lib/sidePair.roundCards). "sides differ" splits it back into a card a
           side for the day they genuinely don't match. */}
       {roundMode && (
-        <div className="flex flex-col gap-3">
+        <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-3">
           {roundCards(roundOnScreen, sidesTogether).map((card) => {
             if (card.kind === 'echo') {
               const s = card.step
