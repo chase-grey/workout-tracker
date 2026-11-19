@@ -199,7 +199,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
         <ComposedChart
           data={rows}
           stackOffset="sign"
-          margin={{ top: 8, right: 12, bottom: 0, left: -12 }}
+          margin={{ top: 8, right: 18, bottom: 0, left: -12 }}
           {...readout.chart}
         >
           <TissuePatterns ids={{ muscle: muscleId, fat: fatId }} colors={colors} />

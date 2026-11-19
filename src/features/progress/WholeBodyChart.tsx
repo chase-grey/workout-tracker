@@ -173,7 +173,7 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
         {figure(WEIGHT_COLOR, fmtLbsError(last.weight, last.weightError), 'font-semibold')}
       </div>
       <ResponsiveContainer width="100%" height={240}>
-        <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -12 }} {...readout.chart}>
+        <ComposedChart data={rows} margin={{ top: 8, right: 18, bottom: 0, left: -12 }} {...readout.chart}>
           <TissuePatterns ids={ids} colors={colors} />
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} ticks={ticks} interval={0} tick={axisTick} />
