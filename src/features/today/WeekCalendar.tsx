@@ -183,8 +183,9 @@ function itemText(i: CalendarItem): string {
 
 /**
  * A day's sessions, each a button onto its details. `chip` gives them the
- * filled, thumb-sized form the small calendar shows for the one day picked;
- * a row of the open week sets them as plain text.
+ * filled, thumb-sized form the small calendar shows for the one day picked,
+ * where a stretch is its mark with no name beside it; a row of the open week
+ * sets them as plain text.
  */
 function Sessions({
   day,
@@ -203,21 +204,29 @@ function Sessions({
   if (sessions.length === 0) return <span className={`text-sm text-neutral-600 ${chip ? 'px-1' : ''}`}>rest</span>
   return (
     <>
-      {sessions.map((i, n) => (
-        <button
-          key={n}
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpen(i)
-          }}
-          className={`flex items-center gap-1.5 text-left text-sm active:opacity-70 ${
-            chip ? 'min-h-[36px] rounded-lg bg-surface-2 px-2.5' : 'min-h-[32px]'
-          } ${i.status === 'done' ? 'text-neutral-100' : 'text-neutral-400'}`}
-        >
-          <PillarMark pillar={i.pillar} status={i.status} size={chip ? 16 : 14} />
-          {itemText(i)}
-        </button>
-      ))}
+      {sessions.map((i, n) => {
+        // Under the strip a stretch is its mark alone: the routine's name is
+        // in the sheet the chip opens, and in the open week's row.
+        const markOnly = chip && i.pillar === 'flexibility'
+        return (
+          <button
+            key={n}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpen(i)
+            }}
+            aria-label={markOnly ? itemText(i) : undefined}
+            className={`flex items-center gap-1.5 text-left text-sm active:opacity-70 ${
+              chip ? 'min-h-[36px] rounded-lg bg-surface-2 px-2.5' : 'min-h-[32px]'
+            } ${markOnly ? 'min-w-[36px] justify-center' : ''} ${
+              i.status === 'done' ? 'text-neutral-100' : 'text-neutral-400'
+            }`}
+          >
+            <PillarMark pillar={i.pillar} status={i.status} size={chip ? 16 : 14} />
+            {!markOnly && itemText(i)}
+          </button>
+        )
+      })}
     </>
   )
 }
