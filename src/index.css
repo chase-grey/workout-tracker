@@ -218,8 +218,11 @@ html {
   font-size: var(--text-base);
 }
 
-/* Stretch guides use the space left by the real header and controls. Container
-   units fit both axes, including landscape and the final set's finish button. */
+/* A stretch's guide is the screen: everything under the header belongs to it.
+   The stage (.rhythm-guide, .hold-visual) runs out through the shell's side
+   gutters to the screen's own edges, and the figure is laid out in all of it
+   rather than in a square of it — a phone under its header is nearly twice as
+   tall as it is wide, and a square leaves half of that dark. */
 .stretch-session {
   height: 100%;
   min-height: 360px;
@@ -231,7 +234,8 @@ html {
 .stretch-session .rhythm-guide {
   flex: 1 1 0;
   min-height: 0;
-  width: 100%;
+  align-self: stretch;
+  margin-inline: -1rem;
 }
 .stretch-session .hold-visual,
 .stretch-session .rhythm-guide {
@@ -239,20 +243,40 @@ html {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
 }
+/* A rhythm figure is let out of its frame — a glow, a ring still spreading —
+   and what leaves it is cut by the screen's edge at the sides, where there is
+   nothing to be cut against, and fades out under the header and above the foot
+   rather than stopping at a line. The frame sits inside that fade, so nothing
+   that belongs in it is dimmed. */
+.stretch-session .rhythm-guide {
+  --stage-fade: 1rem;
+  padding: var(--stage-fade) 1rem;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--stage-fade), #000 calc(100% - var(--stage-fade)), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--stage-fade), #000 calc(100% - var(--stage-fade)), transparent);
+}
+.stretch-session .rhythm-shape {
+  width: 100cqw;
+  height: 100cqh;
+  aspect-ratio: auto;
+  flex-shrink: 0;
+}
+/* A hold's countdown is square art, so the width of the screen is as big as it
+   gets, and it takes the whole of that, gutters included. The few shapes that
+   are a column up the middle of their square are let past it (--hold-grow, set
+   by CountdownShape): the empty sides of the square run off the screen, which
+   is why the stage clips, and the column fills the height instead. */
 .stretch-session .hold-visual {
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
+  padding: 0;
+  overflow: hidden;
 }
-.stretch-session .countdown-shape,
-.stretch-session .rhythm-shape {
-  width: min(100cqw, 100cqh);
+.stretch-session .countdown-shape {
+  width: min(calc(100cqw * var(--hold-grow, 1)), 100cqh);
   flex-shrink: 0;
-}
-.stretch-session .rhythm-shape {
-  --descent-arrow-size: min(32cqw, 32cqh);
 }
 
 /* Rest's boxed shapes and the get-into-position count take the biggest square

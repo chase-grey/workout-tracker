@@ -20,6 +20,21 @@ export type SpreadMode = 'bloom' | 'rise' | 'fall' | 'sweep' | 'clock' | 'split'
 /** How long the white takes to cover the shape. Slow enough to watch happen. */
 export const SPREAD_MS = 900
 
+/**
+ * How far past the frame, in percent of it on every side, the two masked
+ * drawings reach. A mask cuts off what falls outside the box it is set on, so
+ * this is how far out of its frame a figure can draw and still be seen.
+ */
+export const SPREAD_BLEED = 30
+
+/**
+ * The inset that puts the frame back inside a box grown by `SPREAD_BLEED` on
+ * every side — a percentage of the grown box, which is what an inset is read
+ * against.
+ */
+export const spreadFrameInset = (bleed = SPREAD_BLEED): string =>
+  `${Math.round((bleed / (100 + 2 * bleed)) * 1e6) / 1e4}%`
+
 /** Width of the soft edge, in percent of the frame (degrees, for the clock). */
 export const FEATHER = 14
 

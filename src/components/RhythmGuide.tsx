@@ -1,5 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { MdKeyboardArrowDown } from 'react-icons/md'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { parseTempo, workPhaseCount, type TempoPhase } from '../lib/tempo'
 import {
   rhythmWaveEnd,
@@ -24,7 +23,14 @@ import {
   type RepGlow,
 } from '../lib/rhythmMotion'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
-import { SPREAD_MS, spreadMode, spreadStyle } from '../lib/glowSpread'
+import {
+  SPREAD_BLEED,
+  SPREAD_MS,
+  spreadFrameInset,
+  spreadMode,
+  spreadStyle,
+  type SpreadMode,
+} from '../lib/glowSpread'
 import { nextFlossVariant, rhythmVariantForMotion, type RhythmVariant } from '../lib/rhythmVariant'
 import { useShownAnimation } from '../lib/useShownAnimation'
 import { FlossGuide } from './FlossGuide'
@@ -68,18 +74,21 @@ const SWEEP_UNITS = 60
 const SWEEP_MS = 450
 
 /**
- * The push/pull chevron stacks, in the shape's 100-unit frame. Each stack is three
- * chevrons counted outward from the centre line; the strokes are what tell a push
- * (thick, pulsing outward) from the rest priming it (thin, still).
+ * The push/pull chevron stacks, in hundredths of the frame each way. Each stack is
+ * three chevrons counted outward from the centre line; the strokes are what tell a
+ * push (thick, pulsing outward) from the rest priming it (thin, still). The
+ * outermost tip, leaning, comes to 94 — which leaves half a thick stroke (a
+ * twentieth of the frame's short side) inside the frame whatever shape it is.
  */
-const CHEVRON_HALF_WIDTH = 36
-const CHEVRON_RISE = 8
+const CHEVRON_HALF_WIDTH = 43
+const CHEVRON_RISE = 7
 const CHEVRON_FIRST = 10
-const CHEVRON_GAP = 13
+const CHEVRON_GAP = 12
+/** Stroke widths, in hundredths of the frame's short side. */
 const CHEVRON_THIN = 3.5
-const CHEVRON_THICK = 9
+const CHEVRON_THICK = 10
 /** How far a driving stack leans toward its end, in frame units. */
-const CHEVRON_SHIFT = 4
+const CHEVRON_SHIFT = 3
 /** One pulse runs the length of a stack in this long, bottoming out at this share of lit. */
 const CHEVRON_PULSE_SECONDS = 0.9
 const CHEVRON_PULSE_FLOOR = 0.45
@@ -175,7 +184,11 @@ type Tone = (typeof TONES)[RepGlow]
 const litOpacity = (tone: (typeof TONES)[RepGlow], lit: number) =>
   tone.dimmest + lit * (tone.brightest - tone.dimmest)
 
-/** Breathing family: a shape that expands (neutral) and contracts (deep). */
+/**
+ * Breathing family: a shape that expands (neutral) and contracts (deep). These
+ * are round, so the width of the phone is as big as they get: each is sized off
+ * the frame's short side (`cqmin`) and takes nearly all of it.
+ */
 function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: number; tone: Tone }) {
   // Scale is interpolated per animation frame by the parent, so the shape needs
   // no CSS transition of its own — that would only lag behind the live value.
@@ -183,25 +196,25 @@ function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: numbe
     case 'square':
       return (
         <div
-          className={`absolute h-[73%] w-[73%] rounded-[14%] ${tone.fill} ${tone.ring}`}
+          className={`absolute h-[82cqmin] w-[82cqmin] rounded-[14%] ${tone.fill} ${tone.ring}`}
           style={{ transform: `scale(${scale}) rotate(${(scale - 0.55) * 25}deg)` }}
         />
       )
     case 'rings':
       return (
         <>
-          {[73, 53, 33].map((pct, i) => (
+          {[94, 68, 42].map((size, i) => (
             <div
               key={i}
-              className={`absolute rounded-full border ${tone.border}`}
-              style={{ width: `${pct}%`, height: `${pct}%`, transform: `scale(${scale})` }}
+              className={`absolute rounded-full border-2 ${tone.border}`}
+              style={{ width: `${size}cqmin`, height: `${size}cqmin`, transform: `scale(${scale})` }}
             />
           ))}
         </>
       )
     case 'tide':
       return (
-        <div className={`absolute h-[73%] w-[73%] overflow-hidden rounded-full ${tone.ring}`}>
+        <div className={`absolute h-[94cqmin] w-[94cqmin] overflow-hidden rounded-full ${tone.ring}`}>
           <div className={`absolute bottom-0 left-0 w-full ${tone.fill}`} style={{ height: `${scale * 100}%` }} />
         </div>
       )
@@ -209,7 +222,7 @@ function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: numbe
       // Six dots drawn in toward the center and pushed back out — the breath
       // read as a ring closing rather than a single body shrinking.
       return (
-        <div className="absolute h-[73%] w-[73%]">
+        <div className="absolute h-[94cqmin] w-[94cqmin]">
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="absolute inset-0" style={{ transform: `rotate(${i * 60}deg) scale(${scale})` }}>
               <div
@@ -223,11 +236,11 @@ function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: numbe
       // An equalizer that rises and falls from a shared centerline — the only
       // shape in the family that reads left-to-right instead of radially.
       return (
-        <div className="absolute flex h-[73%] w-[73%] items-center justify-center gap-[4%]">
+        <div className="absolute flex h-[94cqmin] w-[94cqmin] items-center justify-center gap-[5%]">
           {[0.55, 0.8, 1, 0.8, 0.55].map((f, i) => (
             <div
               key={i}
-              className={`w-[9%] rounded-full ${tone.fill} ${tone.ring}`}
+              className={`w-[13%] rounded-full ${tone.fill} ${tone.ring}`}
               style={{ height: `${f * scale * 100}%` }}
             />
           ))}
@@ -239,11 +252,11 @@ function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: numbe
       return (
         <>
           <div
-            className={`absolute h-[58%] w-[58%] rounded-full blur-2xl ${tone.fill}`}
+            className={`absolute h-[74cqmin] w-[74cqmin] rounded-full blur-2xl ${tone.fill}`}
             style={{ transform: `scale(${scale})` }}
           />
           <div
-            className={`absolute h-[73%] w-[73%] rounded-full border ${tone.border}`}
+            className={`absolute h-[94cqmin] w-[94cqmin] rounded-full border-2 ${tone.border}`}
             style={{ transform: `scale(${1 + SCALE_MIN - scale})` }}
           />
         </>
@@ -252,7 +265,7 @@ function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: numbe
     default:
       return (
         <div
-          className={`absolute h-[73%] w-[73%] rounded-full ${tone.fill} ${tone.ring}`}
+          className={`absolute h-[94cqmin] w-[94cqmin] rounded-full ${tone.fill} ${tone.ring}`}
           style={{ transform: `scale(${scale})` }}
         />
       )
@@ -261,7 +274,11 @@ function BreatheShape({ variant, scale, tone }: { variant: Variant; scale: numbe
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
-/** Descent family: a shape that reaches/folds downward and settles deep. */
+/**
+ * Descent family: a shape that reaches/folds downward and settles deep. The
+ * travel is in shares of the frame, so on a phone it runs the length of the
+ * screen under the header; anything that has to stay round is sized in `cqmin`.
+ */
 function DescentShape({ variant, depth, tone }: { variant: Variant; depth: number; tone: Tone }) {
   switch (variant) {
     case 'fold':
@@ -269,30 +286,35 @@ function DescentShape({ variant, depth, tone }: { variant: Variant; depth: numbe
       // like the body folding forward over the legs.
       return (
         <div
-          className={`absolute h-[70%] w-[58%] rounded-[16%] ${tone.fill} ${tone.ring}`}
+          className={`absolute h-[84%] w-[76%] rounded-[9cqmin] ${tone.fill} ${tone.ring}`}
           style={{ transform: `scaleY(${1 - depth * 0.72}) scaleX(${1 + depth * 0.16})` }}
         />
       )
     case 'dive':
       // A stack of chevrons that light up and drift downward top-to-bottom as
-      // the stretch deepens — a clear "press down and hold" cue.
+      // the stretch deepens — a clear "press down and hold" cue. Each is as wide
+      // as the frame, and the three are spread down the length of it.
       return (
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center"
-          style={{ fontSize: 'var(--descent-arrow-size, min(22vw, 8rem))' }}
-        >
+        <div className="absolute inset-x-0 inset-y-[7%] flex flex-col items-center justify-around">
           {[0, 1, 2].map((i) => {
             const lit = clamp01(depth * 3 - i)
             return (
-              <MdKeyboardArrowDown
+              <svg
                 key={i}
+                viewBox="0 0 100 46"
                 aria-hidden
-                className="-my-[6%] text-current"
-                style={{
-                  opacity: litOpacity(tone, lit),
-                  transform: `translateY(${lit * 10}%)`,
-                }}
-              />
+                className="max-h-[30%] w-[84cqw] overflow-visible text-current"
+                style={{ opacity: litOpacity(tone, lit), transform: `translateY(${lit * 14}%)` }}
+              >
+                <polyline
+                  points="8,8 50,38 92,8"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={9}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             )
           })}
         </div>
@@ -303,13 +325,16 @@ function DescentShape({ variant, depth, tone }: { variant: Variant; depth: numbe
       return (
         <div className="absolute inset-0">
           <div
-            className={`absolute bottom-[15%] left-1/2 h-[3%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
-            style={{ width: `${16 + depth * 46}%` }}
+            className={`absolute bottom-[9%] left-1/2 h-[3.5cqmin] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
+            style={{ width: `${24 + depth * 64}%` }}
           />
           <div
-            className={`absolute left-1/2 h-[19%] w-[19%] rounded-full ${tone.fill} ${tone.ring}`}
+            className={`absolute left-1/2 h-[28cqmin] w-[28cqmin] rounded-full ${tone.fill} ${tone.ring}`}
             style={{
-              top: `${16 + depth * 56}%`,
+              // From hanging just inside the top of the frame, with room for the
+              // stretch it falls with, to sitting in the pool: the pool's floor is
+              // 9% up, and the drop settles most of its height above that.
+              top: `calc(${6 + depth * 85}% + ${6 - depth * 29.5}cqmin)`,
               transform: `translateX(-50%) scaleY(${1 + (1 - depth) * 0.4}) scaleX(${1 - (1 - depth) * 0.2})`,
             }}
           />
@@ -326,10 +351,10 @@ function DescentShape({ variant, depth, tone }: { variant: Variant; depth: numbe
             return (
               <div
                 key={i}
-                className="absolute h-[7%] w-[28%] rounded-full bg-current"
+                className="absolute h-[9cqmin] w-[40%] rounded-full bg-current"
                 style={{
-                  left: `${18 + i * 12}%`,
-                  top: `${24 + i * 15}%`,
+                  left: `${3 + i * 18}%`,
+                  top: `${12 + i * 22}%`,
                   opacity: litOpacity(tone, lit),
                 }}
               />
@@ -340,15 +365,17 @@ function DescentShape({ variant, depth, tone }: { variant: Variant; depth: numbe
     case 'press': {
       // A plate bearing down on a block that compresses under it — weight going
       // into the stretch, held rather than bounced.
-      const baseHeight = 34 - depth * 20
+      // The block stands on a floor 8% up and the plate rides its top edge, so the
+      // two travel together: 62% of the frame tall at rest, 26% under load.
+      const baseHeight = 62 - depth * 36
       return (
         <div className="absolute inset-0">
           <div
-            className={`absolute left-1/2 h-[8%] w-[54%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
-            style={{ top: `${40 + depth * 20}%` }}
+            className={`absolute left-1/2 h-[7%] w-[88%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
+            style={{ top: `${23 + depth * 36}%` }}
           />
           <div
-            className={`absolute bottom-[18%] left-1/2 w-[36%] -translate-x-1/2 rounded-[14%] border ${tone.border} ${tone.track}`}
+            className={`absolute bottom-[8%] left-1/2 w-[60%] -translate-x-1/2 rounded-[5cqmin] border-2 ${tone.border} ${tone.track}`}
             style={{ height: `${baseHeight}%` }}
           />
         </div>
@@ -361,11 +388,17 @@ function DescentShape({ variant, depth, tone }: { variant: Variant; depth: numbe
       return (
         <div className="absolute inset-0">
           <div
-            className={`absolute left-1/2 top-[14%] h-[68%] w-[2px] -translate-x-1/2 rounded-full ${tone.track}`}
+            className={`absolute left-1/2 top-[6%] h-[88%] w-[3px] -translate-x-1/2 rounded-full ${tone.track}`}
           />
           <div
-            className={`absolute left-1/2 h-[26%] w-[26%] rounded-full ${tone.fill} ${tone.ring}`}
-            style={{ top: `${20 + depth * 60}%`, transform: `translate(-50%, -50%) scale(${0.85 + depth * 0.35})` }}
+            className={`absolute left-1/2 h-[40cqmin] w-[40cqmin] rounded-full ${tone.fill} ${tone.ring}`}
+            // Its centre runs the track from one radius inside the top to one
+            // radius inside the foot, and the radius grows on the way down (17 to
+            // 24 cqmin), so the swollen orb at the bottom still sits in the frame.
+            style={{
+              top: `calc(${6 + depth * 88}% + ${17 - depth * 41}cqmin)`,
+              transform: `translate(-50%, -50%) scale(${0.85 + depth * 0.35})`,
+            }}
           />
         </div>
       )
@@ -431,13 +464,13 @@ function PushPullShape({
         d: wavePath,
         fill: 'none',
         stroke: 'currentColor',
-        strokeWidth: 3,
+        strokeWidth: 4,
         vectorEffect: 'non-scaling-stroke',
         strokeLinecap: 'round',
         strokeLinejoin: 'round',
       } as const
       return (
-        <div className="absolute inset-y-[10%] left-1/2 w-screen -translate-x-1/2 overflow-hidden">
+        <div className="absolute inset-y-[6%] left-1/2 w-screen -translate-x-1/2 overflow-hidden">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible text-current" aria-hidden>
             <g transform={`translate(${50 - dotX} 0)`}>
               {split == null ? (
@@ -483,7 +516,7 @@ function PushPullShape({
             </g>
           </svg>
           <div
-            className="absolute left-1/2 h-[11%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
+            className="absolute left-1/2 h-[15cqmin] w-[15cqmin] -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
             style={{ top: `${dotY}%`, opacity: tone.brightest }}
           />
         </div>
@@ -497,7 +530,16 @@ function PushPullShape({
       // ghost of the push to come and never mistakable for it.
       const elapsed = progress * phases[phaseIndex].seconds
       return (
-        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full overflow-visible text-current" aria-hidden>
+        // Stretched to the frame rather than fitted in a square of it, so the two
+        // stacks reach the top and the bottom of the screen. The strokes are
+        // sized off the frame's short side and kept out of the stretch, so they
+        // stay even and their ends stay round.
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          className="absolute inset-0 h-full w-full overflow-visible text-current"
+          aria-hidden
+        >
           {[-1, 1].map((side) => {
             const driving = clamp01(drive * side)
             const priming = primeDir === side ? prime : 0
@@ -524,7 +566,8 @@ function PushPullShape({
                       points={`${50 - CHEVRON_HALF_WIDTH},${base} 50,${tip} ${50 + CHEVRON_HALF_WIDTH},${base}`}
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth={width}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ strokeWidth: `${width}cqmin` }}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       opacity={litOpacity(tone, lit)}
@@ -545,25 +588,25 @@ function PushPullShape({
       return (
         <div className="absolute inset-0">
           <div
-            className={`absolute left-1/2 top-[8%] h-[84%] w-[13%] -translate-x-1/2 rounded-full ${tone.track}`}
+            className={`absolute left-1/2 top-[8%] h-[84%] w-[24%] -translate-x-1/2 rounded-full ${tone.track}`}
           />
           {[-1, 1].map((side) => (
             <div
               key={side}
-              className={`absolute left-1/2 h-[6%] w-[34%] -translate-x-1/2 rounded-full ${tone.fill}`}
+              className={`absolute left-1/2 h-[5%] w-[64%] -translate-x-1/2 rounded-full ${tone.fill}`}
               style={{
-                top: side === -1 ? '3%' : undefined,
-                bottom: side === 1 ? '3%' : undefined,
+                top: side === -1 ? '1.5%' : undefined,
+                bottom: side === 1 ? '1.5%' : undefined,
                 opacity: litOpacity(tone, endLit(side)),
               }}
             />
           ))}
           <div
-            className={`absolute left-1/2 w-[13%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
+            className={`absolute left-1/2 w-[24%] -translate-x-1/2 rounded-full ${tone.fill} ${tone.ring}`}
             style={{ top: `${drive >= 0 ? 50 : 50 - reach}%`, height: `${reach}%` }}
           />
           <div
-            className="absolute left-1/2 top-1/2 h-[3%] w-[26%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
+            className="absolute left-1/2 top-1/2 h-[1.6%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
             style={{ opacity: tone.dimmest }}
           />
         </div>
@@ -581,23 +624,51 @@ function PushPullShape({
             return (
               <div
                 key={side}
-                className={`absolute left-1/2 w-[64%] -translate-x-1/2 rounded-full border ${tone.border} ${tone.fill}`}
+                className={`absolute left-1/2 w-[92%] -translate-x-1/2 rounded-full border-2 ${tone.border} ${tone.fill}`}
                 style={{
-                  top: side === -1 ? '8%' : undefined,
-                  bottom: side === 1 ? '8%' : undefined,
-                  height: `${8 - bearing * 2.5}%`,
+                  top: side === -1 ? '4%' : undefined,
+                  bottom: side === 1 ? '4%' : undefined,
+                  height: `${7 - bearing * 2}%`,
                   opacity: litOpacity(tone, endLit(side)),
                 }}
               />
             )
           })}
           <div
-            className={`absolute left-1/2 h-[10%] w-[46%] rounded-full ${tone.fill} ${tone.ring}`}
-            style={{ top: `${50 + drive * 27}%`, transform: 'translate(-50%, -50%)' }}
+            className={`absolute left-1/2 h-[9%] w-[66%] rounded-full ${tone.fill} ${tone.ring}`}
+            // Driven home, its edge meets the plate it bears on: the plate's face
+            // is 11% in from the end of the frame, and the bar is 9% thick.
+            style={{ top: `${50 + drive * 34.5}%`, transform: 'translate(-50%, -50%)' }}
           />
         </div>
       )
   }
+}
+
+/**
+ * One of the two drawings of a shape, masked to its share of the finishing white
+ * (see lib/glowSpread). A mask cuts off whatever falls outside the box it is set
+ * on, and a figure is allowed out of its frame — a glow, a ring still spreading,
+ * the round end of a stroke — so the mask sits on a box `SPREAD_BLEED` wider than
+ * the frame all round, with the frame restored inside it for the figure to lay
+ * out in. Set on the frame itself, it drew a hard edge through every one of those.
+ */
+function SpreadLayer({ mode, spread, layer, children }: {
+  mode: SpreadMode
+  spread: number
+  layer: 'accent' | 'white'
+  children: ReactNode
+}) {
+  return (
+    <div
+      className={`pointer-events-none absolute ${layer === 'white' ? 'text-neutral-50' : 'text-accent-bright'}`}
+      style={{ inset: `${-SPREAD_BLEED}%`, ...spreadStyle(mode, spread, layer) }}
+    >
+      <div className="absolute flex items-center justify-center" style={{ inset: spreadFrameInset() }}>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 /** Smooth ease-in-out so each phase accelerates then settles, like a breath. */
@@ -852,7 +923,11 @@ export function RhythmGuide({
 
   return (
     <div className="rhythm-guide flex flex-1 flex-col items-center justify-center py-3">
-      <div className={`rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center ${
+      {/* The frame: in a stretch session, all of the space under the header, not
+          a square of it (see .stretch-session in index.css). A size container, so
+          a figure can lay itself out in shares of the frame and still draw a
+          circle as one — `cqmin` is a hundredth of the frame's short side. */}
+      <div className={`rhythm-shape relative flex aspect-square w-[min(86vw,50vh,30rem)] items-center justify-center [container-type:size] ${
         glow === 'done' ? 'text-neutral-50' : 'text-accent-bright'
       }`}>
         {mode === 'own' ? (
@@ -860,20 +935,10 @@ export function RhythmGuide({
         ) : (
           <>
             {spread < 1 && (
-              <div
-                className="absolute inset-0 flex items-center justify-center text-accent-bright"
-                style={spreadStyle(mode, spread, 'accent')}
-              >
-                {figure(TONES.base)}
-              </div>
+              <SpreadLayer mode={mode} spread={spread} layer="accent">{figure(TONES.base)}</SpreadLayer>
             )}
             {spread > 0 && (
-              <div
-                className="absolute inset-0 flex items-center justify-center text-neutral-50"
-                style={spreadStyle(mode, spread, 'white')}
-              >
-                {figure(TONES.done)}
-              </div>
+              <SpreadLayer mode={mode} spread={spread} layer="white">{figure(TONES.done)}</SpreadLayer>
             )}
           </>
         )}

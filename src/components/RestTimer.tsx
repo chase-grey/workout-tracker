@@ -1012,6 +1012,23 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
 const holdRotation = createRotation(BOX_VARIANTS, Math.random, notHidden)
 
 /**
+ * The boxed shapes drawn as a column up the middle of their square, and how many
+ * times the width of a stretch's stage that square may be (see .stretch-session
+ * in index.css). A square can't be wider than the phone without its art running
+ * off the sides — unless the art never goes near the sides, in which case the
+ * square can outgrow the screen and the column fill the height under the header
+ * instead of a third of it. Each factor keeps its shape's widest part inside the
+ * screen at every level it's drawn at. The shapes not listed use their whole
+ * width at some point in the countdown, or in one of the forms they come in (the
+ * cell is sometimes a coin, the tap reaches left of its glass), and stay the
+ * width of the screen.
+ */
+const HOLD_GROW: Partial<Record<Variant, number>> = {
+  pips: 1.6,
+  icicle: 1.5,
+}
+
+/**
  * A rest shape telling a hold's time instead of a rest's (see
  * components/HoldTimer). The same time-telling shapes under the same rule — the
  * level *is* the countdown, and `fraction` is how much of the hold is still to
@@ -1024,7 +1041,10 @@ export function CountdownShape({ fraction }: { fraction: number }) {
   const [variant, setVariant] = useState<Variant>(() => holdRotation.next())
   useShownAnimation('rest', variant, () => setVariant(holdRotation.next()))
   return (
-    <div className="countdown-shape relative flex aspect-square w-[min(72vw,34vh,20rem)] items-center justify-center">
+    <div
+      className="countdown-shape relative flex aspect-square w-[min(72vw,34vh,20rem)] items-center justify-center"
+      style={{ '--hold-grow': HOLD_GROW[variant] ?? 1 } as CSSProperties}
+    >
       <RestShape variant={variant} fraction={clamp01(fraction)} />
     </div>
   )

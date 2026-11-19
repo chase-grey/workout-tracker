@@ -76,6 +76,11 @@ function positionAt(phaseIndex: number, progress: number): number {
  * at each turn so the reversal is visible before it happens. Reduced motion parks
  * the crest at the end it's heading to with a middling wake, so it still leans.
  *
+ * The frame is whatever the session has under its header — on a phone, much taller
+ * than it is wide — so the run and everything laid along or across it is in shares
+ * of the frame, and whatever has to keep its own shape (a bead, a knot, the kite)
+ * is sized in `cqmin`, a hundredth of the frame's short side.
+ *
  * Four figures draw the same glide; the rotation picks one per set (see
  * lib/rhythmVariant), and the kebab can hide one like any other shape:
  * - 'beads': a strand of beads with a swell running through it — the beads under
@@ -146,7 +151,7 @@ export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
       {vertical ? (
         <Glow x={50} y={up(crest)} />
       ) : (
-        <Glow x={crest} y={figure === 'beads' ? 46 : figure === 'grass' ? 52 : 50} />
+        <Glow x={crest} y={figure === 'beads' ? 42 : 50} />
       )}
       {figure === 'kite' ? (
         <Kite glide={glide} />
@@ -179,11 +184,19 @@ export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
 function Glow({ x, y }: { x: number; y: number }) {
   return (
     <div
-      className="absolute h-[40%] w-[40%] rounded-full bg-current/40 blur-2xl"
+      className="absolute h-[46cqmin] w-[46cqmin] rounded-full bg-current/40 blur-2xl"
       style={{ left: `${r(x)}%`, top: `${r(y)}%`, transform: 'translate(-50%, -50%)' }}
     />
   )
 }
+
+/**
+ * A stroke for a drawing that is stretched to the frame: so many hundredths of the
+ * frame's short side wide, and kept out of the stretch, so a line is the same
+ * weight whichever way it runs and whatever shape the frame is.
+ */
+const hairline = (width: number) =>
+  ({ vectorEffect: 'non-scaling-stroke', style: { strokeWidth: `${width}cqmin` } }) as const
 
 /** A gradient id with the punctuation stripped, so it's safe inside a url() wherever React writes it. */
 const useGradientId = () => `floss-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
@@ -191,7 +204,7 @@ const useGradientId = () => `floss-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
 /** Beads strung evenly across the frame, a little past either end of the run. */
 const BEADS = Array.from({ length: 13 }, (_, k) => 6 + k * 7.333)
 /** How far the swell lifts the strand at its crest, in % of the frame. */
-const LIFT = 16
+const LIFT = 24
 
 function Beads({ glide }: { glide: Glide }) {
   return (
@@ -202,10 +215,10 @@ function Beads({ glide }: { glide: Glide }) {
         return (
           <div
             key={k}
-            className="absolute h-[4.5%] w-[4.5%] rounded-full bg-current"
+            className="absolute h-[7cqmin] w-[7cqmin] rounded-full bg-current"
             style={{
               left: `${x}%`,
-              top: `${54 - l * LIFT}%`,
+              top: `${58 - l * LIFT}%`,
               opacity: DIM + l * (BRIGHT - DIM),
               transform: `translate(-50%, -50%) scale(${0.7 + l * 1.3})`,
             }}
@@ -217,7 +230,7 @@ function Beads({ glide }: { glide: Glide }) {
 }
 
 /** How far the slack lifts the thread off its line at the knot, in % of the frame. */
-const SLACK = 5
+const SLACK = 9
 /** The length of one wave in the slack. */
 const SLACK_WAVE = 14
 /** How far ahead of the knot the thread is lit, and how far behind at a standstill. */
@@ -241,19 +254,34 @@ function Thread({ glide }: { glide: Glide }) {
   const behind = KNOT_LIGHT + speed * WAKE_GAIN * 3
   const left = heading > 0 ? behind : KNOT_LIGHT
   const right = heading > 0 ? KNOT_LIGHT : behind
+  const knot = r(6.5 + speed * 3)
   return (
-    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-      <defs>
-        <linearGradient id={id} gradientUnits="userSpaceOnUse" x1={r(crest - left)} x2={r(crest + right)} y1="0" y2="0">
-          <stop offset="0" stopColor="currentColor" stopOpacity={DIM} />
-          <stop offset={r(left / (left + right))} stopColor="currentColor" stopOpacity={BRIGHT} />
-          <stop offset="1" stopColor="currentColor" stopOpacity={DIM} />
-        </linearGradient>
-      </defs>
-      <rect x="36" y="42" width="28" height="16" rx="8" fill="none" stroke="currentColor" strokeOpacity={DIM} strokeWidth="0.8" />
-      <path d={d} fill="none" stroke={`url(#${id})`} strokeWidth="1.3" strokeLinejoin="round" />
-      <circle cx={r(crest)} cy="50" r={r(2.6 + speed * 1.2)} fill="currentColor" opacity={CREST} />
-    </svg>
+    <>
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+        <defs>
+          <linearGradient id={id} gradientUnits="userSpaceOnUse" x1={r(crest - left)} x2={r(crest + right)} y1="0" y2="0">
+            <stop offset="0" stopColor="currentColor" stopOpacity={DIM} />
+            <stop offset={r(left / (left + right))} stopColor="currentColor" stopOpacity={BRIGHT} />
+            <stop offset="1" stopColor="currentColor" stopOpacity={DIM} />
+          </linearGradient>
+        </defs>
+        <rect x="30" y="37" width="40" height="26" rx="10" fill="none" stroke="currentColor" strokeOpacity={DIM} {...hairline(0.9)} />
+        <path d={d} fill="none" stroke={`url(#${id})`} strokeLinejoin="round" {...hairline(1.6)} />
+      </svg>
+      {/* Outside the drawing above, which is stretched to the frame: a circle in
+          there would come out as tall as the frame is. */}
+      <div
+        className="absolute rounded-full bg-current"
+        style={{
+          left: `${r(crest)}%`,
+          top: '50%',
+          width: `${knot}cqmin`,
+          height: `${knot}cqmin`,
+          opacity: CREST,
+          transform: 'translate(-50%, -50%)',
+        }}
+      />
+    </>
   )
 }
 
@@ -268,16 +296,16 @@ function Wake({ glide }: { glide: Glide }) {
       {Array.from({ length: RING_COUNT }, (_, k) => {
         const age = (k + 1) * RING_SPACING
         const fade = 1 - age / ((RING_COUNT + 1) * RING_SPACING)
-        const size = 6 + age * 70
+        const size = 7 + age * 75
         return (
           <div
             key={k}
-            className="absolute rounded-full border border-current"
+            className="absolute rounded-full border-2 border-current"
             style={{
               left: `${r(trail(age))}%`,
               top: '50%',
-              width: `${r(size)}%`,
-              height: `${r(size)}%`,
+              width: `${r(size)}cqmin`,
+              height: `${r(size)}cqmin`,
               opacity: r(DIM + fade * (BRIGHT - DIM)),
               transform: 'translate(-50%, -50%)',
             }}
@@ -285,7 +313,7 @@ function Wake({ glide }: { glide: Glide }) {
         )
       })}
       <div
-        className="absolute h-[6%] w-[6%] rounded-full bg-current"
+        className="absolute h-[8cqmin] w-[8cqmin] rounded-full bg-current"
         style={{
           left: `${r(crest)}%`,
           top: '50%',
@@ -315,11 +343,11 @@ function Grass({ glide }: { glide: Glide }) {
         return (
           <div
             key={k}
-            className="absolute w-[1.6%] origin-bottom rounded-full bg-current"
+            className="absolute w-[2.2%] origin-bottom rounded-full bg-current"
             style={{
               left: `${x}%`,
-              bottom: '36%',
-              height: `${r(16 + l * 14)}%`,
+              bottom: '32%',
+              height: `${r(18 + l * 22)}%`,
               opacity: r(DIM + l * (BRIGHT - DIM)),
               transform: `translateX(-50%) rotate(${r(bend)}deg)`,
             }}
@@ -333,7 +361,7 @@ function Grass({ glide }: { glide: Glide }) {
 /** Slats set evenly across the frame, a little past either end of the run. */
 const SLATS = Array.from({ length: 15 }, (_, k) => 8 + k * 6)
 /** How far the row shears into the heading at full speed, in degrees. */
-const SHEAR = 22
+const SHEAR = 12
 
 function Slats({ glide }: { glide: Glide }) {
   const { crest, heading, speed } = glide
@@ -344,11 +372,11 @@ function Slats({ glide }: { glide: Glide }) {
     <>
       {SLATS.map((x, k) => {
         const l = lit((x - crest) * heading, glide)
-        const height = 10 + l * 30
+        const height = 14 + l * 46
         return (
           <div
             key={k}
-            className="absolute w-[2.6%] rounded-[1px] bg-current"
+            className="absolute w-[3.4%] rounded-[1px] bg-current"
             style={{
               left: `${x}%`,
               top: `${r(50 - height / 2)}%`,
@@ -364,10 +392,10 @@ function Slats({ glide }: { glide: Glide }) {
 }
 
 /** The grid: columns a little past either end of the run, rows about the midline. */
-const TILE_COLUMNS = Array.from({ length: 9 }, (_, c) => 10 + c * 10)
-const TILE_ROWS = Array.from({ length: 5 }, (_, row) => 30 + row * 10)
+const TILE_COLUMNS = Array.from({ length: 9 }, (_, c) => 14 + c * 9)
+const TILE_ROWS = Array.from({ length: 5 }, (_, row) => 20 + row * 15)
 /** How far the grid skews into the heading at full speed, in degrees. */
-const TILT = 14
+const TILT = 6
 
 function Tiles({ glide }: { glide: Glide }) {
   const { crest, heading, speed } = glide
@@ -380,7 +408,7 @@ function Tiles({ glide }: { glide: Glide }) {
         return TILE_ROWS.map((y, row) => (
           <div
             key={`${x}:${row}`}
-            className="absolute h-[5%] w-[5%] rounded-[12%] bg-current"
+            className="absolute h-[6.5cqmin] w-[6.5cqmin] rounded-[12%] bg-current"
             style={{
               left: `${x}%`,
               top: `${y}%`,
@@ -394,10 +422,14 @@ function Tiles({ glide }: { glide: Glide }) {
   )
 }
 
-/** The capsule's height, its width at a standstill, and the extra at full speed. */
-const CAPSULE_HEIGHT = 18
-const CAPSULE_WIDTH = 18
-const CAPSULE_STRETCH = 22
+/**
+ * The capsule's height, its width at a standstill, and the extra at full speed —
+ * all in hundredths of the frame's short side, so the ends stay round in a frame
+ * that isn't square.
+ */
+const CAPSULE_HEIGHT = 26
+const CAPSULE_WIDTH = 26
+const CAPSULE_STRETCH = 24
 /** Echoes behind the capsule, so many phase-lengths back. */
 const ECHOES = [0.07, 0.14]
 
@@ -420,8 +452,8 @@ function Capsule({ glide }: { glide: Glide }) {
           style={{
             left: `${r(trail(back))}%`,
             top: '50%',
-            width: `${r(CAPSULE_WIDTH * (0.8 - k * 0.2))}%`,
-            height: `${r(CAPSULE_HEIGHT * (0.8 - k * 0.2))}%`,
+            width: `${r(CAPSULE_WIDTH * (0.8 - k * 0.2))}cqmin`,
+            height: `${r(CAPSULE_HEIGHT * (0.8 - k * 0.2))}cqmin`,
             opacity: r(DIM + (BRIGHT - DIM) * (0.5 - k * 0.2)),
             transform: 'translate(-50%, -50%)',
           }}
@@ -432,8 +464,8 @@ function Capsule({ glide }: { glide: Glide }) {
         style={{
           left: `${r(crest)}%`,
           top: '50%',
-          width: `${r(width)}%`,
-          height: `${CAPSULE_HEIGHT}%`,
+          width: `${r(width)}cqmin`,
+          height: `${CAPSULE_HEIGHT}cqmin`,
           borderRadius: radius,
           opacity: CREST,
           transform: 'translate(-50%, -50%)',
@@ -443,15 +475,21 @@ function Capsule({ glide }: { glide: Glide }) {
   )
 }
 
-/** The kite's half-height and half-width at a standstill, and the nose it grows with speed. */
-const KITE_HALF_HEIGHT = 9
-const KITE_HALF_WIDTH = 6
-const KITE_NOSE = 6
+/**
+ * The kite's half-height and half-width at a standstill, and the nose it grows
+ * with speed, in hundredths of the frame's short side: it flies up a frame much
+ * taller than it is wide, and has to stay a kite in it.
+ */
+const KITE_HALF_HEIGHT = 12
+const KITE_HALF_WIDTH = 8.5
+const KITE_NOSE = 8
 /** The tail: how far back it reaches in phase-lengths, how far it sways, the length of a sway, and where its bows sit. */
 const TAIL_REACH = 0.3
-const TAIL_SWAY = 5
-const TAIL_WAVE = 18
+const TAIL_SWAY = 6
+const TAIL_WAVE = 22
 const BOWS = [0.08, 0.16, 0.24]
+/** A bow's side, in the same hundredths. */
+const BOW_SIZE = 4.5
 
 function Kite({ glide }: { glide: Glide }) {
   const { crest, heading, speed, trail } = glide
@@ -470,42 +508,60 @@ function Kite({ glide }: { glide: Glide }) {
     points.push(`${r(p.x)} ${r(p.y)}`)
   }
   // The nose reaches into the heading with speed; the trailing tip stays put. At a
-  // standstill the diamond is even, so the turn changes nothing. The points are
-  // written top, right, bottom, left whichever end is the nose, so the markup is
+  // standstill the diamond is even, so the turn changes nothing. Its widest point
+  // stays on the crest, so the box is measured out from there: `above` of it over
+  // the crest and the rest under, whichever end is the nose, and the markup is
   // the same across the turn too.
-  const nose = cy - heading * (KITE_HALF_HEIGHT + speed * KITE_NOSE)
-  const tip = cy + heading * KITE_HALF_HEIGHT
-  const [top, bottom] = heading > 0 ? [nose, tip] : [tip, nose]
-  const body = `50 ${r(top)} ${50 + KITE_HALF_WIDTH} ${r(cy)} 50 ${r(bottom)} ${50 - KITE_HALF_WIDTH} ${r(cy)}`
+  const nose = speed * KITE_NOSE
+  const above = KITE_HALF_HEIGHT + (heading > 0 ? nose : 0)
+  const height = 2 * KITE_HALF_HEIGHT + nose
+  const waist = r((above / height) * 100)
   return (
-    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-      <path
-        d={`M ${points.join(' L ')}`}
-        fill="none"
-        stroke="currentColor"
-        strokeOpacity={DIM + (BRIGHT - DIM) * 0.5}
-        strokeWidth="0.9"
-        strokeLinejoin="round"
-      />
+    <>
+      {/* Only the tail's line is drawn stretched to the frame. The bows and the
+          kite itself are laid over it in `cqmin`, or the stretch would pull a
+          diamond into a sliver. */}
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+        <path
+          d={`M ${points.join(' L ')}`}
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity={DIM + (BRIGHT - DIM) * 0.5}
+          strokeLinejoin="round"
+          {...hairline(1.1)}
+        />
+      </svg>
       {BOWS.map((back, k) => {
         const p = at(back)
         const fade = 1 - k / BOWS.length
         return (
-          <rect
+          <div
             key={k}
-            x={r(p.x - 2)}
-            y={r(p.y - 2)}
-            width="4"
-            height="4"
-            rx="0.6"
-            fill="currentColor"
-            opacity={r(DIM + (BRIGHT - DIM) * fade)}
-            transform={`rotate(45 ${r(p.x)} ${r(p.y)})`}
+            className="absolute rounded-[12%] bg-current"
+            style={{
+              left: `${r(p.x)}%`,
+              top: `${r(p.y)}%`,
+              width: `${BOW_SIZE}cqmin`,
+              height: `${BOW_SIZE}cqmin`,
+              opacity: r(DIM + (BRIGHT - DIM) * fade),
+              transform: 'translate(-50%, -50%) rotate(45deg)',
+            }}
           />
         )
       })}
-      <polygon points={body} fill="currentColor" opacity={CREST} />
-    </svg>
+      <div
+        className="absolute bg-current"
+        style={{
+          left: '50%',
+          top: `calc(${r(cy)}% - ${r(above)}cqmin)`,
+          width: `${2 * KITE_HALF_WIDTH}cqmin`,
+          height: `${r(height)}cqmin`,
+          opacity: CREST,
+          clipPath: `polygon(50% 0%, 100% ${waist}%, 50% 100%, 0% ${waist}%)`,
+          transform: 'translateX(-50%)',
+        }}
+      />
+    </>
   )
 }
 
@@ -515,7 +571,7 @@ function Kite({ glide }: { glide: Glide }) {
  * short because the spiral turns a hair of travel along the run into a few hairs
  * across it; any more and the trail would be seen to shift at the turn.
  */
-const HELIX_RADIUS = 22
+const HELIX_RADIUS = 30
 const HELIX_PITCH = 46
 const HELIX_TRAIL = 10
 const HELIX_SPACING = 0.02
@@ -534,7 +590,7 @@ function Helix({ glide }: { glide: Glide }) {
       {Array.from({ length: HELIX_TRAIL }, (_, k) => {
         const p = place(trail((k + 1) * HELIX_SPACING))
         const fade = 1 - (k + 1) / (HELIX_TRAIL + 1)
-        const size = (2 + fade * 2.5) * (0.6 + 0.4 * p.depth)
+        const size = (3 + fade * 3.5) * (0.6 + 0.4 * p.depth)
         return (
           <div
             key={k}
@@ -542,8 +598,8 @@ function Helix({ glide }: { glide: Glide }) {
             style={{
               left: `${r(p.x)}%`,
               top: `${r(p.y)}%`,
-              width: `${r(size)}%`,
-              height: `${r(size)}%`,
+              width: `${r(size)}cqmin`,
+              height: `${r(size)}cqmin`,
               opacity: r(DIM + fade * (BRIGHT - DIM)),
               transform: 'translate(-50%, -50%)',
             }}
@@ -551,7 +607,7 @@ function Helix({ glide }: { glide: Glide }) {
         )
       })}
       <div
-        className="absolute h-[6%] w-[6%] rounded-full bg-current"
+        className="absolute h-[9cqmin] w-[9cqmin] rounded-full bg-current"
         style={{
           left: `${r(head.x)}%`,
           top: `${r(head.y)}%`,
@@ -564,11 +620,11 @@ function Helix({ glide }: { glide: Glide }) {
 }
 
 /** The tube's walls, top and floor, and how far the surface domes into the heading at full speed. */
-const TUBE_LEFT = 34
-const TUBE_RIGHT = 66
-const TUBE_TOP = 5
-const TUBE_FLOOR = 95
-const DOME = 7
+const TUBE_LEFT = 22
+const TUBE_RIGHT = 78
+const TUBE_TOP = 3
+const TUBE_FLOOR = 97
+const DOME = 5
 /** How far below the surface the column's light fades to the floor's dimness. */
 const FILL_FADE = 45
 
@@ -595,14 +651,13 @@ function Fill({ glide }: { glide: Glide }) {
         y={TUBE_TOP}
         width={TUBE_RIGHT - TUBE_LEFT}
         height={TUBE_FLOOR - TUBE_TOP}
-        rx="4"
         fill="none"
         stroke="currentColor"
         strokeOpacity={DIM}
-        strokeWidth="0.8"
+        {...hairline(0.9)}
       />
       <path d={column} fill={`url(#${id})`} />
-      <path d={surface} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity={CREST} />
+      <path d={surface} fill="none" stroke="currentColor" strokeLinecap="round" opacity={CREST} {...hairline(1.8)} />
     </svg>
   )
 }
@@ -610,8 +665,8 @@ function Fill({ glide }: { glide: Glide }) {
 /** Rungs set evenly up the frame, a little past either end of the run. */
 const RUNGS = Array.from({ length: 15 }, (_, k) => 8 + k * 6)
 /** The sweep's reach across the frame, and how far its trail of light stretches behind it at full speed. */
-const SWEEP_LEFT = 8
-const SWEEP_RIGHT = 92
+const SWEEP_LEFT = 3
+const SWEEP_RIGHT = 97
 const SWEEP_TRAIL = 30
 
 function Scan({ glide }: { glide: Glide }) {
@@ -641,8 +696,8 @@ function Scan({ glide }: { glide: Glide }) {
             y2={ry}
             stroke="currentColor"
             strokeOpacity={r(DIM + l * (BRIGHT - DIM))}
-            strokeWidth={r(0.5 + l * 0.9)}
             strokeLinecap="round"
+            {...hairline(r(0.7 + l * 1.3))}
           />
         )
       })}
@@ -659,9 +714,9 @@ function Scan({ glide }: { glide: Glide }) {
         y1={r(y)}
         y2={r(y)}
         stroke="currentColor"
-        strokeWidth="1.5"
         strokeLinecap="round"
         opacity={CREST}
+        {...hairline(2.4)}
       />
     </svg>
   )

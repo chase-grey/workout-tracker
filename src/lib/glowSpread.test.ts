@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FEATHER, spreadMode, spreadStyle, type SpreadMode } from './glowSpread'
+import { FEATHER, SPREAD_BLEED, spreadFrameInset, spreadMode, spreadStyle, type SpreadMode } from './glowSpread'
 import type { RhythmVariant } from './rhythmVariant'
 
 const ALL: RhythmVariant[] = [
@@ -94,5 +94,24 @@ describe('spreadStyle', () => {
   it('clamps an amount past either end', () => {
     expect(spreadStyle('dissolve', 1.5, 'white').opacity).toBe(1)
     expect(spreadStyle('bloom', -1, 'white')).toEqual(spreadStyle('bloom', 0, 'white'))
+  })
+})
+
+// The masked drawings sit on a box bigger than the frame, so the mask has
+// nothing of the figure to cut; the figure still has to lay out in the frame.
+describe('spreadFrameInset', () => {
+  it('puts the frame back inside the box the mask is set on', () => {
+    for (const bleed of [SPREAD_BLEED, 0, 10, 50]) {
+      // The box is the frame plus `bleed` percent of it on each side; the inset
+      // is a share of that box, and what's left between the insets is the frame.
+      const box = 100 + 2 * bleed
+      const inset = (parseFloat(spreadFrameInset(bleed)) / 100) * box
+      expect(inset).toBeCloseTo(bleed, 3)
+      expect(box - 2 * inset).toBeCloseTo(100, 3)
+    }
+  })
+  it('leaves a figure room to draw outside its frame', () => {
+    expect(SPREAD_BLEED).toBeGreaterThanOrEqual(25)
+    expect(spreadFrameInset()).toMatch(/^\d+(\.\d+)?%$/)
   })
 })
