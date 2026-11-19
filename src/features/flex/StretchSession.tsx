@@ -57,6 +57,7 @@ import { useEnterNext } from '../../lib/useEnterNext'
 import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { landingStep, setPosition, withSkipped } from '../../lib/skipped'
+import { projectedSoFar } from '../../lib/sessionPace'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -557,20 +558,23 @@ export function StretchSession({
   const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
   const exerciseTimeLeft = timeLeftByExercise(remainingRows, (key) => allSteps.find((s) => s.stepKey === key)?.exKey)
   const exerciseOf = (key: string) => allSteps.find((s) => s.stepKey === key)?.exKey
+  // The whole run priced, done sets and all: what the estimate says this routine
+  // costs, against which both a finished stretch's time and the time so far are
+  // read (see lib/sessionPace).
+  const wholeRows = remainingTiming(exerciseAverages, priceStretchFlow(steps, coreRepsFor, fast))
   const checklistTiming = {
     clock: (
       <ChecklistClock
         startedAt={startedAt}
         readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
+        projected={projectedSoFar(sumTiming(wholeRows), sumTiming(remainingRows))}
         left={sumTiming(remainingRows)}
       />
     ),
     // Read only while the checklist is up; the rest screen's tick keeps a running
     // rest live.
     took: showList ? spentByExercise(setClock.current, Date.now(), exerciseOf) : new Map<string, number>(),
-    projected: showList
-      ? timeLeftByExercise(remainingTiming(exerciseAverages, priceStretchFlow(steps, coreRepsFor, fast)), exerciseOf)
-      : new Map<string, number>(),
+    projected: showList ? timeLeftByExercise(wholeRows, exerciseOf) : new Map<string, number>(),
   }
   const projectedSplit = (doneSet: Set<string>) => {
     const rows = remainingTiming(exerciseAverages, priceStretchFlow(steps.filter((s) => doneSet.has(s.stepKey)), coreRepsFor, fast))

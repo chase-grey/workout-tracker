@@ -84,6 +84,7 @@ import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
 import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
 import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
+import { projectedSoFar } from '../../lib/sessionPace'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
@@ -619,9 +620,13 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const timeLeft = remainingRows.reduce((sum, row) => sum + row.totalSec, 0)
   const exerciseOf = (key: string) => steps.find((s) => s.stepKey === key)?.ex.key
   const exerciseTimeLeft = timeLeftByExercise(remainingRows, exerciseOf)
-  // A finished exercise's time against what the whole flow priced it at. Read only
-  // while the checklist is up; the rest screen's tick keeps a running rest live.
-  const exerciseProjected = showList ? timeLeftByExercise(remainingTiming(exerciseAverages, timingFor(steps)), exerciseOf) : null
+  // The whole flow priced, done sets and all: what the estimate says this workout
+  // costs, against which both a finished exercise's time and the time so far are
+  // read (see lib/sessionPace).
+  const wholeRows = remainingTiming(exerciseAverages, timingFor(steps))
+  // Read only while the checklist is up; the rest screen's tick keeps a running
+  // rest live.
+  const exerciseProjected = showList ? timeLeftByExercise(wholeRows, exerciseOf) : null
   const exerciseSpent = showList ? spentByExercise(setClock.current, Date.now(), exerciseOf) : null
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
@@ -1745,6 +1750,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             <ChecklistClock
               startedAt={session.startedAt}
               readRestSec={(now) => tally.current.takenSec + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
+              projected={projectedSoFar(sumTiming(wholeRows), sumTiming(remainingRows))}
               left={sumTiming(remainingRows)}
             />
             {/* A short session's way up to the whole day — there when the time
