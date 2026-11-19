@@ -55,6 +55,7 @@ export const UNDO_DAYS = 7
 
 const KEY = 'wt.lastAiChange'
 const CONSENT_KEY = 'wt.companionConsent'
+const DATA_CONSENT_KEY = 'wt.companionDataConsent'
 
 type KV = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
@@ -108,6 +109,27 @@ export function hasCompanionConsent(kv: KV | null = store()): boolean {
 export function giveCompanionConsent(now: Date = new Date(), kv: KV | null = store()): void {
   try {
     kv?.setItem(CONSENT_KEY, now.toISOString())
+  } catch {
+    // Asked again next time.
+  }
+}
+
+/**
+ * The same, for the whole history (lib/dataExport) rather than the plan and a
+ * month of lifts. Asked on its own: agreeing to the summary going out was not
+ * agreeing to every weigh-in and meal.
+ */
+export function hasDataConsent(kv: KV | null = store()): boolean {
+  try {
+    return kv?.getItem(DATA_CONSENT_KEY) != null
+  } catch {
+    return false
+  }
+}
+
+export function giveDataConsent(now: Date = new Date(), kv: KV | null = store()): void {
+  try {
+    kv?.setItem(DATA_CONSENT_KEY, now.toISOString())
   } catch {
     // Asked again next time.
   }

@@ -6,9 +6,11 @@ import { applyCompanionOps, type CompanionState } from '../../lib/companion/appl
 import type { CardioContext } from '../../lib/companion/cardio'
 import { companionStatus, parseCompanionReply } from '../../lib/companion/parse'
 import { BOOTSTRAP_LINE, buildCompanionPrompt, buildRepairPrompt } from '../../lib/companion/prompt'
-import { giveCompanionConsent, hasCompanionConsent } from '../../lib/companion/undo'
+import { giveCompanionConsent, giveDataConsent, hasCompanionConsent, hasDataConsent } from '../../lib/companion/undo'
 import { Press, ProposalCard } from '../../components/ProposalCard'
 import { useBackGuard } from '../../lib/useBackGuard'
+import { PressButton } from '../settings/PressButton'
+import { useDataExport } from '../settings/useDataExport'
 import { useCompanion } from './useCompanion'
 
 const BUTTON =
@@ -26,7 +28,11 @@ type Pending = { kind: 'copy' } | { kind: 'open'; url: string }
 const CONSENT = {
   lifts: 'your plan, recent lifts and body details go to the AI you paste into',
   cardio: 'your cardio log, cardio plan and body details go to the AI you paste into',
+  data: 'everything you have logged goes to the AI you paste into',
 } as const
+
+/** The whole history for an AI to read (see lib/dataExport), and the file of it. */
+export type CompanionAnalysis = { text: () => string; saveFile: () => void }
 
 /**
  * The copy-paste companion, start to finish: copy a prompt out to any chat AI,
@@ -43,6 +49,12 @@ const CONSENT = {
  * With `cardio` the reply may change the cardio plan too, and the prompt says
  * where the running stands; `focus` 'cardio' makes the prompt about the cardio
  * plan alone (lib/companion/prompt).
+ *
+ * With `analysis` the flow has a second errand, picked at the top: instead of
+ * a plan change, hand the AI everything logged and ask what it makes of it.
+ * The same copy and open buttons carry that text, the file of it is offered
+ * for an AI that takes attachments, and there is nothing to paste back — the
+ * answer is read where it was asked.
  */
 export function CompanionFlow({
   state,
@@ -52,6 +64,7 @@ export function CompanionFlow({
   workouts,
   cardio,
   focus = 'lifts',
+  analysis,
   onApply,
 }: {
   state: CompanionState
@@ -61,8 +74,11 @@ export function CompanionFlow({
   workouts: WorkoutRow[]
   cardio?: CardioContext
   focus?: 'lifts' | 'cardio'
+  analysis?: CompanionAnalysis
   onApply: (next: CompanionState, summary: string) => void
 }) {
+  const [errand, setErrand] = useState<'plan' | 'data'>('plan')
+  const onData = errand === 'data' && !!analysis
   const [consentAsk, setConsentAsk] = useState<Pending | null>(null)
   const [copied, setCopied] = useState<'prompt' | 'fix' | null>(null)
   const [reply, setReply] = useState('')
@@ -105,11 +121,11 @@ export function CompanionFlow({
 
   // The window opens inside the press, before any await, or it's a blocked popup.
   const go = (p: Pending) => {
-    void copyText(prompt).then((ok) => ok && setCopied('prompt'))
+    void copyText(onData ? analysis.text() : prompt).then((ok) => ok && setCopied('prompt'))
     if (p.kind === 'open') window.open(p.url + encodeURIComponent(BOOTSTRAP_LINE), '_blank', 'noopener')
   }
   const out = (p: Pending) => {
-    if (hasCompanionConsent()) go(p)
+    if (onData ? hasDataConsent() : hasCompanionConsent()) go(p)
     else setConsentAsk(p)
   }
 
@@ -134,13 +150,34 @@ export function CompanionFlow({
 
   return (
     <div className="flex flex-col gap-3">
+      {analysis && (
+        <div className="grid grid-cols-2 gap-2">
+          {(['plan', 'data'] as const).map((e) => (
+            <PressButton
+              key={e}
+              pressed={errand === e}
+              onPress={() => {
+                setErrand(e)
+                setConsentAsk(null)
+                setCopied(null)
+              }}
+              className={`min-h-[44px] rounded-xl px-2 text-sm font-medium active:opacity-80 ${
+                errand === e ? 'bg-accent text-on-accent' : 'bg-surface text-neutral-300'
+              }`}
+            >
+              {e === 'plan' ? 'change my plan' : 'analyse my data'}
+            </PressButton>
+          ))}
+        </div>
+      )}
       {consentAsk ? (
         <div role="alertdialog" aria-label="share with an AI" className="flex flex-col gap-2 rounded-xl bg-surface p-3">
-          <p className="text-sm text-neutral-100">{CONSENT[focus]}</p>
+          <p className="text-sm text-neutral-100">{CONSENT[onData ? 'data' : focus]}</p>
           <div className="flex gap-2">
             <Press
               onPress={() => {
-                giveCompanionConsent()
+                if (onData) giveDataConsent()
+                else giveCompanionConsent()
                 const p = consentAsk
                 setConsentAsk(null)
                 go(p)
@@ -160,7 +197,7 @@ export function CompanionFlow({
       ) : (
         <>
           <Press onPress={() => out({ kind: 'copy' })} className={BUTTON}>
-            {copied === 'prompt' ? 'copied' : 'copy prompt'}
+            {copied === 'prompt' ? 'copied' : onData ? 'copy my data & prompt' : 'copy prompt'}
           </Press>
           <div className="grid grid-cols-2 gap-2">
             {OPENERS.map((o) => (
@@ -172,6 +209,13 @@ export function CompanionFlow({
         </>
       )}
 
+      {onData && (
+        <Press onPress={analysis.saveFile} className={BUTTON}>
+          export as a file
+        </Press>
+      )}
+      {!onData && (
+        <>
       <Press
         onPress={() => void pasteIn()}
         className="min-h-[44px] w-full rounded-xl bg-accent px-3 text-sm font-semibold text-on-accent active:opacity-80"
@@ -253,6 +297,8 @@ export function CompanionFlow({
           />
         )
       )}
+        </>
+      )}
     </div>
   )
 }
@@ -306,6 +352,7 @@ export function LiveCompanion({
   onApplied?: (next: CompanionState) => void
 }) {
   const c = useCompanion({ cardio: focus === 'cardio' })
+  const data = useDataExport()
   const [today] = useState(() => new Date())
   const props = {
     state: c.state,
@@ -315,6 +362,8 @@ export function LiveCompanion({
     workouts: c.workouts,
     cardio: c.cardio,
     focus: c.cardio ? focus : 'lifts',
+    // A sheet opened on the cardio plan stays on that one errand.
+    ...(focus === 'cardio' ? {} : { analysis: { text: data.analysisText, saveFile: () => void data.saveFile() } }),
     onApply: (next: CompanionState, summary: string) => {
       c.commit(next, summary)
       onApplied?.(next)
