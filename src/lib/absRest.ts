@@ -2,19 +2,24 @@
  * Resting the abs on back-to-back days.
  *
  * Every lift day opens with the same two ab movements (see config/plan — the
- * cable crunch and the incline sit-up, four sets each). Trained on consecutive
- * days that's the one muscle in the plan with no day off between sessions, so a
- * session started the day after ab work — or later the same day as some — leaves
- * the ab block out, and spends the time it would have taken on the rest of the
- * day instead. The kebab brings the abs back if today is the day for them after
- * all (see {@link restoreAbs}).
+ * cable crunch and the incline sit-up, four sets each, three on full body).
+ * Trained on consecutive days that is the one muscle in the plan with no day off
+ * between sessions, so a session started the day after ab work — or later the
+ * same day as some — leaves the ab block out, and spends the time it would have
+ * taken on the rest of the day instead. The kebab brings the abs back if today
+ * is the day for them after all (see {@link restoreAbs}).
  *
  * The mechanism is lib/groupRest's, shared with the neck (lib/neckRest); this is
  * the abs' rule for it. What fills the time is pinned at {@link ABS_REST_FILL}:
  * `'borrow'`, the program's own extras — what the day would have had with more
  * time — and then a set or two more of the lifts in play (see groupRest.RestFill
- * for the alternatives). The block is eight sets, a quarter of an hour; a day
- * that just loses it is a noticeably shorter workout, not a rounding error.
+ * for the alternatives). The block is six or eight sets, a quarter of an hour
+ * and more at ninety seconds' rest; a day that just loses it is a noticeably
+ * shorter workout, not a rounding error.
+ *
+ * Whenever the abs are trained they lead the session: the block is the first
+ * thing every day lists, and bringing it back mid-session puts it back at the
+ * top (see {@link restoreAbs}).
  *
  * Pure module — no React/DOM.
  */

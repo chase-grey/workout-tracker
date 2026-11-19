@@ -24,9 +24,9 @@ describe('applyCompanionOps', () => {
   })
 
   it('adds a custom row and a known exercise with its settings', () => {
-    const r = run(['lift add day=pull name="prayer curl" sets=2 reps=10-12 rest=60', 'lift add day=pull name="hammer curl"'])
+    const r = run(['lift add day=pull name="zottman curl" sets=2 reps=10-12 rest=60', 'lift add day=pull name="hammer curl"'])
     const pull = r.next.plan.pull.exercises
-    expect(pull.find((e) => e.name === 'prayer curl')).toMatchObject({ key: 'prayer_curl', sets: 2, group: 'custom' })
+    expect(pull.find((e) => e.name === 'zottman curl')).toMatchObject({ key: 'zottman_curl', sets: 2, group: 'custom' })
     const hammer = pull.find((e) => e.key === 'hammer_curl')!
     expect(hammer.name).toBe('hammer curl')
     expect(hammer.group).not.toBe('custom')

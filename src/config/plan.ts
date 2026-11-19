@@ -344,7 +344,17 @@ export type Plan = Record<DayType, DayPlan>
 // of once — three sets on pull + legs and on full body, a plain movement now that
 // it has no partner to circuit with. The neck rests the day after neck work the
 // way the abs do (see lib/neckRest).
-export const PLAN_REVISION = 21
+// 22: full body is reordered and partly recast, and the abs rest longer. The day
+// runs abs, legs, push, pull, arms, neck: the leg press moves up to directly
+// after the ab block, the bench and the shoulder work follow it, then the
+// pull-ups, then the arm pair, then the neck. The ab block is three sets of each
+// movement on this day rather than four (see FULLBODY_AB_SETS). The dumbbell
+// overhead press is retired from its last day and the one-arm cable lateral raise
+// takes the shoulder slot (see DB_OVERHEAD_PRESS). The arm pair's curl is the
+// preacher curl machine rather than the hammer curl, which goes back to pull +
+// legs on the short day as well as the full one. And the ab block rests ninety
+// seconds between sets on every day, up from sixty (see AB_REST_SEC).
+export const PLAN_REVISION = 22
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -532,11 +542,27 @@ export const NECK_EXTENSION: PlannedExercise = {
 }
 
 /**
+ * The preacher curl machine's key (see the full body day for why it reads the way
+ * it does).
+ */
+export const PREACHER_CURL_KEY = 'prayer_curls'
+
+/**
  * The rest after a round of full body's arm pair — a curl and a tricep extension,
  * back to back on one screen. A minute, which is what each of them rested on its
  * own before they were paired.
  */
 export const FULLBODY_ARMS_ROUND_REST_SEC = 60
+
+/**
+ * Full body's lateral raise: one arm at a time off the cable, the two arms
+ * rotated as a pair the way the hip work on pull + legs is. Ten seconds to turn
+ * round and change hands — the resting delt recovers while the other works — and
+ * forty-five after both arms, which is an isolation movement's rest rather than
+ * a press's.
+ */
+export const FULLBODY_LATERAL_SWITCH_SEC = 10
+export const FULLBODY_LATERAL_ROUND_REST_SEC = 45
 
 /**
  * The load fields of every movement done on the cable pulldown machine — the
@@ -562,12 +588,62 @@ export const DUMBBELL_MAX_LBS = 50
  */
 export const DUMBBELL_PAIR = { increment: 10, dumbbellPair: true, weightCapLbs: DUMBBELL_MAX_LBS * 2 } as const
 
+/** The dumbbell overhead press's key — retired from every day since revision 22. */
+export const DB_OVERHEAD_PRESS_KEY = 'db_overhead_press'
+
+/**
+ * The dumbbell overhead press as it last shipped, on full body, until revision 22
+ * gave its slot to the cable lateral raise. Push + core had already handed its
+ * own to the machine press (revision 8), so this was the press's last day.
+ *
+ * Full body already presses — three sets of the bench — and a press is front
+ * delt work whichever way it points. The side delt is the part a pressing day
+ * leaves undertrained, and a raise trains it for a fraction of the fatigue, on a
+ * day that has an hour to fit three compounds into.
+ *
+ * Kept as an entry for the same reasons as {@link HANGING_RAISE}: its logged
+ * history keeps its name and its place on the shoulders' ladder, an imported log
+ * that says "overhead press" still lands on it, a goal cued on it still knows
+ * where the rack ends, and the add-an-exercise sheet can still offer it.
+ */
+export const DB_OVERHEAD_PRESS: PlannedExercise = {
+  key: DB_OVERHEAD_PRESS_KEY,
+  name: 'dumbbell overhead press',
+  sets: 3,
+  repMin: 8,
+  repMax: 12,
+  restSec: 120,
+  ...DUMBBELL_PAIR,
+  group: 'shoulders',
+}
+
+/**
+ * The rest between sets of the ab block. Ninety seconds, up from sixty since
+ * revision 22: a minute was not enough to hold the reps across four loaded sets,
+ * and the block is the first thing in the day, so what it gives up to a short
+ * rest it gives up fresh. Half a minute a set is about four minutes on a day that
+ * runs the whole block, which the short days had to spare.
+ */
+export const AB_REST_SEC = 90
+
+/**
+ * How many sets of each ab movement full body runs — three, where push + core
+ * and pull + legs run four. It is the day with three compounds to get through
+ * after the block, and the third exposure of the week for the abs.
+ */
+export const FULLBODY_AB_SETS = 3
+
 /**
  * The ab block every lift day opens with: the cable crunch, then the incline
- * sit-up, four sets each — the same on the short day as on the full one, since
- * the abs are what the days have in common rather than what a shorter day trims.
+ * sit-up — the same on the short day as on the full one, since the abs are what
+ * the days have in common rather than what a shorter day trims. Four sets each
+ * on push + core and pull + legs, three on full body (see FULLBODY_AB_BLOCK).
  * One list spread into each day so the three can't drift apart; a day's own
- * entries would otherwise each be a place for the count or the order to differ.
+ * entries would otherwise each be a place for the order or the rest to differ.
+ *
+ * Always first. Whenever a session trains the abs it opens with them: every day
+ * lists the block at the top, at either length, and a session that started with
+ * the abs resting gets them back at the top too (see lib/absRest.restoreAbs).
  *
  * Both loaded: the crunch off the numbered cable stack (see CABLE_STACK), the
  * sit-up with a plate at the chest, so each has somewhere to progress once the
@@ -575,9 +651,12 @@ export const DUMBBELL_PAIR = { increment: 10, dumbbellPair: true, weightCapLbs: 
  * lib/absRest leaves out of a session the day after ab work.
  */
 export const AB_BLOCK: readonly PlannedExercise[] = [
-  { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'abs' },
-  { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+  { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: AB_REST_SEC, ...CABLE_STACK, group: 'abs' },
+  { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: AB_REST_SEC, increment: 5, group: 'abs' },
 ]
+
+/** The ab block as full body runs it: the same two movements, {@link FULLBODY_AB_SETS} sets each. */
+export const FULLBODY_AB_BLOCK: readonly PlannedExercise[] = AB_BLOCK.map((e) => ({ ...e, sets: FULLBODY_AB_SETS }))
 
 export const DEFAULT_PLAN: Plan = {
   push: {
@@ -586,7 +665,7 @@ export const DEFAULT_PLAN: Plan = {
     required: true,
     exercises: [
       // The ab block: the same two movements, in the same order, at the top of
-      // every lift day, and four sets of each whichever length the day runs. The
+      // every lift day, and here four sets of each whichever length the day runs. The
       // crunch first, then the sit-up — one on the cable, one on the bench, both
       // loaded so the abs have somewhere to progress once the reps are there, which
       // a hanging raise capped at 20 doesn't. Opening every day with the same block
@@ -623,8 +702,8 @@ export const DEFAULT_PLAN: Plan = {
       // what limits the dumbbell version is getting them overhead and holding the
       // path, not the delts. A fixed path takes that out, and the stack steps in
       // 5s where a pair of dumbbells can only move 10 at a time — twice the
-      // resolution on the movement that needs it most. The dumbbell press keeps
-      // its place on full body, where it's pressed fresh.
+      // resolution on the movement that needs it most. The dumbbell press is
+      // retired everywhere now (see DB_OVERHEAD_PRESS).
       { key: 'machine_overhead_press', name: 'machine overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 5, group: 'shoulders' },
 
       // Circuit: pushdown → one arm's raise → overhead extension → the other arm's
@@ -741,15 +820,19 @@ export const DEFAULT_PLAN: Plan = {
       // Both are a dumbbell in each hand, so both step in 10s and top out at the
       // rack's heaviest pair (see DUMBBELL_PAIR).
       //
-      // The short day keeps all three sets of the incline curl and leaves the hammer
-      // curl to full body's arm pair, so each curl is trained once a week and neither
-      // is trained twice in one session. Three rather than two since revision 20:
-      // the incline curl is the week's only curl that loads the biceps long, and two
-      // sets of it plus two of hammers was four direct sets a week for the arm the
-      // programme most wants to grow. The short pull day was the shortest of the
-      // three, so the set costs it nothing it needed.
+      // Three curls in the week and each is trained once, none of them twice: the
+      // incline curl and the hammer curl here, the preacher curl machine in full
+      // body's arm pair. The hammer curl used to be full body's, and the short day
+      // here left it out for that reason; since revision 22 the machine has that
+      // slot, so this is the hammer curl's only day and the short form keeps two
+      // sets of it rather than none — otherwise a week of short days would never
+      // train it. Two sets at forty-five seconds is under three minutes, on what
+      // is still the shortest of the three short days.
+      //
+      // All three sets of the incline curl on the short day too (revision 20): it
+      // is the week's only curl that loads the biceps long.
       { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
-      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 0, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
 
       // The neck closes the day, as it closes full body (see NECK_FLEXION). All
       // three sets on the short day too: this is the shortest of the three short
@@ -764,41 +847,76 @@ export const DEFAULT_PLAN: Plan = {
     required: false,
     // The third session of the week: the three goal lifts a second time — four
     // sets of the leg press and the pull-ups, three of the bench — with a little
-    // shoulder, arm and core work around them. Built so
-    // every big muscle is trained twice a week across the three days — the leg
-    // press and the pull-ups here and on pull + legs, the bench here and on push +
-    // core — rather than once on a long day.
+    // shoulder, arm and neck work around them. Built so every big muscle is
+    // trained twice a week across the three days — the leg press and the pull-ups
+    // here and on pull + legs, the bench here and on push + core — rather than
+    // once on a long day.
     //
-    // The short form is twenty-five sets and the full one twenty-eight; the ab
+    // In the order abs, legs, push, pull, arms, neck (revision 22): the biggest
+    // lift goes while the most is left for it, the press and the pull each get
+    // the other's sets to recover across, and the small work closes the day.
+    //
+    // The short form is twenty-seven sets and the full one thirty-two; the ab
     // block and the compounds are the same in both, and what the full day adds is
-    // a third set of the dumbbell press and a third round of the arm pair.
+    // a third round of the lateral raise and of the arm pair, and a third set for
+    // the neck.
     exercises: [
-      // The ab block, as on every day (see AB_BLOCK). It replaced the hanging raise
-      // here, which was the last day to train it: the same two loaded movements on
-      // every day is one ab programme instead of three, and nothing hangs from the
-      // bar before the pull-ups need the grip.
-      ...AB_BLOCK,
+      // The ab block opens the day, as on every day (see AB_BLOCK) — three sets
+      // of each here rather than four (see FULLBODY_AB_SETS).
+      ...FULLBODY_AB_BLOCK,
 
+      // Legs: the leg press directly after the abs, ahead of the bench and the
+      // pull-ups it used to share the middle of the day with. Four sets, the
+      // count it's trained at everywhere, because it is one of the two lifts the
+      // goals are read from and a three-set day read short.
+      //
       // Two minutes between sets of the compounds rather than two and a half: this
       // is the week's second exposure to each lift, not its heaviest, and the
       // longer rests were a third of what made the old day run longer than a push
-      // day. The bench at three sets; the leg press and the pull-ups at four, the
-      // count they're trained at everywhere, because those are the two lifts the
-      // goals are read from and a three-set day read short on both.
+      // day.
       { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
+
+      // Push: the bench at three sets, then the shoulders.
       { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 120, ...DUMBBELL_PAIR, group: 'chest' },
+
+      // The cable lateral raise rather than a second press (see
+      // DB_OVERHEAD_PRESS): the bench above has already worked the front delt,
+      // and the side delt is what pressing leaves behind. The same one-arm raise
+      // push + core trains, under the same keys, so each arm's history and load
+      // carry across the two days.
+      //
+      // One arm at a time, the two rotated as a pair with a short change between
+      // them and the rest after both (see FULLBODY_LATERAL_ROUND_REST_SEC); one
+      // pin between the arms, hence the shared load. Two rounds on the short day.
+      { key: 'lateral_raise_l', name: 'lateral raise (left)', side: 'left', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: FULLBODY_LATERAL_ROUND_REST_SEC, ...CABLE_STACK, group: 'shoulders', circuit: 'lateral', circuitRestSec: FULLBODY_LATERAL_SWITCH_SEC, circuitRoundRestSec: FULLBODY_LATERAL_ROUND_REST_SEC, sharedLoad: 'lateral' },
+      { key: 'lateral_raise_r', name: 'lateral raise (right)', side: 'right', sets: 3, shortSets: 2, repMin: 12, repMax: 20, restSec: FULLBODY_LATERAL_ROUND_REST_SEC, ...CABLE_STACK, group: 'shoulders', circuit: 'lateral', circuitRestSec: FULLBODY_LATERAL_SWITCH_SEC, circuitRoundRestSec: FULLBODY_LATERAL_ROUND_REST_SEC, sharedLoad: 'lateral' },
+
+      // Pull: four sets, for the same reason the leg press runs four — the
+      // pull-up ladder is read from them.
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
-      // The dumbbell press keeps its place here, pressed fresh — push + core has
-      // the machine. Two sets on the short day.
-      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, shortSets: 2, repMin: 8, repMax: 12, restSec: 120, ...DUMBBELL_PAIR, group: 'shoulders' },
-
-      // A curl and a tricep extension, a round at a time on one screen with a
-      // minute after each round (see FULLBODY_ARMS_ROUND_REST_SEC) — antagonists,
-      // so neither is pre-fatigued by the other and the walk between the dumbbell
-      // and the cable is the only break they need. The hammer curl's only slot in
-      // the week; the extension's second. Two rounds on the short day.
-      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...DUMBBELL_PAIR, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
+      // Arms: a curl and a tricep extension, a round at a time on one screen with
+      // a minute after each round (see FULLBODY_ARMS_ROUND_REST_SEC) — antagonists,
+      // so neither is pre-fatigued by the other and the walk between the machine
+      // and the cable is the only break they need. Kept together as a pair rather
+      // than the extension going up with the push work and the curl staying with
+      // the pull: pairing them is what fits both inside the hour, and by the time
+      // the pull-ups are done the triceps have had the whole of them to recover
+      // from the bench.
+      //
+      // The curl is the preacher curl machine — the arm curl machine, elbows on
+      // the pad — and this is its only slot in the week; the hammer curl it
+      // replaced here is trained on pull + legs. A machine, so it steps in 5s and
+      // has no rack to run out of. The extension's second day. Two rounds on the
+      // short day.
+      //
+      // Keyed `prayer_curls` because that is the key the movement already has
+      // history under: it came in with the imported log as "prayer curls", a name
+      // no plan entry claimed, and has been charted from the log alone since.
+      // Shipping it under that key puts the sets already logged on its ladder and
+      // prefills the first session from them, rather than starting a second
+      // history beside the first.
+      { key: PREACHER_CURL_KEY, name: 'preacher curl machine', sets: 3, shortSets: 2, repMin: 8, repMax: 12, restSec: 60, increment: 5, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
 
       // The neck's second day of the week (see NECK_FLEXION). Here and on pull +
@@ -923,9 +1041,10 @@ export function withCircuitRoundRest(
  * fallback. Keys repeat across days (leg press and bench appear on Full Body too),
  * so the first occurrence of each key wins.
  *
- * The retired hanging raise and neck extension and the Stretch + Core session's
- * mat sit-up are appended last: none is a movement a training day prescribes (see
- * HANGING_RAISE, NECK_EXTENSION, STRETCH_CORE), so nothing else would give them a name to chart
+ * The retired hanging raise, neck extension and dumbbell overhead press and the
+ * Stretch + Core session's mat sit-up are appended last: none is a movement a
+ * training day prescribes (see HANGING_RAISE, NECK_EXTENSION, DB_OVERHEAD_PRESS,
+ * STRETCH_CORE), so nothing else would give them a name to chart
  * under — and the sit-up coming last is what makes an old log that just says
  * "weighted sit-ups" resolve to the incline one the training days train, which is
  * what such a log meant.
@@ -939,6 +1058,7 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     ...DEFAULT_PLAN.fullbody.exercises,
     HANGING_RAISE,
     NECK_EXTENSION,
+    DB_OVERHEAD_PRESS,
     STRETCH_CORE,
   ]) {
     if (seen.has(e.key)) continue
@@ -1027,9 +1147,9 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
   // Superseded by the regular pull + legs day, which trains back properly; and
   // the both-arms lateral raise, now split into a left and a right station.
   //
-  // The last two are retired from THIS day only — both are still shipped
-  // elsewhere (the raise on full body, the dumbbell press on full body), which is
-  // fine: retirement is per day, and their logged history is untouched either way.
+  // Retirement is per day: the hanging raise and the dumbbell press each went
+  // from this day first and from full body later (see below), and their logged
+  // history is untouched either way.
   push: [
     'pullups_or_pulldown',
     'lateral_raise',
@@ -1092,6 +1212,13 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     // The hanging raise's last day. The ab block that opens every day replaced it
     // (see AB_BLOCK); its logged history stays, and still reads for graduation.
     HANGING_RAISE_KEY,
+    // The dumbbell overhead press's last day: the cable lateral raise has the
+    // shoulder slot (see DB_OVERHEAD_PRESS). Listed so a stored plan doesn't keep
+    // it on as though it were a movement added by hand.
+    DB_OVERHEAD_PRESS_KEY,
+    // The hammer curl, replaced in the arm pair by the preacher curl machine. It
+    // is still trained on pull + legs.
+    'hammer_curl',
   ],
 }
 
@@ -1310,6 +1437,8 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
   cable_pulldown: ['cable pulldown', 'lat pulldown', 'lat pull down'],
   [MAT_SITUP_KEY]: ['mat situp', 'mat weighted situp', 'floor situp', 'yoga mat situp'],
   machine_overhead_press: ['machine shoulder press'],
+  // What the machine is called on its own placard, and what it gets called.
+  [PREACHER_CURL_KEY]: ['preacher curl', 'prayer curl', 'arm curl', 'arm curl machine'],
 }
 
 /**

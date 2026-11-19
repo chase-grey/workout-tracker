@@ -33,9 +33,19 @@ describe('sideOrderedExercises', () => {
     expect(sideOrderedExercises(list, undefined)).toBe(list)
   })
 
-  it('leaves a day with no sided exercises alone', () => {
-    const keys = sideOrderedExercises(DEFAULT_PLAN.fullbody.exercises, 'right').map((e) => e.key)
-    expect(keys).toEqual(DEFAULT_PLAN.fullbody.exercises.map((e) => e.key))
+  it('leaves a list with no sided exercises alone', () => {
+    const unsided = DEFAULT_PLAN.fullbody.exercises.filter((e) => !e.side)
+    const keys = sideOrderedExercises(unsided, 'right').map((e) => e.key)
+    expect(keys).toEqual(unsided.map((e) => e.key))
+  })
+
+  it("leads full body's raise with the session's side, and moves nothing else", () => {
+    const shipped = DEFAULT_PLAN.fullbody.exercises.map((e) => e.key)
+    expect(sideOrderedExercises(DEFAULT_PLAN.fullbody.exercises, 'left').map((e) => e.key)).toEqual(shipped)
+    const right = sideOrderedExercises(DEFAULT_PLAN.fullbody.exercises, 'right').map((e) => e.key)
+    expect(right.indexOf('lateral_raise_r')).toBe(shipped.indexOf('lateral_raise_l'))
+    expect(right.indexOf('lateral_raise_l')).toBe(shipped.indexOf('lateral_raise_r'))
+    expect(right.filter((k) => !k.startsWith('lateral_raise'))).toEqual(shipped.filter((k) => !k.startsWith('lateral_raise')))
   })
 
   it('leads with the left raise on a left session', () => {

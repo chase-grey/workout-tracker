@@ -126,7 +126,16 @@ describe('matchExercise', () => {
     expect(matchExercise('machine shoulder press').key).toBe('machine_overhead_press')
   })
   it('marks unknowns as new', () => {
-    expect(matchExercise('prayer curls').isNew).toBe(true)
+    expect(matchExercise('zottman curls').isNew).toBe(true)
+  })
+  it('lands the preacher curl machine on the key its imported history is under, by any of its names', () => {
+    for (const name of ['prayer curls', 'preacher curl', 'arm curl machine', 'preacher curl machine']) {
+      expect(matchExercise(name), name).toMatchObject({ key: 'prayer_curls', name: 'preacher curl machine', isNew: false })
+    }
+    // The other curls keep their own names.
+    expect(matchExercise('hammer curls').key).toBe('hammer_curl')
+    expect(matchExercise('incline dumbbell curl').key).toBe('incline_db_curl')
+    expect(matchExercise('hamstring curl').key).toBe('hamstring_curl')
   })
 })
 

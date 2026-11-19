@@ -349,8 +349,8 @@ describe('availableExercises', () => {
     const w: WorkoutRow[] = [
       { ...r('s1', '2026-01-01', 100, 5), exercise: planKey },
       { ...r('s2', '2026-02-01', 90, 8), exercise: planKey },
-      { ...r('s3', '2026-03-01', 40, 12), exercise: 'prayer_curls' },
-      { ...r('s4', '2026-03-02', 40, 12), exercise: 'prayer_curls' }, // duplicate key
+      { ...r('s3', '2026-03-01', 40, 12), exercise: 'farmer_carry' },
+      { ...r('s4', '2026-03-02', 40, 12), exercise: 'farmer_carry' }, // duplicate key
     ]
     const list = availableExercises(w)
 
@@ -360,15 +360,15 @@ describe('availableExercises', () => {
     }
 
     // the unplanned imported key is present, prettified
-    expect(list).toContainEqual({ key: 'prayer_curls', name: 'Prayer Curls' })
+    expect(list).toContainEqual({ key: 'farmer_carry', name: 'Farmer Carry' })
 
     // no duplicate entries for the imported key
-    expect(list.filter((x) => x.key === 'prayer_curls')).toHaveLength(1)
+    expect(list.filter((x) => x.key === 'farmer_carry')).toHaveLength(1)
 
     // plan exercises come before imported extras
     const planCount = ALL_EXERCISES.length
     expect(list.slice(0, planCount).map((x) => x.key)).toEqual(ALL_EXERCISES.map((e) => e.key))
-    expect(list[planCount]).toEqual({ key: 'prayer_curls', name: 'Prayer Curls' })
+    expect(list[planCount]).toEqual({ key: 'farmer_carry', name: 'Farmer Carry' })
   })
 })
 
@@ -384,7 +384,7 @@ describe('exercisesByFrequency', () => {
     { ...r('s4', '2026-01-04', 40, 12), exercise: third.key },
     { ...r('s5', '2026-01-05', 40, 12), exercise: third.key },
     { ...r('s6', '2026-01-06', 40, 12), exercise: third.key },
-    { ...r('s7', '2026-01-07', 40, 12), exercise: 'prayer_curls' },
+    { ...r('s7', '2026-01-07', 40, 12), exercise: 'farmer_carry' },
   ]
 
   it('orders by session count, counting each session once', () => {
@@ -411,7 +411,7 @@ describe('exercisesByFrequency', () => {
 
   it('ranks an imported one-off by its own frequency, not below the plan', () => {
     const list = exercisesByFrequency(w)
-    const curls = list.findIndex((e) => e.key === 'prayer_curls')
+    const curls = list.findIndex((e) => e.key === 'farmer_carry')
     expect(list[curls].sessions).toBe(1)
     // ahead of every plan exercise that was never trained
     expect(list.slice(curls + 1).every((e) => e.sessions === 0)).toBe(true)

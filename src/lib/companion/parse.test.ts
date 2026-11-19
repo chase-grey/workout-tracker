@@ -173,8 +173,8 @@ describe('names and days', () => {
   })
 
   it('makes an unknown add a custom row', () => {
-    const p = parseCompanionReply(block('summary: x', 'lift add day=pull name="Prayer Curl" group=Biceps'), ctx)
-    expect(changeOps(p)).toEqual([{ op: 'lift.add', day: 'pull', name: 'prayer curl', group: 'biceps' }])
+    const p = parseCompanionReply(block('summary: x', 'lift add day=pull name="Zottman Curl" group=Biceps'), ctx)
+    expect(changeOps(p)).toEqual([{ op: 'lift.add', day: 'pull', name: 'zottman curl', group: 'biceps' }])
   })
 
   it('reads a move by anchor or by 1-based position', () => {

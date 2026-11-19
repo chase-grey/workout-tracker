@@ -199,21 +199,57 @@ describe('withPlanDefaults', () => {
   })
 
   it('retires a movement from one day without touching the days that keep it', () => {
-    // The dumbbell press left push + core and still ships on full body — a
+    // The hammer curl left full body and still ships on pull + legs — a
     // retirement is per day, so a stored plan keeps it there. The hanging raise
-    // has now left every day, and a stored full body that still has it lets it go.
+    // and the dumbbell press have now left every day, and a stored full body
+    // that still has them lets them go.
     const storedFull = {
       ...DEFAULT_PLAN.fullbody,
       exercises: [
         { key: 'hanging_leg_raise', name: 'hanging knee raise', sets: 3, repMin: 10, repMax: 20, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
         ...DEFAULT_PLAN.fullbody.exercises,
+        { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, group: 'shoulders' },
+        { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 10, group: 'arms circuit' },
       ],
     }
     const merged = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: storedFull }, PLAN_REVISION)
     expect(merged.push.exercises.map((e) => e.key)).not.toContain('hanging_leg_raise')
     expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('hanging_leg_raise')
     expect(merged.push.exercises.map((e) => e.key)).not.toContain('db_overhead_press')
-    expect(merged.fullbody.exercises.map((e) => e.key)).toContain('db_overhead_press')
+    expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('db_overhead_press')
+    expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('hammer_curl')
+    expect(merged.pull.exercises.map((e) => e.key)).toContain('hammer_curl')
+  })
+
+  it('hands a full body saved at revision 21 the new day whole, keeping only what was added by hand', () => {
+    // The day as revision 21 shipped it, in its old order, plus a movement of the
+    // user's own.
+    const old = [
+      { key: 'cable_crunch', name: 'cable crunch', sets: 4, repMin: 12, repMax: 15, restSec: 60, increment: 1, group: 'abs' },
+      { key: 'weighted_situp', name: 'incline weighted sit-up', sets: 4, repMin: 10, repMax: 15, restSec: 60, increment: 5, group: 'abs' },
+      { key: 'leg_press', name: 'leg press', sets: 4, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'legs' },
+      { key: 'flat_bench', name: 'flat bench press', sets: 3, repMin: 6, repMax: 10, restSec: 120, increment: 10, group: 'chest' },
+      { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
+      { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, group: 'shoulders' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 10, group: 'arms circuit' },
+      { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 1, group: 'arms circuit' },
+      { key: 'neck_flexion', name: 'neck flexion', sets: 3, repMin: 12, repMax: 20, restSec: 45, increment: 2.5, group: 'neck' },
+      { key: 'farmer_carry', name: 'farmer carry', sets: 2, repMin: 1, repMax: 1, restSec: 60, group: 'grip' },
+    ]
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: { ...DEFAULT_PLAN.fullbody, exercises: old } }, 21)
+    expect(merged.fullbody.exercises.map((e) => e.key)).toEqual([
+      ...DEFAULT_PLAN.fullbody.exercises.map((e) => e.key),
+      'farmer_carry',
+    ])
+    expect(merged.fullbody.exercises.slice(0, 2).map((e) => [e.sets, e.restSec])).toEqual([[3, 90], [3, 90]])
+    // And the same plan at the current revision is left as it was stored, bar the
+    // two movements the day retired.
+    const kept = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: { ...DEFAULT_PLAN.fullbody, exercises: old } }, PLAN_REVISION)
+    const oldKeys = old.map((e) => e.key)
+    expect(kept.fullbody.exercises.map((e) => e.key).filter((k) => oldKeys.includes(k))).toEqual(
+      oldKeys.filter((k) => k !== 'db_overhead_press' && k !== 'hammer_curl'),
+    )
+    expect(kept.fullbody.exercises.find((e) => e.key === 'cable_crunch')?.restSec).toBe(60)
   })
 
   it('adopts structural fields (circuit, variants) the plan editor cannot set', () => {
@@ -741,10 +777,16 @@ describe('the two-dumbbell movements as they ship', () => {
     }
   })
 
-  it('covers the curls, the overhead press and both bench presses', () => {
+  it('covers the dumbbell curls and both bench presses', () => {
     expect(new Set(paired.map((p) => p.ex.key))).toEqual(
-      new Set(['hammer_curl', 'incline_db_curl', 'db_overhead_press', 'flat_bench', 'incline_bench']),
+      new Set(['hammer_curl', 'incline_db_curl', 'flat_bench', 'incline_bench']),
     )
+  })
+
+  it('keeps the retired overhead press a pair that ends where the rack does', () => {
+    expect(DEFAULT_PLAN.fullbody.exercises.map((e) => e.key)).not.toContain('db_overhead_press')
+    const press = ALL_EXERCISES.find((e) => e.key === 'db_overhead_press')
+    expect(press).toMatchObject({ name: 'dumbbell overhead press', dumbbellPair: true, increment: 10, weightCapLbs: DUMBBELL_MAX_LBS * 2 })
   })
 
   it('tops every one of them out at a pair of the heaviest dumbbell', () => {

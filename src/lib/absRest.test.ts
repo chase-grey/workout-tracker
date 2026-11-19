@@ -99,13 +99,14 @@ describe('withoutAbs', () => {
   })
 
   it('on a short push day, borrows the full day back and then a set of each bench', () => {
-    // 800 s: the second press's third set (160) and the third arm round (280) come
-    // back, then a set of each bench (160 each) spends what's left.
+    // 1040 s, eight sets at ninety seconds' rest: the second press's third set
+    // (160) and the third arm round (280) come back, then a set of each press
+    // (190, 160, 160) and a second of the flat bench spend what's left.
     const { full, sized } = shortOf('push', 'A')
     expect(counts(withoutAbs(sized, full))).toEqual([
       ['incline_bench', 5],
-      ['flat_bench', 4],
-      ['machine_overhead_press', 3],
+      ['flat_bench', 5],
+      ['machine_overhead_press', 4],
       ['tricep_pushdown', 3],
       ['lateral_raise_l', 3],
       ['overhead_tricep_ext', 3],
@@ -185,6 +186,26 @@ describe('restoreAbs', () => {
     const session = started(performedExercises(day, resting), { dayType: 'pull' })
     const out = restoreAbs(session, withAbs, new Map())
     expect(out.exercises.map((l) => [l.exercise, l.sets.length])).toEqual(withAbs.map((e) => [e.key, e.sets]))
+  })
+
+  it('puts the abs back at the top of the session, on every day and at either length', () => {
+    for (const dayType of ['push', 'pull', 'fullbody'] as const) {
+      for (const length of ['short', 'full'] as const) {
+        const day = DEFAULT_PLAN[dayType]
+        const resting = { variant: dayType === 'push' ? ('A' as const) : undefined, length, startSide: 'left' as const, restAbs: true }
+        const withAbs = performedExercises(day, { ...resting, restAbs: false })
+        // A set of the day's first lift already logged, as it would be by the
+        // time anyone asks for the abs back.
+        const session = started(performedExercises(day, resting), { dayType, length })
+        session.exercises[0].sets[0].done = true
+        const out = restoreAbs(session, withAbs, new Map())
+        const sets = dayType === 'fullbody' ? 3 : 4
+        expect(out.exercises.slice(0, 2).map((l) => [l.exercise, l.sets.length]), `${dayType} ${length}`).toEqual([
+          ['cable_crunch', sets],
+          ['weighted_situp', sets],
+        ])
+      }
+    }
   })
 })
 
