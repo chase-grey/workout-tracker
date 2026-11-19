@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { adHocAdditions, adHocExercise, exerciseOptions, isAdHocKey, LOGGED_GROUP, matchTypedName } from './adHocExercise'
-import { ALL_EXERCISES, DEFAULT_PLAN, QUICK_LOG_KEY, type PlannedExercise } from '../config/plan'
+import { ALL_EXERCISES, DAY_TYPES, DEFAULT_PLAN, QUICK_LOG_KEY, withPlanDefaults, type PlannedExercise, type SessionLength, type VariantKey } from '../config/plan'
+import { performedExercises } from './performed'
 import type { WorkoutRow } from '../types'
 
 const row = (exercise: string): WorkoutRow => ({
@@ -52,6 +53,70 @@ describe('exerciseOptions', () => {
     const opts = exerciseOptions(DEFAULT_PLAN, [row(key)], [])
     expect(opts.filter((o) => o.key === key)).toHaveLength(1)
     expect(opts.find((o) => o.key === key)?.base).toBeDefined()
+  })
+})
+
+/**
+ * The whole point of the list: nothing you could want to add is ever missing
+ * from it. Checked against every shape a session can take, since what a session
+ * "already holds" is the one thing that takes a movement off the list.
+ */
+describe('exerciseOptions leaves nothing out', () => {
+  // Movements the plan has retired but the log still holds, a name typed in once,
+  // and a plan movement logged the ordinary way.
+  const history = [
+    row('iso_chest'), row('barbell_squat'), row('cable_row'), row('pullups_or_pulldown'),
+    row('farmer carry'), row('overhead_tricep_ext'), row('hammer_curl'),
+  ]
+  const lengths: SessionLength[] = ['short', 'full']
+  const variants: (VariantKey | undefined)[] = [undefined, 'A', 'B']
+  // The plan as shipped, and as a phone that saved an older one holds it — with a
+  // movement deleted from one day and one of the user's own added to another.
+  const stored = withPlanDefaults({
+    ...DEFAULT_PLAN,
+    push: {
+      ...DEFAULT_PLAN.push,
+      exercises: DEFAULT_PLAN.push.exercises.filter((e) => e.key !== 'overhead_tricep_ext'),
+      removed: ['overhead_tricep_ext'],
+    },
+    pull: { ...DEFAULT_PLAN.pull, exercises: [...DEFAULT_PLAN.pull.exercises, ex('sled_push', { name: 'sled push' })] },
+  })
+  const plans = [DEFAULT_PLAN, stored]
+
+  const everything = (plan: typeof DEFAULT_PLAN) =>
+    new Set([
+      ...DAY_TYPES.flatMap((d) => plan[d].exercises.map((e) => e.key)),
+      ...ALL_EXERCISES.map((e) => e.key),
+      ...history.map((r) => r.exercise),
+    ])
+
+  for (const [p, plan] of plans.entries()) {
+    for (const day of DAY_TYPES) {
+      for (const length of lengths) {
+        for (const variant of variants) {
+          for (const resting of [{}, { restAbs: true }, { restNeck: true }, { restAbs: true, restNeck: true }]) {
+            it(`offers all of it on a ${length} ${day} day (plan ${p}, variant ${variant ?? '-'}, ${JSON.stringify(resting)})`, () => {
+              const inSession = performedExercises(plan[day], { variant, length, startSide: 'left', ...resting })
+              const held = new Set(inSession.map((e) => e.key))
+              const offered = exerciseOptions(plan, history, inSession).map((o) => o.key)
+              expect(new Set(offered).size).toBe(offered.length)
+              const want = [...everything(plan)].filter((k) => !held.has(k)).sort()
+              expect([...offered].sort()).toEqual(want)
+            })
+          }
+        }
+      }
+    }
+  }
+
+  it('offers the overhead tricep extension on every day that does not already run it', () => {
+    for (const day of DAY_TYPES) {
+      for (const length of lengths) {
+        const inSession = performedExercises(DEFAULT_PLAN[day], { length, startSide: 'left' })
+        const offered = exerciseOptions(DEFAULT_PLAN, history, inSession).some((o) => o.key === 'overhead_tricep_ext')
+        expect(offered).toBe(!inSession.some((e) => e.key === 'overhead_tricep_ext'))
+      }
+    }
   })
 })
 
