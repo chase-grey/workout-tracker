@@ -13,6 +13,11 @@ const TABS: { id: Tab; Icon: IconType; label: string }[] = [
   { id: 'settings', Icon: MdSettings, label: 'settings' },
 ]
 
+/** The bar's tabs, left to right, as it is drawn with the coach on or off. */
+export function tabsShown(showChat: boolean): Tab[] {
+  return TABS.filter((t) => t.id !== 'coach' || showChat).map((t) => t.id)
+}
+
 export function BottomNav({
   active,
   onChange,
@@ -26,6 +31,7 @@ export function BottomNav({
   alerts?: Tab[]
 }) {
   const tabs = TABS.filter((t) => t.id !== 'coach' || showChat)
+  const at = tabs.findIndex((t) => t.id === active)
   // Dark, the bar wears the ground rather than a surface: an installed app on
   // Android doesn't draw under the system navigation bar yet, and Chrome paints
   // that bar the manifest's theme_color — the dark ground. On the ground, the
@@ -41,6 +47,18 @@ export function BottomNav({
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
+      {/* A soft pill of the accent under the tab you're on, which slides to the
+          next one rather than blinking out and in. A cell wide, so moving it a
+          whole tab is its own width; under the buttons, and never in a tap's way. */}
+      {at >= 0 && (
+        <span
+          aria-hidden
+          className="nav-pill pointer-events-none absolute left-0 top-0 -z-10 flex h-[44px] items-center justify-center"
+          style={{ width: `${100 / tabs.length}%`, transform: `translateX(${at * 100}%)` }}
+        >
+          <span className="h-8 w-14 rounded-full bg-accent/15" />
+        </span>
+      )}
       {tabs.map((t) => (
         <button
           key={t.id}

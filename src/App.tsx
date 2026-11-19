@@ -6,7 +6,7 @@ import {
   type WorkoutFinishSummary,
 } from './store/DataContext'
 import { CelebrationProvider, useCelebrate } from './store/CelebrationContext'
-import { BottomNav, type Tab } from './components/BottomNav'
+import { BottomNav, tabsShown, type Tab } from './components/BottomNav'
 import { InstallBanner } from './components/InstallBanner'
 import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
@@ -29,6 +29,7 @@ import { useBackGuard } from './lib/useBackGuard'
 import { noteScreen } from './services/screenWatch'
 import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
+import { useScreenMove } from './lib/useScreenMove'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
 import { MdFitnessCenter } from 'react-icons/md'
 import { nextStretchSide } from './lib/stretchSide'
@@ -229,6 +230,9 @@ function AppShell() {
   // unless they've been set aside.
   const immersive =
     (sessionActive && !minimized) || finishSummary != null || stretchSummary != null
+
+  // The screen arrives from the side of the bar its tab sits on (see lib/motion).
+  useScreenMove(mainRef, { tab, immersive: false, session: false }, tabsShown(showChat))
 
   // What this shell believes it is showing, for the report a blank screen sends
   // (see services/screenWatch): the phone can't be asked, and the DOM alone

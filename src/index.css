@@ -1194,3 +1194,19 @@ input[type='number'] {
     animation: none;
   }
 }
+
+/* ---- Moving around the app ----
+   Short, quiet, and never in the way: every one of these is an arrival, played
+   on something that is already there and already takes taps. Transform and
+   opacity only. The screen under the tab bar is moved from JS (lib/motion,
+   lib/useScreenMove), since it must not be remounted to be replayed. */
+
+/* The tab bar's pill slides to the tab you picked, a touch past it and back. */
+.nav-pill {
+  transition: transform 240ms cubic-bezier(0.3, 1.35, 0.5, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-pill {
+    transition: none;
+  }
+}
