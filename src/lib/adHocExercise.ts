@@ -23,8 +23,8 @@ export const LOGGED_GROUP = 'from your log'
  * A movement the add-exercise sheet can offer instead of a blank name field.
  *
  * `base` is set for a plan movement, carried whole so adding it keeps everything
- * the plan knows — its key, rest, increment, hold-or-reps — and only the set and
- * rep counts come from the form. A movement known only from the log has no base:
+ * the plan knows — its key, rest, increment, rep range, hold-or-reps — and only
+ * the set count comes from the form. A movement known only from the log has no base:
  * the key is whatever the sheet stored it under (a typed name, or a key the
  * defaults have since retired), so adding it again logs onto the same history.
  */
@@ -78,11 +78,29 @@ export function matchTypedName(name: string, options: ExerciseOption[]): Exercis
   return options.find((o) => o.name.trim().toLowerCase() === wanted) ?? null
 }
 
+/** How many sets the sheet opens on for a movement the plan has no count for. */
+export const AD_HOC_SETS = 3
+
+/** The reps a movement with no plan entry and no history is prescribed. */
+export const AD_HOC_REPS = 10
+
+/**
+ * The set count the sheet opens on for a pick: the plan's own for a movement it
+ * defines, else {@link AD_HOC_SETS}.
+ */
+export function defaultSets(option: ExerciseOption | null | undefined): number {
+  return option?.base?.sets ?? AD_HOC_SETS
+}
+
 export type AdHocInput = {
   /** Read only when there is no option: the movement is being typed in. */
   name: string
   sets: number
-  reps: number
+  /**
+   * What a movement with no plan entry was last done for, when the log knows —
+   * read only for those, since a plan movement brings its own rep range.
+   */
+  reps?: number
 }
 
 /**
@@ -90,14 +108,17 @@ export type AdHocInput = {
  * belongs to the movement itself — key, name, rest, increment, how it's loaded or
  * held — and sheds what belonged to its place in the day: a circuit of one is no
  * circuit, a shared load has nothing to share with, and a side was the day's call.
- * The set and rep counts are the form's, so the prescription is what you asked
- * for rather than what the day would have asked. A movement with no plan entry
- * gets a minute's rest and the group the list filed it under; a typed name gets
- * a fresh key of its own.
+ * The set count is the form's and nothing else is: the sheet asks how many sets
+ * and leaves the weight and the reps to the set card, where they're entered once
+ * the set has been done, so a plan movement keeps the rep range the plan gives it
+ * and prefills the way it would on its own day. A movement with no plan entry
+ * gets a minute's rest, the group the list filed it under, and the reps it was
+ * last done for (ten when the log has none); a typed name gets a fresh key of
+ * its own.
  */
 export function adHocExercise(input: AdHocInput, option: ExerciseOption | null): PlannedExercise {
   const sets = clamp(input.sets, 1, 20)
-  const reps = clamp(input.reps, 1, 999)
+  const reps = clamp(input.reps ?? AD_HOC_REPS, 1, 999)
   const base = option?.base
   if (base) {
     const {
@@ -112,7 +133,7 @@ export function adHocExercise(input: AdHocInput, option: ExerciseOption | null):
       optional: _optional,
       ...own
     } = base
-    return { ...own, sets, repMin: reps, repMax: reps }
+    return { ...own, sets }
   }
   return {
     key: option?.key ?? `${AD_HOC_PREFIX}${uuid()}`,
@@ -128,7 +149,7 @@ export function adHocExercise(input: AdHocInput, option: ExerciseOption | null):
 /**
  * Everything an addition puts into the workout: the movement asked for and, when
  * it's one side of a one-limb-at-a-time pair, the other side too (see
- * lib/pairedSides), left first, with the same sets and reps. The partner comes
+ * lib/pairedSides), left first, with the same set count. The partner comes
  * from `options` — the sheet's own list — so a side the workout already holds
  * isn't added twice, and adding the missing half of a lone side completes it.
  */

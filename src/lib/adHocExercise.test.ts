@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { adHocAdditions, adHocExercise, exerciseOptions, isAdHocKey, LOGGED_GROUP, matchTypedName } from './adHocExercise'
+import { adHocAdditions, adHocExercise, defaultSets, exerciseOptions, isAdHocKey, LOGGED_GROUP, matchTypedName } from './adHocExercise'
 import { ALL_EXERCISES, DAY_TYPES, DEFAULT_PLAN, QUICK_LOG_KEY, withPlanDefaults, type PlannedExercise, type SessionLength, type VariantKey } from '../config/plan'
 import { performedExercises } from './performed'
 import type { WorkoutRow } from '../types'
@@ -149,7 +149,7 @@ describe('adHocExercise', () => {
     })
     const e = adHocExercise({ name: 'ignored', sets: 2, reps: 45 }, { key: base.key, name: base.name, group: base.group, base })
     expect(e).toEqual({
-      key: 'plank', name: 'plank', sets: 2, repMin: 45, repMax: 45, restSec: 90,
+      key: 'plank', name: 'plank', sets: 2, repMin: 8, repMax: 12, restSec: 90,
       timed: true, repsOnly: true, increment: 5, weightCapLbs: 50, group: 'core',
     })
   })
@@ -157,6 +157,20 @@ describe('adHocExercise', () => {
   it('logs a movement known only from the log onto its stored key', () => {
     const e = adHocExercise({ name: 'typed', sets: 4, reps: 8 }, { key: 'farmer carry', name: 'farmer carry', group: LOGGED_GROUP })
     expect(e).toMatchObject({ key: 'farmer carry', name: 'farmer carry', sets: 4, repMin: 8, restSec: 60, group: LOGGED_GROUP })
+  })
+
+  it('asks only for the set count: a movement with no plan entry takes its last reps, or ten', () => {
+    expect(adHocExercise({ name: 'farmer carry', sets: 3 }, null)).toMatchObject({ sets: 3, repMin: 10, repMax: 10 })
+    const logged = { key: 'farmer carry', name: 'farmer carry', group: LOGGED_GROUP }
+    expect(adHocExercise({ name: '', sets: 2, reps: 14 }, logged)).toMatchObject({ sets: 2, repMin: 14, repMax: 14 })
+  })
+
+  it("opens the set count on the plan's own, or three", () => {
+    const opts = exerciseOptions(DEFAULT_PLAN, [row('farmer carry')], [])
+    const planned = DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'leg_press')!
+    expect(defaultSets(opts.find((o) => o.key === 'leg_press'))).toBe(planned.sets)
+    expect(defaultSets(opts.find((o) => o.key === 'farmer carry'))).toBe(3)
+    expect(defaultSets(null)).toBe(3)
   })
 
   it('clamps the counts into range and rounds them', () => {
@@ -167,14 +181,14 @@ describe('adHocExercise', () => {
 })
 
 describe('adHocAdditions', () => {
-  const input = { name: '', sets: 2, reps: 30 }
+  const input = { name: '', sets: 2 }
 
   it('adds both sides of a sided movement, left first, with the same prescription', () => {
     const opts = exerciseOptions(DEFAULT_PLAN, [], [])
     const right = opts.find((o) => o.key === 'copenhagen_plank_r')!
     const added = adHocAdditions(input, right, opts)
     expect(added.map((e) => e.key)).toEqual(['copenhagen_plank_l', 'copenhagen_plank_r'])
-    expect(added.map((e) => [e.sets, e.repMin])).toEqual([[2, 30], [2, 30]])
+    expect(added.map((e) => [e.sets, e.repMin])).toEqual([[2, right.base!.repMin], [2, right.base!.repMin]])
   })
 
   it("adds only the missing side when the workout already holds the other", () => {

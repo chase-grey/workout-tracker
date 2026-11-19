@@ -80,7 +80,7 @@ import { ControlWord } from '../../components/ControlWord'
 import { useControlLabel } from '../../lib/useControlLabel'
 import { SetCheer } from '../../components/SetCheer'
 import { useSessionFade } from '../../lib/useSessionFade'
-import { adHocAdditions, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
+import { AD_HOC_SETS, adHocAdditions, defaultSets, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
 
 type Props = {
   session: WorkoutSession
@@ -184,9 +184,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // The movement picked from the list, by key — '' is the blank name field.
   const [newExercisePick, setNewExercisePick] = useState('')
   const [newExerciseName, setNewExerciseName] = useState('')
-  const [newExerciseSets, setNewExerciseSets] = useState('1')
-  const [newExerciseReps, setNewExerciseReps] = useState('10')
-  const [newExerciseWeight, setNewExerciseWeight] = useState('')
+  const [newExerciseSets, setNewExerciseSets] = useState(String(AD_HOC_SETS))
   const [paused, setPaused] = useState(false)
   // The exercise whose history sheet is open: the one on screen, or on a round
   // screen whichever station's trend button was pressed.
@@ -1017,20 +1015,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     }
   }
 
-  // Prefill the form for a movement picked from the list the way the day would
-  // prescribe it: its own set count, and the weight and reps that beat the last
-  // time it was done — whether that was on a plan day or as an earlier addition.
+  // The sheet asks for the movement and how many sets of it, and opens the count
+  // on what the plan runs it for (see lib/adHocExercise.defaultSets).
   const pickNewExercise = (key: string) => {
     setNewExercisePick(key)
-    const option = addable.find((o) => o.key === key)
-    if (!option) return
-    const base = option.base ?? { key: option.key, repMin: 1, repMax: 999 }
-    const target = nextTargets(workouts, [base], {
-      variantFor: (k) => progressionVariant(k, session.variant),
-    }).get(option.key)
-    setNewExerciseSets(String(option.base?.sets ?? 3))
-    setNewExerciseReps(String(target?.reps ?? option.base?.repMin ?? 10))
-    setNewExerciseWeight(target?.weightLbs == null ? '' : String(target.weightLbs))
+    setNewExerciseSets(String(defaultSets(addable.find((o) => o.key === key))))
   }
 
   const addAdHocExercise = () => {
@@ -1038,16 +1027,28 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     // go onto the history it has rather than opening a second one.
     const option = addable.find((o) => o.key === newExercisePick) ?? matchTypedName(newExerciseName, addable)
     if (!option && !newExerciseName.trim()) return
+    const variantFor = (k: string) => progressionVariant(k, session.variant)
+    // A movement the plan doesn't define has no rep range to prescribe from, so
+    // it's read open-ended: whatever it was last done for, and the weight with it.
+    const loose =
+      option && !option.base
+        ? nextTargets(workouts, [{ key: option.key, repMin: 1, repMax: 999 }], { variantFor }).get(option.key)
+        : undefined
     // One side of a sided pair brings the other (see lib/adHocExercise).
     const additions = adHocAdditions(
-      { name: newExerciseName, sets: Number(newExerciseSets), reps: Number(newExerciseReps) },
+      { name: newExerciseName, sets: Number(newExerciseSets), reps: loose?.reps },
       option,
       addable,
     )
+    // The weight and reps aren't asked for: every set prefills the way a planned
+    // one does at the start of a workout, with what beats the last time it was
+    // done, and the set card is where the real numbers go.
+    const targets = option?.base ? nextTargets(workouts, additions, { variantFor }) : null
     for (const exercise of additions) {
+      const target = targets ? targets.get(exercise.key) : loose
       controls.addExercise(exercise, {
-        weightLbs: newExerciseWeight === '' ? null : toWeight(newExerciseWeight),
-        reps: exercise.repMin,
+        weightLbs: target?.weightLbs ?? null,
+        reps: target?.reps ?? exercise.repMin,
       })
     }
     setPendingStepKey(`${additions[0].key}:0`)
@@ -1055,9 +1056,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     if (rest) closeRest()
     setNewExercisePick('')
     setNewExerciseName('')
-    setNewExerciseSets('1')
-    setNewExerciseReps('10')
-    setNewExerciseWeight('')
+    setNewExerciseSets(String(AD_HOC_SETS))
     setShowAddExercise(false)
     setShowList(false)
   }
@@ -1996,20 +1995,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                   />
                 </label>
               )}
-              <div className="grid grid-cols-3 gap-2">
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs tracking-wide text-neutral-500">sets</span>
-                  <input type="number" min="1" max="20" inputMode="numeric" value={newExerciseSets} onChange={(event) => setNewExerciseSets(event.target.value)} className="min-h-[48px] rounded-xl bg-surface-2 px-3 tabular-nums focus:outline-none focus:ring-2 focus:ring-accent" />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs tracking-wide text-neutral-500">reps</span>
-                  <input type="number" min="1" max="999" inputMode="numeric" value={newExerciseReps} onChange={(event) => setNewExerciseReps(event.target.value)} className="min-h-[48px] rounded-xl bg-surface-2 px-3 tabular-nums focus:outline-none focus:ring-2 focus:ring-accent" />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs tracking-wide text-neutral-500">weight (lb)</span>
-                  <input type="number" min="0" step="0.5" inputMode="decimal" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(event.target.value)} placeholder="optional" className="min-h-[48px] rounded-xl bg-surface-2 px-3 tabular-nums focus:outline-none focus:ring-2 focus:ring-accent" />
-                </label>
-              </div>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs tracking-wide text-neutral-500">sets</span>
+                <input type="number" min="1" max="20" inputMode="numeric" value={newExerciseSets} onChange={(event) => setNewExerciseSets(event.target.value)} className="min-h-[48px] rounded-xl bg-surface-2 px-3 tabular-nums focus:outline-none focus:ring-2 focus:ring-accent" />
+              </label>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setShowAddExercise(false)} className="min-h-[48px] flex-1 rounded-xl bg-surface-2 font-semibold active:opacity-70">cancel</button>
                 <button type="submit" disabled={newExercisePick === '' && !newExerciseName.trim()} className="min-h-[48px] flex-1 rounded-xl bg-accent font-semibold text-on-accent disabled:opacity-40">add to workout</button>
