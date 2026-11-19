@@ -19,6 +19,7 @@ import { AiPlanSection } from '../companion/AiPlanSection'
 import { WeekCalendarSetting } from './WeekCalendarSetting'
 import { WeekStartSetting } from './WeekStartSetting'
 import { CalendarExportSection } from './CalendarExportSection'
+import { DataExportSection } from './DataExportSection'
 import { PasteCoachSection, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
@@ -425,6 +426,7 @@ export function SettingsTab({
             <AccountSection />
             <InstallLink />
             <PhoneLink />
+            <DataExportSection />
           </Group>
 
           {/* Flipping the switch on is what brings the provider and key up
