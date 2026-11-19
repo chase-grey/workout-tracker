@@ -18,11 +18,11 @@ const all = (pins: CardioPin[] = []) =>
 const ids = (ts: HomeTile[]) => ts.map(tileId)
 
 describe('candidateTiles', () => {
-  it('groups strength, then flexibility, then cardio, with full body last of the lifts', () => {
+  it('groups strength, then flexibility, then cardio, with the lifts in the order given', () => {
     expect(ids(all([soccer]))).toEqual([
+      'lift:fullbody',
       'lift:push',
       'lift:pull',
-      'lift:fullbody',
       'core',
       'stretch:head_to_toe',
       'stretch:side_split',

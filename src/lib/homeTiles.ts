@@ -59,15 +59,14 @@ export function tilePillar(t: HomeTile): Pillar {
  * offers them — and filtered out of the grid by {@link arrangeTiles}' caller.
  */
 export function candidateTiles(input: {
-  /** Lift days with exercises, in the plan's order; full body goes last. */
+  /** Lift days with exercises, the one up next first (see lib/liftRotation). */
   liftDays: DayType[]
   core: boolean
   routines: FlexRoutineKey[]
   pins: CardioPin[]
 }): HomeTile[] {
-  const lifts = [...input.liftDays.filter((d) => d !== 'fullbody'), ...input.liftDays.filter((d) => d === 'fullbody')]
   return [
-    ...lifts.map((day): HomeTile => ({ type: 'lift', day })),
+    ...input.liftDays.map((day): HomeTile => ({ type: 'lift', day })),
     ...(input.core ? [{ type: 'core' } as HomeTile] : []),
     ...input.routines.map((routine): HomeTile => ({ type: 'stretch', routine })),
     { type: 'cardio' },

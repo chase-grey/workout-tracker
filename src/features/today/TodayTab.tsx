@@ -10,7 +10,8 @@ import { photoReminder } from '../../lib/photoReminder'
 import { NeverAskPhotos } from '../../components/NeverAskPhotos'
 import { toISODate } from '../../lib/dates'
 import { dayOrder, type VariantKey } from '../../config/plan'
-import { lastTrainingSession } from '../../lib/session'
+import { trainingSessions } from '../../lib/session'
+import { nextLiftDay } from '../../lib/liftRotation'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
@@ -106,13 +107,13 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     flashTimer.current = window.setTimeout(() => setFlash(null), undo ? 5000 : 1800)
   }
 
-  // Dim the button of whichever lift day was trained last, so the app nudges you
-  // on round the three — push, pull + legs and full body each take a turn in the
-  // week now that every day has a form that fits inside an hour (see
-  // SessionLength). Stretch + core isn't training and never changes this. Dimming
-  // is only a hint — the button still starts the session.
-  const lastDay = lastTrainingSession(workouts)?.dayType ?? null
-  const dimmedDay: DayType | null = lastDay
+  // The lift days are one rotation: exactly one is up next and the others are
+  // dimmed. Which one is lib/liftRotation's call — the day that has waited
+  // longest, with full body held until the day after a rest day. Stretch + core
+  // isn't training and never changes this. Dimming is only a hint — a dimmed
+  // button still starts its session.
+  const liftDays = dayOrder(plan).filter((t) => plan[t].exercises.length > 0)
+  const nextDay: DayType | null = nextLiftDay(trainingSessions(workouts), todayISO, liftDays)
 
   // The two stretch routines would dim the same way and for the same reason —
   // whichever was done last steps back so the other reads as up next — but for
@@ -128,19 +129,15 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   // Whichever half of an alternating pair reads as up next takes the top row:
   // the dimmed one was just done, so it steps down and the button you're
   // likelier to want is the first one your eye and thumb land on. With nothing
-  // dimmed — no history yet, or a full-body day, which dims neither — the pair
-  // keeps the order it already had.
+  // dimmed — no history yet — the pair keeps the order it already had. The lift
+  // days do the same with three: the one up next leads, the rest keep their order.
   const nextUpFirst = <T,>(pair: T[], dimmed: T | null) =>
     dimmed && pair.length === 2 && pair[0] === dimmed ? [pair[1], pair[0]] : pair
 
   // That rotation only orders the tiles until they've been dragged into an
   // order of their own (see HomeTiles); from then on that order holds.
-  const liftDays = dayOrder(plan).filter((t) => plan[t].exercises.length > 0)
   const candidates = candidateTiles({
-    liftDays: [
-      ...nextUpFirst(liftDays.filter((t) => t !== 'fullbody'), dimmedDay),
-      ...liftDays.filter((t) => t === 'fullbody'),
-    ],
+    liftDays: nextDay ? [nextDay, ...liftDays.filter((t) => t !== nextDay)] : liftDays,
     // The core block is the owner's.
     core: owner,
     // Only the skills this person trains; one who just counts sessions gets the log card instead.
@@ -167,7 +164,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         ? `today: ${todaysCardio.label}`
         : undefined
   const tileDimmed = (t: HomeTile) =>
-    (t.type === 'lift' && t.day === dimmedDay) ||
+    (t.type === 'lift' && t.day !== nextDay) ||
     (t.type === 'stretch' && t.routine === dimmedStretch) ||
     (t.type === 'core' && absRemaining === 0)
 
