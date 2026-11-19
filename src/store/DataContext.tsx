@@ -12,6 +12,7 @@ import { reconcileBodyWeights } from '../lib/bodyWeightSync'
 import { reconcileWorkouts } from '../lib/workoutSync'
 import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
 import { withMatSitups } from '../lib/stretchCore'
+import { withRenamedKeys } from '../lib/renamedKeys'
 import { DAY_TYPES, STRETCH_CORE } from '../config/plan'
 import { maxAttemptRow } from '../lib/maxAttempt'
 import { normalizeWeekStart, setWeekStartDay, toISODate, weekStartISO } from '../lib/dates'
@@ -472,11 +473,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const [w, bw] = await Promise.all([api.fetchWorkouts(), api.fetchBodyWeight()])
       // The sheet still holds the stretch block's early sit-ups under the key the
       // training days' one has to itself now, so they're re-keyed as they arrive
-      // (see lib/stretchCore.withMatSitups).
+      // (see lib/stretchCore.withMatSitups). A movement logged under a key it has
+      // since been moved off is re-keyed the same way (see lib/renamedKeys).
       if (!Array.isArray(w)) throw new Error('Invalid workout response')
-      persistWorkouts(withMatSitups(reconcileWorkouts(
+      persistWorkouts(withRenamedKeys(withMatSitups(reconcileWorkouts(
         w, pendingWorkouts, storage.loadWorkouts(), workoutsAtFetch, workoutRevision.current,
-      )))
+      ))))
       // A log (or newer refresh) made while this request was in flight must
       // survive even if its POST has already succeeded and left the outbox.
       // Failed writes present before the fetch also stay visible until retried.

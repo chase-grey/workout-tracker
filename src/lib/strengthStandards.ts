@@ -464,12 +464,15 @@ export const EXERCISE_SOURCES: Record<string, ExerciseSource> = {
   // Retired from the plan, but back still reads the rows already logged, so the muscle keeps the
   // better of its two lifts rather than losing one outright.
   cable_row: { lift: 'row', muscles: ['back'] },
-  incline_db_curl: { lift: 'curl', muscles: ['biceps'] },
+  // The preacher curl machine, under the key its slot has always had (see
+  // plan.PREACHER_CURL_KEY). Laddered rather than ranked against the curl table,
+  // for the hip machines' reason: a curl machine's lever arm is its own, so its
+  // stack number is not a dumbbell's weight, and 70 lbs on the pad against a
+  // table of dumbbell curls would be a made-up percentile.
+  incline_db_curl: { ladder: 'load', muscles: ['biceps'] },
+  // The dumbbell movement that key was named for (see plan.INCLINE_DUMBBELL_CURL).
+  incline_dumbbell_curl: { lift: 'curl', muscles: ['biceps'] },
   hammer_curl: { lift: 'curl', muscles: ['biceps'] },
-  // The preacher curl machine (see plan.PREACHER_CURL_KEY). Laddered rather than
-  // ranked against the curl table, for the hip machines' reason: a curl machine's
-  // lever arm is its own, so its stack number is not a dumbbell's weight.
-  prayer_curls: { ladder: 'load', muscles: ['biceps'] },
   tricep_pushdown: { lift: 'tricep', muscles: ['triceps'] },
   overhead_tricep_ext: { lift: 'tricep', muscles: ['triceps'] },
   hamstring_curl: { lift: 'legcurl', muscles: ['hamstrings'] },

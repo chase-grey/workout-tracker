@@ -196,7 +196,7 @@ describe('muscleDevelopment — mapping', () => {
         flat_bench: 1.0 * BW, // chest
         db_overhead_press: 0.7 * BW, // shoulders
         cable_row: 0.95 * BW, // back
-        incline_db_curl: 0.6 * BW, // biceps
+        hammer_curl: 0.6 * BW, // biceps
         tricep_pushdown: 0.6 * BW, // triceps
         hamstring_curl: 0.55 * BW, // hamstrings
         calf_raise: 1.75 * BW, // calves

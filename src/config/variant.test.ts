@@ -201,7 +201,7 @@ describe('the full body day', () => {
       'lateral_raise_l',
       'lateral_raise_r',
       'weighted_pullups',
-      'prayer_curls',
+      'hammer_curl',
       'overhead_tricep_ext',
       'neck_flexion',
     ])
@@ -274,10 +274,10 @@ describe('the full body day', () => {
 
   it('pairs the curl and the extension a round at a time', () => {
     const arms = DEFAULT_PLAN.fullbody.exercises.filter((e) => e.circuit === 'arms')
-    expect(arms.map((e) => e.key)).toEqual(['prayer_curls', 'overhead_tricep_ext'])
+    expect(arms.map((e) => e.key)).toEqual(['hammer_curl', 'overhead_tricep_ext'])
     // After the pull-ups and before the neck, the two of them side by side.
     const keys = DEFAULT_PLAN.fullbody.exercises.map((e) => e.key)
-    expect(keys.indexOf('prayer_curls')).toBe(keys.indexOf('weighted_pullups') + 1)
+    expect(keys.indexOf('hammer_curl')).toBe(keys.indexOf('weighted_pullups') + 1)
     expect(keys.indexOf('overhead_tricep_ext')).toBe(keys.indexOf('neck_flexion') - 1)
     expect(arms.every((e) => e.roundScreen && e.circuitRoundRestSec === FULLBODY_ARMS_ROUND_REST_SEC)).toBe(true)
   })
@@ -301,7 +301,7 @@ describe('the short forms', () => {
   it('cut every day', () => {
     expect(total(short('push', 'A'))).toBe(25)
     expect(total(short('push', 'B'))).toBe(25)
-    expect(total(short('pull'))).toBe(27)
+    expect(total(short('pull'))).toBe(25)
     expect(total(short('fullbody'))).toBe(27)
     expect(total(variantExercises(DEFAULT_PLAN.push, 'A'))).toBe(30)
     expect(total(DEFAULT_PLAN.pull.exercises)).toBe(40)
@@ -317,7 +317,7 @@ describe('the short forms', () => {
     }
   })
 
-  it('train the incline curl at three sets on the short pull day as on the full one', () => {
+  it('train the preacher curl machine at three sets on the short pull day as on the full one', () => {
     expect(short('pull').find((e) => e.key === 'incline_db_curl')?.sets).toBe(3)
     expect(DEFAULT_PLAN.pull.exercises.find((e) => e.key === 'incline_db_curl')?.sets).toBe(3)
   })
@@ -356,18 +356,20 @@ describe('the short forms', () => {
     }
   })
 
-  it('train each of the three curls on one day of the week, short or full', () => {
+  it('train each curl once in a short week: the machine on pull + legs, the hammer curl on full body', () => {
     const days = (key: string, length: 'short' | 'full') =>
       (['push', 'pull', 'fullbody'] as const).filter((t) =>
         shortExercises(variantExercises(DEFAULT_PLAN[t], t === 'push' ? 'A' : null), length).some((e) => e.key === key),
       )
     for (const length of ['short', 'full'] as const) {
       expect(days('incline_db_curl', length)).toEqual(['pull'])
-      expect(days('hammer_curl', length)).toEqual(['pull'])
-      expect(days('prayer_curls', length)).toEqual(['fullbody'])
+      // Revision 22's key for the machine is on no day.
+      expect(days('prayer_curls', length)).toEqual([])
     }
-    // The hammer curl is on the short pull day now that full body no longer has it.
-    expect(short('pull').find((e) => e.key === 'hammer_curl')?.sets).toBe(2)
+    expect(days('hammer_curl', 'short')).toEqual(['fullbody'])
+    // The full pull day keeps its hammer curls as well, as it did before revision 22.
+    expect(days('hammer_curl', 'full')).toEqual(['pull', 'fullbody'])
+    expect(short('pull').some((e) => e.key === 'hammer_curl')).toBe(false)
   })
 
   it('train the three goal lifts twice a week between them', () => {

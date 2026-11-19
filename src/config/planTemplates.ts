@@ -67,7 +67,7 @@ const SHIPPED_NAMES: Record<string, string> = {
   cable_pulldown: 'lat pulldown',
   machine_overhead_press: 'machine overhead press',
   db_overhead_press: 'dumbbell overhead press',
-  incline_db_curl: 'incline dumbbell curl',
+  incline_dumbbell_curl: 'incline dumbbell curl',
   hammer_curl: 'hammer curl',
   tricep_pushdown: 'tricep pushdown',
   hamstring_curl: 'hamstring curl',
@@ -104,7 +104,7 @@ const GYM: PlannedExercise[][] = [
     ex('flat_bench', 'chest', 6, 10, 120, PLATE),
     ex('cable_pulldown', 'back', 8, 12, 90, PLATE),
     ex('machine_overhead_press', 'shoulders', 8, 12, 90, PLATE),
-    ex('incline_db_curl', 'biceps', 8, 12, 60, PAIR),
+    ex('incline_dumbbell_curl', 'biceps', 8, 12, 60, PAIR),
     ex('cable_crunch', 'abs', 12, 15, 60, PLATE),
   ],
   [

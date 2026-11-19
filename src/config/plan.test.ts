@@ -6,6 +6,8 @@ import {
   DAY_TYPES,
   DEFAULT_PLAN,
   DUMBBELL_MAX_LBS,
+  INCLINE_DUMBBELL_CURL,
+  PREACHER_CURL_KEY,
   MAT_SITUP_KEY,
   STRETCH_CORE,
   TODAY_DAY_ORDER,
@@ -16,6 +18,7 @@ import {
   sideOrderedExercises,
   unslugKey,
   variantExercises,
+  defaultWeightCap,
   withCircuitRest,
   withCircuitRoundRest,
   withDayOrder,
@@ -199,17 +202,17 @@ describe('withPlanDefaults', () => {
   })
 
   it('retires a movement from one day without touching the days that keep it', () => {
-    // The hammer curl left full body and still ships on pull + legs — a
-    // retirement is per day, so a stored plan keeps it there. The hanging raise
-    // and the dumbbell press have now left every day, and a stored full body
-    // that still has them lets them go.
+    // The neck extension left pull + legs and nothing else; the hanging raise and
+    // the dumbbell press have now left every day, and a stored full body that
+    // still has them lets them go. So does one stored during the day revision 22
+    // had the preacher curl machine there under a key of its own.
     const storedFull = {
       ...DEFAULT_PLAN.fullbody,
       exercises: [
         { key: 'hanging_leg_raise', name: 'hanging knee raise', sets: 3, repMin: 10, repMax: 20, restSec: 60, bodyweight: true, repsOnly: true, group: 'core' },
         ...DEFAULT_PLAN.fullbody.exercises,
         { key: 'db_overhead_press', name: 'dumbbell overhead press', sets: 3, repMin: 8, repMax: 12, restSec: 120, increment: 10, group: 'shoulders' },
-        { key: 'hammer_curl', name: 'hammer curl', sets: 3, repMin: 10, repMax: 15, restSec: 60, increment: 10, group: 'arms circuit' },
+        { key: 'prayer_curls', name: 'preacher curl machine', sets: 3, repMin: 8, repMax: 12, restSec: 60, increment: 5, group: 'arms circuit' },
       ],
     }
     const merged = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: storedFull }, PLAN_REVISION)
@@ -217,8 +220,39 @@ describe('withPlanDefaults', () => {
     expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('hanging_leg_raise')
     expect(merged.push.exercises.map((e) => e.key)).not.toContain('db_overhead_press')
     expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('db_overhead_press')
-    expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('hammer_curl')
+    expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('prayer_curls')
+    // The hammer curl has the arm pair back, and is still on pull + legs.
+    expect(merged.fullbody.exercises.map((e) => e.key)).toContain('hammer_curl')
     expect(merged.pull.exercises.map((e) => e.key)).toContain('hammer_curl')
+  })
+
+  it('hands a plan saved at revision 22 the machine on pull + legs and the hammer curl back on full body', () => {
+    // Revision 22 as a device stored it: the pull day's curl still named for the
+    // dumbbells and capped at the rack, the machine on full body under its
+    // guessed key.
+    const pull22 = DEFAULT_PLAN.pull.exercises.map((e) =>
+      e.key === 'incline_db_curl'
+        ? { ...e, name: 'incline dumbbell curl', dumbbellPair: true, weightCapLbs: 100 }
+        : e.key === 'hammer_curl' ? { ...e, shortSets: 2 } : e,
+    )
+    const full22 = DEFAULT_PLAN.fullbody.exercises.map((e) =>
+      e.key === 'hammer_curl' ? { ...e, key: 'prayer_curls', name: 'preacher curl machine', increment: 5, dumbbellPair: undefined, weightCapLbs: undefined } : e,
+    )
+    const stored = {
+      ...DEFAULT_PLAN,
+      pull: { ...DEFAULT_PLAN.pull, exercises: pull22 },
+      fullbody: { ...DEFAULT_PLAN.fullbody, exercises: full22 },
+    }
+    for (const revision of [22, PLAN_REVISION]) {
+      const merged = withPlanDefaults(stored, revision)
+      const machine = merged.pull.exercises.find((e) => e.key === 'incline_db_curl')
+      expect(machine).toMatchObject({ name: 'preacher curl machine', increment: 10 })
+      expect(machine?.dumbbellPair).toBeUndefined()
+      expect(machine?.weightCapLbs).toBeUndefined()
+      expect(merged.fullbody.exercises.map((e) => e.key)).not.toContain('prayer_curls')
+      expect(merged.fullbody.exercises.filter((e) => e.circuit === 'arms').map((e) => e.key)).toEqual(['hammer_curl', 'overhead_tricep_ext'])
+    }
+    expect(withPlanDefaults(stored, 22).pull.exercises.find((e) => e.key === 'hammer_curl')?.shortSets).toBe(0)
   })
 
   it('hands a full body saved at revision 21 the new day whole, keeping only what was added by hand', () => {
@@ -243,11 +277,11 @@ describe('withPlanDefaults', () => {
     ])
     expect(merged.fullbody.exercises.slice(0, 2).map((e) => [e.sets, e.restSec])).toEqual([[3, 90], [3, 90]])
     // And the same plan at the current revision is left as it was stored, bar the
-    // two movements the day retired.
+    // one movement the day retired.
     const kept = withPlanDefaults({ ...DEFAULT_PLAN, fullbody: { ...DEFAULT_PLAN.fullbody, exercises: old } }, PLAN_REVISION)
     const oldKeys = old.map((e) => e.key)
     expect(kept.fullbody.exercises.map((e) => e.key).filter((k) => oldKeys.includes(k))).toEqual(
-      oldKeys.filter((k) => k !== 'db_overhead_press' && k !== 'hammer_curl'),
+      oldKeys.filter((k) => k !== 'db_overhead_press'),
     )
     expect(kept.fullbody.exercises.find((e) => e.key === 'cable_crunch')?.restSec).toBe(60)
   })
@@ -274,7 +308,19 @@ describe('withPlanDefaults', () => {
     }
     const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
     expect(merged.pull.exercises.find((e) => e.key === 'hammer_curl')?.increment).toBe(10)
-    expect(merged.pull.exercises.find((e) => e.key === 'incline_db_curl')?.increment).toBe(10)
+  })
+
+  it('leaves a 5-lb step chosen for the preacher curl machine alone', () => {
+    // It was raised to 10 while the slot was taken for a pair of dumbbells. A
+    // machine's stack can step in 5s, so a 5 here is a choice now.
+    const storedPull = {
+      ...DEFAULT_PLAN.pull,
+      exercises: DEFAULT_PLAN.pull.exercises.map((e) =>
+        e.key === 'incline_db_curl' ? { ...e, increment: 5 } : e,
+      ),
+    }
+    const merged = withPlanDefaults({ ...DEFAULT_PLAN, pull: storedPull }, PLAN_REVISION)
+    expect(merged.pull.exercises.find((e) => e.key === 'incline_db_curl')?.increment).toBe(5)
   })
 
   it('leaves a weight step the user chose themselves alone', () => {
@@ -777,10 +823,29 @@ describe('the two-dumbbell movements as they ship', () => {
     }
   })
 
-  it('covers the dumbbell curls and both bench presses', () => {
+  it('covers the hammer curl and both bench presses', () => {
     expect(new Set(paired.map((p) => p.ex.key))).toEqual(
-      new Set(['hammer_curl', 'incline_db_curl', 'flat_bench', 'incline_bench']),
+      new Set(['hammer_curl', 'flat_bench', 'incline_bench']),
     )
+  })
+
+  it('leaves the preacher curl machine out: a stack in 10s, with no rack to run out of', () => {
+    const machine = DEFAULT_PLAN.pull.exercises.find((e) => e.key === PREACHER_CURL_KEY)
+    expect(PREACHER_CURL_KEY).toBe('incline_db_curl')
+    expect(machine).toMatchObject({ name: 'preacher curl machine', increment: 10, group: 'biceps' })
+    expect(machine?.dumbbellPair).toBeUndefined()
+    expect(machine?.weightCapLbs).toBeUndefined()
+    expect(machine?.stackSetting).toBeUndefined()
+    expect(defaultWeightCap(PREACHER_CURL_KEY)).toBeUndefined()
+    expect(exerciseName('incline_db_curl')).toBe('preacher curl machine')
+  })
+
+  it('keeps the incline dumbbell curl as a movement of its own, on a key the machine has no history under', () => {
+    expect(DAY_TYPES.flatMap((t) => DEFAULT_PLAN[t].exercises.map((e) => e.key))).not.toContain(INCLINE_DUMBBELL_CURL.key)
+    expect(INCLINE_DUMBBELL_CURL.key).not.toBe(PREACHER_CURL_KEY)
+    expect(ALL_EXERCISES.find((e) => e.key === 'incline_dumbbell_curl')).toMatchObject({
+      name: 'incline dumbbell curl', dumbbellPair: true, increment: 10, weightCapLbs: DUMBBELL_MAX_LBS * 2,
+    })
   })
 
   it('keeps the retired overhead press a pair that ends where the rack does', () => {

@@ -138,7 +138,7 @@ const LIBRARY: Record<Equipment, Record<Muscle, Option[]>> = {
       c('db_reverse_lunge', 'dumbbell reverse lunge', 'glutes', 8, 12, 90, PAIR, HALF_QUADS),
     ],
     arms: [
-      i('incline_db_curl', 'incline dumbbell curl', 'biceps', 8, 12, 60, PAIR),
+      i('incline_dumbbell_curl', 'incline dumbbell curl', 'biceps', 8, 12, 60, PAIR),
       i('tricep_pushdown', 'tricep pushdown', 'triceps', 10, 15, 60, PLATE),
       i('hammer_curl', 'hammer curl', 'biceps', 10, 15, 60, PAIR),
       i('cable_overhead_extension', 'cable overhead tricep extension', 'triceps', 10, 15, 60, PLATE),
@@ -174,7 +174,7 @@ const LIBRARY: Record<Equipment, Record<Muscle, Option[]>> = {
     arms: [
       i('hammer_curl', 'hammer curl', 'biceps', 10, 15, 60, PAIR),
       i('db_tricep_extension', 'dumbbell overhead tricep extension', 'triceps', 10, 15, 60, PLATE),
-      i('incline_db_curl', 'incline dumbbell curl', 'biceps', 8, 12, 60, PAIR),
+      i('incline_dumbbell_curl', 'incline dumbbell curl', 'biceps', 8, 12, 60, PAIR),
     ],
     calves: [i('db_calf_raise', 'dumbbell calf raise', 'calves', 12, 20, 60, PLATE)],
     abs: ABS_FLOOR,

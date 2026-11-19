@@ -75,7 +75,7 @@ describe.each(SETUPS)('starterPlan %o', (setup) => {
       for (const e of plan[type].exercises) {
         if (!shipped.has(e.key) && !(e.key in STARTER_EXERCISE_NAMES)) {
           // a retired shipped key (calf_raise, deadbug, cable_pulldown, ...) is fine
-          expect(['calf_raise', 'deadbug', 'cable_pulldown', 'barbell_squat', 'db_overhead_press']).toContain(e.key)
+          expect(['calf_raise', 'deadbug', 'cable_pulldown', 'barbell_squat', 'db_overhead_press', 'incline_dumbbell_curl']).toContain(e.key)
         }
       }
     }

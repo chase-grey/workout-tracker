@@ -12,6 +12,7 @@ import type { ProviderId } from '../lib/aiProvider'
 import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
 import { withMatSitups } from '../lib/stretchCore'
+import { withRenamedKeys } from '../lib/renamedKeys'
 import type { RestTally } from '../lib/rest'
 import type { SetClock } from '../lib/setClock'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
@@ -372,7 +373,7 @@ export const storage = {
 
   // Re-keyed on the way out, not on the way in: the cache can hold rows written by
   // a build that predates the mat sit-up's own key (see lib/stretchCore).
-  loadWorkouts: (): WorkoutRow[] => withMatSitups(read(KEYS.cacheWorkouts, [])),
+  loadWorkouts: (): WorkoutRow[] => withRenamedKeys(withMatSitups(read(KEYS.cacheWorkouts, []))),
   saveWorkouts: (rows: WorkoutRow[]) => write(KEYS.cacheWorkouts, rows),
 
   loadBodyWeights: (): BodyWeightEntry[] => read(KEYS.cacheBodyWeight, []),

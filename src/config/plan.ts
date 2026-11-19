@@ -354,7 +354,13 @@ export type Plan = Record<DayType, DayPlan>
 // preacher curl machine rather than the hammer curl, which goes back to pull +
 // legs on the short day as well as the full one. And the ab block rests ninety
 // seconds between sets on every day, up from sixty (see AB_REST_SEC).
-export const PLAN_REVISION = 22
+// 23: the preacher curl machine is the pull + legs day's curl, which is what was
+// being done in that slot all along while it was named for an incline dumbbell
+// curl (see PREACHER_CURL_KEY). It keeps the slot's key and so its history, and
+// loses the dumbbell rack's cap. Revision 22's guess at the machine is undone:
+// full body's arm pair is the hammer curl and the tricep extension again, and the
+// hammer curl comes back off the short pull + legs day.
+export const PLAN_REVISION = 23
 
 export const DAY_TYPES: DayType[] = ['push', 'pull', 'fullbody']
 
@@ -542,10 +548,34 @@ export const NECK_EXTENSION: PlannedExercise = {
 }
 
 /**
- * The preacher curl machine's key (see the full body day for why it reads the way
- * it does).
+ * The preacher curl machine's key. It reads as an incline dumbbell curl because
+ * that is what the pull + legs day's curl slot was named from the first plan to
+ * revision 22 — and the machine is what was actually done in it the whole time.
+ * Every set of it in the sheet is under this key, so the machine keeps the key
+ * and takes the name, rather than the name keeping the key and the history being
+ * re-keyed on every read. The dumbbell movement the key describes has its own
+ * now (see INCLINE_DUMBBELL_CURL).
  */
-export const PREACHER_CURL_KEY = 'prayer_curls'
+export const PREACHER_CURL_KEY = 'incline_db_curl'
+
+/**
+ * The key revision 22 shipped the preacher curl machine under for a day, on full
+ * body, on a guess that the sheet held it that way. It didn't — nothing had been
+ * logged as `prayer_curls`. Kept so that anything logged under it while that
+ * revision was live is read as the machine (see RENAMED_EXERCISE_KEYS) and a
+ * stored plan doesn't keep the entry as a hand-added movement (see
+ * RETIRED_EXERCISES).
+ */
+export const GUESSED_PREACHER_CURL_KEY = 'prayer_curls'
+
+/**
+ * Keys a movement was once logged under, to the key it is read as now. Applied
+ * to workout rows on the way in (see lib/renamedKeys.withRenamedKeys) and never
+ * to the sheet, which keeps what it recorded.
+ */
+export const RENAMED_EXERCISE_KEYS: Record<string, string> = {
+  [GUESSED_PREACHER_CURL_KEY]: PREACHER_CURL_KEY,
+}
 
 /**
  * The rest after a round of full body's arm pair — a curl and a tricep extension,
@@ -587,6 +617,29 @@ export const DUMBBELL_MAX_LBS = 50
  * two of the heaviest dumbbell (see PlannedExercise.dumbbellPair, DUMBBELL_MAX_LBS).
  */
 export const DUMBBELL_PAIR = { increment: 10, dumbbellPair: true, weightCapLbs: DUMBBELL_MAX_LBS * 2 } as const
+
+/**
+ * The incline dumbbell curl proper: lying back on an incline bench, a dumbbell in
+ * each hand. No day of the shipped plan trains it — the slot that carried its
+ * name was the preacher curl machine all along (see PREACHER_CURL_KEY) — but the
+ * starter plans do (see planTemplates, lib/planBuilder), and it is a movement
+ * worth being able to add. Under its own key so that picking it doesn't open
+ * onto the machine's history, whose numbers are a stack's and not a pair's.
+ *
+ * An entry for the reasons DB_OVERHEAD_PRESS is one: a name to chart under, a
+ * match for an imported log that says "incline dumbbell curl", and a row in the
+ * add-an-exercise sheet.
+ */
+export const INCLINE_DUMBBELL_CURL: PlannedExercise = {
+  key: 'incline_dumbbell_curl',
+  name: 'incline dumbbell curl',
+  sets: 3,
+  repMin: 8,
+  repMax: 12,
+  restSec: 60,
+  ...DUMBBELL_PAIR,
+  group: 'biceps',
+}
 
 /** The dumbbell overhead press's key — retired from every day since revision 22. */
 export const DB_OVERHEAD_PRESS_KEY = 'db_overhead_press'
@@ -817,22 +870,26 @@ export const DEFAULT_PLAN: Plan = {
       // because the training is the same whichever way the goal is counted.
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
-      // Both are a dumbbell in each hand, so both step in 10s and top out at the
-      // rack's heaviest pair (see DUMBBELL_PAIR).
+      // The preacher curl machine — the arm curl machine, elbows on the pad. This
+      // slot was named for an incline dumbbell curl until revision 23, and the
+      // machine is what was done in it throughout, which is why it keeps the key
+      // (see PREACHER_CURL_KEY) and with it every set already logged. A machine:
+      // its stack moves 10 lbs a step, which is how the log climbs (60, then 70),
+      // and it has no rack to run out of, so unlike the hammer curl below it
+      // carries no cap and goes on progressing in weight past the 100 lbs a pair
+      // of dumbbells stops at.
       //
-      // Three curls in the week and each is trained once, none of them twice: the
-      // incline curl and the hammer curl here, the preacher curl machine in full
-      // body's arm pair. The hammer curl used to be full body's, and the short day
-      // here left it out for that reason; since revision 22 the machine has that
-      // slot, so this is the hammer curl's only day and the short form keeps two
-      // sets of it rather than none — otherwise a week of short days would never
-      // train it. Two sets at forty-five seconds is under three minutes, on what
-      // is still the shortest of the three short days.
+      // The short day keeps all three sets of it and leaves the hammer curl to full
+      // body's arm pair, so on a short week each curl is trained once and neither
+      // twice in one session. Three rather than two since revision 20: two sets of
+      // it plus two of hammers was four direct sets a week for the arm the
+      // programme most wants to grow, and the short pull day is the shortest of
+      // the three, so the set costs it nothing it needed.
       //
-      // All three sets of the incline curl on the short day too (revision 20): it
-      // is the week's only curl that loads the biceps long.
-      { key: 'incline_db_curl', name: 'incline dumbbell curl', sets: 3, repMin: 8, repMax: 12, restSec: 60, ...DUMBBELL_PAIR, group: 'biceps' },
-      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
+      // The hammer curl is a dumbbell in each hand, so it steps in 10s and tops out
+      // at the rack's heaviest pair (see DUMBBELL_PAIR).
+      { key: PREACHER_CURL_KEY, name: 'preacher curl machine', sets: 3, repMin: 8, repMax: 12, restSec: 60, increment: 10, group: 'biceps' },
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 0, repMin: 10, repMax: 15, restSec: 45, ...DUMBBELL_PAIR, group: 'biceps' },
 
       // The neck closes the day, as it closes full body (see NECK_FLEXION). All
       // three sets on the short day too: this is the shortest of the three short
@@ -897,26 +954,18 @@ export const DEFAULT_PLAN: Plan = {
 
       // Arms: a curl and a tricep extension, a round at a time on one screen with
       // a minute after each round (see FULLBODY_ARMS_ROUND_REST_SEC) — antagonists,
-      // so neither is pre-fatigued by the other and the walk between the machine
+      // so neither is pre-fatigued by the other and the walk between the dumbbells
       // and the cable is the only break they need. Kept together as a pair rather
       // than the extension going up with the push work and the curl staying with
       // the pull: pairing them is what fits both inside the hour, and by the time
       // the pull-ups are done the triceps have had the whole of them to recover
       // from the bench.
       //
-      // The curl is the preacher curl machine — the arm curl machine, elbows on
-      // the pad — and this is its only slot in the week; the hammer curl it
-      // replaced here is trained on pull + legs. A machine, so it steps in 5s and
-      // has no rack to run out of. The extension's second day. Two rounds on the
-      // short day.
-      //
-      // Keyed `prayer_curls` because that is the key the movement already has
-      // history under: it came in with the imported log as "prayer curls", a name
-      // no plan entry claimed, and has been charted from the log alone since.
-      // Shipping it under that key puts the sets already logged on its ladder and
-      // prefills the first session from them, rather than starting a second
-      // history beside the first.
-      { key: PREACHER_CURL_KEY, name: 'preacher curl machine', sets: 3, shortSets: 2, repMin: 8, repMax: 12, restSec: 60, increment: 5, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
+      // The curl is the hammer curl, and on a short week this is its only slot;
+      // the preacher curl machine is pull + legs' (revision 22 had the machine
+      // here for a day, under a key of its own — see GUESSED_PREACHER_CURL_KEY).
+      // The extension's second day. Two rounds on the short day.
+      { key: 'hammer_curl', name: 'hammer curl', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...DUMBBELL_PAIR, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
       { key: 'overhead_tricep_ext', name: 'overhead tricep extension', sets: 3, shortSets: 2, repMin: 10, repMax: 15, restSec: 60, ...CABLE_STACK, group: 'arms circuit', circuit: 'arms', circuitRoundRestSec: FULLBODY_ARMS_ROUND_REST_SEC, roundScreen: true },
 
       // The neck's second day of the week (see NECK_FLEXION). Here and on pull +
@@ -1041,10 +1090,11 @@ export function withCircuitRoundRest(
  * fallback. Keys repeat across days (leg press and bench appear on Full Body too),
  * so the first occurrence of each key wins.
  *
- * The retired hanging raise, neck extension and dumbbell overhead press and the
- * Stretch + Core session's mat sit-up are appended last: none is a movement a
- * training day prescribes (see HANGING_RAISE, NECK_EXTENSION, DB_OVERHEAD_PRESS,
- * STRETCH_CORE), so nothing else would give them a name to chart
+ * The retired hanging raise, neck extension and dumbbell overhead press, the
+ * incline dumbbell curl and the Stretch + Core session's mat sit-up are appended
+ * last: none is a movement a training day prescribes (see HANGING_RAISE,
+ * NECK_EXTENSION, DB_OVERHEAD_PRESS, INCLINE_DUMBBELL_CURL, STRETCH_CORE), so
+ * nothing else would give them a name to chart
  * under — and the sit-up coming last is what makes an old log that just says
  * "weighted sit-ups" resolve to the incline one the training days train, which is
  * what such a log meant.
@@ -1059,6 +1109,7 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     HANGING_RAISE,
     NECK_EXTENSION,
     DB_OVERHEAD_PRESS,
+    INCLINE_DUMBBELL_CURL,
     STRETCH_CORE,
   ]) {
     if (seen.has(e.key)) continue
@@ -1105,6 +1156,9 @@ const LEGACY_EXERCISE_NAMES: Record<string, string[]> = {
   // stretch has its own on the mat, the training days' one says which bench it's
   // done on (see MAT_SITUP_KEY).
   weighted_situp: ['weighted sit-up'],
+  // What the pull + legs day's curl slot was called while it was taken for a
+  // dumbbell movement (see PREACHER_CURL_KEY).
+  [PREACHER_CURL_KEY]: ['incline dumbbell curl'],
 }
 
 /**
@@ -1116,7 +1170,6 @@ const LEGACY_EXERCISE_NAMES: Record<string, string[]> = {
  */
 const LEGACY_EXERCISE_INCREMENTS: Record<string, number[]> = {
   db_overhead_press: [5],
-  incline_db_curl: [5],
   hammer_curl: [5],
   // Shipped as pound steps before the cable stack was read as the 1–15 setting it is.
   cable_crunch: [5],
@@ -1216,9 +1269,11 @@ const RETIRED_EXERCISES: Partial<Record<DayType, string[]>> = {
     // shoulder slot (see DB_OVERHEAD_PRESS). Listed so a stored plan doesn't keep
     // it on as though it were a movement added by hand.
     DB_OVERHEAD_PRESS_KEY,
-    // The hammer curl, replaced in the arm pair by the preacher curl machine. It
-    // is still trained on pull + legs.
-    'hammer_curl',
+    // Revision 22's preacher curl machine, here for a day under a key of its own.
+    // The machine is pull + legs' curl (see PREACHER_CURL_KEY); listed so a plan
+    // stored while that revision was live doesn't keep it on as a movement added
+    // by hand, beside the hammer curl that has the slot back.
+    GUESSED_PREACHER_CURL_KEY,
   ],
 }
 
