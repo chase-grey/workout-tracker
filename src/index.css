@@ -1293,3 +1293,31 @@ input[type='number'] {
     animation: none;
   }
 }
+
+/* ---- Numbers that change ----
+   A count that just moved rolls in from the side it came from (see
+   components/Tick): up from below when it grew, down from above when it fell. */
+@keyframes tick-up {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+}
+@keyframes tick-down {
+  from {
+    opacity: 0;
+    transform: translateY(-0.45em);
+  }
+}
+.tick-up {
+  animation: tick-up 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+.tick-down {
+  animation: tick-down 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tick-up,
+  .tick-down {
+    animation: none;
+  }
+}

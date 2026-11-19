@@ -38,6 +38,14 @@ export function screenMove(prev: Screen, next: Screen, tabs: readonly string[]):
   return to > from ? 'right' : 'left'
 }
 
+/**
+ * Which way a number rolls when it changes: up for more, down for less. Text
+ * that isn't a number has no more or less to it, and rolls up.
+ */
+export function tickDirection(prev: string | number, next: string | number): 'up' | 'down' {
+  return typeof prev === 'number' && typeof next === 'number' && next < prev ? 'down' : 'up'
+}
+
 export const SCREEN_MOVE_MS = 180
 
 /** Front-loaded: most of the distance is covered in the first few frames. */

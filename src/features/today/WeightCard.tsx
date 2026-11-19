@@ -4,6 +4,7 @@ import { bodyFatSeries } from '../../lib/bodyComp'
 import { bodyWeightPoints } from '../../lib/goals'
 import { readsBodyFat, weighsIn } from '../../lib/profile'
 import { WeightLogSheet } from './WeightLogSheet'
+import { Tick } from '../../components/Tick'
 
 export function WeightCard() {
   const { bodyWeights, measurements, settings } = useData()
@@ -18,9 +19,9 @@ export function WeightCard() {
     <div className="flex items-center justify-between rounded-2xl bg-surface p-3">
       <div>
         <p className="text-xs tracking-wider text-neutral-500">body measurement</p>
-        {scale && <p className="text-sm text-neutral-400">{latest ? `${latest.value} lbs` : '—'}</p>}
+        {scale && <p className="text-sm text-neutral-400">{latest ? <><Tick value={latest.value} /> lbs</> : '—'}</p>}
         {bodyFat && !scale && !latestBodyFat && <p className="text-sm text-neutral-400">—</p>}
-        {bodyFat && latestBodyFat && <p className="text-sm text-neutral-400">{latestBodyFat.value}% body fat</p>}
+        {bodyFat && latestBodyFat && <p className="text-sm text-neutral-400"><Tick value={latestBodyFat.value} />% body fat</p>}
       </div>
       <button
         onClick={() => setShow(true)}

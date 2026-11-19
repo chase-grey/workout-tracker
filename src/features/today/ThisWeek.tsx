@@ -18,6 +18,7 @@ import { goalsFor } from '../../lib/profileGoals'
 import { weekPace, type MetricKey, type MetricPace } from '../../lib/weekPace'
 import { overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
+import { Tick } from '../../components/Tick'
 import { hasPillar, ownerFlavour } from '../../lib/profile'
 import { Collapse } from '../../components/Collapse'
 
@@ -40,7 +41,7 @@ function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | '
       <div className="mb-1 flex items-center justify-between text-sm">
         <span className="text-neutral-300">{label}</span>
         <span className="tabular-nums text-neutral-400">
-          {m.done}/{m.goal}{' '}
+          <Tick value={m.done} />/{m.goal}{' '}
           {over ? (
             <MdStar className="inline align-text-bottom text-accent-2" aria-hidden />
           ) : m.met ? (
@@ -139,10 +140,10 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
           className="-m-2 flex items-center gap-3 p-2 text-sm font-semibold active:opacity-70"
         >
           <span className="flex items-center gap-1 text-accent">
-            <MdLocalFireDepartment aria-hidden /> {streaks.streak}
+            <MdLocalFireDepartment aria-hidden /> <Tick value={streaks.streak} />
           </span>
           <span className="flex items-center gap-1 text-neutral-300">
-            <MdAcUnit aria-hidden /> {streaks.freezes}
+            <MdAcUnit aria-hidden /> <Tick value={streaks.freezes} />
           </span>
         </button>
       </div>

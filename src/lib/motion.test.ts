@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screenMove, screenMoveKeyframes } from './motion'
+import { screenMove, screenMoveKeyframes, tickDirection } from './motion'
 
 const TABS = ['today', 'progress', 'coach', 'settings']
 const on = (tab: string, immersive = false, session = immersive) => ({ tab, immersive, session })
@@ -50,5 +50,18 @@ describe('a session starting', () => {
   it('travels without fading, since the session fades itself in', () => {
     expect(screenMoveKeyframes('rise')[0].opacity).toBe(1)
     expect(screenMoveKeyframes('return')[0].opacity).toBe(0)
+  })
+})
+
+describe('tickDirection', () => {
+  it('rolls up for more and down for less', () => {
+    expect(tickDirection(3, 4)).toBe('up')
+    expect(tickDirection(4, 3)).toBe('down')
+    expect(tickDirection(181.4, 180.8)).toBe('down')
+  })
+
+  it('rolls text up, there being no less of it', () => {
+    expect(tickDirection('b', 'a')).toBe('up')
+    expect(tickDirection(4, '—')).toBe('up')
   })
 })
