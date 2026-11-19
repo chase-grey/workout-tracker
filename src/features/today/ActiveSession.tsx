@@ -42,9 +42,10 @@ import {
   CIRCUIT_REST_CHOICES,
   CIRCUIT_ROUND_REST_CHOICES,
   openRest,
-  restBeforeNextSet,
+  restAfterStep,
   restLabel,
   resumeRestTally,
+  sessionRest,
   staleRestSec,
   upNextTargetLabel,
   type RestTally,
@@ -121,7 +122,7 @@ type SetStep = {
  * Price a run of steps for the estimator: each set costs its exercise's learned
  * average active time plus its own prescribed rest scaled by the learned rest
  * ratio (structural fallbacks day one). The prescribed rest comes from
- * restBeforeNextSet — the same source the ratio was measured against — so a
+ * lib/rest.restAfterStep — the same source the ratio was measured against — so a
  * circuit station change isn't priced as a full inter-set rest, and the run has
  * to be in the order the flow will walk it, since every step's rest depends on
  * which step follows it.
@@ -130,27 +131,8 @@ function priceFlow(flow: SetStep[]): RemainingStep[] {
   return flow.map((s, i, arr) => ({
     exercise: s.ex.key,
     fallbackActiveSec: WORK_PER_SET_SEC,
-    prescribedRestSec: restBetweenSteps(s, arr[i + 1]),
+    prescribedRestSec: restAfterStep(s, arr[i + 1]),
   }))
-}
-
-/**
- * The rest between one step and the step the flow goes to after it (see
- * lib/rest.restBeforeNextSet). Coming back around to a circuit station starts a
- * fresh round — the set number goes up — rather than continuing the current one.
- */
-function restBetweenSteps(s: SetStep, next: SetStep | null | undefined): number {
-  const sameCircuit = !!next && !!s.ex.circuit && next.ex.circuit === s.ex.circuit
-  return restBeforeNextSet({
-    currentRestSec: s.ex.restSec,
-    sameExercise: !!next && next.ex.key === s.ex.key,
-    nextRestSec: next ? next.ex.restSec : null,
-    sameCircuit,
-    newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
-    circuitRestSec: s.ex.circuitRestSec,
-    circuitRoundRestSec: s.ex.circuitRoundRestSec,
-    roundScreen: s.ex.roundScreen,
-  })
 }
 
 /** Guided, one-set-at-a-time workout flow with a built-in rest after each set. */
@@ -198,6 +180,13 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // The rest the last tap cut short, held so Android back can step into it again
   // (see lib/leftRest), with the set its seconds were running up on the set clock.
   const [leftRest, setLeftRest] = useState<(LeftRest<ActiveRest> & { clockKey: SetKeys | null }) | null>(null)
+  // The rest that led into a set, by that set's step key — what "back to rest"
+  // reopens (see lib/rest.sessionRest). A rest resumed across a reload leads into
+  // the set that was saved with it.
+  const [ledIn, setLedIn] = useState<{ stepKey: string; seconds: number } | null>(() => {
+    const stepKey = storage.loadActiveStepKey()
+    return rest && stepKey ? { stepKey, seconds: rest.seconds } : null
+  })
   // A first set that's a hold waits on a tap to begin (see `awaitingStart`).
   const [started, setStarted] = useState(false)
   // Whether a timed hold's clock is running (see HoldTimer). While it is, the
@@ -903,26 +892,36 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }
 
   /**
-   * The rest that actually follows the set on screen: a full inter-set rest within
-   * an exercise, whatever a circuit station prescribes for the change to the next
-   * one, the round rest when this station wraps the circuit, and a transition rest
-   * sized to the coming exercise otherwise (see lib/rest.restBeforeNextSet).
+   * Every rest number this screen shows or runs (see lib/rest.sessionRest): the
+   * rest the timer opens with when the set on screen is logged, the one the header
+   * lists, and the one "back to rest" reopens.
    *
-   * Derived from the step the flow will actually reach rather than from the
-   * exercise's own number, because inside a circuit the two differ by design: the
-   * Copenhagen pair gives ten seconds to turn over onto the other side between its
-   * two stations and a full rest on the wrap into the next round, and a header
-   * reading either of those for the other would be naming a break you don't get.
+   * What follows a set is a full inter-set rest within an exercise, whatever a
+   * circuit station prescribes for the change to the next one, the round rest when
+   * this station wraps the circuit, and a transition rest sized to the coming
+   * exercise otherwise. It is derived from the step the flow will actually reach
+   * rather than from the exercise's own number, because inside a circuit the two
+   * differ by design: the Copenhagen pair gives ten seconds to turn over onto the
+   * other side between its two stations and a full rest on the wrap into the next
+   * round, and a header reading either of those for the other would be naming a
+   * break you don't get.
    *
    * On a round screen it's timed from the round's last station, which is the one
    * that wraps the circuit.
    *
-   * On the last set of all there's no transition to price, so it falls back to the
-   * exercise's own rest — the number "back to rest" reopens.
+   * The header is up over the rest screen as well, by which time the flow has moved
+   * on to the coming set — so while a rest runs it lists that rest, the one on the
+   * clock under it, not the one the coming set will be followed by.
    */
-  const restShownSec = useMemo(
-    () => (nextStep ? restBetweenSteps(lastOnScreen, nextStep) : lastOnScreen.ex.restSec),
-    [lastOnScreen, nextStep],
+  const rests = useMemo(
+    () =>
+      sessionRest({
+        current: lastOnScreen,
+        next: nextStep,
+        runningSec: rest ? rest.seconds : null,
+        ledInSec: ledIn?.stepKey === step.stepKey ? ledIn.seconds : null,
+      }),
+    [lastOnScreen, nextStep, rest, ledIn, step.stepKey],
   )
 
   // Mark the current set done and either rest into the next set or finish.
@@ -968,9 +967,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     for (const { s, l, reps } of logged) {
       if (l) controls.carrySet(s.ex.key, { weightLbs: l.weightLbs ?? null, reps })
     }
-    // The rest the header has been naming all along (see restShownSec) — one
+    // The rest the header has been naming all along (see `rests`) — one
     // computation for both, so the break you get is the one you were shown.
-    const restSec = restShownSec
+    const restSec = rests.afterSec
+    setLedIn({ stepKey: steps[upcoming].stepKey, seconds: restSec })
     // What the set clock charges this screen's time to: the set, or every set of
     // the round, which share it.
     const clockKeys = roundOnScreen.length > 1 ? roundOnScreen.map((s) => s.stepKey) : step.stepKey
@@ -1262,8 +1262,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const menuItems: MenuItem[] = [
     // Off the rest screen only — there's nothing to go back to while it's up, and
     // nothing to rest before if the workout hasn't started.
-    ...(rest == null && !opening && restShownSec > 0
-      ? [{ label: 'back to rest', onClick: () => reopenRest(restShownSec) }]
+    ...(rest == null && !opening && rests.reopenSec > 0
+      ? [{ label: 'back to rest', onClick: () => reopenRest(rests.reopenSec) }]
       : []),
     // Only inside a circuit: everywhere else the rest after a set is simply the
     // exercise's own, and there's nothing per-station to choose between.
@@ -1296,6 +1296,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   //
   // Which set it names is right either way: the flow advances *before* resting, so
   // through a rest `step` is already the set the rest leads into.
+  // The last set of all is followed by no rest, so it lists none.
+  const restListed = rests.listedSec == null ? '' : ` · rest ${restLabel(rests.listedSec)}`
   const topBar = (
     <div className="flex flex-col gap-3">
       {/* How much of the whole workout is still ahead of you. */}
@@ -1339,13 +1341,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {/* The muscle group is left off a single lift: the name already says it. */}
       {roundMode ? (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
-          round <span className="tabular-nums">{step.setIndex + 1}/{roundCount}</span> · rest{' '}
-          {restLabel(restShownSec)}
+          round <span className="tabular-nums">{step.setIndex + 1}/{roundCount}</span>
+          {restListed}
         </p>
       ) : (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
           set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
-          {repRangeLabel(planned, target?.weightLbs)} {planned.timed ? 'sec' : 'reps'} · rest {restLabel(restShownSec)}
+          {repRangeLabel(planned, target?.weightLbs)} {planned.timed ? 'sec' : 'reps'}
+          {restListed}
         </p>
       )}
     </div>

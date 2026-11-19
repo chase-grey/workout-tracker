@@ -5,10 +5,12 @@ import {
   circuitRestLabel,
   emptyRestTally,
   openRest,
+  restAfterStep,
   restBeforeNextSet,
   restLabel,
   restScreenSec,
   resumeRestTally,
+  sessionRest,
   staleRestSec,
   upNextSetLabel,
   upNextTargetLabel,
@@ -405,5 +407,79 @@ describe('rest tally', () => {
     const saved = { sessionId: 's1', takenSec: 1800, prescribedSec: 2000, count: 20 }
     expect(resumeRestTally(saved, 's2')).toEqual(emptyRestTally('s2'))
     expect(resumeRestTally(null, 's2')).toEqual(emptyRestTally('s2'))
+  })
+})
+
+describe('restAfterStep', () => {
+  const bench = { key: 'bench', restSec: 150 }
+  const curl = { key: 'curl', restSec: 60 }
+  const row = { key: 'row', restSec: 120 }
+  const a = { key: 'a', restSec: 60, circuit: 'c', circuitRestSec: 10, circuitRoundRestSec: 90 }
+  const b = { key: 'b', restSec: 60, circuit: 'c', circuitRestSec: 10, circuitRoundRestSec: 90 }
+
+  it('is the exercise’s own rest between its sets', () => {
+    expect(restAfterStep({ ex: bench, setIndex: 0 }, { ex: bench, setIndex: 1 })).toBe(150)
+  })
+
+  it('is sized to the coming exercise, capped, on the way out of one', () => {
+    expect(restAfterStep({ ex: bench, setIndex: 3 }, { ex: curl, setIndex: 0 })).toBe(60)
+    expect(restAfterStep({ ex: curl, setIndex: 2 }, { ex: row, setIndex: 0 })).toBe(TRANSITION_REST_CAP_SEC)
+  })
+
+  it('tells a station change from the wrap into a new round', () => {
+    expect(restAfterStep({ ex: a, setIndex: 0 }, { ex: b, setIndex: 0 })).toBe(10)
+    expect(restAfterStep({ ex: b, setIndex: 0 }, { ex: a, setIndex: 1 })).toBe(90)
+  })
+
+  it('is nothing when no step follows', () => {
+    expect(restAfterStep({ ex: bench, setIndex: 3 }, null)).toBe(0)
+  })
+})
+
+describe('sessionRest', () => {
+  const bench = { key: 'bench', restSec: 150 }
+  const curl = { key: 'curl', restSec: 60 }
+  const set = (ex: typeof bench, setIndex: number) => ({ ex, setIndex })
+
+  it('lists, on the set screen, the rest the timer will open with', () => {
+    const mid = sessionRest({ current: set(bench, 1), next: set(bench, 2), runningSec: null, ledInSec: null })
+    expect(mid.listedSec).toBe(150)
+    expect(mid.afterSec).toBe(150)
+    const last = sessionRest({ current: set(bench, 3), next: set(curl, 0), runningSec: null, ledInSec: null })
+    expect(last.listedSec).toBe(60)
+    expect(last.afterSec).toBe(60)
+  })
+
+  it('lists the rest on the clock while one is running, not the coming set’s', () => {
+    // Resting off bench's third set into its last: 150s on the clock, though the
+    // set coming is followed by a 60s walk to the curls.
+    const r = sessionRest({ current: set(bench, 3), next: set(curl, 0), runningSec: 150, ledInSec: 150 })
+    expect(r.listedSec).toBe(150)
+    // And resting into the first row off the curls: the capped 90 on the clock,
+    // though the rows rest 120 between their own sets.
+    const row = { key: 'row', restSec: 120 }
+    const into = sessionRest({ current: set(row, 0), next: set(row, 1), runningSec: 90, ledInSec: 90 })
+    expect(into.listedSec).toBe(90)
+    expect(into.afterSec).toBe(120)
+  })
+
+  it('names no rest on the last set of all, and opens none', () => {
+    const r = sessionRest({ current: set(curl, 2), next: null, runningSec: null, ledInSec: null })
+    expect(r.listedSec).toBeNull()
+    expect(r.afterSec).toBe(0)
+  })
+
+  it('reopens the rest that led into the set on screen', () => {
+    // Bench's last set handed 60s to the curls; back to rest is that 60 again.
+    const row = { key: 'row', restSec: 120 }
+    expect(sessionRest({ current: set(row, 0), next: set(row, 1), runningSec: null, ledInSec: 90 }).reopenSec).toBe(90)
+    // Even on the last set, where nothing follows.
+    expect(sessionRest({ current: set(curl, 2), next: null, runningSec: null, ledInSec: 60 }).reopenSec).toBe(60)
+  })
+
+  it('reopens the rest that follows when none led in, and the exercise’s own on the last set', () => {
+    expect(sessionRest({ current: set(bench, 0), next: set(bench, 1), runningSec: null, ledInSec: null }).reopenSec).toBe(150)
+    expect(sessionRest({ current: set(bench, 0), next: set(bench, 1), runningSec: null, ledInSec: 0 }).reopenSec).toBe(150)
+    expect(sessionRest({ current: set(curl, 2), next: null, runningSec: null, ledInSec: null }).reopenSec).toBe(60)
   })
 })

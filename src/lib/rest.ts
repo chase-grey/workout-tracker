@@ -273,3 +273,68 @@ export function restBeforeNextSet(params: {
   }
   return Math.min(nextRestSec, TRANSITION_REST_CAP_SEC)
 }
+
+/** As much of a flow step as the rest after it is decided from. */
+export type RestStep = {
+  ex: {
+    key: string
+    restSec: number
+    circuit?: string
+    circuitRestSec?: number
+    circuitRoundRestSec?: number
+    roundScreen?: boolean
+  }
+  /** 0-based set of its exercise; a circuit's round. */
+  setIndex: number
+}
+
+/**
+ * The rest between one step and the step the flow goes to after it (see
+ * {@link restBeforeNextSet}). Coming back around to a circuit station starts a
+ * fresh round — the set number goes up — rather than continuing the current one.
+ */
+export function restAfterStep(s: RestStep, next: RestStep | null | undefined): number {
+  const sameCircuit = !!next && !!s.ex.circuit && next.ex.circuit === s.ex.circuit
+  return restBeforeNextSet({
+    currentRestSec: s.ex.restSec,
+    sameExercise: !!next && next.ex.key === s.ex.key,
+    nextRestSec: next ? next.ex.restSec : null,
+    sameCircuit,
+    newCircuitRound: sameCircuit && next.setIndex > s.setIndex,
+    circuitRestSec: s.ex.circuitRestSec,
+    circuitRoundRestSec: s.ex.circuitRoundRestSec,
+    roundScreen: s.ex.roundScreen,
+  })
+}
+
+/**
+ * Every rest number the lift session shows or runs, decided in one place so the
+ * one that's listed is the one the timer counts.
+ *
+ * - `afterSec` is the rest the timer opens with when the set on screen is
+ *   logged: {@link restAfterStep} to the step the flow will actually reach, and
+ *   `0` on the last set of all, which finishes instead.
+ * - `listedSec` is the number the header names. The header rides over the rest
+ *   screen too, and by then the flow has already moved on to the coming set — so
+ *   while a rest is on the clock the number is *that* rest's, not the one the
+ *   coming set will be followed by. Off the rest screen it is `afterSec`; `null`
+ *   on the last set, where there is no rest to name.
+ * - `reopenSec` is what "back to rest" runs: the rest that led into the set on
+ *   screen, when one did. Otherwise (the set was jumped to, or the app reloaded
+ *   since) the rest that follows it, and on the last set its exercise's own.
+ *
+ * `runningSec` is the full length of the rest on the clock, `null` off the rest
+ * screen. `ledInSec` is the length of the rest that led into the set on screen,
+ * `null` when none did or it isn't known.
+ */
+export function sessionRest(p: {
+  current: RestStep
+  next: RestStep | null | undefined
+  runningSec: number | null
+  ledInSec: number | null
+}): { afterSec: number; listedSec: number | null; reopenSec: number } {
+  const afterSec = p.next ? restAfterStep(p.current, p.next) : 0
+  const listedSec = p.runningSec ?? (p.next ? afterSec : null)
+  const reopenSec = p.ledInSec != null && p.ledInSec > 0 ? p.ledInSec : p.next ? afterSec : p.current.ex.restSec
+  return { afterSec, listedSec, reopenSec }
+}
