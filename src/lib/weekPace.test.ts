@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest'
-import { DAYS_IN_WEEK, calDaysRequiredByNow, requiredByNow, weekDaysCompleted, weekPace } from './weekPace'
+import { DAYS_IN_WEEK, calDaysBehind, calDaysRequiredByNow, requiredByNow, weekDaysCompleted, weekPace } from './weekPace'
 import { WEEKLY_GOAL_HISTORY, type WeeklyGoalConfig } from './weeklyStreak'
 
 // 2026-06-15 is a Monday; the Mon–Sun week runs 06-15 … 06-21.
@@ -62,40 +62,100 @@ describe('requiredByNow', () => {
 })
 
 describe('calDaysRequiredByNow', () => {
-  it('owes nothing until Monday 10pm, then one day', () => {
+  it('owes nothing all Monday: no day has finished', () => {
     expect(calDaysRequiredByNow(7, at(MON, 9))).toBe(0)
-    expect(calDaysRequiredByNow(7, new Date(2026, 5, MON, 21, 59))).toBe(0)
-    expect(calDaysRequiredByNow(7, at(MON, 22))).toBe(1)
-    expect(calDaysRequiredByNow(7, at(MON, 23))).toBe(1)
+    expect(calDaysRequiredByNow(7, at(MON, 22))).toBe(0)
+    expect(calDaysRequiredByNow(7, new Date(2026, 5, MON, 23, 59))).toBe(0)
   })
-  it('holds steady through the day and steps once at each 10pm', () => {
+  it('steps at midnight and holds through the whole day, evening included', () => {
     expect(calDaysRequiredByNow(7, at(MON + 1, 0))).toBe(1)
     expect(calDaysRequiredByNow(7, at(MON + 1, 12))).toBe(1)
-    expect(calDaysRequiredByNow(7, at(MON + 1, 21))).toBe(1)
-    expect(calDaysRequiredByNow(7, at(MON + 1, 22))).toBe(2)
+    expect(calDaysRequiredByNow(7, at(MON + 1, 22))).toBe(1)
+    expect(calDaysRequiredByNow(7, new Date(2026, 5, MON + 1, 23, 59))).toBe(1)
+    expect(calDaysRequiredByNow(7, at(MON + 2, 0))).toBe(2)
     expect(calDaysRequiredByNow(7, at(MON + 3, 9))).toBe(3)
-    expect(calDaysRequiredByNow(7, at(MON + 3, 22))).toBe(4)
   })
-  it('comes fully due at Sunday 10pm, an hour after the rest of the week, and resets Monday', () => {
-    expect(calDaysRequiredByNow(7, at(MON + 6, 21))).toBe(6)
-    expect(calDaysRequiredByNow(7, at(MON + 6, 22))).toBe(7)
-    expect(calDaysRequiredByNow(7, new Date(2026, 5, MON + 6, 23, 59))).toBe(7)
+  it('never owes the day in progress, so Sunday stops one short and Monday resets', () => {
+    expect(calDaysRequiredByNow(7, at(MON + 6, 9))).toBe(6)
+    expect(calDaysRequiredByNow(7, new Date(2026, 5, MON + 6, 23, 59))).toBe(6)
     expect(calDaysRequiredByNow(7, at(MON + 7, 9))).toBe(0)
   })
-  it('scales a smaller goal across the same seven steps', () => {
-    expect(calDaysRequiredByNow(6, at(MON + 1, 12))).toBeCloseTo(6 / 7)
-    expect(calDaysRequiredByNow(6, at(MON + 6, 22))).toBe(6)
+  it('keeps the spare day of a six-of-seven goal in hand, in whole days', () => {
+    expect(calDaysRequiredByNow(6, at(MON, 9))).toBe(0)
+    expect(calDaysRequiredByNow(6, at(MON + 1, 12))).toBe(0)
+    expect(calDaysRequiredByNow(6, at(MON + 2, 20))).toBe(1)
+    expect(calDaysRequiredByNow(6, at(MON + 6, 23))).toBe(5)
+    // Five of seven has two spare.
+    expect(calDaysRequiredByNow(5, at(MON + 2, 20))).toBe(0)
+    expect(calDaysRequiredByNow(5, at(MON + 3, 20))).toBe(1)
   })
-  it('keeps the 10pm deadline local across daylight saving transitions', () => {
+  it('is a whole number at every hour of the week', () => {
+    for (let d = MON; d <= MON + 6; d++) {
+      for (let h = 0; h < 24; h++) {
+        for (const goal of [1, 3, 5, 6, 7]) {
+          expect(Number.isInteger(calDaysRequiredByNow(goal, at(d, h)))).toBe(true)
+        }
+      }
+    }
+  })
+  it('steps at local midnight across daylight saving transitions', () => {
     for (const month of [2, 10]) {
-      const sunday = new Date(2026, month, month === 2 ? 8 : 1, 22)
-      expect(calDaysRequiredByNow(7, sunday)).toBe(7)
-      sunday.setHours(21, 59)
+      const sunday = new Date(2026, month, month === 2 ? 8 : 1, 23, 59)
+      expect(calDaysRequiredByNow(7, sunday)).toBe(6)
+      sunday.setHours(0, 0)
       expect(calDaysRequiredByNow(7, sunday)).toBe(6)
     }
   })
   it('handles zero goals', () => {
     expect(calDaysRequiredByNow(0, at(MON + 3))).toBe(0)
+  })
+})
+
+// The complaint, twice now: "days on calorie target is moving too soon again.
+// I'm somehow behind pace on a Wednesday evening when I hit my goal Monday and
+// Tuesday". Whatever else changes about pacing, this must not.
+describe('days on calorie target is moving too soon', () => {
+  const WED = MON + 2
+  const evening = [18, 20, 21, 22, 23].map((h) => at(WED, h)).concat(new Date(2026, 5, WED, 23, 59, 59))
+  const calRow = (calDays: number, goals: WeeklyGoalConfig, now: Date) =>
+    weekPace({ workouts: 0, flex: 0, calDays }, goals, now).metrics.find((m) => m.key === 'calDays')!
+
+  it('is not behind on Wednesday evening with Monday and Tuesday hit', () => {
+    for (const now of evening) {
+      for (const goal of [5, 6, 7]) {
+        expect(calDaysBehind(2, goal, now)).toBe(false)
+        expect(calDaysRequiredByNow(goal, now)).toBeLessThanOrEqual(2)
+      }
+    }
+  })
+
+  it('draws the row marker no further than the fill, and holds it still all Wednesday', () => {
+    for (const goals of [G, G7]) {
+      const rows = evening.map((now) => calRow(2, goals, now))
+      for (const m of rows) expect(m.required).toBeLessThanOrEqual(m.done)
+      const morning = calRow(2, goals, at(WED, 0))
+      expect(new Set([morning.required, ...rows.map((m) => m.required)]).size).toBe(1)
+    }
+  })
+
+  it('is behind only once the days left cannot cover what is owed', () => {
+    // Seven of seven, Monday missed: lost the moment Monday ended.
+    expect(calDaysBehind(0, 7, at(MON, 23))).toBe(false)
+    expect(calDaysBehind(0, 7, at(MON + 1, 0))).toBe(true)
+    // Six of seven, Monday missed: the spare day covers it for the rest of the week.
+    expect(calDaysBehind(0, 6, at(MON + 1, 9))).toBe(false)
+    expect(calDaysBehind(1, 6, at(MON + 2, 9))).toBe(false)
+    expect(calDaysBehind(5, 6, at(MON + 6, 23))).toBe(false)
+    // A second miss is one too many.
+    expect(calDaysBehind(0, 6, at(MON + 2, 0))).toBe(true)
+  })
+
+  it('agrees with the metric being out of reach', () => {
+    for (let d = MON; d <= MON + 6; d++) {
+      for (let done = 0; done <= 7; done++) {
+        expect(calDaysBehind(done, G.calDays, at(d, 20))).toBe(calRow(done, G, at(d, 20)).missed)
+      }
+    }
   })
 })
 
@@ -130,15 +190,15 @@ describe('weekPace — the schedule marker', () => {
     expect(flexRequired(MON + 6)).toBe(2)
   })
 
-  it('steps calorie days once a night while the other two ramp', () => {
+  it('steps calorie days at midnight while the other two ramp', () => {
     const cal = (d: number, h: number) =>
       weekPace({ workouts: 0, flex: 0, calDays: 0 }, G7, at(d, h)).metrics.find((m) => m.key === 'calDays')!.required
     expect(cal(MON + 2, 8)).toBe(2)
-    expect(cal(MON + 2, 21)).toBe(2)
-    expect(cal(MON + 2, 22)).toBe(3)
+    expect(cal(MON + 2, 23)).toBe(2)
+    expect(cal(MON + 3, 0)).toBe(3)
   })
 
-  it('finishes workouts and flex at 9pm Sunday, and the whole bar at 10pm, where the marker retires', () => {
+  it('finishes workouts and flex at 9pm Sunday, and never calls the calorie day of Sunday due', () => {
     const nine = weekPace({ workouts: 0, flex: 0, calDays: 0 }, G7, at(MON + 6, 21))
     const byKey = new Map(nine.metrics.map((m) => [m.key, m]))
     expect(byKey.get('workouts')!.required).toBe(G7.workouts)
@@ -146,16 +206,19 @@ describe('weekPace — the schedule marker', () => {
     expect(byKey.get('calDays')!.required).toBe(6)
     expect(nine.requiredFraction).toBeLessThan(1)
 
-    const ten = weekPace({ workouts: 0, flex: 0, calDays: 0 }, G7, at(MON + 6, 22))
-    expect(ten.requiredFraction).toBe(1)
-    expect(ten.metrics.every((m) => m.required === m.goal)).toBe(true)
+    const late = weekPace({ workouts: 0, flex: 0, calDays: 0 }, G7, at(MON + 6, 23))
+    expect(late.metrics.find((m) => m.key === 'calDays')!.required).toBe(6)
+    expect(late.requiredFraction).toBeLessThan(1)
   })
 
-  it('leaves the last two hours open even with the schedule finished', () => {
-    // 10pm Sunday, a calorie day short: the whole goal is due, but the day it can
-    // still be logged on has not ended, so nothing is lost yet.
-    const p = weekPace({ workouts: 2, flex: 3, calDays: 5 }, G, at(MON + 6, 22))
+  it('retires the marker at 9pm Sunday when no calorie days are asked for', () => {
+    const p = weekPace({ workouts: 0, flex: 0, calDays: 0 }, { ...G, calDays: 0 }, at(MON + 6, 21))
     expect(p.requiredFraction).toBe(1)
+  })
+
+  it('leaves Sunday night open a calorie day short', () => {
+    const p = weekPace({ workouts: 2, flex: 3, calDays: 5 }, G, at(MON + 6, 22))
+    expect(p.metrics.find((m) => m.key === 'calDays')!.required).toBe(5)
     expect(p.binding?.key).toBe('calDays')
     expect(p.binding?.missed).toBe(false)
     expect(p.buffer).toBe(0)
@@ -166,8 +229,9 @@ describe('weekPace — the schedule marker', () => {
     const done = weekPace({ workouts: 2, flex: 3, calDays: 6 }, G, at(MON + 3))
     expect(none.requiredFraction).toBe(done.requiredFraction)
     expect(none.metrics.map((m) => m.required)).toEqual(done.metrics.map((m) => m.required))
-    // Thursday 9am: 63 of the 147 ramp hours, 63 of flex's 123, three calorie nights of seven.
-    expect(none.requiredFraction).toBeCloseTo((63 / 147 + 63 / 123 + 3 / 7) / 3)
+    // Thursday 9am: 63 of the 147 ramp hours, 63 of flex's 123, and two of six
+    // calorie days: three days done, one of them the spare.
+    expect(none.requiredFraction).toBeCloseTo((63 / 147 + 63 / 123 + 2 / 6) / 3)
   })
 })
 
@@ -185,8 +249,8 @@ describe('weekPace — the buffer', () => {
     // gets wrong.
     const counts = { workouts: 2, flex: 3, calDays: 4 }
     const p = weekPace(counts, G, at(MON + 5))
-    // Saturday 9am: five calorie nights have passed.
-    expect(p.requiredFraction).toBeCloseTo((111 / 147 + 111 / 123 + 5 / 7) / 3)
+    // Saturday 9am: five days done, so four of the six had to be in.
+    expect(p.requiredFraction).toBeCloseTo((111 / 147 + 111 / 123 + 4 / 6) / 3)
     expect(p.buffer).toBe(0)
     expect(p.binding?.key).toBe('calDays')
   })

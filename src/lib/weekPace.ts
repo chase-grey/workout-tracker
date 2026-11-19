@@ -1,9 +1,9 @@
 /**
  * Weekly pace, independent of logged progress. Workouts and flex sessions run
  * on a steady ramp: a Monday evening grace period, then a smooth climb to the
- * last intended day's evening deadline. Calorie days are owed one a day, so
- * their schedule is a staircase: each day's share comes due at that day's
- * 10pm. Remaining-day buffers are separate, since pace and feasibility differ.
+ * last intended day's evening deadline. Calorie days can't be banked ahead or
+ * caught up, and a day isn't settled until it ends, so their schedule is a
+ * staircase that steps at midnight and counts finished days only.
  */
 
 import { mondayOf } from './dates'
@@ -44,31 +44,28 @@ export function requiredByNow(
 }
 
 /**
- * Local hour at which a calorie day is due. Calorie days are owed one a night,
- * not spread across the week: Monday's share is due Monday night, and the
- * schedule steps up once a night rather than ramping.
- * An hour past the eating window, so a late plate still lands before the bar
- * moves.
- */
-export const CAL_DAY_DEADLINE_HOUR = 22
-
-/**
- * Calorie days the schedule expects by `now`: the goal's share for every day of
- * this week whose {@link CAL_DAY_DEADLINE_HOUR} has passed. Zero all day Monday
- * until 10pm, one step per night after that, the whole goal from Sunday 10pm.
- * Fractional when the goal isn't seven, so the staircase still tops out at the
- * goal rather than overshooting it.
+ * Calorie days that had to be banked by `now` for the goal to still be in reach:
+ * the goal less every day that can still carry one, today included.
+ *
+ * A calorie day is settled only when it ends. Until midnight today's plate is
+ * still being filled, so today is never owed, and the marker moves at midnight
+ * and at no other time. It has been moved early twice before: on a ramp across
+ * the clock, then at each day's own 10pm, which called a day missed with two
+ * hours of it left. Days can't be banked ahead or caught up either, so the only
+ * honest "behind" is that the days left no longer cover what's owed. A goal
+ * short of seven keeps its spare days in hand until they are spent: six of seven
+ * owes nothing through Tuesday, one on Wednesday, five on Sunday. Seven of
+ * seven owes every finished day.
  */
 export function calDaysRequiredByNow(goal: number, now: Date = new Date()): number {
   if (goal <= 0) return 0
-  const due = new Date(mondayOf(now))
-  due.setHours(CAL_DAY_DEADLINE_HOUR, 0, 0, 0)
-  let days = 0
-  while (days < DAYS_IN_WEEK && due.getTime() <= now.getTime()) {
-    days++
-    due.setDate(due.getDate() + 1)
-  }
-  return (goal * days) / DAYS_IN_WEEK
+  const daysLeft = DAYS_IN_WEEK - weekDaysCompleted(now)
+  return Math.min(goal, Math.max(0, goal - daysLeft))
+}
+
+/** Behind on calorie days: fewer banked than the days left can make up. */
+export function calDaysBehind(done: number, goal: number, now: Date = new Date()): boolean {
+  return done < calDaysRequiredByNow(goal, now)
 }
 
 export type MetricKey = keyof WeekCounts
@@ -119,9 +116,9 @@ export type WeekPace = {
   /**
    * Where the pace marker sits on the overall bar: the mean of the per-metric
    * required fractions, aggregated the same way progress is so the two are
-   * directly comparable. Reaches 1 at the week's last deadline — Sunday 10pm,
-   * when the final calorie day comes due — where the schedule has nothing left
-   * to say and the marker goes away.
+   * directly comparable. At 1 the schedule has nothing left to say and the
+   * marker goes away; with calorie days in play it stops short of that all
+   * Sunday, since Sunday's own day is never owed before it ends.
    */
   requiredFraction: number
   /**
