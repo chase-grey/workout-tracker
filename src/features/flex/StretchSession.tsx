@@ -57,7 +57,7 @@ import { useEnterNext } from '../../lib/useEnterNext'
 import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { landingStep, setPosition, withSkipped } from '../../lib/skipped'
-import { projectedSoFar } from '../../lib/sessionPace'
+import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -562,6 +562,11 @@ export function StretchSession({
   // costs, against which both a finished stretch's time and the time so far are
   // read (see lib/sessionPace).
   const wholeRows = remainingTiming(exerciseAverages, priceStretchFlow(steps, coreRepsFor, fast))
+  // The same pricing read against the clock, for the mark on the progress bar:
+  // how much of the bar the projection says should be filled by now.
+  const startedMs = startedAt ? Date.parse(startedAt) : NaN
+  const expectedAt = (now: number) =>
+    Number.isFinite(startedMs) ? expectedProgress(wholeRows, (now - startedMs) / 1000) : null
   const checklistTiming = {
     clock: (
       <ChecklistClock
@@ -1085,6 +1090,7 @@ export function StretchSession({
         unit="sets"
         timeLeftLabel={`${formatDuration(timeLeft)} left`}
         onTimeClick={() => setShowList(true)}
+        expected={expectedAt}
       />
 
       <header className="flex items-start justify-between gap-2">

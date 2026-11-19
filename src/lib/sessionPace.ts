@@ -34,3 +34,43 @@ export function projectedSoFar(
   const restSec = Math.max(0, whole.restSec - left.restSec)
   return { activeSec, restSec, totalSec: activeSec + restSec }
 }
+
+/** One set of the whole flow as the projection prices it. */
+export type PaceStep = {
+  activeSec: number
+  restSec: number
+  /**
+   * How much of the progress bar finishing this set fills, in the bar's own
+   * unit. One set, unless the bar counts something coarser: a circuit logged a
+   * round at a time counts rounds, so each of its four stations is a quarter.
+   */
+  units?: number
+}
+
+/**
+ * The same projection read the other way: given the time on the clock, how far
+ * through the session the estimate says you should be, as the fraction of the
+ * progress bar that should be filled.
+ *
+ * The bar fills a set at a time, when the set is logged, so the projection is
+ * read in the same steps: a set counts once its active time has gone by, and
+ * nothing more is owed through the rest after it. Exactly on pace, the mark
+ * sits on the end of the fill; a fill short of it is behind, one past it ahead.
+ *
+ * `steps` is the whole flow in the order it's walked, done sets included. Null
+ * when there is nothing to project against.
+ */
+export function expectedProgress(steps: readonly PaceStep[], elapsedSec: number): number | null {
+  let all = 0
+  let earned = 0
+  let at = 0
+  for (const step of steps) {
+    const units = step.units ?? 1
+    all += units
+    at += Math.max(0, step.activeSec)
+    if (elapsedSec >= at) earned += units
+    at += Math.max(0, step.restSec)
+  }
+  if (all <= 0 || at <= 0) return null
+  return Math.max(0, Math.min(1, earned / all))
+}

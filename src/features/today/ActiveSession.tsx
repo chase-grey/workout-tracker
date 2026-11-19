@@ -84,7 +84,7 @@ import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
 import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
 import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
-import { projectedSoFar } from '../../lib/sessionPace'
+import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
@@ -627,6 +627,20 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Read only while the checklist is up; the rest screen's tick keeps a running
   // rest live.
   const exerciseProjected = showList ? timeLeftByExercise(wholeRows, exerciseOf) : null
+  // The same pricing read against the clock, for the mark on the progress bar:
+  // how much of the bar the projection says should be filled by now. The bar
+  // counts a circuit logged a round at a time in rounds (see `totals`), so each
+  // of its stations fills its share of one.
+  const pace = wholeRows.map((row, i) => {
+    const s = steps[i]
+    const sharing = s.ex.roundScreen && s.ex.circuit
+      ? steps.filter((o) => o.ex.circuit === s.ex.circuit && o.setIndex === s.setIndex).length
+      : 1
+    return { activeSec: row.activeSec, restSec: row.restSec, units: 1 / sharing }
+  })
+  const startedMs = session.startedAt ? Date.parse(session.startedAt) : NaN
+  const expectedAt = (now: number) =>
+    Number.isFinite(startedMs) ? expectedProgress(pace, (now - startedMs) / 1000) : null
   const exerciseSpent = showList ? spentByExercise(setClock.current, Date.now(), exerciseOf) : null
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
@@ -1339,6 +1353,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         unit="sets"
         timeLeftLabel={`${formatDuration(timeLeft)} left`}
         onTimeClick={() => setShowList(true)}
+        expected={expectedAt}
       />
 
       <header className="flex items-start justify-between gap-2">
