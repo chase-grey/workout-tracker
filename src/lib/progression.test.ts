@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { WorkoutRow } from '../types'
+import { epley1RM } from './epley'
 import {
   bestPerformance,
   lastPerformance,
@@ -48,11 +49,11 @@ describe('nextTarget', () => {
     })
   })
 
-  it('bumps weight and resets reps at the top of the range', () => {
+  it('bumps weight at the top of the range, and gives up a rep for it', () => {
     const rows = [row({ weight_lbs: 135, reps: 10 })]
     expect(nextTarget(rows, 'bench', { repMin: 6, repMax: 10, increment: 5, today: TODAY })).toEqual({
       weightLbs: 140,
-      reps: 6,
+      reps: 9,
     })
   })
 
@@ -249,7 +250,7 @@ describe('nextTarget', () => {
     )
     expect(nextTarget(rows, 'bench', { repMin: 8, repMax: 12, increment: 5, today: TODAY })).toEqual({
       weightLbs: 140,
-      reps: 8,
+      reps: 11,
     })
   })
 
@@ -320,7 +321,7 @@ describe('nextTarget', () => {
     const rows = [row({ weight_lbs: 100, reps: 10 })]
     expect(nextTarget(rows, 'bench', { repMin: 6, repMax: 10, increment: 2.75, today: TODAY })).toEqual({
       weightLbs: 103,
-      reps: 6,
+      reps: 9,
     })
   })
 
@@ -550,6 +551,52 @@ describe('nextTarget builds on the best ever held', () => {
   })
 })
 
+describe('the reps asked for when the weight goes up', () => {
+  /** Three clean sets at the top of the range, then the target that follows. */
+  const after = (weight: number, reps: number, opts: { repMin: number; repMax: number; increment: number }) =>
+    nextTarget(
+      [1, 2, 3].map((set_number) => row({ set_number, weight_lbs: weight, reps })),
+      'bench',
+      { ...opts, today: TODAY },
+    )
+  /** The incline dumbbell curl: 8-12, a pair of dumbbells, so the step is 10 lbs. */
+  const CURL = { repMin: 8, repMax: 12, increment: 10 }
+
+  it('takes two reps off a curl going from 50 to 60, not four', () => {
+    // 50×12 is 600 lbs a set; at 60 that is ten reps. It used to be 60×8.
+    expect(after(50, 12, CURL)).toEqual({ weightLbs: 60, reps: 10 })
+  })
+
+  it('takes more off the lighter the load, since the same 10 lbs is more of it', () => {
+    expect(after(60, 12, CURL)).toEqual({ weightLbs: 70, reps: 10 })
+    expect(after(40, 12, CURL)).toEqual({ weightLbs: 50, reps: 9 })
+    expect(after(30, 12, CURL)).toEqual({ weightLbs: 40, reps: 9 })
+  })
+
+  it('never asks for fewer than the bottom of the range', () => {
+    // 20×12 is 240 a set, which at 30 would be eight exactly; 10×12 would be six.
+    expect(after(20, 12, CURL)).toEqual({ weightLbs: 30, reps: 8 })
+    expect(after(10, 12, CURL)).toEqual({ weightLbs: 20, reps: 8 })
+  })
+
+  it('takes one rep off a heavy lift, where the step is small beside the load', () => {
+    expect(after(300, 10, { repMin: 6, repMax: 10, increment: 10 })).toEqual({ weightLbs: 310, reps: 9 })
+    expect(after(100, 12, { repMin: 8, repMax: 12, increment: 5 })).toEqual({ weightLbs: 105, reps: 11 })
+  })
+
+  it('is always a harder set than the one that earned it', () => {
+    for (const weight of [20, 30, 40, 50, 60, 80, 100, 150, 300]) {
+      const next = after(weight, 12, CURL)
+      expect(epley1RM(next.weightLbs!, next.reps)).toBeGreaterThan(epley1RM(weight, 12))
+      expect(next.reps).toBeLessThan(12)
+    }
+  })
+
+  it('keeps to the top of the range after a session that went past it', () => {
+    expect(after(100, 20, { repMin: 8, repMax: 12, increment: 5 })).toEqual({ weightLbs: 105, reps: 12 })
+  })
+})
+
 describe('nextTarget on a movement that takes no weight', () => {
   /** The sideways leg raise: no plate to add, so 15 reps is where the ladder starts. */
   const RAISE = { repMin: 15, repMax: 15, bodyweight: true, repLadder: true, today: TODAY }
@@ -651,7 +698,7 @@ describe('nextTarget at a load ceiling', () => {
     const rows = [row({ weight_lbs: 135, reps: 10 })]
     expect(nextTarget(rows, 'bench', { repMin: 6, repMax: 10, increment: 5, today: TODAY })).toEqual({
       weightLbs: 140,
-      reps: 6,
+      reps: 9,
     })
   })
 })
@@ -909,8 +956,8 @@ describe('nextTargets with a shared load', () => {
       row({ exercise: 'overhead_tricep_ext', weight_lbs: 30, reps: 15 }),
     ]
     const stepped = targets(earned)
-    expect(stepped.get('tricep_pushdown')).toEqual({ weightLbs: 32.5, reps: 10 })
-    expect(stepped.get('overhead_tricep_ext')).toEqual({ weightLbs: 32.5, reps: 10 })
+    expect(stepped.get('tricep_pushdown')).toEqual({ weightLbs: 32.5, reps: 13 })
+    expect(stepped.get('overhead_tricep_ext')).toEqual({ weightLbs: 32.5, reps: 13 })
   })
 
   it('reads the held-back move’s reps off what it actually lifted', () => {
@@ -948,7 +995,7 @@ describe('nextTargets with a shared load', () => {
     // The extension isn't in today's list, so the pushdown climbs on its own.
     expect(targets(rows, [PUSHDOWN, LATERAL]).get('tricep_pushdown')).toEqual({
       weightLbs: 42.5,
-      reps: 10,
+      reps: 14,
     })
   })
 
@@ -966,7 +1013,7 @@ describe('nextTargets with a shared load', () => {
     ]
     const t = nextTargets(rows, [PUSHDOWN, dips], { today: TODAY })
     expect(t.get('dips')).toEqual({ weightLbs: null, reps: 11 })
-    expect(t.get('tricep_pushdown')).toEqual({ weightLbs: 42.5, reps: 10 })
+    expect(t.get('tricep_pushdown')).toEqual({ weightLbs: 42.5, reps: 14 })
   })
 })
 

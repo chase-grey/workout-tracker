@@ -835,9 +835,9 @@ describe('the cable pulldown machine as it ships', () => {
       })) as unknown as Parameters<typeof nextTarget>[0]
     const today = new Date(2026, 9, 27)
     // A clean top-of-range session at 12 earns exactly one setting, not a pound step.
-    expect(nextTarget(session(12, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 13, reps: ex.repMin })
+    expect(nextTarget(session(12, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 13, reps: 13 })
     // The last step lands on 15 and no further.
-    expect(nextTarget(session(14, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 15, reps: ex.repMin })
+    expect(nextTarget(session(14, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 15, reps: 14 })
     // At 15 there is nothing left to add, so the ask is one more rep.
     expect(nextTarget(session(15, ex.repMax), ex.key, { ...opts, today })).toEqual({ weightLbs: 15, reps: ex.repMax + 1 })
   })

@@ -64,6 +64,35 @@ function repsAtWeight(
 }
 
 /**
+ * The reps to ask for at `weight`, the next step up from `topWeight`×`topReps`:
+ * as many as keep the load moved in a set about what it was, rounded down.
+ *
+ * Going up a weight used to send the reps straight to the bottom of the range
+ * whatever the size of the step, so a curl that went from 50 to 60 lbs dropped
+ * from 12 reps to 8 — a third of the reps for a fifth more weight. How far the
+ * reps should come down depends on how big the step is beside the load: the same
+ * 10 lbs is a fifth of a 50 lb curl and a thirtieth of a 300 lb leg press. So the
+ * drop is the step's own proportion. 50×12 is 600 lbs a set, which at 60 is ten
+ * reps; 300×10 at 310 is nine.
+ *
+ * That is always a harder set than the one it follows — heavier, for all but the
+ * reps the extra weight itself pays for — and never an easier one than the bottom
+ * of the range would have been: `repMin` is still the floor, and the top of the
+ * range the ceiling for a session that went past it.
+ */
+function repsAfterBump(
+  topWeight: number,
+  topReps: number,
+  weight: number,
+  repMin: number,
+  repMax: number,
+): number {
+  if (weight <= 0) return repMin
+  const reps = Math.floor((topWeight * topReps) / weight + 1e-9)
+  return Math.max(repMin, Math.min(repMax, reps))
+}
+
+/**
  * How long a gap makes the last session a poor basis for a step up. Come back
  * from a break, an illness or a holiday and the plan repeats what you last
  * actually did rather than demanding more on top of it — you re-pace upward from
@@ -685,7 +714,13 @@ function targetFrom(
   // `atCap` sends the progression into reps.
   if (!atCap && !repeat && last.topReps >= repMax) {
     const bumped = last.topWeight + increment
-    return { weightLbs: roundHalf(cap == null ? bumped : Math.min(bumped, cap)), reps: repMin }
+    const weight = roundHalf(cap == null ? bumped : Math.min(bumped, cap))
+    // Fewer reps at the heavier weight, by as much as the step is big (see
+    // repsAfterBump) rather than all the way back to the bottom of the range.
+    return {
+      weightLbs: weight,
+      reps: repsAfterBump(last.topWeight, last.topReps, weight, repMin, repMax),
+    }
   }
 
   const reps = repeat ? repeatReps : oneMoreRep
