@@ -4,6 +4,7 @@ import {
   MdBlock,
   MdBolt,
   MdCheckCircle,
+  MdDragIndicator,
   MdFlag,
   MdRadioButtonUnchecked,
   MdShowChart,
@@ -41,7 +42,9 @@ import {
   toSkippedRecord,
 } from '../../lib/skipped'
 import { pairKeys } from '../../lib/pairedSides'
-import { circuitRunKeys, dayEntries, roundTally, sidelessName } from '../../lib/circuitEntry'
+import { circuitMembers, circuitRunKeys, dayEntries, entryExercises, roundTally, sidelessName } from '../../lib/circuitEntry'
+import { arrange, dropAt, isComboId } from '../../lib/arrangement'
+import { DRAG_LEFT, DRAG_LIFTED, DRAG_ONTO, useDragCombine } from '../../lib/useDragCombine'
 import { roundCards, sidePairPeer, sidesAgree } from '../../lib/sidePair'
 import { ChecklistCircuit } from './ChecklistCircuit'
 import {
@@ -270,12 +273,17 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Keyed once: a movement the short form left out can be added from the list
   // before the checklist opens the day up, and then the day prescribes what the
   // addition already carries. The day's own entry wins, since the log is one.
-  const exercises = useMemo(() => {
+  const dayExercises = useMemo(() => {
     const own = performedExercises(day, session)
     const have = new Set(own.map((e) => e.key))
     return [...own, ...(session.adHocExercises ?? []).filter((e) => !have.has(e.key))]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day, session.variant, session.length, session.startSide, session.restAbs, session.restNeck, session.adHocExercises])
+  // And as the checklist has been dragged into shape since: reordered, and with
+  // the circuits made or unmade there (see lib/arrangement). Everything below
+  // reads this list, so a circuit made by hand is rotated, rested and listed by
+  // the same code as one the plan defines.
+  const exercises = useMemo(() => arrange(dayExercises, session.arrangement), [dayExercises, session.arrangement])
 
   // What the add-exercise sheet can offer (see lib/adHocExercise), grouped the
   // way the plan is: built only while it's open, since it reads the whole log.
@@ -354,6 +362,33 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     }
     return next
   }
+
+  // The checklist's rows — a circuit is one — and the drag that rearranges them.
+  // What's dropped is a whole row (both sides of a one-limb pair travel
+  // together, as they do everywhere else) or one movement out of a circuit; where
+  // it lands is worked out in lib/arrangement, and the set on screen is held by
+  // key across the reshaped flow, the way opening the day up holds it.
+  const checklistEntries = useMemo(() => dayEntries(exercises), [exercises])
+  const listScroller = useRef<HTMLDivElement>(null)
+  const listDrag = useDragCombine(
+    checklistEntries.map((entry) => entry.id),
+    (dragId, target) => {
+      const row = checklistEntries.find((entry) => entry.id === dragId)
+      const lone = new Set(checklistEntries.flatMap((entry) => (entry.kind === 'exercise' ? [entry.exercise.key] : [])))
+      const keys = row
+        ? row.kind === 'circuit'
+          ? entryExercises(row).map((e) => e.key)
+          : pairKeys(exercises.map((e) => e.key), row.exercise.key).filter((k) => lone.has(k))
+        : checklistEntries
+            .flatMap((entry) => (entry.kind === 'circuit' ? circuitMembers(entry.stations) : []))
+            .find((m) => `part:${m.keys[0]}` === dragId)?.keys ?? []
+      const next = dropAt(dayExercises, session.arrangement, keys, target)
+      if (next === (session.arrangement ?? null)) return
+      setPendingStepKey(step.stepKey)
+      controls.arrange(next)
+    },
+    listScroller,
+  )
 
   const logFor = (key: string) => session.exercises.find((e) => e.exercise === key)
   const doneCount = (key: string) => logFor(key)?.sets.filter((s) => s.done && s.reps > 0).length ?? 0
@@ -1313,7 +1348,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       : []),
     // Only inside a circuit: everywhere else the rest after a set is simply the
     // exercise's own, and there's nothing per-station to choose between.
-    ...(stations.length > 0
+    ...(stations.length > 0 && !isComboId(planned.circuit)
       ? [{ label: roundMode ? 'rest between rounds' : 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
     { label: roundMode ? 'add a round' : 'add a set', onClick: addSet },
@@ -1757,6 +1792,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         // Above the rest overlay (z-50) — reachable from the rest screen's menu.
         <div className="fixed inset-0 z-60 flex items-end bg-black/60" onClick={() => setShowList(false)}>
           <div
+            ref={listScroller}
             className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-4"
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
@@ -1785,8 +1821,18 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 </button>
               </div>
             )}
-            <div className="flex flex-col gap-1">
-              {dayEntries(exercises).map((entry) => {
+            {/* The rows are dragged by their grips (see lib/useDragCombine): let
+                go between two rows a row moves there, let go on one it joins it
+                in a circuit. The line marks the gap, the ring the row. */}
+            <div ref={listDrag.list} className="relative flex flex-col gap-1">
+              {listDrag.gapTop != null && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 z-30 h-1 -translate-y-1/2 rounded-full bg-accent"
+                  style={{ top: listDrag.gapTop }}
+                />
+              )}
+              {checklistEntries.map((entry) => {
                 // A circuit is one row, opening into its rounds (see ChecklistCircuit).
                 if (entry.kind === 'circuit') {
                   const st = entry.stations
@@ -1802,6 +1848,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                   return (
                     <ChecklistCircuit
                       key={entry.id}
+                      drag={{
+                        row: listDrag.row(entry.id),
+                        head: listDrag.part(entry.id),
+                        handle: listDrag.handle(entry.id),
+                        lifted: listDrag.draggingId === entry.id,
+                        onto: listDrag.ontoId === entry.id,
+                        part: (lead) => listDrag.part(`part:${lead}`),
+                        partHandle: (lead) => listDrag.partHandle(`part:${lead}`, entry.id),
+                        partLifted: (lead) => listDrag.draggingId === `part:${lead}`,
+                      }}
                       stations={st}
                       logFor={logFor}
                       currentStepKey={step.stepKey}
@@ -1848,8 +1904,22 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 const firstStep = steps.findIndex((s, si) => s.ex.key === e.key && !stepDone[si])
                 const jumpStep = firstStep >= 0 ? firstStep : steps.findIndex((s) => s.ex.key === e.key)
                 return (
-                  <div key={e.key} className={`rounded-xl px-2 ${planned.key === e.key ? 'bg-surface-2' : ''}`}>
-                    <div className="flex items-center gap-2">
+                  <div
+                    key={e.key}
+                    ref={listDrag.row(entry.id)}
+                    className={`rounded-xl px-2 ${planned.key === e.key ? 'bg-surface-2' : ''} ${listDrag.ontoId === entry.id ? DRAG_ONTO : ''}`}
+                  >
+                    <div
+                      ref={listDrag.part(entry.id)}
+                      className={`flex items-center gap-2 ${listDrag.draggingId === entry.id ? DRAG_LIFTED : ''}`}
+                    >
+                      <button
+                        {...listDrag.handle(entry.id)}
+                        aria-label={`move ${e.name}`}
+                        className="-ml-2 flex min-h-[44px] w-9 shrink-0 cursor-grab items-center justify-center text-2xl text-neutral-600 active:cursor-grabbing"
+                      >
+                        <MdDragIndicator aria-hidden />
+                      </button>
                       <button
                         onClick={() => {
                           // A skipped exercise has no step to jump to until it's
@@ -1899,7 +1969,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                       )}
                     </div>
                     {!isSkipped && exerciseLog && (
-                      <div className="mb-2 flex flex-col gap-1 border-t border-neutral-200/10 pt-1">
+                      <div className={`mb-2 flex flex-col gap-1 border-t border-neutral-200/10 pt-1 ${listDrag.draggingId === entry.id ? DRAG_LEFT : ''}`}>
                         {exerciseLog.sets.map((loggedSet, setIndex) => {
                           // A set not yet done holds its prefilled target (see
                           // lib/checklistEdit): shown as the prompt it is, not as

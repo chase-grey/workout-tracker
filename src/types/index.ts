@@ -28,6 +28,11 @@ export type WorkoutSession = {
   exercises: ExerciseLog[]
   /** Exercises added only to this in-progress workout from the checklist. */
   adHocExercises?: import('../config/plan').PlannedExercise[]
+  /**
+   * The order and the circuits this workout was dragged into from the checklist
+   * (see lib/arrangement). Today's only: the plan is untouched.
+   */
+  arrangement?: import('../lib/arrangement').Arrangement | null
   isHistorical: boolean
   /** ISO timestamp the session was started — used to learn typical durations. */
   startedAt?: string

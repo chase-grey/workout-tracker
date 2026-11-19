@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { MdBlock, MdCheckCircle, MdKeyboardArrowDown, MdRadioButtonUnchecked } from 'react-icons/md'
+import { MdBlock, MdCheckCircle, MdDragIndicator, MdKeyboardArrowDown, MdRadioButtonUnchecked } from 'react-icons/md'
 import type { PlannedExercise } from '../../config/plan'
 import type { ExerciseLog, SetLog } from '../../types'
-import { circuitMembers, circuitRounds, circuitTitle, membersLine, roundsLabel, roundTally } from '../../lib/circuitEntry'
+import { circuitMembers, circuitRounds, circuitTitle, roundsLabel, roundTally } from '../../lib/circuitEntry'
+import { DRAG_LEFT, DRAG_LIFTED, DRAG_ONTO, type CombineHandleProps } from '../../lib/useDragCombine'
 import { sidesAgree } from '../../lib/sidePair'
 import { inPlayRounds, setPosition } from '../../lib/skipped'
 import { formatDuration } from '../../lib/estimate'
@@ -10,7 +11,27 @@ import { clockText } from '../../lib/setClock'
 import { toWeight } from '../../lib/weightField'
 import { ControlWord } from '../../components/ControlWord'
 
+/**
+ * The checklist's drag, as it applies to this row (see lib/useDragCombine): the
+ * whole circuit is carried by its own grip, and each movement by its grip — a
+ * movement let go outside the circuit leaves it. Movements are named by the key
+ * of the station that leads them.
+ */
+export type CircuitDrag = {
+  row: (el: HTMLElement | null) => void
+  /** The heading, which is what's carried when the whole circuit is dragged. */
+  head: (el: HTMLElement | null) => void
+  handle: CombineHandleProps
+  lifted: boolean
+  /** A drop would add what's being dragged to this circuit. */
+  onto: boolean
+  part: (lead: string) => (el: HTMLElement | null) => void
+  partHandle: (lead: string) => CombineHandleProps
+  partLifted: (lead: string) => boolean
+}
+
 type Props = {
+  drag: CircuitDrag
   stations: PlannedExercise[]
   logFor: (key: string) => ExerciseLog | undefined
   /** The step on screen, as `key:setIndex`. */
@@ -41,6 +62,7 @@ type Props = {
  *
  * The row reads like an exercise's — what it is, how far through it you are,
  * the time left on it — and its block and check act on every station at once.
+ * Under it, its movements a line each, every one with a grip to drag it out by.
  * It opens (already open when it's the circuit on screen) into its rounds, each
  * with every station's numbers in it, and a round is struck off, put back or
  * ticked as one: a round is what one tap logs.
@@ -50,6 +72,7 @@ type Props = {
  * sets of the round differ, or when the set screen split them.
  */
 export function ChecklistCircuit({
+  drag,
   stations,
   logFor,
   currentStepKey,
@@ -81,15 +104,24 @@ export function ChecklistCircuit({
     'min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-30'
 
   return (
-    <div className={`rounded-xl px-2 ${onScreen ? 'bg-surface-2' : ''}`}>
-      <div className="flex items-center gap-2">
+    <div
+      ref={drag.row}
+      className={`rounded-xl px-2 ${onScreen ? 'bg-surface-2' : ''} ${drag.onto ? DRAG_ONTO : ''}`}
+    >
+      <div ref={drag.head} className={`flex items-center gap-2 ${drag.lifted ? DRAG_LIFTED : ''}`}>
+        <button
+          {...drag.handle}
+          aria-label={`move ${title}`}
+          className="-ml-2 flex min-h-[44px] w-9 shrink-0 cursor-grab items-center justify-center text-2xl text-neutral-600 active:cursor-grabbing"
+        >
+          <MdDragIndicator aria-hidden />
+        </button>
         <button
           onClick={onJump}
           className={`min-w-0 flex-1 py-3 text-left active:opacity-70 ${skipped ? 'opacity-50' : ''}`}
         >
           <span className="text-[10px] tracking-wide text-neutral-500">{roundsLabel(rounds)}</span>
           <span className={`block font-medium ${skipped ? 'line-through' : ''}`}>{title}</span>
-          <span className="block truncate text-xs text-neutral-400">{membersLine(stations)}</span>
           <span className="text-xs text-neutral-500 tabular-nums">
             {tally.done}/{tally.all} rounds
             {!skipped && timeLeftSec > 0 && ` · ${formatDuration(timeLeftSec).replace(/^~/, '')}`}
@@ -135,8 +167,27 @@ export function ChecklistCircuit({
         )}
       </div>
 
+      <div className={`mb-1 flex flex-col ${skipped ? 'opacity-50' : ''} ${drag.lifted ? DRAG_LEFT : ''}`}>
+        {circuitMembers(stations).map((m) => (
+          <div
+            key={m.keys[0]}
+            ref={drag.part(m.keys[0])}
+            className={`flex items-center rounded-lg ${drag.partLifted(m.keys[0]) ? DRAG_LIFTED : ''}`}
+          >
+            <button
+              {...drag.partHandle(m.keys[0])}
+              aria-label={`move ${m.name} out of ${title}`}
+              className="flex min-h-[40px] w-9 shrink-0 cursor-grab items-center justify-center text-xl text-neutral-600 active:cursor-grabbing"
+            >
+              <MdDragIndicator aria-hidden />
+            </button>
+            <span className="min-w-0 flex-1 truncate text-sm text-neutral-300">{m.name}</span>
+          </div>
+        ))}
+      </div>
+
       {open && !skipped && (
-        <div className="mb-2 flex flex-col gap-2 border-t border-neutral-200/10 pt-1">
+        <div className={`mb-2 flex flex-col gap-2 border-t border-neutral-200/10 pt-1 ${drag.lifted ? DRAG_LEFT : ''}`}>
           {Array.from({ length: rounds }, (_, r) => {
             const roundSets = sets.map((s) => s[r])
             const existing = roundSets.filter((s): s is SetLog => !!s)

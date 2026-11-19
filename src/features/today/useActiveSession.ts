@@ -15,6 +15,7 @@ import { nextStartSide } from '../../lib/pushSide'
 import { expandToFull as expandSession } from '../../lib/sessionLength'
 import { restoreGroup, type RestRule } from '../../lib/groupRest'
 import { performedExercises, restingFlags } from '../../lib/performed'
+import type { Arrangement } from '../../lib/arrangement'
 
 /**
  * Owns the in-progress workout session, mirrored to localStorage so a mid-gym
@@ -197,6 +198,13 @@ export function useActiveSession() {
     )
   }, [])
 
+  // Keep the order and the circuits the checklist was dragged into (see
+  // lib/arrangement). Held on the session, so it's saved with it and a reload
+  // mid-workout comes back to the same rotation.
+  const arrange = useCallback((arrangement: Arrangement | null) => {
+    setSession((prev) => (prev && (prev.arrangement ?? null) !== arrangement ? { ...prev, arrangement } : prev))
+  }, [])
+
   const updateSet = useCallback(
     // `alone` writes this set and nothing else: a side whose numbers were split
     // from its other side's on purpose ("sides differ"), where carrying the number
@@ -252,5 +260,5 @@ export function useActiveSession() {
     setSession(null)
   }, [])
 
-  return { session, start, expandToFull, restoreRested, addSet, addExercise, updateSet, carrySet, removeSet, clear }
+  return { session, start, expandToFull, restoreRested, addSet, addExercise, arrange, updateSet, carrySet, removeSet, clear }
 }
