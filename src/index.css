@@ -1210,3 +1210,65 @@ input[type='number'] {
     transition: none;
   }
 }
+
+/* ---- Sheets and menus ----
+   A bottom sheet rises out of the bottom edge while the scrim behind it fades
+   up. Matched on the shape every sheet in the app already has — a fixed,
+   screen-filling scrim with its panel sat on the bottom — rather than on a
+   class each one would have to remember to wear, so a sheet written tomorrow
+   rises too. The curve lands without overshooting: a sheet that bounced would
+   show the scrim under its own bottom edge. The scrim fades its colour, not
+   its opacity — the one place here that isn't transform or opacity — because
+   opacity would take the panel with it, and a sheet you can read the page
+   through on its way up looks like a mistake. Neither keyframe has a `to`, so
+   once it has played the sheet holds no transform and its fields, and anything
+   fixed inside it, are laid out as they always were. */
+@keyframes sheet-scrim-in {
+  from {
+    background-color: transparent;
+  }
+}
+@keyframes sheet-rise {
+  from {
+    transform: translateY(min(100%, 24rem));
+  }
+}
+.fixed.inset-0.items-end.bg-black\/60 {
+  animation: sheet-scrim-in 180ms ease-out;
+}
+.fixed.inset-0.items-end.bg-black\/60 > * {
+  animation: sheet-rise 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A menu opens out of the button that raised it. */
+@keyframes menu-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-4px);
+  }
+}
+.menu-pop {
+  transform-origin: top right;
+  animation: menu-pop 130ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* A screen that takes over the whole app — the plan editor, the coach's
+   setup — comes up from just below where it lands. */
+@keyframes overlay-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.overlay-rise {
+  animation: overlay-rise 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fixed.inset-0.items-end.bg-black\/60,
+  .fixed.inset-0.items-end.bg-black\/60 > *,
+  .menu-pop,
+  .overlay-rise {
+    animation: none;
+  }
+}

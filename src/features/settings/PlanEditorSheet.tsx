@@ -13,7 +13,7 @@ export function PlanEditorSheet({ day, onClose }: { day?: DayType; onClose: () =
   const [dirty, setDirty] = useState(false)
   useBackGuard(true, onClose)
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-bg" role="dialog" aria-label="workout plan">
+    <div className="overlay-rise fixed inset-0 z-40 flex flex-col bg-bg" role="dialog" aria-label="workout plan">
       <div className="flex min-h-[52px] items-center justify-between px-4 pt-[env(safe-area-inset-top)]">
         <h2 className="text-lg font-bold">workout plan</h2>
         <button

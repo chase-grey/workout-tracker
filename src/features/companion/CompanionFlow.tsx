@@ -310,7 +310,7 @@ export function CompanionSheet({
 }: Parameters<typeof CompanionFlow>[0] & { onClose: () => void }) {
   useBackGuard(true, onClose)
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-bg" role="dialog" aria-label="your AI">
+    <div className="overlay-rise fixed inset-0 z-40 flex flex-col bg-bg" role="dialog" aria-label="your AI">
       <div className="flex min-h-[52px] items-center justify-between px-4 pt-[env(safe-area-inset-top)]">
         <h2 className="text-lg font-bold">your AI</h2>
         <button

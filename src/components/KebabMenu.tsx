@@ -59,7 +59,7 @@ export function KebabMenu({ items: own }: { items: MenuItem[] }) {
               setOpen(false)
             }}
           />
-          <div className="absolute right-0 top-12 z-50 w-52 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+          <div className="menu-pop absolute right-0 top-12 z-50 w-52 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
             {items.map((it, i) => (
               <button
                 key={i}
