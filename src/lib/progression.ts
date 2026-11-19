@@ -264,41 +264,8 @@ function recentPerformances(
   repMin: number,
   variant?: VariantKey | null,
 ): LastPerformance[] {
-  const bySession = new Map<string, SessionGroup>()
-  for (const r of workouts) {
-    if (r.exercise !== exerciseKey) continue
-    // A max attempt is a single, not training (see maxAttempt). Left in, a session
-    // that was nothing but an attempt becomes the latest one and hands the next
-    // session its max weight to do six reps with; {@link workingSet} only sets a
-    // single aside when the same session held real sets to read instead.
-    if (isMaxAttempt(r)) continue
-    const key = r.session_id || r.date
-    const g = bySession.get(key) ?? { date: r.date, sets: [] }
-    // A blank from the sheet or a CSV round-trip reads as "no slot recorded".
-    if (g.variant == null && r.variant) g.variant = r.variant
-    g.sets.push({ weight: r.weight_lbs, reps: r.reps })
-    bySession.set(key, g)
-  }
-
-  if (bySession.size === 0) return []
-
-  const groups = [...bySession.values()]
-  const comparable = comparableSessions(groups, variant)
-  // Nothing in this slot yet — the lift's first session in it, or its first since
-  // the split shipped. Read the other slot rather than treating a known lift as
-  // brand new, and flag it so the target repeats instead of stepping up.
-  const sameSlot = comparable.length > 0
-  const pool = sameSlot ? comparable : groups
-
-  // Newest first (YYYY-MM-DD sorts lexicographically). Two sessions on one date
-  // keep the order they were first logged in, so the earlier-logged one still
-  // reads as the latest, as it always has.
-  const ordered = pool
-    .map((g, i) => ({ g, i }))
-    .sort((a, b) => (a.g.date === b.g.date ? a.i - b.i : b.g.date.localeCompare(a.g.date)))
-    .map(({ g }) => g)
-
-  return ordered.map((session) => {
+  const { sessions, sameSlot } = comparableHistory(workouts, exerciseKey, variant)
+  return sessions.map((session) => {
     const working = workingSet(session.sets, repMin)
     if (working === null) {
       // Bodyweight session: no weight anywhere, so the reading is the reps alone.
@@ -322,6 +289,146 @@ function recentPerformances(
 }
 
 /**
+ * Every session of one exercise that the slot asked for can be compared with,
+ * newest first, each with the sets it logged. `sameSlot` is false when the slot
+ * has no sessions of its own and the other slot's are handed back instead.
+ */
+function comparableHistory(
+  workouts: WorkoutRow[],
+  exerciseKey: string,
+  variant?: VariantKey | null,
+): { sessions: SessionGroup[]; sameSlot: boolean } {
+  const bySession = new Map<string, SessionGroup>()
+  for (const r of workouts) {
+    if (r.exercise !== exerciseKey) continue
+    // A max attempt is a single, not training (see maxAttempt). Left in, a session
+    // that was nothing but an attempt becomes the latest one and hands the next
+    // session its max weight to do six reps with; {@link workingSet} only sets a
+    // single aside when the same session held real sets to read instead.
+    if (isMaxAttempt(r)) continue
+    const key = r.session_id || r.date
+    const g = bySession.get(key) ?? { date: r.date, sets: [] }
+    // A blank from the sheet or a CSV round-trip reads as "no slot recorded".
+    if (g.variant == null && r.variant) g.variant = r.variant
+    g.sets.push({ weight: r.weight_lbs, reps: r.reps })
+    bySession.set(key, g)
+  }
+
+  if (bySession.size === 0) return { sessions: [], sameSlot: true }
+
+  const groups = [...bySession.values()]
+  const comparable = comparableSessions(groups, variant)
+  // Nothing in this slot yet — the lift's first session in it, or its first since
+  // the split shipped. Read the other slot rather than treating a known lift as
+  // brand new, and flag it so the target repeats instead of stepping up.
+  const sameSlot = comparable.length > 0
+  const pool = sameSlot ? comparable : groups
+
+  // Newest first (YYYY-MM-DD sorts lexicographically). Two sessions on one date
+  // keep the order they were first logged in, so the earlier-logged one still
+  // reads as the latest, as it always has.
+  const ordered = pool
+    .map((g, i) => ({ g, i }))
+    .sort((a, b) => (a.g.date === b.g.date ? a.i - b.i : b.g.date.localeCompare(a.g.date)))
+    .map(({ g }) => g)
+
+  return { sessions: ordered, sameSlot }
+}
+
+/** The best an exercise has ever been held at — see {@link bestPerformance}. */
+export type BestPerformance = {
+  date: string
+  /** Null for a lift that carries no weight. */
+  weightLbs: number | null
+  /** The reps held on at least `sets` sets of one session. */
+  reps: number
+  /** How many sets had to hold them: the `sets` asked for. */
+  sets: number
+}
+
+/**
+ * How many sets a performance has to span when the caller doesn't say: the set
+ * count most of the lift's sessions ran to, the larger on a tie.
+ */
+function usualSetCount(sessions: SessionGroup[]): number {
+  const counts = new Map<number, number>()
+  for (const s of sessions) counts.set(s.sets.length, (counts.get(s.sets.length) ?? 0) + 1)
+  let usual = 1
+  let seen = 0
+  for (const [n, count] of counts) {
+    if (count > seen || (count === seen && n > usual)) {
+      usual = n
+      seen = count
+    }
+  }
+  return usual
+}
+
+/**
+ * The best the lift has EVER been held at: the highest weight × reps that one
+ * session carried across `sets` sets — 100×12, 12, 12, 12 is 100×12×4, whenever
+ * it happened and whatever the sessions since looked like.
+ *
+ * "Held" is what keeps a freak set out of it. A session is read at each weight it
+ * used, by the reps its `sets`-th best set there reached, so 100×14, 10, 10, 9 is
+ * 100×9×4 and a lone 120×8 beside three sets at 100 is no reading at 120 at all.
+ * A set at a heavier weight counts toward a lighter one, since the same reps with
+ * more on the bar is that performance and then some. A weighted reading also has
+ * to reach `repMin`: three heavy triples of an 8–12 lift were never a session of
+ * that lift's training, the same line {@link workingSet} draws.
+ *
+ * Across weights the order is double progression's own (see isHigher): heavier
+ * wins, and at one weight the more reps. `bodyweight` reads every set by its reps
+ * alone. Max attempts are no part of it, and neither is the day's other A/B slot,
+ * exactly as for {@link lastPerformance}; a slot with no sessions of its own has
+ * no best to speak of.
+ */
+export function bestPerformance(
+  workouts: WorkoutRow[],
+  exerciseKey: string,
+  opts: {
+    repMin?: number
+    /** Sets the performance has to span. Omitted, the lift's usual count is used. */
+    sets?: number
+    bodyweight?: boolean
+    variant?: VariantKey | null
+  } = {},
+): BestPerformance | null {
+  const { sessions, sameSlot } = comparableHistory(workouts, exerciseKey, opts.variant)
+  if (!sameSlot || sessions.length === 0) return null
+  const need = Math.max(1, opts.sets ?? usualSetCount(sessions))
+  const repMin = opts.repMin ?? 1
+
+  /** The reps the `need`-th best of these sets reached; 0 when they are too few. */
+  const heldReps = (reps: number[]) =>
+    reps.length < need ? 0 : [...reps].sort((a, b) => b - a)[need - 1]
+
+  let best: BestPerformance | null = null
+  const offer = (date: string, weightLbs: number | null, reps: number) => {
+    if (reps <= 0) return
+    if (best == null || isHigher({ weightLbs, reps }, best)) {
+      best = { date, weightLbs, reps, sets: need }
+    }
+  }
+
+  // Oldest first, so the day a best was first set is the one it is dated to.
+  for (const session of [...sessions].reverse()) {
+    const weighted = opts.bodyweight
+      ? []
+      : session.sets.filter((s): s is { weight: number; reps: number } => s.weight != null)
+    if (weighted.length === 0) {
+      offer(session.date, null, heldReps(session.sets.map((s) => s.reps)))
+      continue
+    }
+    for (const weight of new Set(weighted.map((s) => s.weight))) {
+      const reps = heldReps(weighted.filter((s) => s.weight >= weight).map((s) => s.reps))
+      if (reps >= repMin) offer(session.date, weight, reps)
+    }
+  }
+  return best
+}
+
+/**
  * Suggest the next target for an exercise using double progression within
  * [repMin, repMax].
  *
@@ -336,14 +443,15 @@ function recentPerformances(
  * target that climbs while a set is still being missed just widens the gap. This is
  * the rep half of double progression: finish all your sets, then ask for more.
  *
- * Re-pacing note: the target is derived from the MOST RECENT session, so a lift
- * logged below target re-paces to that lower actual rather than compounding an
- * aspirational number never actually hit — but not off one session alone. The
- * session before it is a floor (see heldFloor): one bad day holds the number the
- * day before it earned, and only a second one in a row lets the target come down.
- * A better session moves it up straight away. After a gap of more than
- * STALE_HISTORY_DAYS it stops asking for a step up at all and simply repeats the
- * last working set, so coming back from a break starts from something achievable.
+ * Re-pacing note: the recent sessions say what to ask for only where it's MORE
+ * than the lift has ever held. The step up on the best ever held (see bestTarget)
+ * is the least the target asks for, so worse days since don't bring it down: a
+ * number already beaten is not a challenge. Below that, the most recent session
+ * is read with the one before it as a floor (see heldFloor), which is what
+ * decides a lift that has never yet held a number inside its range. After a gap
+ * of more than STALE_HISTORY_DAYS it stops asking for a step up at all and simply
+ * repeats the last working set, so coming back from a break starts from something
+ * achievable.
  *
  * `opts.variant` scopes that most-recent session to the A/B slot being trained,
  * so a lift the week hits twice under different fatigue climbs on two independent
@@ -384,6 +492,8 @@ export function nextTarget(
     repLadder?: boolean
     /** The prescription is a hold in seconds — see PlannedExercise.timed. */
     timed?: boolean
+    /** Sets being asked for today, which a best has to have spanned — see bestPerformance. */
+    sets?: number
     today?: Date
     /** The A/B slot being trained — see lastPerformance. */
     variant?: VariantKey | null
@@ -412,7 +522,54 @@ export function nextTarget(
   const stale = daysBetween(last.date, toISODate(today)) > STALE_HISTORY_DAYS
   const fromLast = targetFrom(last, opts, increment, stale)
   const floor = heldFloor(last, prev, opts, increment, stale)
-  return floor != null && isHigher(floor, fromLast) ? floor : fromLast
+  const recent = floor != null && isHigher(floor, fromLast) ? floor : fromLast
+  const fromBest = bestTarget(workouts, exerciseKey, opts, increment, stale)
+  return fromBest != null && isHigher(fromBest, recent) ? fromBest : recent
+}
+
+/**
+ * The step up on the best the lift has ever been held at (see bestPerformance),
+ * which is the least the target ever asks for; null when there's no such best or
+ * it has no say.
+ *
+ * The last two sessions alone decided the target, so two ordinary days in a row
+ * were enough to forget a better one: flat bench held at 100×12 across four sets,
+ * then 100×10 and 100×9, was asked for 100×10 — a number beaten weeks ago, sold
+ * as today's challenge. The challenge is the next thing never yet done, so it's
+ * read from the best ever held: 100×12×4 asks for 100×13 until 100×13 is held,
+ * however the days in between went.
+ *
+ * It's a step up rather than a repeat because the best is by construction a
+ * number every one of its sets held, which is all a step up ever waited for (see
+ * heldEverySet). The recent sessions still speak when they ask for more — a
+ * session that outdid the old best is itself the best, and a number repeated for
+ * a set that fell short of it stands if it's the higher.
+ *
+ * A layoff is the one thing that silences it: past STALE_HISTORY_DAYS the plan
+ * repeats what was last done, and a best set before the break is not what a
+ * first day back should be measured against.
+ */
+function bestTarget(
+  workouts: WorkoutRow[],
+  exerciseKey: string,
+  opts: TargetRules & { sets?: number; variant?: VariantKey | null },
+  increment: number,
+  stale: boolean,
+): Target | null {
+  if (stale) return null
+  const best = bestPerformance(workouts, exerciseKey, {
+    repMin: opts.repMin,
+    sets: opts.sets,
+    bodyweight: opts.bodyweight,
+    variant: opts.variant,
+  })
+  if (best == null) return null
+  return targetFrom(
+    { date: best.date, topWeight: best.weightLbs, topReps: best.reps, heldEverySet: true, sameSlot: true },
+    opts,
+    increment,
+    false,
+  )
 }
 
 /**
@@ -560,6 +717,8 @@ export type TargetInputs = {
   repLadder?: boolean
   /** The prescription is a hold in seconds — see PlannedExercise.timed. */
   timed?: boolean
+  /** Sets being asked for today — see bestPerformance. */
+  sets?: number
   /** Load-sharing group id — see {@link nextTargets}. */
   sharedLoad?: string
 }
@@ -616,6 +775,7 @@ export function nextTargets(
         weightCapLbs: e.weightCapLbs,
         repLadder: e.repLadder,
         timed: e.timed,
+        sets: e.sets,
         today: opts.today,
         variant: opts.variantFor?.(e.key),
       }),

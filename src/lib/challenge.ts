@@ -138,7 +138,9 @@ export function sessionChallenges(
     prev,
     [...byKey.keys()].flatMap((key) => {
       const opts = optsByKey.get(key)
-      return opts ? [{ key, ...opts }] : []
+      // The sets logged stand in for the sets asked for, which is what a best ever
+      // held has to have spanned for the prefill to have built on it.
+      return opts ? [{ key, ...opts, sets: byKey.get(key)?.length }] : []
     }),
     { today, variantFor },
   )

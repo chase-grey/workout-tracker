@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { WorkoutRow } from '../types'
 import {
+  bestPerformance,
   lastPerformance,
   nextTarget,
   nextTargets,
@@ -323,15 +324,15 @@ describe('nextTarget', () => {
     })
   })
 
-  it('re-paces from the most recent (lower) sessions once there are two of them', () => {
+  it('re-paces from the most recent (lower) sessions when the heavier one never reached the range', () => {
     const rows = [
-      // Earlier heavy session.
-      row({ session_id: 's1', date: '2026-01-01', weight_lbs: 135, reps: 10 }),
+      // Earlier heavy session, short of the 6-10 range: not a best to build on.
+      row({ session_id: 's1', date: '2026-01-01', weight_lbs: 135, reps: 4 }),
       // Two lighter sessions since (user backed off).
       row({ session_id: 's2', date: '2026-01-05', weight_lbs: 125, reps: 7 }),
       row({ session_id: 's3', date: '2026-01-08', weight_lbs: 125, reps: 7 }),
     ]
-    // Target derives from the newer 125x7 sessions, not the older 135x10 one.
+    // Target derives from the newer 125x7 sessions, not the older 135x4 one.
     expect(nextTarget(rows, 'bench', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
       weightLbs: 125,
       reps: 8,
@@ -339,7 +340,95 @@ describe('nextTarget', () => {
   })
 })
 
-describe('nextTarget after one bad session', () => {
+describe('bestPerformance', () => {
+  /** One session, a set per entry of `reps`, all at `weight`. */
+  const session = (id: string, date: string, weight: number | null, reps: number[]) =>
+    reps.map((r, i) => row({ session_id: id, date, set_number: i + 1, weight_lbs: weight, reps: r }))
+
+  it('is null with no history', () => {
+    expect(bestPerformance([], 'bench', { sets: 4 })).toBeNull()
+  })
+
+  it('reads the best session ever, not the latest', () => {
+    const rows = [
+      ...session('s1', '2026-01-02', 100, [12, 12, 12, 12]),
+      ...session('s2', '2026-01-05', 100, [10, 10, 9, 9]),
+      ...session('s3', '2026-01-08', 100, [9, 9, 8, 8]),
+    ]
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 4 })).toEqual({
+      date: '2026-01-02',
+      weightLbs: 100,
+      reps: 12,
+      sets: 4,
+    })
+  })
+
+  it('reads a session by the reps all of the sets asked for reached, not its one freak set', () => {
+    const rows = session('s1', '2026-01-02', 100, [14, 10, 10, 9])
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 4 })?.reps).toBe(9)
+    // Asked across three sets, the three best are what count.
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 3 })?.reps).toBe(10)
+  })
+
+  it('does not credit a weight that only one set was done at', () => {
+    const rows = [...session('s1', '2026-01-02', 100, [10, 10, 10]), ...session('s1', '2026-01-02', 120, [8])]
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 4 })).toMatchObject({ weightLbs: 100, reps: 8 })
+  })
+
+  it('counts a heavier set toward the lighter weight', () => {
+    const rows = [...session('s1', '2026-01-02', 100, [12, 12]), ...session('s1', '2026-01-02', 110, [12, 12])]
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 4 })).toMatchObject({ weightLbs: 100, reps: 12 })
+  })
+
+  it('puts the heavier weight first, then the reps', () => {
+    const rows = [
+      ...session('s1', '2026-01-02', 100, [12, 12, 12]),
+      ...session('s2', '2026-01-05', 110, [8, 8, 8]),
+      ...session('s3', '2026-01-08', 110, [9, 9, 9]),
+      ...session('s4', '2026-01-10', 100, [12, 12, 12]),
+    ]
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 3 })).toMatchObject({
+      date: '2026-01-08',
+      weightLbs: 110,
+      reps: 9,
+    })
+  })
+
+  it('leaves out a heavy session that never reached the rep range', () => {
+    const rows = [...session('s1', '2026-01-02', 100, [10, 10, 10]), ...session('s2', '2026-01-05', 130, [3, 3, 3])]
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 3 })).toMatchObject({ weightLbs: 100, reps: 10 })
+  })
+
+  it('has nothing to say when no session ran to the sets asked for', () => {
+    const rows = session('s1', '2026-01-02', 100, [12, 12])
+    expect(bestPerformance(rows, 'bench', { repMin: 8, sets: 4 })).toBeNull()
+  })
+
+  it('takes the lift\u2019s usual set count when none is given', () => {
+    const rows = [
+      ...session('s1', '2026-01-02', 100, [10, 10, 10]),
+      ...session('s2', '2026-01-05', 100, [12, 9, 9]),
+      ...session('s3', '2026-01-08', 100, [13]),
+    ]
+    expect(bestPerformance(rows, 'bench', { repMin: 8 })).toMatchObject({ reps: 10, sets: 3 })
+  })
+
+  it('reads a bodyweight lift by reps alone', () => {
+    const rows = [...session('s1', '2026-01-02', null, [8, 8, 7, 7]), ...session('s2', '2026-01-05', null, [6, 6, 5, 5])]
+    expect(bestPerformance(rows, 'bench', { bodyweight: true, sets: 4 })).toMatchObject({ weightLbs: null, reps: 7 })
+  })
+
+  it('keeps to the A/B slot asked for', () => {
+    const rows = [
+      ...session('b1', '2026-01-02', 120, [10, 10, 10]).map((r) => ({ ...r, variant: 'B' as const })),
+      ...session('a1', '2026-01-05', 100, [10, 10, 10]).map((r) => ({ ...r, variant: 'A' as const })),
+    ]
+    expect(bestPerformance(rows, 'bench', { sets: 3, variant: 'A' })?.weightLbs).toBe(100)
+    expect(bestPerformance(rows, 'bench', { sets: 3, variant: 'B' })?.weightLbs).toBe(120)
+  })
+})
+
+describe('nextTarget builds on the best ever held', () => {
   const RANGE = { repMin: 8, repMax: 12, today: TODAY }
   /** One session of `sets` sets, every set at the same weight and reps. */
   const session = (id: string, date: string, weight: number | null, reps: number, sets = 3) =>
@@ -347,48 +436,76 @@ describe('nextTarget after one bad session', () => {
       row({ session_id: id, date, set_number: i + 1, weight_lbs: weight, reps }),
     )
 
-  it('holds the number the session before earned rather than dropping the weight', () => {
+  it('asks flat bench for 100×13 after 100×12×4, however the two days since went', () => {
+    // The owner's push-day flat bench: a pair of 50s is the heaviest there is, so
+    // at 100 the reps are the ladder. Variant B leads with it for four sets.
+    const BENCH = { repMin: 8, repMax: 12, increment: 10, weightCapLbs: 100, sets: 4, today: TODAY }
+    const rows = [
+      ...session('s1', '2026-01-02', 100, 12, 4),
+      ...session('s2', '2026-01-06', 100, 10, 4),
+      ...session('s3', '2026-01-09', 100, 9, 4),
+    ]
+    expect(nextTarget(rows, 'bench', BENCH)).toEqual({ weightLbs: 100, reps: 13 })
+    // And it stays there until 13 is held, not for a window of sessions.
+    const later = [
+      ...rows,
+      ...session('s4', '2026-01-10', 100, 9, 4),
+      ...session('s5', '2026-01-11', 100, 8, 4),
+      ...session('s6', '2026-01-12', 100, 10, 4),
+    ]
+    expect(nextTarget(later, 'bench', BENCH)).toEqual({ weightLbs: 100, reps: 13 })
+  })
+
+  it('does not take a best from one freak set', () => {
+    const BENCH = { repMin: 8, repMax: 12, increment: 10, weightCapLbs: 100, sets: 4, today: TODAY }
+    const rows = [
+      row({ session_id: 's1', date: '2026-01-02', set_number: 1, weight_lbs: 100, reps: 12 }),
+      row({ session_id: 's1', date: '2026-01-02', set_number: 2, weight_lbs: 100, reps: 9 }),
+      row({ session_id: 's1', date: '2026-01-02', set_number: 3, weight_lbs: 100, reps: 9 }),
+      row({ session_id: 's1', date: '2026-01-02', set_number: 4, weight_lbs: 100, reps: 9 }),
+      ...session('s2', '2026-01-06', 100, 8, 4),
+      ...session('s3', '2026-01-09', 100, 8, 4),
+    ]
+    // Held 9 across the four, so 10 is the next thing never done. Not 13.
+    expect(nextTarget(rows, 'bench', BENCH)).toEqual({ weightLbs: 100, reps: 10 })
+  })
+
+  it('holds the step up through one bad session', () => {
     // 100×6 alone would re-pace below the range and solve back to 90×8.
     const bad = session('s2', '2026-01-08', 100, 6)
     expect(nextTarget(bad, 'bench', RANGE)).toEqual({ weightLbs: 90, reps: 8 })
     const rows = [...session('s1', '2026-01-05', 100, 10), ...bad]
-    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 10 })
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 11 })
   })
 
-  it('holds the reps a short session lost, without stepping up on them', () => {
-    // The floor repeats 100×10 — it doesn't ask for the 11 the earlier session
-    // would have been asked for next.
-    const rows = [...session('s1', '2026-01-05', 100, 10), ...session('s2', '2026-01-08', 100, 8)]
-    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 10 })
-  })
-
-  it('holds the old weight when a step up to a heavier one fell apart', () => {
-    const rows = [...session('s1', '2026-01-05', 100, 12), ...session('s2', '2026-01-08', 105, 4)]
-    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 12 })
-  })
-
-  it('holds a reps-only lift too', () => {
-    const LADDER = { repMin: 15, repMax: 15, bodyweight: true, repLadder: true, today: TODAY }
-    const rows = [...session('s1', '2026-01-05', null, 20), ...session('s2', '2026-01-08', null, 14)]
-    expect(nextTarget(rows, 'bench', LADDER)).toEqual({ weightLbs: null, reps: 20 })
-  })
-
-  it('comes down after a second bad session in a row', () => {
+  it('holds it through a second bad session in a row, and a third', () => {
     const rows = [
       ...session('s1', '2026-01-02', 100, 10),
       ...session('s2', '2026-01-05', 100, 6),
       ...session('s3', '2026-01-08', 100, 6),
     ]
-    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 90, reps: 8 })
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 11 })
+    expect(nextTarget([...rows, ...session('s4', '2026-01-10', 100, 7)], 'bench', RANGE)).toEqual({
+      weightLbs: 100,
+      reps: 11,
+    })
   })
 
-  it('comes down to the better of two slipping sessions', () => {
-    const rows = [
+  it('goes on asking for the heavier weight once the top of the range was held', () => {
+    const fellApart = [...session('s1', '2026-01-05', 100, 12), ...session('s2', '2026-01-08', 105, 4)]
+    expect(nextTarget(fellApart, 'bench', RANGE).weightLbs).toBe(105)
+    const slipping = [
       ...session('s1', '2026-01-02', 100, 12),
       ...session('s2', '2026-01-05', 100, 10),
       ...session('s3', '2026-01-08', 100, 9),
     ]
-    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 10 })
+    expect(nextTarget(slipping, 'bench', RANGE).weightLbs).toBe(105)
+  })
+
+  it('holds a reps-only lift too', () => {
+    const LADDER = { repMin: 15, repMax: 15, bodyweight: true, repLadder: true, today: TODAY }
+    const rows = [...session('s1', '2026-01-05', null, 20), ...session('s2', '2026-01-08', null, 14)]
+    expect(nextTarget(rows, 'bench', LADDER)).toEqual({ weightLbs: null, reps: 21 })
   })
 
   it('still climbs straight off a better session', () => {
@@ -399,18 +516,37 @@ describe('nextTarget after one bad session', () => {
     expect(nextTarget(bumped, 'bench', RANGE)).toEqual({ weightLbs: 105, reps: 9 })
   })
 
-  it('takes a light comeback after a layoff as the real number', () => {
-    const rows = [...session('s1', '2025-12-01', 100, 10), ...session('s2', '2026-01-08', 100, 6)]
-    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 90, reps: 8 })
+  it('keeps a number repeated for a set that fell short, when that asks for more', () => {
+    // 100×10, 10, 10, 7: held 7 across the four, working at 10. The best says 8;
+    // the session says finish the 10.
+    const rows = [
+      ...session('s1', '2026-01-08', 100, 10, 3),
+      row({ session_id: 's1', date: '2026-01-08', set_number: 4, weight_lbs: 100, reps: 7 }),
+    ]
+    expect(nextTarget(rows, 'bench', { ...RANGE, sets: 4 })).toEqual({ weightLbs: 100, reps: 10 })
   })
 
-  it('reads the floor from the same A/B slot only', () => {
+  it('falls back on the session before when no session ran to the sets asked for', () => {
+    // Three-set history read on a four-set day: no ×4 best, so one bad day holds
+    // what the day before earned (see heldFloor) and a second brings it down.
+    const rows = [...session('s1', '2026-01-05', 100, 10), ...session('s2', '2026-01-08', 100, 8)]
+    expect(nextTarget(rows, 'bench', { ...RANGE, sets: 4 })).toEqual({ weightLbs: 100, reps: 10 })
+    const again = [...rows, ...session('s3', '2026-01-10', 100, 8)]
+    expect(nextTarget(again, 'bench', { ...RANGE, sets: 4 })).toEqual({ weightLbs: 100, reps: 9 })
+  })
+
+  it('repeats the last session on the first day back from a layoff, best or no best', () => {
+    const rows = [...session('s1', '2025-11-01', 100, 12), ...session('s2', '2025-12-01', 100, 9)]
+    expect(nextTarget(rows, 'bench', RANGE)).toEqual({ weightLbs: 100, reps: 9 })
+  })
+
+  it('reads the best from the same A/B slot only', () => {
     const rows = [
       ...session('b1', '2026-01-05', 120, 10).map((r) => ({ ...r, variant: 'B' as const })),
       ...session('a1', '2026-01-07', 100, 10).map((r) => ({ ...r, variant: 'A' as const })),
       ...session('a2', '2026-01-09', 100, 8).map((r) => ({ ...r, variant: 'A' as const })),
     ]
-    expect(nextTarget(rows, 'bench', { ...RANGE, variant: 'A' })).toEqual({ weightLbs: 100, reps: 10 })
+    expect(nextTarget(rows, 'bench', { ...RANGE, variant: 'A' })).toEqual({ weightLbs: 100, reps: 11 })
   })
 })
 
@@ -659,10 +795,10 @@ describe('nextTarget across A/B slots', () => {
   it('ignores slots entirely when no variant is asked for', () => {
     // The lifts both variants train alike keep one ladder off every session: the
     // 165 is read as a lighter day after the 185 rather than as another slot's
-    // own number, so the 185 holds (see heldFloor).
+    // own number, so the 185 is still the best there is to step up from.
     expect(nextTarget(twoSlots, 'bench', { repMin: 6, repMax: 10, today: TODAY })).toEqual({
       weightLbs: 185,
-      reps: 8,
+      reps: 9,
     })
   })
 })
