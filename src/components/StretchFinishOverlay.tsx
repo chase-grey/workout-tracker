@@ -53,7 +53,7 @@ export function StretchFinishOverlay({
     <div className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
       {hasWins && <Confetti count={72} colors={[...GOLDS, ...currentPalette().confetti, '#ffffff']} />}
 
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+      <div className="recap-in mx-auto flex w-full max-w-md flex-1 flex-col">
         <div className="flex flex-col items-center text-center">
           <MdEmojiEvents
             className={`text-5xl ${hasWins ? 'text-amber-400' : 'text-accent-2'}`}

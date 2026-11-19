@@ -33,7 +33,7 @@ export function WorkoutFinishOverlay({
     <div className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
       {hasPRs && <Confetti count={72} colors={[...GOLDS, ...currentPalette().confetti, '#ffffff']} />}
 
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+      <div className="recap-in mx-auto flex w-full max-w-md flex-1 flex-col">
         <div className="flex flex-col items-center text-center">
           <MdEmojiEvents className={`text-5xl ${hasPRs ? 'text-amber-400' : 'text-accent-2'}`} aria-hidden />
           <h1 className="mt-3 text-3xl font-black leading-tight">workout complete</h1>

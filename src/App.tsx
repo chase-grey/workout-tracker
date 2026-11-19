@@ -231,8 +231,9 @@ function AppShell() {
   const immersive =
     (sessionActive && !minimized) || finishSummary != null || stretchSummary != null
 
-  // The screen arrives from the side of the bar its tab sits on (see lib/motion).
-  useScreenMove(mainRef, { tab, immersive: false, session: false }, tabsShown(showChat))
+  // The screen arrives from the side of the bar its tab sits on, a session comes
+  // up over the tabs, and the tabs settle back when it leaves (see lib/motion).
+  useScreenMove(mainRef, { tab, immersive, session: sessionActive }, tabsShown(showChat))
 
   // What this shell believes it is showing, for the report a blank screen sends
   // (see services/screenWatch): the phone can't be asked, and the DOM alone

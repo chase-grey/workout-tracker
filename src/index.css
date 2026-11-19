@@ -1272,3 +1272,24 @@ input[type='number'] {
     animation: none;
   }
 }
+
+/* ---- Leaving a session ----
+   The recap's black is there at once and what's written on it comes up into
+   place; the month's review does the same. The pane itself is not faded: by
+   the time a recap opens the session behind it has already given way to Today,
+   and a pane you can see through would flash Today between the two. Nor is it
+   moved: confetti is pinned to the screen from inside it. */
+@keyframes recap-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.recap-in {
+  animation: recap-in 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .recap-in {
+    animation: none;
+  }
+}
