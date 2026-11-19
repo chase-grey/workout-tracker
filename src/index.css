@@ -189,6 +189,29 @@ html {
   }
 }
 
+/* The shell's foot: the nav and whatever banner sits on it. Where the keyboard
+   is drawn over the page (--kb-cover, see overlayKeyboard in
+   src/lib/viewport.ts) nothing is resized for it, so the foot is made as tall
+   as the keyboard instead. Its contents keep to the bottom, where the keys
+   cover them, and the scroller above loses the difference, so the composer at
+   its bottom edge rises to sit on the keyboard. The rise is this transition
+   and nothing else: the browser moves nothing of its own to fall out of step
+   with it. The length and the curve are the ones Android itself moves the
+   keyboard on (285ms, 0.2/0/0/1), so the two travel together; the rise starts
+   at the tap where the height is already known, a beat before the keys. */
+.shell-foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: var(--kb-cover, 0px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shell-foot {
+    transition: min-height 285ms cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
 /* A session is read from across the room: the phone is propped on the rack or
    the floor at the far end of a mat, and the name of the lift, the set coming,
    the rest clock and the rep count all have to carry to where you are standing.

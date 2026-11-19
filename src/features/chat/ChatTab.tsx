@@ -38,7 +38,7 @@ import {
 } from '../../config/flexRoutines'
 import { MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
 import { Markdown } from './Markdown'
-import { expectKeyboard } from '../../lib/viewport'
+import { expectKeyboard, overlayKeyboard } from '../../lib/viewport'
 import { useKeyboardOpen } from '../../lib/useKeyboardOpen'
 import { ProposalCard, type ProposalStatus } from '../../components/ProposalCard'
 import { LiveCompanion } from '../companion/CompanionFlow'
@@ -600,6 +600,9 @@ export function ChatTab({
   const owner = ownerFlavour(settings.profile)
   // Epic key locally, or a key of your own goes straight to its service.
   const hasKey = import.meta.env.DEV || settings.openAiKey.trim().length > 0
+  // While the composer is on screen the keyboard slides over the page rather
+  // than resizing it, where the browser can do that (see overlayKeyboard).
+  useEffect(() => (hasKey ? overlayKeyboard() : undefined), [hasKey])
 
   const send = async () => {
     const text = input.trim()

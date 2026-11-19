@@ -136,6 +136,20 @@ dropped, each load with its navigation type, each hide and show, every one
 stamped with `history.length` and the entry's guard id. Anything new that
 touches `history` should `note()` what it did.
 
+## When the keyboard and the composer fall out of step
+
+The coach's composer rides the keyboard by one of three routes
+(`src/lib/viewport.ts`): Chromium draws the keyboard over the page and the app
+runs its own slide (`overlayKeyboard`, `--kb-cover`); a browser that resizes the
+page gets a lift borrowed ahead of the resize (`expectKeyboard`, `--kb-lift`);
+iOS gets the visual viewport mirrored (`--vvh`). Which one a phone takes, and
+when its browser said what, cannot be seen from a desktop. The first keyboard
+raised from the composer on each load is reported to `save_errors` as
+`keyboard_trace`: the user agent, whether the keyboard was overlaid, and every
+layout, visual-viewport and geometry change in the next second and a half with
+its milliseconds since the tap. Read that (`npm run save-errors -- --json`)
+before changing the timing or the route.
+
 ## UI copy
 
 No explanatory subtext, hint captions, or "how to use this" sentences under

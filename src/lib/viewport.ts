@@ -61,7 +61,7 @@ export function foldKeyboard(
   return { width: next.width, rest, open: rest - next.visible > KEYBOARD_MIN_PX }
 }
 
-let keyboardOpen = false
+let measuredOpen = false
 const keyboardListeners = new Set<() => void>()
 
 // The browser only says the keyboard is up once it has arrived: Chrome resizes
@@ -119,10 +119,67 @@ function rememberKeyboardHeight(width: number, height: number): void {
   }
 }
 
+// Chromium has a real answer to all of the above: the VirtualKeyboard API. Asked
+// to (overlaysContent), the browser stops resizing anything for the keyboard,
+// lets it slide over the page, and says how tall it is (geometrychange). Then
+// nothing on screen moves except what this file moves, on this file's own
+// transition, and there is no browser resize to arrive early, late or in one
+// jump. The page under the keyboard stays where it is, so the nav really is
+// covered rather than stood down, and only the shell's foot grows to hold the
+// composer clear (--kb-cover, index.css).
+//
+// Only the coach asks for it (overlayKeyboard): every other field in the app
+// still counts on the viewport shrinking to stay in view.
+type VirtualKeyboard = EventTarget & { overlaysContent: boolean; boundingRect: DOMRectReadOnly }
+
+function virtualKeyboard(): VirtualKeyboard | undefined {
+  return (navigator as Navigator & { virtualKeyboard?: VirtualKeyboard }).virtualKeyboard
+}
+
+/** The keyboard is drawn over the page rather than resizing it. */
+let overlaying = false
+/** How much of the page the overlaid keyboard covers, 0 when it is away. */
+let coverHeight = 0
+
+/**
+ * What the shell should give up for the keyboard, and through which property.
+ * A keyboard drawn over the page is cleared with --kb-cover for as long as it
+ * is up. One that resizes the page is only anticipated, with --kb-lift, until
+ * the resize lands.
+ */
+export function keyboardRoom(state: {
+  overlaying: boolean
+  cover: number
+  expected: boolean
+  remembered: number
+}): { cover: number; lift: number } {
+  const anticipated = state.expected ? state.remembered : 0
+  if (state.overlaying) return { cover: state.cover || anticipated, lift: 0 }
+  return { cover: 0, lift: anticipated }
+}
+
+function syncRoom(): void {
+  const { cover, lift } = keyboardRoom({
+    overlaying,
+    cover: coverHeight,
+    expected,
+    remembered: expected ? rememberedKeyboardHeight(readStoredHeight(), window.innerWidth) : 0,
+  })
+  const style = document.documentElement.style
+  if (cover) style.setProperty('--kb-cover', `${cover}px`)
+  else style.removeProperty('--kb-cover')
+  if (lift) style.setProperty('--kb-lift', `${lift}px`)
+  else style.removeProperty('--kb-lift')
+}
+
+function notifyKeyboard(): void {
+  for (const notify of keyboardListeners) notify()
+}
+
 function dropExpectation(): void {
   expected = false
   window.clearTimeout(expectTimer)
-  document.documentElement.style.removeProperty('--kb-lift')
+  syncRoom()
 }
 
 /**
@@ -131,17 +188,58 @@ function dropExpectation(): void {
  * been measured on this screen once, or while one is already up.
  */
 export function expectKeyboard(): void {
-  if (keyboardOpen || expected) return
+  if (measuredOpen || coverHeight || expected) return
+  startTrace()
   const height = rememberedKeyboardHeight(readStoredHeight(), window.innerWidth)
   if (!height) return
   expected = true
-  document.documentElement.style.setProperty('--kb-lift', `${height}px`)
+  syncRoom()
   // A hardware keyboard, or a focus the system declined to raise one for.
   expectTimer = window.setTimeout(() => {
     dropExpectation()
-    for (const notify of keyboardListeners) notify()
+    notifyKeyboard()
   }, EXPECT_MS)
-  for (const notify of keyboardListeners) notify()
+  notifyKeyboard()
+}
+
+/**
+ * Have the keyboard slide over the page instead of resizing it, where the
+ * browser can (see above); returns the undo. A no-op elsewhere, which leaves
+ * the resize and the --vvh mirror doing the work as before.
+ */
+export function overlayKeyboard(): () => void {
+  const vk = virtualKeyboard()
+  if (!vk) return () => {}
+  const onGeometry = () => {
+    const height = Math.round(vk.boundingRect.height)
+    trace('geometry', height)
+    const was = isKeyboardOpen()
+    coverHeight = height > KEYBOARD_MIN_PX ? height : 0
+    if (coverHeight) {
+      rememberKeyboardHeight(window.innerWidth, coverHeight)
+      expected = false
+      window.clearTimeout(expectTimer)
+    }
+    syncRoom()
+    if (isKeyboardOpen() !== was) notifyKeyboard()
+  }
+  overlaying = true
+  vk.overlaysContent = true
+  vk.addEventListener('geometrychange', onGeometry)
+  return () => {
+    vk.removeEventListener('geometrychange', onGeometry)
+    vk.overlaysContent = false
+    const was = isKeyboardOpen()
+    overlaying = false
+    coverHeight = 0
+    syncRoom()
+    if (isKeyboardOpen() !== was) notifyKeyboard()
+  }
+}
+
+/** The keyboard is drawn over the page, so what sits under it can stay put. */
+export function keyboardCoversPage(): boolean {
+  return overlaying
 }
 
 /**
@@ -149,7 +247,57 @@ export function expectKeyboard(): void {
  * expected to within the moment (see expectKeyboard).
  */
 export function isKeyboardOpen(): boolean {
-  return keyboardOpen || expected
+  return measuredOpen || coverHeight > 0 || expected
+}
+
+// What the browser actually did around one keyboard coming up, so the slide can
+// be judged from the phone that showed it rather than from a desktop: every
+// viewport and geometry change in the second and a half after the field was
+// reached for, each stamped with the milliseconds since. Handed to whoever
+// asked (main.tsx reports it); the first one of a page load only.
+export type KeyboardTrace = {
+  overlay: boolean
+  remembered: number
+  events: { ms: number; what: string; value: number; inner: number; visual: number }[]
+}
+const TRACE_MS = 1500
+const TRACE_MAX = 60
+let traceSink: ((t: KeyboardTrace) => void) | undefined
+let tracing: KeyboardTrace | undefined
+let traceStart = 0
+let traced = false
+
+/** Receive the first keyboard trace of this page load. */
+export function onKeyboardTrace(sink: (t: KeyboardTrace) => void): void {
+  traceSink = sink
+}
+
+function trace(what: string, value: number): void {
+  if (!tracing || tracing.events.length >= TRACE_MAX) return
+  tracing.events.push({
+    ms: Math.round(performance.now() - traceStart),
+    what,
+    value,
+    inner: window.innerHeight,
+    visual: Math.round(window.visualViewport?.height ?? 0),
+  })
+}
+
+function startTrace(): void {
+  if (traced || !traceSink) return
+  traced = true
+  traceStart = performance.now()
+  tracing = {
+    overlay: overlaying,
+    remembered: rememberedKeyboardHeight(readStoredHeight(), window.innerWidth),
+    events: [],
+  }
+  trace('tap', 0)
+  window.setTimeout(() => {
+    const done = tracing
+    tracing = undefined
+    if (done) traceSink?.(done)
+  }, TRACE_MS)
 }
 
 /** Subscribe to keyboard open/close; returns the unsubscribe. */
@@ -177,8 +325,8 @@ export function trackVisualViewport(): void {
     // The keyboard this was waiting for is here, and the layout has shrunk by
     // its height: stop subtracting it a second time.
     if (folded.open && expected) dropExpectation()
-    keyboardOpen = folded.open
-    if (isKeyboardOpen() !== was) for (const notify of keyboardListeners) notify()
+    measuredOpen = folded.open
+    if (isKeyboardOpen() !== was) notifyKeyboard()
 
     const layout = foldKeyboard(restingLayout, {
       width: window.innerWidth,
@@ -202,10 +350,16 @@ export function trackVisualViewport(): void {
     }
   }
   apply()
-  vv.addEventListener('resize', apply)
+  vv.addEventListener('resize', () => {
+    trace('visual', Math.round(vv.height))
+    apply()
+  })
   vv.addEventListener('scroll', apply)
   // Where interactive-widget shrinks the layout viewport, that resize lands here
   // as the keyboard slides in rather than waiting for vv's end-of-animation
   // event — so the nav gets out of the way sooner.
-  window.addEventListener('resize', apply)
+  window.addEventListener('resize', () => {
+    trace('layout', window.innerHeight)
+    apply()
+  })
 }

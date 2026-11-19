@@ -29,6 +29,7 @@ import { useBackGuard } from './lib/useBackGuard'
 import { noteScreen } from './services/screenWatch'
 import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
+import { keyboardCoversPage } from './lib/viewport'
 import { useScreenMove } from './lib/useScreenMove'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
 import { MdFitnessCenter } from 'react-icons/md'
@@ -256,7 +257,11 @@ function AppShell() {
   // down and only the composer follows it: as far as the eye can tell they've
   // stayed put and the keyboard slid over them. They come back when it goes,
   // measured rather than guessed from focus (see useKeyboardOpen).
-  const typingToCoach = tab === 'coach' && keyboardOpen
+  //
+  // Where the keyboard is drawn over the page instead (keyboardCoversPage), that
+  // is literally what happens: nothing rides up, the keys cover the nav where it
+  // stands, and taking it away would only drop the composer a row before it rose.
+  const typingToCoach = tab === 'coach' && keyboardOpen && !keyboardCoversPage()
 
   const dismissFinish = () => {
     const ambient = finishSummary?.ambient ?? null
@@ -339,26 +344,32 @@ function AppShell() {
           </>
         )}
       </main>
-      {minimized && sessionActive && !typingToCoach && (
-        <button
-          onClick={() => setMinimized(false)}
-          className="flex min-h-[52px] items-center justify-center gap-2 border-t border-border bg-accent text-base font-bold text-on-accent active:opacity-80"
-        >
-          <MdFitnessCenter className="text-xl" aria-hidden />
-          {controls.session ? 'back to your workout' : storage.loadStretch()?.officeAbs ? 'back to core' : 'back to your stretch'}
-        </button>
-      )}
-      {!immersive && !typingToCoach && <InstallBanner />}
-      {!immersive && !typingToCoach && (
-        <BottomNav
-          active={tab}
-          onChange={setTab}
-          showChat={showChat}
-          alerts={
-            awaiting.length > 0 || (saveError && !saveErrorSeen) || updateReady ? ['settings'] : []
-          }
-        />
-      )}
+      {/* Everything under the scroller, in one box that can be made as tall as a
+          keyboard drawn over the page (.shell-foot, index.css): its contents keep
+          to its bottom edge, under the keys, and the scroller above gives up the
+          difference, which is what carries the composer up. */}
+      <div className="shell-foot">
+        {minimized && sessionActive && !typingToCoach && (
+          <button
+            onClick={() => setMinimized(false)}
+            className="flex min-h-[52px] items-center justify-center gap-2 border-t border-border bg-accent text-base font-bold text-on-accent active:opacity-80"
+          >
+            <MdFitnessCenter className="text-xl" aria-hidden />
+            {controls.session ? 'back to your workout' : storage.loadStretch()?.officeAbs ? 'back to core' : 'back to your stretch'}
+          </button>
+        )}
+        {!immersive && !typingToCoach && <InstallBanner />}
+        {!immersive && !typingToCoach && (
+          <BottomNav
+            active={tab}
+            onChange={setTab}
+            showChat={showChat}
+            alerts={
+              awaiting.length > 0 || (saveError && !saveErrorSeen) || updateReady ? ['settings'] : []
+            }
+          />
+        )}
+      </div>
       <UpdateToast />
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
       {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}

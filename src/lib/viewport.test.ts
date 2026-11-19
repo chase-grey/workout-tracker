@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foldKeyboard, rememberedKeyboardHeight } from './viewport'
+import { foldKeyboard, keyboardRoom, rememberedKeyboardHeight } from './viewport'
 
 /** Feed a run of measurements through the fold, returning every `open` reading. */
 function run(samples: { width: number; visible: number }[]): boolean[] {
@@ -107,5 +107,50 @@ describe('rememberedKeyboardHeight', () => {
     expect(rememberedKeyboardHeight('{"w":390,"h":48}', 390)).toBe(0)
     expect(rememberedKeyboardHeight('{"w":390,"h":"301"}', 390)).toBe(0)
     expect(rememberedKeyboardHeight('not json', 390)).toBe(0)
+  })
+})
+
+// The complaint in its own terms: the composer has to be clear of the keyboard
+// for as long as the keyboard is up, by one property and never by both.
+describe('keyboardRoom', () => {
+  const away = { overlaying: false, cover: 0, expected: false, remembered: 0 }
+
+  it('gives nothing up while no keyboard is up or on its way', () => {
+    expect(keyboardRoom(away)).toEqual({ cover: 0, lift: 0 })
+    expect(keyboardRoom({ ...away, overlaying: true })).toEqual({ cover: 0, lift: 0 })
+  })
+
+  it('clears a keyboard drawn over the page by its own height, for as long as it is up', () => {
+    expect(keyboardRoom({ ...away, overlaying: true, cover: 312 })).toEqual({ cover: 312, lift: 0 })
+  })
+
+  it('starts for the remembered height at the tap, before the keyboard has said anything', () => {
+    expect(keyboardRoom({ overlaying: true, cover: 0, expected: true, remembered: 301 })).toEqual({
+      cover: 301,
+      lift: 0,
+    })
+  })
+
+  it('takes the measured height over the remembered one once there is one', () => {
+    expect(keyboardRoom({ overlaying: true, cover: 320, expected: true, remembered: 301 })).toEqual({
+      cover: 320,
+      lift: 0,
+    })
+  })
+
+  it('borrows a lift, not a cover, where the keyboard resizes the page', () => {
+    expect(keyboardRoom({ overlaying: false, cover: 0, expected: true, remembered: 301 })).toEqual({
+      cover: 0,
+      lift: 301,
+    })
+  })
+
+  it('never asks for both at once', () => {
+    for (const overlaying of [true, false])
+      for (const cover of [0, 312])
+        for (const expected of [true, false]) {
+          const room = keyboardRoom({ overlaying, cover, expected, remembered: 301 })
+          expect(room.cover && room.lift).toBe(0)
+        }
   })
 })
