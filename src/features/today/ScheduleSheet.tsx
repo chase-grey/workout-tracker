@@ -5,6 +5,8 @@ import { PillarMark } from './PillarMark'
 import {
   PIN_LABEL,
   WEEKDAY_SHORT,
+  dateOfWeekday,
+  pinsForWeek,
   scheduledWeekdays,
   togglePin,
   toggleWeekday,
@@ -14,6 +16,7 @@ import {
   type CalendarDay,
   type PinnablePillar,
 } from '../../lib/weekCalendar'
+import { mondayIndexOrder } from '../../lib/dates'
 
 
 /**
@@ -50,11 +53,11 @@ export function ScheduleSheet({
   // A week wholly behind you has nothing left to plan.
   const weekOpen = dates[6] >= today
   const [mode, setMode] = useState<'week' | 'always'>(weekOpen ? 'week' : 'always')
-  const ownDays = settings.calendarWeeks?.[weekStart]
+  const ownDays = pinsForWeek(settings.calendarWeeks, weekStart)
 
   const isOn = (p: PinnablePillar, d: number) =>
     mode === 'week' ? scheduledWeekdays(days, p).includes(d) : (settings.calendarPins?.[p]?.includes(d) ?? false)
-  const locked = (d: number) => mode === 'week' && dates[d] < today
+  const locked = (d: number) => mode === 'week' && dateOfWeekday(weekStart, d) < today
 
   const toggle = (p: PinnablePillar, d: number) => {
     if (mode === 'always') {
@@ -62,7 +65,7 @@ export function ScheduleSheet({
       return
     }
     // Only the days still ahead are the week's to plan; what's done stays done.
-    const planned = scheduledWeekdays(days, p).filter((w) => dates[w] >= today)
+    const planned = scheduledWeekdays(days, p).filter((w) => dateOfWeekday(weekStart, w) >= today)
     updateSettings({
       ...settings,
       calendarWeeks: withWeekPins(settings.calendarWeeks, weekStart, p, toggleWeekday(planned, d), today),
@@ -108,7 +111,7 @@ export function ScheduleSheet({
                 {PIN_LABEL[p]}
               </h3>
               <div className="grid grid-cols-7 gap-1">
-                {WEEKDAY_SHORT.map((name, d) => (
+                {mondayIndexOrder().map((d) => (
                   <button
                     key={d}
                     onClick={() => toggle(p, d)}
@@ -119,7 +122,7 @@ export function ScheduleSheet({
                       isOn(p, d) ? 'bg-accent text-on-accent' : 'bg-surface-2 text-neutral-400'
                     }`}
                   >
-                    {name[0]}
+                    {WEEKDAY_SHORT[d][0]}
                   </button>
                 ))}
               </div>

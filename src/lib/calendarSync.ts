@@ -25,7 +25,7 @@
  * Pure module. The network is services/api, the wiring features/today/CalendarSync.
  */
 
-import { parseISODate, toISODate, weekStartISO } from './dates'
+import { mondayIndexOf, parseISODate, toISODate, weekStartISO } from './dates'
 import {
   PINNABLE,
   shiftWeek,
@@ -175,7 +175,7 @@ export function mergeSync(input: {
     return {
       weekStart,
       pillar,
-      weekdays: dates.map((d, i) => (result.has(keyOf({ pillar, date: d })) ? i : -1)).filter((i) => i >= 0),
+      weekdays: dates.filter((d) => result.has(keyOf({ pillar, date: d }))).map(mondayIndexOf),
     }
   })
 

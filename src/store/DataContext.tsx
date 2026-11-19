@@ -14,7 +14,7 @@ import { CORE_SESSION_NOTE, sessionToRows, trainingDates } from '../lib/session'
 import { withMatSitups } from '../lib/stretchCore'
 import { DAY_TYPES, STRETCH_CORE } from '../config/plan'
 import { maxAttemptRow } from '../lib/maxAttempt'
-import { toISODate, weekStartISO } from '../lib/dates'
+import { normalizeWeekStart, setWeekStartDay, toISODate, weekStartISO } from '../lib/dates'
 import { withPlanDefaults, withRemovedFrom, type Plan } from '../config/plan'
 import type { FlexBlock } from '../config/flexPlan'
 import type { FlexRoutineKey } from '../config/flexRoutines'
@@ -284,6 +284,7 @@ const Ctx = createContext<DataContextValue | null>(null)
 // profile's own rather than the shipped ones (see lib/profileStore).
 setActiveProfile(storage.loadSettings().profile)
 setActiveCardioPlan(storage.loadSettings().cardioPlan)
+setWeekStartDay(storage.loadSettings().weekStartDay)
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>(() => storage.loadWorkouts())
@@ -301,6 +302,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // the profile through pure lib functions, and an effect would run after them.
   setActiveProfile(settings.profile)
   setActiveCardioPlan(settings.cardioPlan)
+  // The day weeks start on is read the same unnamed way (see lib/dates), so it
+  // is a dependency of every memo below that sorts dates into weeks.
+  setWeekStartDay(settings.weekStartDay)
+  const weekStart = normalizeWeekStart(settings.weekStartDay)
   const profile = settings.profile
   const cardioPlan = settings.cardioPlan
   const [plan, setPlan] = useState<Plan>(() => storage.loadPlan())
@@ -1225,7 +1230,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         cardioDates: cardioDays,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [workoutDates, flexDates, calHitDates, cardioDays, profile, cardioPlan],
+    [workoutDates, flexDates, calHitDates, cardioDays, profile, cardioPlan, weekStart],
   )
 
   const streaks = useMemo<StreakState>(() => {
@@ -1242,7 +1247,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       calDays: calHitDates.filter(inWeek).length,
       cardio: cardioDays.filter(inWeek).length,
     }
-  }, [workoutDates, flexDates, calHitDates, cardioDays])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workoutDates, flexDates, calHitDates, cardioDays, weekStart])
 
   // Merge read-only historical anchors (e.g. the 2025-10-31 baseline) with logged
   // measurements. Logged entries win on a shared date; history is never re-synced.

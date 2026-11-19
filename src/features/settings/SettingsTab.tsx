@@ -17,6 +17,7 @@ import { TrackingSection } from './ProfileSection'
 import { PlanSetupSection } from './PlanSetupSection'
 import { AiPlanSection } from '../companion/AiPlanSection'
 import { WeekCalendarSetting } from './WeekCalendarSetting'
+import { WeekStartSetting } from './WeekStartSetting'
 import { CalendarExportSection } from './CalendarExportSection'
 import { PasteCoachSection, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
@@ -517,6 +518,10 @@ export function SettingsTab({
           <Group title="help">
             <GuideSection />
             {!owner && <FeedbackSection />}
+          </Group>
+
+          <Group title="week">
+            <WeekStartSetting />
           </Group>
 
           <Group title="about">

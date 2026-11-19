@@ -277,8 +277,14 @@ export type Settings = {
   weekCalendarView?: WeekCalendarView
   /** The standing schedule: weekdays pinned to lifting, stretching or cardio, which the calendar plans first. */
   calendarPins?: CalendarPins
-  /** Single weeks given days of their own, by Monday (see lib/weekCalendar WeekPins). */
+  /** Single weeks given days of their own, by their first day (see lib/weekCalendar WeekPins). */
   calendarWeeks?: WeekPins
+  /**
+   * The day a week starts on, as `Date.getDay()` numbers it (0 = Sunday).
+   * Unset is Monday. The account's: a week should not end on different days on
+   * two phones. See lib/dates.
+   */
+  weekStartDay?: number
   /**
    * Whether the schedule is kept in step with a Google calendar (see
    * lib/calendarSync). The account's, not the phone's: the link to Google is

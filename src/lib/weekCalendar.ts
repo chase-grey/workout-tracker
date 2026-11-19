@@ -33,7 +33,7 @@ import type { FlexEntry } from './flex'
 import { calorieDayHit, PILLARS, type DietDirection, type Pillar } from './profile'
 import { trainingSessions } from './session'
 import { completedRoutinesOf } from './stretchRotation'
-import { parseISODate, toISODate, weekStartISO } from './dates'
+import { mondayIndexOf, parseISODate, sameWeek, toISODate, weekStartISO } from './dates'
 
 /**
  * One planned cardio session. Mirrors `PlannedCardio` in src/lib/cardioPlan.ts
@@ -65,11 +65,29 @@ export const PIN_LABEL: Record<PinnablePillar, string> = { strength: 'lift', fle
 export const WEEKDAY_SHORT = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 /**
- * One week's own days, by its Monday: "this week I'm lifting Tuesday instead".
- * A pillar named here is planned on exactly these weekdays that week, the
- * standing pins stepping aside, and a pillar left out keeps its standing days.
+ * One week's own days, by its first day: "this week I'm lifting Tuesday
+ * instead". A pillar named here is planned on exactly these weekdays that week,
+ * the standing pins stepping aside, and a pillar left out keeps its standing
+ * days.
+ *
+ * The key is the week's first day as it was when the days were chosen. Read it
+ * through {@link pinsForWeek}, which finds a week by any date inside it, so a
+ * week saved under its Monday is still found once weeks start on another day.
  */
 export type WeekPins = Record<string, CalendarPins>
+
+/** The saved key of the week holding `weekStart`, if that week has days of its own. */
+function weekPinKey(weekPins: WeekPins | undefined, weekStart: string): string | undefined {
+  if (!weekPins) return undefined
+  if (weekPins[weekStart]) return weekStart
+  return Object.keys(weekPins).find((w) => sameWeek(w, weekStart))
+}
+
+/** The days chosen for the week holding `weekStart` alone, whichever day its key was written under. */
+export function pinsForWeek(weekPins: WeekPins | undefined, weekStart: string): CalendarPins | undefined {
+  const key = weekPinKey(weekPins, weekStart)
+  return key === undefined ? undefined : weekPins?.[key]
+}
 
 /** done: it happened. planned: still ahead. missed: a calorie day that passed under target. */
 export type CalendarStatus = 'done' | 'planned' | 'missed'
@@ -109,7 +127,7 @@ export type CalendarDay = {
 }
 
 export type WeekCalendarInput = {
-  /** Any date in the week to lay out; it's snapped to its Monday. */
+  /** Any date in the week to lay out; it's snapped to the week's first day. */
   weekStart: string
   today: string
   pillars: Pillar[]
@@ -140,11 +158,16 @@ function addDays(date: string, n: number): string {
 }
 
 export function weekDates(weekStart: string): string[] {
-  const monday = weekStartISO(weekStart)
-  return Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+  const first = weekStartISO(weekStart)
+  return Array.from({ length: 7 }, (_, i) => addDays(first, i))
 }
 
-/** The Monday `n` weeks from the week holding `date`. */
+/** The date in the week of `weekStart` that falls on `weekday` (0 = Monday … 6 = Sunday). */
+export function dateOfWeekday(weekStart: string, weekday: number): string {
+  return weekDates(weekStart).find((d) => mondayIndexOf(d) === weekday)!
+}
+
+/** The first day of the week `n` weeks from the week holding `date`. */
 export function shiftWeek(date: string, n: number): string {
   return addDays(weekStartISO(date), n * 7)
 }
@@ -193,9 +216,11 @@ function plannedDates(
   pillar: PinnablePillar,
 ): string[] {
   const dates = weekDates(weekStart)
-  const chosen = input.weekPins?.[weekStart]?.[pillar] ?? input.pins?.[pillar] ?? []
+  const chosen = pinsForWeek(input.weekPins, weekStart)?.[pillar] ?? input.pins?.[pillar] ?? []
+  // A pin names a day of the week, not a place in it: Tuesday is Tuesday
+  // whichever day the week starts on.
   return dates.filter(
-    (d, weekday) => chosen.includes(weekday) && (d > input.today || (d === input.today && !done[pillar].has(d))),
+    (d) => chosen.includes(mondayIndexOf(d)) && (d > input.today || (d === input.today && !done[pillar].has(d))),
   )
 }
 
@@ -337,9 +362,9 @@ export function weekCalendar(input: WeekCalendarInput): CalendarDay[] {
   }
 
   const order = (p: Pillar) => PILLARS.indexOf(p)
-  return dates.map((date, weekday) => ({
+  return dates.map((date) => ({
     date,
-    weekday,
+    weekday: mondayIndexOf(date),
     when: date < input.today ? 'past' : date === input.today ? 'today' : 'future',
     // Stable within a pillar: done before planned, then in the order pushed.
     items: (items.get(date) ?? []).sort((a, b) => order(a.pillar) - order(b.pillar)),
@@ -414,25 +439,30 @@ export function withWeekPins(
 ): WeekPins {
   const week = weekStartISO(weekStart)
   const current = weekStartISO(today)
-  const kept = Object.fromEntries(Object.entries(weekPins ?? {}).filter(([w]) => w >= current))
+  // Re-keyed to each week's first day as weeks run now, so a week saved under
+  // its Monday before the start day moved is updated rather than doubled.
+  const kept = Object.fromEntries(
+    Object.entries(weekPins ?? {})
+      .map(([w, pins]) => [weekStartISO(w), pins] as const)
+      .filter(([w]) => w >= current),
+  )
   return { ...kept, [week]: setPins(kept[week], pillar, weekdays) }
 }
 
 /** `weekPins` without the week of `weekStart`: back to the standing schedule. */
 export function withoutWeekPins(weekPins: WeekPins | undefined, weekStart: string): WeekPins {
-  const week = weekStartISO(weekStart)
-  return Object.fromEntries(Object.entries(weekPins ?? {}).filter(([w]) => w !== week))
+  return Object.fromEntries(Object.entries(weekPins ?? {}).filter(([w]) => !sameWeek(w, weekStart)))
 }
 
 /** Whether any day has been chosen for any pillar, standing or for the week of `weekStart`. */
 export function hasSchedule(pins: CalendarPins | undefined, weekPins: WeekPins | undefined, weekStart: string): boolean {
   const any = (p: CalendarPins | undefined) => PINNABLE.some((k) => (p?.[k]?.length ?? 0) > 0)
-  return any(pins) || any(weekPins?.[weekStartISO(weekStart)])
+  return any(pins) || any(pinsForWeek(weekPins, weekStart))
 }
 
 /**
- * The day a week opens on: today in the current week, the Sunday of a week
- * behind you (its last word), the Monday of one ahead.
+ * The day a week opens on: today in the current week, the last day of a week
+ * behind you (its last word), the first of one ahead.
  */
 export function defaultCalendarDate(weekStart: string, today: string): string {
   const dates = weekDates(weekStart)

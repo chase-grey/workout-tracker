@@ -14,7 +14,7 @@ import {
   type Macro,
   type MacroGrams,
 } from '../../lib/calories'
-import { mondayOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
+import { mondayIndexOf, weekStartOf, parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import {
   MACRO_LABELS,
   derivesCalories,
@@ -59,7 +59,7 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
   const setSelDate = onSelectDate ?? setOwnDate
   const currentWeek = weekStartISO(today)
   const historical = weekStart != null && weekStart !== currentWeek
-  const monday = weekStart ? parseISODate(weekStart) : mondayOf(now)
+  const monday = weekStart ? parseISODate(weekStart) : weekStartOf(now)
   const week = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
@@ -181,7 +181,7 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
 
       {!picked && (
         <div className="mt-2 flex gap-1">
-          {week.map((day, i) => {
+          {week.map((day) => {
             const hit = totalForDate(calorieEntries, day) >= calorieGoalOn(day)
             return (
               <button
@@ -193,7 +193,7 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
                 }`}
               >
                 <span className={`text-[10px] leading-none ${day === today ? 'text-accent' : 'text-neutral-500'}`}>
-                  {DOW[i]}
+                  {DOW[mondayIndexOf(day)]}
                 </span>
                 <MdCheck
                   className={`text-sm ${hit ? 'text-accent' : day > today ? 'text-neutral-800' : 'text-neutral-700'}`}

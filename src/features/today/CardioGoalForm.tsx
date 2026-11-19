@@ -18,7 +18,7 @@ import {
   type CardioGoalType,
   type CardioLevel,
 } from '../../lib/cardioPlan'
-import { parseISODate, toISODate } from '../../lib/dates'
+import { mondayIndexOrder, parseISODate, toISODate } from '../../lib/dates'
 import { trainingDates } from '../../lib/session'
 import { currentWeeklyGoals } from '../../lib/weeklyStreak'
 import { LiveCompanion } from '../companion/CompanionFlow'
@@ -293,7 +293,7 @@ export function CardioGoalForm({ onSaved, daysPerWeek }: { onSaved: () => void; 
 
       <h3 className="mb-2 mt-4 text-xs tracking-wider text-neutral-500">days</h3>
       <div className="grid grid-cols-7 gap-1">
-        {WEEKDAY_LETTERS.map((letter, d) => (
+        {mondayIndexOrder().map((d) => (
           <button
             key={d}
             onClick={() => toggleDay(d)}
@@ -302,7 +302,7 @@ export function CardioGoalForm({ onSaved, daysPerWeek }: { onSaved: () => void; 
               days.includes(d) ? 'bg-accent text-on-accent' : 'bg-surface-2 text-neutral-400'
             }`}
           >
-            {letter}
+            {WEEKDAY_LETTERS[d]}
           </button>
         ))}
       </div>

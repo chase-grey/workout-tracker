@@ -6,7 +6,7 @@
  * staircase that steps at midnight and counts finished days only.
  */
 
-import { mondayOf } from './dates'
+import { weekStartOf } from './dates'
 import type { WeekCounts, WeeklyGoalConfig } from './weeklyStreak'
 
 export const DAYS_IN_WEEK = 7
@@ -14,16 +14,17 @@ export const DAYS_IN_WEEK = 7
 const MS_PER_DAY = 86400000
 
 /**
- * Whole Mon–Sun days that have FULLY ENDED at `now`: 0 for all of Monday, 6 for
- * all of Sunday. The day in progress never counts — it's still yours to spend —
+ * Whole days of the week that have FULLY ENDED at `now`: 0 for all of its first
+ * day (Monday, unless another start day is chosen; see lib/dates), 6 for all
+ * of its last. The day in progress never counts — it's still yours to spend —
  * which is what keeps the schedule from moving underneath you mid-afternoon.
  */
 export function weekDaysCompleted(now: Date = new Date()): number {
-  const elapsed = Math.floor((now.getTime() - mondayOf(now).getTime()) / MS_PER_DAY)
+  const elapsed = Math.floor((now.getTime() - weekStartOf(now).getTime()) / MS_PER_DAY)
   return Math.min(DAYS_IN_WEEK - 1, Math.max(0, elapsed))
 }
 
-/** Local hours for the Monday start and the last intended day's finish. */
+/** Local hours for the first day's start and the last intended day's finish. */
 export const WEEK_START_HOUR = 18
 export const WEEK_DEADLINE_HOUR = 21
 
@@ -34,7 +35,7 @@ export function requiredByNow(
   windowDays: number = DAYS_IN_WEEK,
 ): number {
   if (goal <= 0) return 0
-  const start = mondayOf(now)
+  const start = weekStartOf(now)
   const end = new Date(start)
   start.setHours(WEEK_START_HOUR)
   end.setDate(end.getDate() + windowDays - 1)
@@ -71,9 +72,9 @@ export function calDaysBehind(done: number, goal: number, now: Date = new Date()
 export type MetricKey = keyof WeekCounts
 
 /**
- * The days of the Mon–Sun week each metric is actually done on, counted from
- * Monday. Flex sessions land by the end of Saturday — Sunday isn't part of the
- * plan for them, so pacing them over seven days let undone sessions look
+ * The days of the week each metric is actually done on, counted from its first
+ * day. Flex sessions land by the end of the sixth (Saturday in a Monday week) —
+ * the last day isn't part of the plan for them, so pacing them over seven days let undone sessions look
  * comfortable on Thursday when fewer intended days were left than it appeared.
  *
  * A goal can still be rescued outside its window; that's what

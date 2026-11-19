@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { cardioMinutesByWeek, type CardioEntry } from '../../lib/cardio'
 import { CHART_SURFACE_2, LINE_PRIMARY, niceScale } from '../../lib/chart'
-import { mondayOf, toISODate } from '../../lib/dates'
+import { weekStartOf, toISODate } from '../../lib/dates'
 
 const WEEKS = 12
 const axisTick = { fill: '#737373', fontSize: 11 }
@@ -17,7 +17,7 @@ function weekLabel(iso: string): string {
 export function CardioChart({ entries }: { entries: CardioEntry[] }) {
   const data = useMemo(() => {
     const byWeek = cardioMinutesByWeek(entries)
-    const monday = mondayOf(new Date())
+    const monday = weekStartOf(new Date())
     const rows: { week: string; minutes: number }[] = []
     for (let i = WEEKS - 1; i >= 0; i--) {
       const d = new Date(monday)

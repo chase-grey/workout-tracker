@@ -21,7 +21,18 @@
 
 import { asksDistance, type CardioEntry } from './cardio'
 import type { Celebration } from './celebration'
-import { daysBetween, parseISODate, toISODate, weekStartISO } from './dates'
+import { daysBetween, mondayISO, parseISODate, toISODate, weekDatesISO } from './dates'
+
+/**
+ * The plan's own weeks are training weeks, saved by their Monday with each
+ * session at a day offset from it, and they stay that way whichever day the
+ * person's week starts on: a saved plan is not rebuilt because a setting moved.
+ * Everything in this file that walks the plan week by week therefore snaps to
+ * Monday. Only the questions asked on behalf of the person's own week (what is
+ * planned in it, how many sessions it owes) are answered by date instead; see
+ * {@link cardioSessionsForWeek}.
+ */
+const weekStartISO = mondayISO
 
 // ---------------------------------------------------------------------------
 // Types
@@ -795,10 +806,8 @@ function weekOf(plan: CardioPlan | undefined, weekStart: string): CardioPlanWeek
   return plan.weeks.find((w) => w.start === monday) ?? null
 }
 
-/** The sessions planned for the week starting `weekStart`, each on its date. Empty with no plan or nothing that week. */
-export function cardioSessionsForWeek(plan: CardioPlan | undefined, weekStart: string): PlannedCardio[] {
-  const week = weekOf(plan, weekStart)
-  if (!plan || !week) return []
+/** One training week's sessions, each on its date. */
+function sessionsOf(plan: CardioPlan, week: CardioPlanWeek): PlannedCardio[] {
   return week.sessions.map((s) => ({
     date: plusDays(week.start, s.day),
     kind: plan.kind,
@@ -809,18 +818,47 @@ export function cardioSessionsForWeek(plan: CardioPlan | undefined, weekStart: s
 }
 
 /**
+ * The training weeks that put a day inside the person's week holding
+ * `weekStart`: one when their week starts on Monday, the two it straddles
+ * otherwise.
+ */
+function planWeeksIn(plan: CardioPlan | undefined, weekStart: string): { dates: string[]; weeks: CardioPlanWeek[] } {
+  const dates = weekDatesISO(weekStart)
+  const mondays = [...new Set([mondayISO(dates[0]), mondayISO(dates[6])])]
+  const weeks = mondays.map((m) => weekOf(plan, m)).filter((w): w is CardioPlanWeek => w != null)
+  return { dates, weeks }
+}
+
+/**
+ * The sessions planned in the person's week holding `weekStart`, each on its
+ * date, in date order. Empty with no plan or nothing that week.
+ */
+export function cardioSessionsForWeek(plan: CardioPlan | undefined, weekStart: string): PlannedCardio[] {
+  if (!plan) return []
+  const { dates, weeks } = planWeeksIn(plan, weekStart)
+  return weeks
+    .flatMap((w) => sessionsOf(plan, w))
+    .filter((s) => dates.includes(s.date))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+}
+
+/**
  * The cardio days the plan asks of the week starting `weekStart`, or null when
  * it has nothing to say about that week — what drives the weekly cardio goal
  * (see weeklyStreak.weeklyGoalsFor).
  */
 export function plannedSessionCount(plan: CardioPlan | undefined, weekStart: string): number | null {
-  const week = weekOf(plan, weekStart)
-  return week ? new Set(week.sessions.map((s) => s.day)).size : null
+  if (!plan) return null
+  const { dates, weeks } = planWeeksIn(plan, weekStart)
+  if (weeks.length === 0) return null
+  const planned = weeks.flatMap((w) => w.sessions.map((s) => plusDays(w.start, s.day)))
+  return new Set(planned.filter((d) => dates.includes(d))).size
 }
 
 /** What's planned on `date`, if anything. */
 export function plannedOn(plan: CardioPlan | undefined, date: string): PlannedCardio | null {
-  return cardioSessionsForWeek(plan, weekStartISO(date)).find((s) => s.date === date) ?? null
+  const week = weekOf(plan, date)
+  return (plan && week ? sessionsOf(plan, week) : []).find((s) => s.date === date) ?? null
 }
 
 /** Whether `date`'s planned session has been done: something counted logged that day. */

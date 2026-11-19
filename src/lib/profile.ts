@@ -12,6 +12,7 @@
  * what that device shows until a profile is saved on it.
  */
 
+import { addDaysISO } from './dates'
 import type { WeeklyGoalConfig } from './weeklyStreak'
 import type { Macro } from './calories'
 import type { FlexRoutineKey } from '../config/flexRoutines'
@@ -216,7 +217,11 @@ const NO_GOALS: WeeklyGoalConfig = { workouts: 0, flex: 0, calDays: 0, cardio: 0
  */
 export function profileWeeklyGoals(profile: Profile, week: string): WeeklyGoalConfig {
   let goals = profile.weeklyGoals[0]?.goals ?? NO_GOALS
-  for (const g of profile.weeklyGoals) if (g.from <= week) goals = g.goals
+  // An entry holds from the week its `from` falls in. `from` was written as the
+  // first day of a week as weeks ran at the time, so once the start day moves it
+  // can sit mid-week; the week that contains it is still the one it was set in.
+  const lastDay = addDaysISO(week, 6)
+  for (const g of profile.weeklyGoals) if (g.from <= lastDay) goals = g.goals
   return { ...goals, cardio: goals.cardio ?? 0 }
 }
 
@@ -243,6 +248,8 @@ export function profileCalorieGoal(profile: Profile, date: string): number | nul
  * a history nobody lived.
  */
 export function withWeeklyGoals(profile: Profile, goals: WeeklyGoalConfig, week: string): Profile {
+  // `week` is a week's first day, so anything dated on or after it belongs to
+  // this week or a later one and is superseded, whichever day it was keyed by.
   const kept = profile.weeklyGoals.filter((g) => g.from < week)
   return { ...profile, weeklyGoals: [...kept, { from: week, goals }] }
 }
