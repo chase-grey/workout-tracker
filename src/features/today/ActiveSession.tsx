@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  MdAdd,
   MdBlock,
   MdBolt,
   MdCheckCircle,
@@ -1270,7 +1271,6 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       ? [{ label: roundMode ? 'rest between rounds' : 'rest between these moves', onClick: () => setShowCircuitRest(true) }]
       : []),
     { label: roundMode ? 'add a round' : 'add a set', onClick: addSet },
-    { label: 'add an exercise', onClick: () => setShowAddExercise(true) },
     // Only while a group is sitting the session out — a block that's in the day
     // has nothing to bring back.
     ...REST_RULES.filter((rule) => session[rule.flag]).map((rule) => ({
@@ -1718,8 +1718,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             {/* A short session's way up to the whole day — there when the time
                 turns out to be there, gone once it's been taken. Here rather than
                 in the kebab: it's a decision about what today's workout is, made
-                while reading what's left of it. Adding a single movement is in
-                the kebab with adding a set, both rare. Only on a day whose short
+                while reading what's left of it. Adding a single movement is at
+                the foot of the list, where the new row will land. Only on a day whose short
                 form is actually shorter: on a day that runs the same either way
                 (every legacy starter template's) it would add nothing. */}
             {session.length === 'short' && hasShortForm(day) && (
@@ -1942,6 +1942,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                   </div>
                 )
               })}
+              {/* Adding a movement is an edit to this list, so it's made from
+                  the list: the row it adds lands right here, at the end. */}
+              <button
+                onClick={() => setShowAddExercise(true)}
+                className="mt-1 flex min-h-[48px] items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-200/20 font-semibold text-neutral-300 active:bg-surface-2"
+              >
+                <MdAdd className="text-xl" aria-hidden />
+                add an exercise
+              </button>
             </div>
           </div>
         </div>
