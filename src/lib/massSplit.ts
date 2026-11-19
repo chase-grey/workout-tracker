@@ -138,15 +138,18 @@ export const BAND_ERROR_SE = 1
 /** Days either side of a date the trends weigh the weigh-ins and readings over — see fitLine.localTrend. */
 export const TREND_HALF_WIDTH_DAYS = 21
 
-/** One week on the chart: where the trends put the weight and its split that week. */
+/** One week on the chart: the most recent weigh-in in it, and how the body-fat trend splits that weight. */
 export type MassTrendPoint = {
-  /** The Monday the week starts on. */
+  /** The day the week starts on. */
   date: string
   weighIns: number
-  /** The weight trend that week, lbs — the top of the stack — and the body-fat trend, %. */
+  /**
+   * The most recent weigh-in logged in the week, lbs, as it was entered — the
+   * top of the stack — and the body-fat trend on the day of it, %.
+   */
   weight: number
   bodyFat: number
-  /** Lean and fat put on by the trends, against where they started. */
+  /** Lean and fat in that weight, against the first week's read the same way. */
   muscleGain: number
   fatGain: number
   /**
@@ -164,7 +167,7 @@ export type MassTrend = {
   points: MassTrendPoint[]
   /** From the first week's Monday to the last's. */
   days: number
-  /** The weight trend where the span starts, lbs: the floor the bands stand on. */
+  /** The first week's weight, lbs — its most recent weigh-in: the floor the bands stand on. */
   startWeight: number
   /** Pounds a week the trend has put on over the span in all, as lean, and as fat; the last two sum to the first. */
   weightPerWeek: number
@@ -194,9 +197,20 @@ export type MassTrend = {
  * weeks to have a span; under that there is no trend yet and the caller shows
  * nothing.
  *
- * At each week the trends are read at the mean date of that week's weigh-ins,
- * fat is weight × body fat, lean the rest, and both are gains against the
- * trends at the first week. Give-or-takes come with them, each built from the
+ * A week's weight is not read off the trend. It is the most recent weigh-in
+ * logged in that week, as entered, so the figure under the chart is the one
+ * last put in and a weigh-in later in the week replaces the one before it;
+ * two on one day, the later entered. A trend read at the middle of the
+ * week's mornings showed a weight nobody had logged, and a fresh weigh-in
+ * moved it by a fraction of itself, which read as a chart that had not taken
+ * it. The body-fat trend is read on the day of that weigh-in, fat is weight ×
+ * body fat, lean the rest, and both are gains against the first week read the
+ * same way. The cost is that one heavy morning at the end of a week now shows
+ * in that week's stack; the rates below, and so the bulk's grade, still come
+ * off the trends and still take it as one morning among three weeks of them.
+ *
+ * For the rates and the give-or-takes the trends are read at the mean date of
+ * each week's weigh-ins. Give-or-takes are each built from the
  * error on the difference between two readings of a trend — readings that
  * share the mornings they were made from, so it is nothing at the start and
  * grows as the weeks stop overlapping. The weight's is the doubt about the top
@@ -238,11 +252,16 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
   )
   if (!fatTrend) return null
 
-  // Each week is read where its weigh-ins were, on average, not at its Monday.
+  // The trends are read where each week's weigh-ins were, on average, not at
+  // its first day. `used` is in date order and the sort is stable, so the last
+  // weigh-in seen for a week is its most recent, and of two on one day the one
+  // entered later.
   const daySum = new Map<string, number>()
+  const latest = new Map<string, Point>()
   for (const w of used) {
     const key = weekStartISO(w.date)
     daySum.set(key, (daySum.get(key) ?? 0) + x(w.date))
+    latest.set(key, w)
   }
   const mid = (p: MassPoint) => (daySum.get(p.date) ?? x(p.date)) / p.weighIns
 
@@ -267,16 +286,27 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
     }
   }
 
+  // What the chart shows for a week: its most recent weigh-in, split by the
+  // body-fat trend on that day.
+  const shown = (p: MassPoint) => {
+    const w = latest.get(p.date)
+    const weight = w ? w.value : p.weight
+    const bodyFat = fatTrend.at(w ? x(w.date) : mid(p)).value
+    const fat = (weight * bodyFat) / 100
+    return { weight, bodyFat, fat, lean: weight - fat }
+  }
+  const shownStart = shown(points[0])
+
   const out: MassTrendPoint[] = points.map((p) => {
-    const here = read(mid(p))
-    const se = errors(here)
+    const here = shown(p)
+    const se = errors(read(mid(p)))
     return {
       date: p.date,
       weighIns: p.weighIns,
       weight: round1(here.weight),
       bodyFat: round1(here.bodyFat),
-      muscleGain: round1(here.lean - start.lean),
-      fatGain: round1(here.fat - start.fat),
+      muscleGain: round1(here.lean - shownStart.lean),
+      fatGain: round1(here.fat - shownStart.fat),
       weightError: round1(BAND_ERROR_SE * se.weightSE),
       muscleError: round1(BAND_ERROR_SE * se.muscleSE),
       fatError: round1(BAND_ERROR_SE * se.fatSE),
@@ -293,7 +323,7 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
   return {
     points: out,
     days: daysBetween(first.date, last.date),
-    startWeight: round1(start.weight),
+    startWeight: round1(shownStart.weight),
     weightPerWeek: round2(weightPerWeek),
     leanPerWeek: round2(weightPerWeek - fatPerWeek),
     fatPerWeek: round2(fatPerWeek),

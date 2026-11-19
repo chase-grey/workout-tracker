@@ -159,21 +159,22 @@ describe('massTrend', () => {
     expect(t.days).toBe(21)
     expect(t.weighIns).toBe(28)
     expect(t.readings).toBe(4)
-    // Each week is read at the middle of its mornings, three weeks apart first to last.
-    expect(t.startWeight).toBeCloseTo(180.3, 1)
+    // Each week shows its last morning; the rates are read at the middle of its
+    // mornings, three weeks apart first to last.
+    expect(t.startWeight).toBeCloseTo(180.6, 1)
     expect(t.weightPerWeek).toBeCloseTo(0.7)
     expect(t.fatPerWeek).toBeCloseTo(0.14, 1)
     expect(t.leanPerWeek).toBeCloseTo(0.56, 1)
     expect(t.fatPerWeekSE).toBeCloseTo(0)
     const last = t.points[3]
-    expect(last.weight).toBeCloseTo(182.4, 1)
+    expect(last.weight).toBeCloseTo(182.7, 1)
     expect(last.bodyFat).toBe(20)
     expect(last.muscleGain).toBeCloseTo(1.7, 1)
     expect(last.fatGain).toBeCloseTo(0.4, 1)
     expect(last.weightError).toBe(0)
     expect(last.muscleError).toBe(0)
     expect(last.fatError).toBe(0)
-    // The stack's top is the weight trend, give or take the tenth each band is rounded to.
+    // The stack's top is the week's weight, give or take the tenth each band is rounded to.
     for (const p of t.points) {
       expect(Math.abs(t.startWeight + p.muscleGain + p.fatGain - p.weight)).toBeLessThanOrEqual(0.15)
     }
@@ -222,12 +223,12 @@ describe('massTrend', () => {
     expect(dense.fatPerWeekSE).toBeLessThan(sparse.fatPerWeekSE)
   })
 
-  it('lets one heavy morning move the trend a little, not a pound', () => {
+  it('lets one heavy morning mid-week move the pace a little, and the week not at all', () => {
     const t = massTrend(mornings(28, 0.1, (i) => (i === 10 ? 3 : 0)), readings(28, 7, 20))
     if (!t) throw new Error('no trend')
     const heavy = t.points[1]
-    expect(heavy.weight - 181).toBeGreaterThan(0)
-    expect(heavy.weight - 181).toBeLessThan(0.5)
+    // The week ends on day 13's 181.3, not on day 10's 184.
+    expect(heavy.weight).toBeCloseTo(181.3, 1)
     expect(t.weightPerWeek).toBeCloseTo(0.7, 0)
   })
 
@@ -238,6 +239,44 @@ describe('massTrend', () => {
     expect(last.fatGain).toBeGreaterThan(0)
     expect(last.muscleGain).toBeCloseTo(-last.fatGain, 1)
     expect(t.weightPerWeek).toBeCloseTo(0)
+  })
+
+  it('shows each week at the most recent weight logged in it', () => {
+    // Three steady weeks at 180, then a newest week with one morning in it so far.
+    const steady = mornings(21, 0)
+    const early = massTrend([...steady, { date: day(21), value: 180 }], readings(28, 7, 20))
+    if (!early) throw new Error('no trend')
+    expect(early.points.at(-1)).toMatchObject({ date: day(21), weight: 180, weighIns: 1 })
+
+    // A heavier weigh-in later in the same week is the week's weight from then on,
+    // and the fat and lean are split off it.
+    const later = massTrend(
+      [...steady, { date: day(21), value: 180 }, { date: day(24), value: 183 }],
+      readings(28, 7, 20),
+    )
+    if (!later) throw new Error('no trend')
+    const last = later.points.at(-1)
+    expect(last).toMatchObject({ date: day(21), weight: 183, weighIns: 2, bodyFat: 20 })
+    if (!last) return
+    expect(last.fatGain).toBeCloseTo(0.6, 1)
+    expect(last.muscleGain).toBeCloseTo(2.4, 1)
+    expect(later.startWeight + last.muscleGain + last.fatGain).toBeCloseTo(183, 1)
+    // The earlier weeks keep their own last mornings.
+    expect(later.points.slice(0, 3).map((p) => p.weight)).toEqual([180, 180, 180])
+  })
+
+  it('takes the later of two weigh-ins on one day, and the later day however they were stored', () => {
+    const steady = mornings(21, 0)
+    const twice = massTrend(
+      [...steady, { date: day(22), value: 181 }, { date: day(22), value: 182 }],
+      readings(28, 7, 20),
+    )
+    expect(twice?.points.at(-1)?.weight).toBe(182)
+    const shuffled = massTrend(
+      [{ date: day(24), value: 183 }, ...steady, { date: day(21), value: 180 }],
+      readings(28, 7, 20),
+    )
+    expect(shuffled?.points.at(-1)?.weight).toBe(183)
   })
 
   it('has no trend inside one week, or on fewer than three of either', () => {

@@ -52,7 +52,7 @@ export type WholeBodyPoint = {
   /** The Monday the week starts on. */
   date: string
   weighIns: number
-  /** The weight trend that week, lbs, and the body-fat trend, %. */
+  /** The most recent weigh-in logged that week, lbs, and the body-fat trend on its day, %. */
   weight: number
   bodyFat: number
   muscle: number
