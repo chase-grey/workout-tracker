@@ -56,7 +56,7 @@ import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
 import { useEnterNext } from '../../lib/useEnterNext'
 import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
-import { landingStep, withSkipped } from '../../lib/skipped'
+import { landingStep, setPosition, withSkipped } from '../../lib/skipped'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -85,8 +85,19 @@ function stepPosition(s: SessionStep): string {
   return [s.side && `${s.side} leg`, s.setLabel].filter(Boolean).join(' · ')
 }
 
-/** Which set of how many. */
-const setOfLabel = (s: SessionStep) => `set ${s.round + 1} of ${s.maxSets}`
+/**
+ * Which set of how many, counting only the sets still in play: a set skipped from
+ * the checklist comes out of the count, and the ones after it are numbered by the
+ * ones you'll actually do (see lib/skipped.setPosition). `inPlay` is the run's
+ * steps without the skipped ones; a round is in play while either side of it is.
+ * Without it, the set as the routine wrote it — what a skipped row reads.
+ */
+function setOfLabel(s: SessionStep, inPlay?: readonly SessionStep[]): string {
+  if (!inPlay) return `set ${s.round + 1} of ${s.maxSets}`
+  const rounds = [...new Set(inPlay.filter((o) => o.exKey === s.exKey).map((o) => o.round))].sort((a, b) => a - b)
+  const at = setPosition(rounds, s.round)
+  return `set ${at.number} of ${at.of}`
+}
 
 /**
  * The big title. A stretch taken one leg at a time, in one of three shapes, is a
@@ -102,8 +113,8 @@ const stepTitle = (s: SessionStep) => stepPosition(s) || s.exName
  * brightens when it's done, so it has no count to state; core reps are typed in,
  * and their target does need saying.
  */
-function stepDetail(s: SessionStep): string {
-  return [stepPosition(s) ? s.exName : '', setOfLabel(s), s.kind === 'core' && `${repRangeLabel(s)} reps`]
+function stepDetail(s: SessionStep, inPlay: readonly SessionStep[]): string {
+  return [stepPosition(s) ? s.exName : '', setOfLabel(s, inPlay), s.kind === 'core' && `${repRangeLabel(s)} reps`]
     .filter(Boolean).join(' · ')
 }
 
@@ -221,7 +232,7 @@ function RoutineChecklist({
                             className={`flex-1 py-2 text-left active:opacity-70 ${isStepSkipped ? 'opacity-50' : ''}`}
                           >
                             <span className={`block text-sm font-medium ${isStepSkipped ? 'line-through' : ''}`}>
-                              {[stepPosition(step), setOfLabel(step)].filter(Boolean).join(' · ')}
+                              {[stepPosition(step), setOfLabel(step, isStepSkipped ? undefined : live)].filter(Boolean).join(' · ')}
                             </span>
                           </button>
                           {/* One tap drops the set from this run, the same mark as
@@ -1081,7 +1092,7 @@ export function StretchSession({
           {/* The move the position belongs to, which set of it, and for the core
               block the rep range — which leg and which of the calf stretch's three
               shapes are up in the title, where they can't be missed mid-stretch. */}
-          <p className="mt-1 text-lg font-medium text-neutral-400">{stepDetail(step)}</p>
+          <p className="mt-1 text-lg font-medium text-neutral-400">{stepDetail(step, steps)}</p>
         </div>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>

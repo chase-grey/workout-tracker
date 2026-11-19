@@ -30,7 +30,16 @@ import { buildSetOrder, circuitStations, roundSteps } from '../../lib/circuit'
 import { checklistSetEdit } from '../../lib/checklistEdit'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { nextFastMode, rollsThroughRest, startsNewExercise, turboSetMs, type FastMode } from '../../lib/fastMode'
-import { allInPlayDone, landingStep, resumeSkipped, setsInPlay, toSkippedRecord } from '../../lib/skipped'
+import {
+  allInPlayDone,
+  inPlayIndices,
+  inPlayRounds,
+  landingStep,
+  resumeSkipped,
+  setPosition,
+  setsInPlay,
+  toSkippedRecord,
+} from '../../lib/skipped'
 import { pairKeys } from '../../lib/pairedSides'
 import { circuitRunKeys, dayEntries, roundTally, sidelessName } from '../../lib/circuitEntry'
 import { roundCards, sidePairPeer, sidesAgree } from '../../lib/sidePair'
@@ -1195,9 +1204,17 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         : `${target.weightLbs} × ${target.reps}`
     : null
 
-  // How many rounds the circuit runs: its longest station, since a station that
-  // has run out of sets just drops out of the last rounds (see lib/circuit).
-  const roundCount = Math.max(0, ...stations.map((e) => logFor(e.key)?.sets.length ?? e.sets))
+  // Which set of how many this is, counting only the ones still in play: a set
+  // skipped from the checklist comes out of the count, and the sets after it are
+  // numbered by the ones you'll actually do (see lib/skipped.setPosition). On a
+  // round screen it's the round of the circuit's rounds — its longest station's,
+  // since a station that has run out of sets just drops out of the last ones (see
+  // lib/circuit).
+  const setsOf = (e: PlannedExercise) => logFor(e.key)?.sets ?? Array.from({ length: e.sets }, () => ({}))
+  const position = setPosition(
+    roundMode ? inPlayRounds(stations.map(setsOf)) : inPlayIndices(setsOf(planned)),
+    step.setIndex,
+  )
 
   // What each station of a round screen is going for: its target, whether that's a
   // step up from last time, and the goal riding on it — the same three cues the
@@ -1351,12 +1368,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {/* The muscle group is left off a single lift: the name already says it. */}
       {roundMode ? (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
-          round <span className="tabular-nums">{step.setIndex + 1}/{roundCount}</span>
+          round <span className="tabular-nums">{position.number}/{position.of}</span>
           {restListed}
         </p>
       ) : (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
-          set <span className="tabular-nums">{step.setIndex + 1}/{step.setCount}</span> ·{' '}
+          set <span className="tabular-nums">{position.number}/{position.of}</span> ·{' '}
           {repRangeLabel(planned, target?.weightLbs)} {planned.timed ? 'sec' : 'reps'}
           {restListed}
         </p>
@@ -1610,7 +1627,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           header={topBar}
           // `targetNumbers` is the coming set's target: the numbers to walk back to
           // the bar with, on the rests that should carry them (see lib/rest).
-          upNextTarget={upNextTargetLabel(step.setIndex, targetNumbers)}
+          // By the set's place among the ones in play: with set one skipped, the
+          // second is the first you'll load.
+          upNextTarget={upNextTargetLabel(position.number - 1, targetNumbers)}
           // Hands-free stands down on the way into an exercise you haven't
           // started: the rest waits for your tap, with its seconds showing, and
           // the mode picks up again from that exercise's first set (see
@@ -1880,7 +1899,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                                 onClick={() => (isSetSkipped ? unskipSetAndJump(e.key, setIndex) : jumpToStep(stepIndex))}
                                 className={`min-h-[40px] w-10 shrink-0 text-left text-xs text-neutral-500 active:opacity-70 ${isSetSkipped ? 'line-through opacity-50' : ''}`}
                               >
-                                set {setIndex + 1}
+                                {/* Numbered as the header numbers it; a skipped set
+                                    keeps the number it was written with. */}
+                                set {isSetSkipped ? setIndex + 1 : setPosition(inPlayIndices(exerciseLog.sets), setIndex).number}
                               </button>
                               {!e.repsOnly && (
                                 <label className="flex min-w-0 flex-1 items-center gap-1">

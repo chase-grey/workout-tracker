@@ -91,3 +91,44 @@ export function landingStep(
   const owed = (k: string) => inPlay(k) && !done(k)
   return order.slice(at + 1).find(owed) ?? order.find(owed) ?? order.find(inPlay) ?? null
 }
+
+/*
+ * Counting the sets still in play.
+ *
+ * "set 1/4" is a statement about the workout being done, so a skipped set comes
+ * out of both halves of it: with the last of four skipped the first reads 1/3,
+ * and with the first skipped the second reads 1/3 too — it is the first you'll
+ * do. A set keeps its index underneath (the log and the step keys are positional),
+ * so the number shown is derived from the indices still in play.
+ */
+
+/** The indices of the sets a skip hasn't taken out, in order. */
+export function inPlayIndices(sets: readonly { skipped?: boolean }[]): number[] {
+  return sets.flatMap((s, i) => (s.skipped ? [] : [i]))
+}
+
+/**
+ * The rounds of a circuit still in play, in order. A round is owed while any
+ * station's set of it is (see lib/circuitEntry.roundTally), and a station that
+ * has run out of sets has none of that round to owe.
+ */
+export function inPlayRounds(stations: readonly (readonly { skipped?: boolean }[])[]): number[] {
+  const rounds = Math.max(0, ...stations.map((sets) => sets.length))
+  const out: number[] = []
+  for (let r = 0; r < rounds; r++) {
+    if (stations.some((sets) => sets[r] && !sets[r].skipped)) out.push(r)
+  }
+  return out
+}
+
+/**
+ * Where the set at `index` stands among the ones in play: its number counting
+ * only those, and how many there are. `inPlay` is ascending indices.
+ *
+ * An index that isn't in play gets the number it would take if it came back,
+ * out of the count without it; a caller showing a skipped set says so some
+ * other way.
+ */
+export function setPosition(inPlay: readonly number[], index: number): { number: number; of: number } {
+  return { number: inPlay.filter((i) => i < index).length + 1, of: inPlay.length }
+}

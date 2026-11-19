@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { allInPlayDone, canSkip, landingStep, resumeSkipped, setsInPlay, toSkippedRecord, withSkipped } from './skipped'
+import {
+  allInPlayDone,
+  canSkip,
+  inPlayIndices,
+  inPlayRounds,
+  landingStep,
+  resumeSkipped,
+  setPosition,
+  setsInPlay,
+  toSkippedRecord,
+  withSkipped,
+} from './skipped'
 
 describe('resumeSkipped', () => {
   it('reads back what was saved for this session', () => {
@@ -102,5 +113,59 @@ describe('landingStep', () => {
 
   it('has nowhere to land when the flow is empty', () => {
     expect(landingStep(order, () => false, none, 'a:0')).toBeNull()
+  })
+})
+
+describe('setPosition', () => {
+  const sets = (skipped: boolean[]) => skipped.map((s) => ({ skipped: s }))
+
+  it('counts a set among all of them when none is skipped', () => {
+    const inPlay = inPlayIndices(sets([false, false, false, false]))
+    expect(setPosition(inPlay, 0)).toEqual({ number: 1, of: 4 })
+    expect(setPosition(inPlay, 3)).toEqual({ number: 4, of: 4 })
+  })
+
+  it('reads 1/3 on the first set once another of the four is skipped', () => {
+    expect(setPosition(inPlayIndices(sets([false, false, false, true])), 0)).toEqual({ number: 1, of: 3 })
+    expect(setPosition(inPlayIndices(sets([false, true, false, false])), 0)).toEqual({ number: 1, of: 3 })
+  })
+
+  it('numbers the sets after a skipped one by the ones actually done', () => {
+    // Set 1 skipped: the second is the first you'll do.
+    const inPlay = inPlayIndices(sets([true, false, false, false]))
+    expect(setPosition(inPlay, 1)).toEqual({ number: 1, of: 3 })
+    expect(setPosition(inPlay, 3)).toEqual({ number: 3, of: 3 })
+    // A hole in the middle closes up.
+    expect(setPosition(inPlayIndices(sets([false, true, false, false])), 2)).toEqual({ number: 2, of: 3 })
+  })
+
+  it('puts the count back when the set is unskipped', () => {
+    expect(setPosition(inPlayIndices(sets([false, false, false, false])), 0).of).toBe(4)
+  })
+
+  it('reads sets with no skip flag at all as in play', () => {
+    expect(inPlayIndices([{}, {}, {}])).toEqual([0, 1, 2])
+  })
+})
+
+describe('inPlayRounds', () => {
+  const s = (skipped = false) => ({ skipped })
+
+  it('drops a round every station has skipped', () => {
+    const rounds = inPlayRounds([
+      [s(), s(true), s()],
+      [s(), s(true), s()],
+    ])
+    expect(rounds).toEqual([0, 2])
+    expect(setPosition(rounds, 2)).toEqual({ number: 2, of: 2 })
+  })
+
+  it('keeps a round while any station still owes its set of it', () => {
+    expect(inPlayRounds([[s(), s(true)], [s(), s()]])).toEqual([0, 1])
+  })
+
+  it('runs as many rounds as the longest station', () => {
+    expect(inPlayRounds([[s(), s(), s()], [s(), s()]])).toEqual([0, 1, 2])
+    expect(inPlayRounds([])).toEqual([])
   })
 })

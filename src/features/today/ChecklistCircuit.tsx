@@ -4,6 +4,7 @@ import type { PlannedExercise } from '../../config/plan'
 import type { ExerciseLog, SetLog } from '../../types'
 import { circuitMembers, circuitRounds, circuitTitle, membersLine, roundsLabel, roundTally } from '../../lib/circuitEntry'
 import { sidesAgree } from '../../lib/sidePair'
+import { inPlayRounds, setPosition } from '../../lib/skipped'
 import { formatDuration } from '../../lib/estimate'
 import { clockText } from '../../lib/setClock'
 import { toWeight } from '../../lib/weightField'
@@ -75,6 +76,7 @@ export function ChecklistCircuit({
   const sets = stations.map((e) => logFor(e.key)?.sets ?? [])
   const rounds = circuitRounds(stations.map((e, i) => sets[i].length || e.sets))
   const tally = roundTally(sets)
+  const liveRounds = inPlayRounds(sets)
   const field =
     'min-h-[40px] w-full rounded-lg bg-surface-2 px-2 text-sm tabular-nums placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-30'
 
@@ -149,7 +151,9 @@ export function ChecklistCircuit({
                     onClick={() => (roundSkipped ? onSkipRound(r, false) : onJumpRound(r))}
                     className={`min-h-[40px] flex-1 text-left text-xs text-neutral-500 active:opacity-70 ${roundSkipped ? 'line-through opacity-50' : ''}`}
                   >
-                    round {r + 1}
+                    {/* Numbered as the round screen numbers it; a skipped round
+                        keeps the number it was written with. */}
+                    round {roundSkipped ? r + 1 : setPosition(liveRounds, r).number}
                   </button>
                   {/* The same mark a set has: not on a round already logged, nor
                       on the last one left in play. */}
