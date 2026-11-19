@@ -308,8 +308,8 @@ describe('project declines a date past the horizon', () => {
   const today = new Date(2026, 0, 26)
 
   /**
-   * The pull-up ladder: four sets of six, climbing a fifth of a rep a week. The
-   * far rung — 4×20 — is fourteen reps away, which once the taper is spent is a
+   * The pull-up ladder: a best set of six, climbing a fifth of a rep a week. The
+   * far rung — twenty — is fourteen reps away, which once the taper is spent is a
    * sum in the 2030s rather than a forecast.
    */
   const creeping = [

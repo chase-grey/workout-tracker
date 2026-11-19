@@ -65,8 +65,8 @@ function weightForE1RM(e1rm: number, reps: number): number {
  *
  * Only goals measured in estimated 1RM are cued. The whole cue is "load the bar
  * to this and the line is met", and a goal counted in reps — the pull-up ladder
- * — has no weight to name: what it wants is another rep on every set, which the
- * rep target on screen already says.
+ * — has no weight to name: what it wants is another rep, which the rep target
+ * on screen already asks for.
  */
 export function goalCueForExercise(
   locked: LockedProjections,

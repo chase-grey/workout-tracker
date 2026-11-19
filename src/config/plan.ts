@@ -732,9 +732,10 @@ export const DEFAULT_PLAN: Plan = {
       { key: 'sideways_leg_raise_l', name: 'sideways leg raise (left)', side: 'left', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
       { key: 'sideways_leg_raise_r', name: 'sideways leg raise (right)', side: 'right', sets: 3, shortSets: 0, repMin: SIDE_RAISE_START_REPS, repMax: SIDE_RAISE_START_REPS, restSec: SIDE_RAISE_ROUND_REST_SEC, bodyweight: true, repsOnly: true, repLadder: true, group: 'abductors', circuit: 'side_raise', circuitRestSec: SIDE_RAISE_SWITCH_SEC, circuitRoundRestSec: SIDE_RAISE_ROUND_REST_SEC },
 
-      // Four sets whichever length the day runs, like the leg press above: the
-      // pull-up ladder is measured on four sets (see goals.PULLUP_GOAL_SETS), so a
-      // short day that trained three was a day the ladder read short.
+      // Four sets whichever length the day runs, like the leg press above. That
+      // was for the pull-up ladder while it was measured on four sets; it reads
+      // the best set alone now (see goals.PULLUP_GOAL_SETS), and the four stay
+      // because the training is the same whichever way the goal is counted.
       { key: 'weighted_pullups', name: 'weighted pull-ups', sets: 4, repMin: 6, repMax: 10, restSec: 120, bodyweight: true, group: 'back' },
 
       // Both are a dumbbell in each hand, so both step in 10s and top out at the

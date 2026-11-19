@@ -1,11 +1,11 @@
 /**
  * The sets behind a goal's readings, keyed by the date they were performed.
  *
- * A goal's line plots one number per session, and for some goals that number is
- * not a set anybody did: the pull-up ladder reads the average of four sets (see
- * progress.averageRepsSeries), so a session that went 9, 8, 6, 5 plots as 7 — a
- * number no set of it actually was. The e1RM goals have the same gap in gentler form — the line is a
- * formula's answer, not a weight that was on the bar.
+ * A goal's line plots one number per session, and that number leaves the rest of
+ * the session out: the pull-up ladder reads the best set alone (see
+ * goals.PULLUP_GOAL_SETS), so a session that went 9, 8, 6, 5 plots as 9 and says
+ * nothing of the three sets after it. The e1RM goals have the gap in another
+ * form — the line is a formula's answer, not a weight that was on the bar.
  *
  * So the tooltip on a goal's chart lists the session as it was logged, and the
  * line's own number goes back to being what it is: a summary of the sets shown

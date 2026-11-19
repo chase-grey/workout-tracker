@@ -47,7 +47,7 @@ export function goalPaceNotes(
   const goalsAfter = buildGoals({ ...inputs, workouts: [...prev, ...added] })
   // The same goals off the history alone, so "before" is read on whatever series
   // each goal is actually measured on — an estimated 1RM for the lift goals, the
-  // reps held across four sets for the pull-up ladder. Rebuilding them is what
+  // best set's reps for the pull-up ladder. Rebuilding them is what
   // keeps the two halves of the comparison in the same units.
   const goalsBefore = new Map(buildGoals({ ...inputs, workouts: prev }).map((g) => [g.id, g]))
   const notes: GoalPaceNote[] = []

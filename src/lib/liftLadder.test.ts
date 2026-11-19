@@ -29,9 +29,10 @@ describe('how a ladder reads its numbers', () => {
     expect(bench.goalLabel(200)).toBe('goal 200')
   })
 
-  it('spells a pull-up rung out as the four sets it takes', () => {
+  it('reads a pull-up rung as reps in one set', () => {
     const pullups = LIFT_LADDERS[PULLUP_KEY]
-    expect(pullups.headline(8)).toBe('4×8')
-    expect(pullups.goalLabel(10)).toBe('goal 4×10')
+    expect(pullups.seriesName).toBe('best set')
+    expect(pullups.headline(8)).toBe('8 in a set')
+    expect(pullups.goalLabel(10)).toBe('goal 10')
   })
 })

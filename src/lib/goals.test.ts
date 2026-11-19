@@ -156,23 +156,31 @@ describe('the pull-up ladder', () => {
   it('lists a rung per rep target, ascending', () => {
     expect(ladder([]).map((g) => g.target)).toEqual([...PULLUP_GOAL_REPS])
     expect(ladder([]).map((g) => g.title)).toEqual([
-      '4×5 pull-ups',
-      '4×10 pull-ups',
-      '4×15 pull-ups',
-      '4×20 pull-ups',
+      '5 pull-ups',
+      '10 pull-ups',
+      '15 pull-ups',
+      '20 pull-ups',
     ])
+    expect(ladder([]).map((g) => g.id)).toEqual(['pullups_1x5', 'pullups_1x10', 'pullups_1x15', 'pullups_1x20'])
   })
 
-  it('measures a rung on the average of the four sets', () => {
-    // 12, 10, 9, 7 is 38 reps — 9.5 a set, short of 4×10 but well past 4×5.
-    const goals = ladder(pullups('2026-02-01', [12, 10, 9, 7]))
-    expect(goals[0].points).toEqual([{ date: '2026-02-01', value: 9.5 }])
-    expect(isReached(goals[0])).toBe(true) // 4×5
-    expect(isReached(goals[1])).toBe(false) // 4×10
+  it('measures a rung on one set: the best of the session', () => {
+    // One set of ten is ten pull-ups, whatever the sets after it came to.
+    const goals = ladder(pullups('2026-02-01', [10, 6, 5, 4]))
+    expect(goals[0].points).toEqual([{ date: '2026-02-01', value: 10 }])
+    expect(isReached(goals[1])).toBe(true) // 10
+    expect(isReached(goals[2])).toBe(false) // 15
   })
 
-  it('reads a session that stopped short of four sets on the sets it logged', () => {
-    expect(ladder(pullups('2026-02-01', [20, 20, 20]))[0].points).toEqual([{ date: '2026-02-01', value: 20 }])
+  it('does not clear a rung on sets that only add up to it', () => {
+    // 9, 9, 9, 9 is thirty-six pull-ups and not one set of ten.
+    const goals = ladder(pullups('2026-02-01', [9, 9, 9, 9]))
+    expect(goals[0].points).toEqual([{ date: '2026-02-01', value: 9 }])
+    expect(isReached(goals[1])).toBe(false)
+  })
+
+  it('reads a session of a single set', () => {
+    expect(ladder(pullups('2026-02-01', [20]))[0].points).toEqual([{ date: '2026-02-01', value: 20 }])
   })
 
   it('counts a rung done with added weight', () => {
@@ -188,7 +196,7 @@ describe('the pull-up ladder', () => {
 
   it('caps the pace at half a rep a week, so a hot pair of sessions is not a ladder', () => {
     // 6 → 9 → 12 across a fortnight fits three reps a week; straight off that,
-    // 4×20 lands inside a couple of months.
+    // twenty lands inside a couple of months.
     const hot = [
       ...pullups('2026-02-01', [6, 6, 6, 6]),
       ...pullups('2026-02-08', [9, 9, 9, 9]),

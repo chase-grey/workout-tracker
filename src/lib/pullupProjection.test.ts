@@ -12,14 +12,14 @@ function goal(readings: [string, number][]) {
     })),
   )
   return buildGoals({ workouts, bodyWeights: [], measurements: [], heightIn: 70 })
-    .find((g) => g.id === 'pullups_4x20')!
+    .find((g) => g.id === 'pullups_1x20')!
 }
 
 describe('conservative pull-up projections', () => {
   const today = new Date(2026, 1, 15)
   const hot = goal([['2026-02-01', 6], ['2026-02-08', 9], ['2026-02-15', 12]])
 
-  it('does not extrapolate a quick jump into four sets of twenty within months', () => {
+  it('does not extrapolate a quick jump into a set of twenty within months', () => {
     const p = projectGoal(hot, today)
     expect(p.observedSlopePerWeek).toBe(3)
     expect(p.slopePerWeek).toBe(0.5)

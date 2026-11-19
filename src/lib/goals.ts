@@ -232,20 +232,24 @@ export const SQUAT_SCALE: Record<string, number> = {
 /** The exercise the pull-up ladder is measured on. */
 export const PULLUP_KEY = 'weighted_pullups'
 
-/** Sets every rung of the pull-up ladder asks for. */
-export const PULLUP_GOAL_SETS = 4
+/**
+ * Sets every rung of the pull-up ladder asks for: one. A rung is a number of
+ * pull-ups done in a row, once — "ten pull-ups" means a set of ten, not four of
+ * them.
+ */
+export const PULLUP_GOAL_SETS = 1
 
 /**
- * The pull-up ladder's rungs, in reps per set, ascending — so the nearer
+ * The pull-up ladder's rungs, in reps in one set, ascending — so the nearer
  * milestone is listed (and reached) before the harder one, the way the squat
  * multiples and the flexibility ladders are.
  */
 export const PULLUP_GOAL_REPS = [5, 10, 15, 20] as const
 
 /**
- * Conservative starting pace ceiling, in reps per set per week. Half a rep
- * means at most one additional rep across all four sets every two weeks before
- * the strength taper slows it further. This is a forecasting assumption, not
+ * Conservative starting pace ceiling, in reps per week. Half a rep means at
+ * most one more pull-up in the best set every two weeks before the strength
+ * taper slows it further. This is a forecasting assumption, not
  * a limit on what a workout can achieve.
  */
 export const PULLUP_GAIN_CAP = 0.5
@@ -756,14 +760,13 @@ export function buildGoals({
     window: FLEX_TREND_WINDOW,
   }))
 
-  // The pull-up ladder. Each rung is four sets at a rep count, measured on the
-  // average of a session's four best sets — so a rung is cleared by the reps it
-  // asks for in total, and one set that ran out early costs only its own missing
-  // reps rather than the whole session. The price: 12, 12, 12, 4 clears 4×10
-  // without a fourth set of ten. Milestones, like the flexibility rungs: a day
-  // that hit 4×10 doesn't stop having happened because the next session came in
-  // tired. A session that stopped short of four sets is read on the sets it did
-  // log rather than dropped from the line (see progress.averageRepsSeries).
+  // The pull-up ladder. Each rung is one set at a rep count, measured on a
+  // session's best set — ten pull-ups is ten in a row, once, and the sets after
+  // it neither add to the reading nor take from it. (The rungs asked for four
+  // sets each until the owner asked for the plain number; averageRepsSeries
+  // over one set is that set.) Milestones, like the flexibility rungs: a day
+  // that hit ten doesn't stop having happened because the next session came in
+  // tired.
   //
   // Any pull-up set counts, added weight or not. A rung done with a belt on is
   // the harder version of the same thing, and refusing it would mean the ladder
@@ -771,7 +774,7 @@ export function buildGoals({
   const pullupPoints = averageRepsSeries(workouts, PULLUP_KEY, PULLUP_GOAL_SETS)
   const pullupGoals: GoalSpec[] = PULLUP_GOAL_REPS.map((reps): GoalSpec => ({
     id: `pullups_${PULLUP_GOAL_SETS}x${reps}`,
-    title: `${PULLUP_GOAL_SETS}×${reps} pull-ups`,
+    title: `${reps} pull-ups`,
     unit: 'reps',
     exerciseKey: PULLUP_KEY,
     measure: 'reps',
