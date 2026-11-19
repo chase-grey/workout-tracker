@@ -365,6 +365,18 @@ export function pillarMarks(day: CalendarDay, pillars: Pillar[]): Record<Pillar,
   return out
 }
 
+/**
+ * How a mark is drawn for its status. The shape already says which pillar, so
+ * the colour is left one job: lit once it happened, dim while it hasn't —
+ * a session still planned, a calorie target not hit — and absent when the day
+ * has nothing of that pillar at all.
+ */
+export type MarkTone = 'lit' | 'dim'
+
+export function markTone(status: CalendarStatus | null): MarkTone | null {
+  return status === 'done' ? 'lit' : status ? 'dim' : null
+}
+
 /** `pins` with `weekday` added to or taken off `pillar`. */
 export function togglePin(pins: CalendarPins | undefined, pillar: PinnablePillar, weekday: number): CalendarPins {
   return setPins(pins, pillar, toggleWeekday(pins?.[pillar] ?? [], weekday))

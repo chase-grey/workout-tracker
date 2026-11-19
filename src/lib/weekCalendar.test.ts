@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { DayType, WorkoutRow } from '../types'
 import type { FlexEntry } from './flex'
+import type { Pillar } from './profile'
 import {
   defaultCalendarDate,
   hasSchedule,
+  markTone,
   pillarMarks,
   scheduledWeekdays,
   shiftWeek,
@@ -263,6 +265,34 @@ describe('pillarMarks', () => {
     expect(pillarMarks(days[1], ['strength', 'diet'])).toMatchObject({ strength: null, diet: 'missed' })
     expect(pillarMarks(days[2], ['strength', 'diet'])).toMatchObject({ strength: 'planned', diet: 'planned' })
     expect(pillarMarks(days[3], ['strength', 'diet'])).toMatchObject({ strength: null, diet: null })
+  })
+})
+
+describe('markTone', () => {
+  it('lights what happened, dims what has not, and draws nothing for nothing', () => {
+    expect(markTone('done')).toBe('lit')
+    expect(markTone('planned')).toBe('dim')
+    expect(markTone('missed')).toBe('dim')
+    expect(markTone(null)).toBeNull()
+  })
+
+  it('gives a day that did all four a lit mark apiece, and a day ahead no food mark', () => {
+    const all: Pillar[] = ['strength', 'flexibility', 'cardio', 'diet']
+    const days = weekCalendar(input({
+      today: MON,
+      pillars: all,
+      pins: { strength: [2] },
+      workouts: [lift(MON, 'push')],
+      flexEntries: [stretch(MON)],
+      cardioEntries: [{ id: 'a', date: MON, kind: 'run', minutes: 25 }],
+      calorieEntries: [{ date: MON, calories: 3500 }],
+    }))
+    const tones = (n: number) => {
+      const marks = pillarMarks(days[n], all)
+      return all.map((p) => markTone(marks[p]))
+    }
+    expect(tones(0)).toEqual(['lit', 'lit', 'lit', 'lit'])
+    expect(tones(2)).toEqual(['dim', null, null, null])
   })
 })
 

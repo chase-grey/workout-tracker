@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
 import { useBackGuard } from '../../lib/useBackGuard'
+import { PillarMark } from './PillarMark'
 import {
   PIN_LABEL,
   WEEKDAY_SHORT,
@@ -31,7 +32,6 @@ export function ScheduleSheet({
   today,
   days,
   pillars,
-  colours,
   onClose,
 }: {
   weekStart: string
@@ -41,7 +41,6 @@ export function ScheduleSheet({
   days: CalendarDay[]
   /** The pillars whose days are set here, in order. */
   pillars: PinnablePillar[]
-  colours: Record<PinnablePillar, string>
   onClose: () => void
 }) {
   const { settings, updateSettings } = useData()
@@ -105,7 +104,7 @@ export function ScheduleSheet({
           {pillars.map((p) => (
             <div key={p} role="group" aria-label={PIN_LABEL[p]} className="flex flex-col gap-2">
               <h3 className="flex items-center gap-2 text-sm font-medium text-neutral-300">
-                <span aria-hidden className="inline-block h-2 w-2 rounded-full" style={{ background: colours[p] }} />
+                <PillarMark pillar={p} status="done" size={16} />
                 {PIN_LABEL[p]}
               </h3>
               <div className="grid grid-cols-7 gap-1">

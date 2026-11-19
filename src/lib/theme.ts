@@ -236,25 +236,3 @@ export function rgbOf(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
-
-/** The pillars that are sessions; the same union as lib/weekCalendar's PinnablePillar. */
-type SessionPillarKey = 'strength' | 'flexibility' | 'cardio'
-
-/**
- * One colour per kind of session, for marks that sit side by side and have to
- * be told apart at a glance (the week calendar's dots). All three are the
- * accent, two steps apart: strength in the middle, flexibility stepped away
- * from the ground and cardio stepped into it.
- *
- * The calorie target has none. A fourth step would be too close to its
- * neighbours to read, and a dot says nothing about food; the calendar draws
- * that day's target as a fork and knife in the accent instead.
- */
-export function pillarColours(p: Palette): Record<SessionPillarKey, string> {
-  const light = p.theme.mode === 'light'
-  return {
-    strength: p.scale[light ? 600 : 500],
-    flexibility: p.scale[light ? 800 : 300],
-    cardio: p.scale[light ? 400 : 700],
-  }
-}

@@ -1,10 +1,8 @@
-import { useMemo, useState, type CSSProperties } from 'react'
-import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore, MdRestaurant } from 'react-icons/md'
+import { useMemo, useState } from 'react'
+import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { parseISODate, weekStartISO } from '../../lib/dates'
 import type { Pillar } from '../../lib/profile'
-import { pillarColours } from '../../lib/theme'
-import { useTheme } from '../../lib/themeStore'
 import {
   PINNABLE,
   WEEKDAY_SHORT as DOW,
@@ -15,11 +13,11 @@ import {
   type CalendarAction,
   type CalendarDay,
   type CalendarItem,
-  type CalendarStatus,
   type PinnablePillar,
   type PlannedCardio,
 } from '../../lib/weekCalendar'
 import { CalendarItemSheet } from './CalendarItemSheet'
+import { PillarMark } from './PillarMark'
 import { ScheduleSheet } from './ScheduleSheet'
 import { useCalendarInput } from './useCalendarInput'
 
@@ -36,33 +34,8 @@ type Props = {
 
 /** A session on the calendar: every item but the day's calorie target. */
 type Session = CalendarItem & { pillar: PinnablePillar }
-type Colours = Record<PinnablePillar, string>
 
 const isSession = (i: CalendarItem): i is Session => i.pillar !== 'diet'
-
-/** A session's mark: filled for done, a ring for planned. */
-function Mark({ colour, status, size = 8 }: { colour: string; status: CalendarStatus | null; size?: number }) {
-  const style: CSSProperties = { width: size, height: size }
-  if (status === 'done') style.background = colour
-  else if (status) style.boxShadow = `inset 0 0 0 1.5px ${colour}`
-  return <span aria-hidden className="inline-block shrink-0 rounded-full" style={style} />
-}
-
-/**
- * The day's calorie target: a fork and knife, lit in the accent once the day
- * hit it and left in the ground's grey until then, the way the calorie card's
- * own week marks a day. Not a dot, since it isn't a session, and a shape can
- * say "food" where a fourth colour only said "something else".
- */
-function DietMark({ status, size }: { status: CalendarStatus | null; size: number }) {
-  return (
-    <MdRestaurant
-      aria-hidden
-      className={`shrink-0 ${status === 'done' ? 'text-accent' : status ? 'text-neutral-700' : 'invisible'}`}
-      style={{ width: size, height: size }}
-    />
-  )
-}
 
 function weekTitle(weekStart: string, today: string): string {
   const current = weekStartISO(today)
@@ -79,8 +52,9 @@ function weekTitle(weekStart: string, today: string): string {
  * Left alone it is a record of what was done; days ahead appear only once
  * some are chosen from the header (ScheduleSheet), or a cardio plan sets them.
  *
- * It opens small — one strip of coloured marks, and under it the sessions of
- * the day picked — because most looks at it are "what's today". The chevron
+ * It opens small — one strip of marks, a shape to each pillar (PillarMark),
+ * and under it the sessions of the day picked — because most looks at it are
+ * "what's today". The chevron
  * opens the whole week at a row per day, and `keep open` there makes that the
  * way it opens from then on. Either way a session is a button that shows what
  * it holds (CalendarItemSheet) rather than one that starts it, and which days
@@ -91,7 +65,6 @@ function weekTitle(weekStart: string, today: string): string {
  */
 export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plannedCardio, onAction }: Props) {
   const { settings, updateSettings } = useData()
-  const colours = pillarColours(useTheme())
   const kept = settings.weekCalendarView === 'full'
   const [expanded, setExpanded] = useState(kept)
   const [detail, setDetail] = useState<{ day: CalendarDay; item: Session } | null>(null)
@@ -153,7 +126,6 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
               <li key={day.date}>
                 <DayRow
                   day={day}
-                  colours={colours}
                   selected={day.date === selected}
                   onSelect={() => onSelect(day.date)}
                   onOpen={(item) => open(day, item)}
@@ -174,10 +146,10 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
         </>
       ) : (
         <>
-          <SimpleStrip days={days} pillars={pillars} colours={colours} selected={selected} onSelect={onSelect} />
+          <SimpleStrip days={days} pillars={pillars} selected={selected} onSelect={onSelect} />
           {picked && (planned || picked.items.some(isSession)) && (
             <div className="mt-2 flex min-h-[36px] flex-wrap items-center gap-1.5">
-              <Sessions day={picked} colours={colours} onOpen={(item) => open(picked, item)} rest={planned} chip />
+              <Sessions day={picked} onOpen={(item) => open(picked, item)} rest={planned} chip />
             </div>
           )}
         </>
@@ -187,7 +159,6 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
         <CalendarItemSheet
           day={detail.day}
           item={detail.item}
-          colour={colours[detail.item.pillar]}
           onAction={onAction}
           onClose={() => setDetail(null)}
         />
@@ -199,7 +170,6 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
           today={today}
           days={days}
           pillars={schedulable}
-          colours={colours}
           onClose={() => setScheduling(false)}
         />
       )}
@@ -218,13 +188,11 @@ function itemText(i: CalendarItem): string {
  */
 function Sessions({
   day,
-  colours,
   onOpen,
   rest,
   chip,
 }: {
   day: CalendarDay
-  colours: Colours
   onOpen: (item: Session) => void
   /** Whether an empty day says so. */
   rest: boolean
@@ -246,7 +214,7 @@ function Sessions({
             chip ? 'min-h-[36px] rounded-lg bg-surface-2 px-2.5' : 'min-h-[32px]'
           } ${i.status === 'done' ? 'text-neutral-100' : 'text-neutral-400'}`}
         >
-          <Mark colour={colours[i.pillar]} status={i.status} />
+          <PillarMark pillar={i.pillar} status={i.status} size={chip ? 16 : 14} />
           {itemText(i)}
         </button>
       ))}
@@ -256,14 +224,12 @@ function Sessions({
 
 function DayRow({
   day,
-  colours,
   selected,
   onSelect,
   onOpen,
   rest,
 }: {
   day: CalendarDay
-  colours: Colours
   selected: boolean
   onSelect: () => void
   onOpen: (item: Session) => void
@@ -289,9 +255,9 @@ function DayRow({
         <span className="tabular-nums">{parseISODate(day.date).getDate()}</span>
       </button>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3">
-        <Sessions day={day} colours={colours} onOpen={onOpen} rest={rest} />
+        <Sessions day={day} onOpen={onOpen} rest={rest} />
       </span>
-      {diet && <DietMark status={diet.status} size={14} />}
+      {diet && <PillarMark pillar="diet" status={diet.status} size={14} />}
     </div>
   )
 }
@@ -299,19 +265,15 @@ function DayRow({
 /**
  * The week as one strip: a letter per day and, under it, a mark per pillar in
  * a fixed order, so reading along a row of marks is reading one pillar's week.
- * The sessions are dots in their own colours; the calorie target closes the
- * column as a fork and knife.
  */
 function SimpleStrip({
   days,
   pillars,
-  colours,
   selected,
   onSelect,
 }: {
   days: CalendarDay[]
   pillars: Pillar[]
-  colours: Colours
   selected: string
   onSelect: (date: string) => void
 }) {
@@ -334,13 +296,9 @@ function SimpleStrip({
               {DOW[day.weekday][0]}
             </span>
             <span className="flex flex-col items-center gap-1">
-              {pillars.map((p) =>
-                p === 'diet' ? (
-                  <DietMark key={p} status={marks[p]} size={11} />
-                ) : (
-                  <Mark key={p} colour={colours[p]} status={marks[p]} size={7} />
-                ),
-              )}
+              {pillars.map((p) => (
+                <PillarMark key={p} pillar={p} status={marks[p]} size={13} />
+              ))}
             </span>
           </button>
         )

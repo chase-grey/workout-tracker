@@ -6,6 +6,7 @@ import { parseISODate } from '../../lib/dates'
 import { isSupplementalSet } from '../../lib/session'
 import { useBackGuard } from '../../lib/useBackGuard'
 import type { CalendarAction, CalendarDay, CalendarItem } from '../../lib/weekCalendar'
+import { PillarMark } from './PillarMark'
 
 type Line = { name: string; detail: string }
 type Group = { label?: string; lines: Line[] }
@@ -21,13 +22,11 @@ const ROW = 'flex items-baseline justify-between gap-3 py-1.5 text-sm'
 export function CalendarItemSheet({
   day,
   item,
-  colour,
   onAction,
   onClose,
 }: {
   day: CalendarDay
   item: CalendarItem
-  colour: string
   onAction: (a: CalendarAction) => void
   onClose: () => void
 }) {
@@ -92,7 +91,7 @@ export function CalendarItemSheet({
           {date} · {done ? 'done' : 'planned'}
         </p>
         <h2 className="mb-3 mt-1 flex items-center gap-2 text-lg font-bold">
-          <span aria-hidden className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colour }} />
+          <PillarMark pillar={item.pillar} status={item.status} size={20} />
           {item.amount ? `${item.label} ${item.amount}` : item.label}
         </h2>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACCENTS, DEFAULT_PREF, DEFAULT_THEME, MODES, palette, parseThemePref, pillarColours, resolveTheme, rotateHue, SHADES } from './theme'
+import { ACCENTS, DEFAULT_PREF, DEFAULT_THEME, MODES, palette, parseThemePref, resolveTheme, rotateHue, SHADES } from './theme'
 
 describe('parseThemePref', () => {
   it('keeps a saved preference', () => {
@@ -73,30 +73,5 @@ describe('rotateHue', () => {
 
   it('leaves greys grey', () => {
     expect(rotateHue('#737373', 120)).toBe('#737373')
-  })
-})
-
-describe('pillarColours', () => {
-  it('gives the three kinds of session three different colours on every theme', () => {
-    for (const accent of ACCENTS) {
-      for (const mode of MODES) {
-        const c = pillarColours(palette({ accent, mode }))
-        expect(new Set(Object.values(c)).size, `${accent} ${mode}`).toBe(3)
-      }
-    }
-  })
-
-  it('takes all three from the accent scale', () => {
-    for (const accent of ACCENTS) {
-      for (const mode of MODES) {
-        const p = palette({ accent, mode })
-        for (const c of Object.values(pillarColours(p))) expect(Object.values(p.scale)).toContain(c)
-      }
-    }
-  })
-
-  it('wears the accent for strength', () => {
-    const p = palette({ accent: 'rose', mode: 'dark' })
-    expect(pillarColours(p).strength).toBe(p.scale[500])
   })
 })
