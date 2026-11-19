@@ -71,7 +71,7 @@ export function BottomNav({
         >
           {/* The dot rides on the icon, not the button, so it sits against the
               glyph rather than out in the tab's empty width. */}
-          <span className="relative leading-none">
+          <span className="nav-icon relative leading-none">
             {/* A step up from the labelled bar's text-xl: with nothing written
                 under it the glyph is the whole target, and it matches the icon
                 buttons in the session header. */}
