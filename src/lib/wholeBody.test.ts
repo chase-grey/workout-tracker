@@ -15,6 +15,7 @@ const round1 = (n: number): number => Math.round(n * 10) / 10
 const point = (over: Partial<MassTrendPoint>): MassTrendPoint => ({
   date: '2026-01-05',
   weighIns: 5,
+  scale: 180,
   weight: 180,
   bodyFat: 15,
   muscleGain: 0,

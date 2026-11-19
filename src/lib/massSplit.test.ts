@@ -159,22 +159,21 @@ describe('massTrend', () => {
     expect(t.days).toBe(21)
     expect(t.weighIns).toBe(28)
     expect(t.readings).toBe(4)
-    // Each week shows its last morning; the rates are read at the middle of its
-    // mornings, three weeks apart first to last.
-    expect(t.startWeight).toBeCloseTo(180.6, 1)
+    // Each week is read at the middle of its mornings, three weeks apart first to last.
+    expect(t.startWeight).toBeCloseTo(180.3, 1)
     expect(t.weightPerWeek).toBeCloseTo(0.7)
     expect(t.fatPerWeek).toBeCloseTo(0.14, 1)
     expect(t.leanPerWeek).toBeCloseTo(0.56, 1)
     expect(t.fatPerWeekSE).toBeCloseTo(0)
     const last = t.points[3]
-    expect(last.weight).toBeCloseTo(182.7, 1)
+    expect(last.weight).toBeCloseTo(182.4, 1)
     expect(last.bodyFat).toBe(20)
     expect(last.muscleGain).toBeCloseTo(1.7, 1)
     expect(last.fatGain).toBeCloseTo(0.4, 1)
     expect(last.weightError).toBe(0)
     expect(last.muscleError).toBe(0)
     expect(last.fatError).toBe(0)
-    // The stack's top is the week's weight, give or take the tenth each band is rounded to.
+    // The stack's top is the weight trend, give or take the tenth each band is rounded to.
     for (const p of t.points) {
       expect(Math.abs(t.startWeight + p.muscleGain + p.fatGain - p.weight)).toBeLessThanOrEqual(0.15)
     }
@@ -223,13 +222,72 @@ describe('massTrend', () => {
     expect(dense.fatPerWeekSE).toBeLessThan(sparse.fatPerWeekSE)
   })
 
-  it('lets one heavy morning mid-week move the pace a little, and the week not at all', () => {
+  it('lets one heavy morning move the trend a little, not a pound', () => {
     const t = massTrend(mornings(28, 0.1, (i) => (i === 10 ? 3 : 0)), readings(28, 7, 20))
     if (!t) throw new Error('no trend')
     const heavy = t.points[1]
-    // The week ends on day 13's 181.3, not on day 10's 184.
-    expect(heavy.weight).toBeCloseTo(181.3, 1)
+    expect(heavy.weight - 181).toBeGreaterThan(0)
+    expect(heavy.weight - 181).toBeLessThan(0.5)
     expect(t.weightPerWeek).toBeCloseTo(0.7, 0)
+  })
+
+  it('keeps the week on the trend when its last morning is heavy, and reports that morning beside it', () => {
+    // Three steady weeks at 180, then a newest week of 180 and a heavier 183.
+    const steady = mornings(21, 0)
+    const t = massTrend(
+      [...steady, { date: day(21), value: 180 }, { date: day(24), value: 183 }],
+      readings(28, 7, 20),
+    )
+    if (!t) throw new Error('no trend')
+    const last = t.points[t.points.length - 1]
+    // The weigh-in is shown as entered...
+    expect(last.scale).toBe(183)
+    expect(t.points.slice(0, 3).map((p) => p.scale)).toEqual([180, 180, 180])
+    // ...and the stack takes it as one morning among three weeks of them.
+    expect(last.weight).toBeGreaterThan(180)
+    expect(last.weight).toBeLessThan(181.5)
+    expect(last.muscleGain + last.fatGain).toBeLessThan(1.5)
+  })
+
+  it('reports the later of two weigh-ins on one day, and the later day however they were stored', () => {
+    const steady = mornings(21, 0)
+    const twice = massTrend(
+      [...steady, { date: day(22), value: 181 }, { date: day(22), value: 182 }],
+      readings(28, 7, 20),
+    )
+    expect(twice?.points.at(-1)?.scale).toBe(182)
+    const shuffled = massTrend(
+      [{ date: day(24), value: 183 }, ...steady, { date: day(21), value: 180 }],
+      readings(28, 7, 20),
+    )
+    expect(shuffled?.points.at(-1)?.scale).toBe(183)
+  })
+
+  it('does not read a steady bulk weighed on noisy mornings as muscle lost and regained', () => {
+    // Half a pound a week at a steady 14 % fat, on a scale that swings a pound
+    // and a half either way from one morning to the next: the last morning of
+    // a week is as often two pounds under the one before as over it.
+    const swing = (i: number) => 1.5 * Math.sin(i * 2.4) + (i % 7 === 6 ? (i % 2 ? 2 : -2) : 0)
+    const t = massTrend(mornings(56, 0.5 / 7, swing), readings(56, 2, 14))
+    if (!t) throw new Error('no trend')
+    const muscle = t.points.map((p) => p.muscleGain)
+    for (let i = 1; i < muscle.length; i++) {
+      // No week gives back more than half a pound of the muscle before it.
+      expect(muscle[i] - muscle[i - 1]).toBeGreaterThan(-0.5)
+    }
+    expect(muscle[muscle.length - 1]).toBeGreaterThan(2)
+  })
+
+  it('ends on figures that split the gain the way the rates the grade reads do', () => {
+    // The header prints the last week's two gains and their ratio; the grade
+    // under it prints lean's share of the pounds a week. They are one bulk.
+    const swing = (i: number) => 1.5 * Math.sin(i * 2.4)
+    const t = massTrend(mornings(56, 0.5 / 7, swing), readings(56, 2, 13.5, (i) => i * 0.03))
+    if (!t) throw new Error('no trend')
+    const last = t.points[t.points.length - 1]
+    const shown = last.muscleGain / (last.muscleGain + last.fatGain)
+    const graded = t.leanPerWeek / t.weightPerWeek
+    expect(Math.abs(shown - graded)).toBeLessThan(0.05)
   })
 
   it('reads rising body fat at a steady weight as fat on and lean off', () => {
@@ -239,44 +297,6 @@ describe('massTrend', () => {
     expect(last.fatGain).toBeGreaterThan(0)
     expect(last.muscleGain).toBeCloseTo(-last.fatGain, 1)
     expect(t.weightPerWeek).toBeCloseTo(0)
-  })
-
-  it('shows each week at the most recent weight logged in it', () => {
-    // Three steady weeks at 180, then a newest week with one morning in it so far.
-    const steady = mornings(21, 0)
-    const early = massTrend([...steady, { date: day(21), value: 180 }], readings(28, 7, 20))
-    if (!early) throw new Error('no trend')
-    expect(early.points.at(-1)).toMatchObject({ date: day(21), weight: 180, weighIns: 1 })
-
-    // A heavier weigh-in later in the same week is the week's weight from then on,
-    // and the fat and lean are split off it.
-    const later = massTrend(
-      [...steady, { date: day(21), value: 180 }, { date: day(24), value: 183 }],
-      readings(28, 7, 20),
-    )
-    if (!later) throw new Error('no trend')
-    const last = later.points.at(-1)
-    expect(last).toMatchObject({ date: day(21), weight: 183, weighIns: 2, bodyFat: 20 })
-    if (!last) return
-    expect(last.fatGain).toBeCloseTo(0.6, 1)
-    expect(last.muscleGain).toBeCloseTo(2.4, 1)
-    expect(later.startWeight + last.muscleGain + last.fatGain).toBeCloseTo(183, 1)
-    // The earlier weeks keep their own last mornings.
-    expect(later.points.slice(0, 3).map((p) => p.weight)).toEqual([180, 180, 180])
-  })
-
-  it('takes the later of two weigh-ins on one day, and the later day however they were stored', () => {
-    const steady = mornings(21, 0)
-    const twice = massTrend(
-      [...steady, { date: day(22), value: 181 }, { date: day(22), value: 182 }],
-      readings(28, 7, 20),
-    )
-    expect(twice?.points.at(-1)?.weight).toBe(182)
-    const shuffled = massTrend(
-      [{ date: day(24), value: 183 }, ...steady, { date: day(21), value: 180 }],
-      readings(28, 7, 20),
-    )
-    expect(shuffled?.points.at(-1)?.weight).toBe(183)
   })
 
   it('has no trend inside one week, or on fewer than three of either', () => {
