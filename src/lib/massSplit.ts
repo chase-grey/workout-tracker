@@ -150,11 +150,18 @@ export type MassTrendPoint = {
    * The most recent weigh-in logged in the week, lbs, as it was entered: the
    * later day, and of two on one day the later entry. Printed in the readout
    * beside the trend so the number last put in can be seen to have arrived.
-   * It is not drawn and nothing is split off it: one morning swings a pound
-   * or two with water, and a stack whose top chased it read as muscle lost
-   * and regained week to week, and disagreed with the grade under it.
+   * In a week that is over it is not drawn and nothing is split off it: one
+   * morning swings a pound or two with water, and a stack whose top chased it
+   * every week read as muscle lost and regained, and disagreed with the grade
+   * under it.
    */
   scale: number
+  /**
+   * True of the newest week only: its `weight` and `bodyFat` are the latest
+   * weigh-in and the latest body-fat reading as logged, not the trends — see
+   * {@link massTrend}.
+   */
+  live: boolean
   /** Lean and fat put on by the trends, against where they started. */
   muscleGain: number
   fatGain: number
@@ -216,6 +223,20 @@ export type MassTrend = {
  * most of the weight's doubt, and the muscle figure is always the less sure
  * of the two. The seam between the bands is still drawn with the fat's: given
  * the top, that is how far the split could move it.
+ *
+ * The newest week is the exception, and is not read off the trends at all. Its
+ * weight is the latest weigh-in and its body fat the latest reading, as
+ * logged, so the right-hand end of the chart is the two numbers at the top of
+ * the page and moves the morning something is logged. A trend at its newest
+ * end is a line through three weeks read at the last of them, and a week that
+ * came in four pounds over the fortnight before it moved that end by one: by
+ * Friday the chart was still a pound and a half under five days of weigh-ins,
+ * and read as waiting for the week to finish. The rates are measured to the
+ * same end, so the header's figures and the grade under them are one bulk.
+ * The costs: the end moves with every weigh-in, water and all, and the grade
+ * with it; and when the next week opens, this one settles back onto the
+ * trend, so its figure can change after the fact. Its give-or-takes are still
+ * the trends': how far off the smoothed reading of the same week could be.
  */
 export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null {
   const points = massPoints(weights, bodyFat)
@@ -280,15 +301,30 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
     }
   }
 
-  const out: MassTrendPoint[] = points.map((p) => {
-    const here = read(mid(p))
-    const se = errors(here)
+  // The newest week as logged: the latest weigh-in, and the latest reading.
+  const lastWeighIn = used[used.length - 1]
+  const lastReading = inSpan[inSpan.length - 1]
+  const nowFat = (lastWeighIn.value * lastReading.value) / 100
+  const now = {
+    day: x(lastWeighIn.date),
+    weight: lastWeighIn.value,
+    bodyFat: lastReading.value,
+    fat: nowFat,
+    lean: lastWeighIn.value - nowFat,
+  }
+
+  const out: MassTrendPoint[] = points.map((p, i) => {
+    const smoothed = read(mid(p))
+    const se = errors(smoothed)
+    const live = i === points.length - 1
+    const here = live ? now : smoothed
     return {
       date: p.date,
       weighIns: p.weighIns,
       weight: round1(here.weight),
       bodyFat: round1(here.bodyFat),
       scale: latest.get(p.date) ?? p.weight,
+      live,
       muscleGain: round1(here.lean - start.lean),
       fatGain: round1(here.fat - start.fat),
       weightError: round1(BAND_ERROR_SE * se.weightSE),
@@ -300,10 +336,10 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
   const first = out[0]
   const last = out[out.length - 1]
   const end = read(mid(points[points.length - 1]))
-  const spanWeeks = (mid(points[points.length - 1]) - startDay) / 7
+  const spanWeeks = (now.day - startDay) / 7
   const perWeek = (n: number) => (spanWeeks > 0 ? n / spanWeeks : 0)
-  const weightPerWeek = perWeek(end.weight - start.weight)
-  const fatPerWeek = perWeek(end.fat - start.fat)
+  const weightPerWeek = perWeek(now.weight - start.weight)
+  const fatPerWeek = perWeek(now.fat - start.fat)
   return {
     points: out,
     days: daysBetween(first.date, last.date),

@@ -54,14 +54,24 @@ function MassTooltip({
       <div style={{ color: colors.muscle.edge }}>muscle {fmtGainError(row.muscleGain, row.muscleError)}</div>
       <div style={{ color: colors.fat.edge }}>fat {fmtGainError(row.fatGain, row.fatError)}</div>
       {ratio && <div className="font-semibold">{ratio}</div>}
-      <div className="text-neutral-400">
-        trend {row.weight}
-        {row.weightError > 0 && ` ± ${row.weightError}`} lbs · {row.bodyFat}% fat
-      </div>
-      <div className="text-neutral-400">
-        {row.weighIns === 1 ? 'weigh-in' : 'last weigh-in'} {row.scale} lbs
-        {row.weighIns > 1 && ` · ${row.weighIns} this week`}
-      </div>
+      {/* The newest week is the latest weigh-in and reading themselves; an
+          earlier one is the trend, with its last weigh-in beside it. */}
+      {row.live ? (
+        <div className="text-neutral-400">
+          {row.weight} lbs · {row.bodyFat}% fat · latest logged
+        </div>
+      ) : (
+        <>
+          <div className="text-neutral-400">
+            trend {row.weight}
+            {row.weightError > 0 && ` ± ${row.weightError}`} lbs · {row.bodyFat}% fat
+          </div>
+          <div className="text-neutral-400">
+            {row.weighIns === 1 ? 'weigh-in' : 'last weigh-in'} {row.scale} lbs
+            {row.weighIns > 1 && ` · ${row.weighIns} that week`}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -74,10 +84,10 @@ function MassTooltip({
  * fibres and cells, in the theme's accent rather than butcher's colours.
  *
  * The axis is body weight. The stack stands on the weight the trend started
- * at, and its top is the weight trend itself — so the scale reads in pounds
- * on the scale, and the top of the stack ends where the latest weigh-ins are
- * (see lib/massSplit.massTrend, which follows the mornings rather than ruling
- * one line across them). Inside, the bands are still gains: the axis is
+ * at, and its top is the weight trend itself, until the newest week: that one
+ * is the latest weigh-in, split by the latest body-fat reading, so the chart
+ * ends on the two numbers logged last and moves the day they are logged (see
+ * lib/massSplit.massTrend). Inside, the bands are still gains: the axis is
  * stretched over the few pounds that moved, with a break at its foot.
  *
  * Each edge can show a dashed line either side, as far off as it could really
