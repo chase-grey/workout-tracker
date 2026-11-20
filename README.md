@@ -123,7 +123,7 @@ it on its own schedule; uninstall and reinstall to pick up a new one immediately
 
 ### The icon
 
-`public/` holds three SVGs and five PNGs of the same barbell, all generated: edit the geometry
+`public/` holds two SVGs and three PNGs of the same barbell, all generated: edit the geometry
 in [`scripts/make-icons.mjs`](./scripts/make-icons.mjs) and run `npm run icons` to rewrite them
 together. The manifest lists the PNGs first on purpose — Chrome builds the installed app's icon
 from a raster, and iOS reads nothing but `icon-180.png`.
