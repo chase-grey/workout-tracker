@@ -130,7 +130,9 @@ export function wholeBody(
       fat: round1(fat),
       rest: round1(rest),
       musclePct: pct(muscle),
-      fatPct: pct(fat),
+      // The fat's share is the body fat itself, to the tenth it is logged in:
+      // rounded to a whole percent, a 14.5 printed as 15 under a header reading 14.5.
+      fatPct: p.bodyFat,
       restPct: pct(rest),
       muscleError: round1(muscleError),
       fatError: p.fatError,
