@@ -8,6 +8,9 @@ import {
   leeSkeletalMuscleKg,
   SKELETAL_MUSCLE_SEE_KG,
   wholeBody,
+  wholeBodyByVolume,
+  FAT_FREE_KG_PER_L,
+  FAT_KG_PER_L,
 } from './wholeBody'
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
@@ -128,6 +131,53 @@ describe('wholeBody', () => {
 
   it('refuses a body the equation cannot fit inside', () => {
     expect(wholeBody(trend([point({ weight: 60, bodyFat: 50 })]), 78)).toBeNull()
+  })
+})
+
+describe('wholeBodyByVolume', () => {
+  const start = point({})
+  const later = point({
+    date: '2026-03-02',
+    weight: 186,
+    bodyFat: 15.5,
+    muscleGain: 4.2,
+    fatGain: 1.8,
+    muscleError: 1.1,
+    fatError: 0.4,
+    weightError: 0.8,
+  })
+  const body = wholeBody(trend([start, later]), 70)!
+  const litres = wholeBodyByVolume(body.points)
+
+  it('sizes the fat at its own density and everything else at the fat-free one', () => {
+    const [p] = litres
+    expect(p.fat).toBe(round1(27 / LB_PER_KG / FAT_KG_PER_L))
+    expect(p.muscle + p.rest).toBeCloseTo(153 / LB_PER_KG / FAT_FREE_KG_PER_L, 0)
+    expect(p.weight).toBeCloseTo(p.fat + p.muscle + p.rest, 0)
+    expect(p.bodyFat).toBe(15)
+  })
+
+  it('gives the fat a bigger share of the room than of the scale, and the shares still add up', () => {
+    for (const [i, p] of litres.entries()) {
+      expect(p.fatPct).toBeGreaterThan(body.points[i].fatPct)
+      expect(p.fatPct).toBe(round1((100 * p.fat) / p.weight))
+      expect(Math.abs(p.musclePct + p.fatPct + p.restPct - 100)).toBeLessThanOrEqual(1.5)
+    }
+    // 15% by weight: 15/0.9007 against 85/1.1.
+    expect(litres[0].fatPct).toBeCloseTo((100 * (15 / 0.9007)) / (15 / 0.9007 + 85 / 1.1), 0)
+  })
+
+  it('holds the rest fixed in litres as it is in pounds', () => {
+    expect(litres[1].rest).toBe(litres[0].rest)
+    expect(litres[1].muscle).toBeGreaterThan(litres[0].muscle)
+  })
+
+  it('carries each give-or-take over at the density of its tissue', () => {
+    const [a, b] = litres
+    expect(a.restError).toBe(round1(body.points[0].restError / LB_PER_KG / FAT_FREE_KG_PER_L))
+    expect(a.fatError).toBe(0)
+    expect(b.fatError).toBe(round1(0.4 / LB_PER_KG / FAT_KG_PER_L))
+    expect(b.weightError).toBeGreaterThanOrEqual(round1(0.8 / LB_PER_KG / FAT_FREE_KG_PER_L))
   })
 })
 

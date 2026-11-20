@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { CHART_SURFACE, CHART_SURFACE_2, fmtDateLabel, niceScale, spacedTicks, timeXAxis, withTime } from '../../lib/chart'
-import { fmtLbsError, fmtPctError, type WholeBody, type WholeBodyPoint } from '../../lib/wholeBody'
+import { fmtPctError, fmtUnitError, wholeBodyByVolume, type WholeBody, type WholeBodyPoint } from '../../lib/wholeBody'
 import { useTheme } from '../../lib/themeStore'
 import { useChartReadout } from '../../lib/useChartReadout'
 import { tissueColors, type TissueColors } from '../../lib/tissue'
@@ -17,6 +17,13 @@ const BOUND_DASH = '3 3'
 const BOUND_WIDTH = 1.25
 const HALO_WIDTH = 3.5
 
+/** What the stack is measured in: pounds on the scale, or litres of room taken up. */
+type Measure = 'weight' | 'volume'
+const MEASURES: { value: Measure; label: string; unit: string }[] = [
+  { value: 'weight', label: 'by weight', unit: 'lbs' },
+  { value: 'volume', label: 'by volume', unit: 'L' },
+]
+
 /** A week on the chart: the body's three parts, and its two seams — where the muscle starts above the floor, and where the fat starts above the muscle. */
 type Row = WholeBodyPoint & { t: number; seam: number; lean: number }
 
@@ -24,10 +31,14 @@ function WholeBodyTooltip({
   active,
   payload,
   colors,
+  measure,
+  unit,
 }: {
   active?: boolean
   payload?: { payload: Row }[]
   colors: TissueColors
+  measure: Measure
+  unit: string
 }) {
   const row = payload?.[0]?.payload
   if (!active || !row) return null
@@ -35,16 +46,18 @@ function WholeBodyTooltip({
     <div style={tooltipStyle} className="px-3 py-2 text-xs">
       <div className="text-neutral-400">week of {fmtDateLabel(row.t)}</div>
       <div style={{ color: colors.muscle.edge }}>
-        muscle {fmtLbsError(row.muscle, row.muscleError)} · {fmtPctError(row.musclePct, row.musclePctError)}
+        muscle {fmtUnitError(row.muscle, row.muscleError, unit)} · {fmtPctError(row.musclePct, row.musclePctError)}
       </div>
       <div style={{ color: colors.fat.edge }}>
-        fat {fmtLbsError(row.fat, row.fatError)} · {fmtPctError(row.fatPct, row.fatPctError)}
+        fat {fmtUnitError(row.fat, row.fatError, unit)} · {fmtPctError(row.fatPct, row.fatPctError)}
       </div>
       <div style={{ color: colors.frame.edge }}>
-        rest {fmtLbsError(row.rest, row.restError)} · {fmtPctError(row.restPct, row.restPctError)}
+        rest {fmtUnitError(row.rest, row.restError, unit)} · {fmtPctError(row.restPct, row.restPctError)}
       </div>
       <div className="text-neutral-400">
-        {fmtLbsError(row.weight, row.weightError)} · {row.bodyFat}% fat · {row.weighIns}{' '}
+        {fmtUnitError(row.weight, row.weightError, unit)}
+        {/* By volume the fat row above already carries its share; the scale's would contradict it. */}
+        {measure === 'weight' && ` · ${row.bodyFat}% fat`} · {row.weighIns}{' '}
         {row.weighIns === 1 ? 'weigh-in' : 'weigh-ins'}
       </div>
     </div>
@@ -77,6 +90,12 @@ function WholeBodyTooltip({
  * the two — so its figure's give-or-take is the other two's added, the far
  * side of the one pair to the far side of the other (see lib/wholeBody). A
  * second tap lifts the dashes.
+ *
+ * The same stack can be read by volume: fat is a fifth lighter than the rest
+ * of the body for its size, so its band is thicker in litres than in pounds,
+ * and that thicker band is the one the mirror shows (see wholeBodyByVolume).
+ * The switch sits in the card because it is the same chart re-measured, and
+ * flipping it in place is what shows the fat band move.
  */
 export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?: string }) {
   const readout = useChartReadout()
@@ -89,7 +108,13 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
   const [shown, setShown] = useState(false)
   const toggle = () => setShown((s) => !s)
 
-  const points = useMemo(() => body?.points ?? [], [body])
+  const [measure, setMeasure] = useState<Measure>('weight')
+  const unit = MEASURES.find((m) => m.value === measure)!.unit
+
+  const points = useMemo(
+    () => (measure === 'volume' ? wholeBodyByVolume(body?.points ?? []) : (body?.points ?? [])),
+    [body, measure],
+  )
   const rows: Row[] = useMemo(
     () => withTime(points.map((p) => ({ ...p, seam: p.rest, lean: p.rest + p.muscle }))),
     [points],
@@ -170,7 +195,22 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
           {figure(colors.fat.edge, `fat ${fmtPctError(last.fatPct, last.fatPctError)}`)}
           {figure(colors.frame.edge, `rest ${fmtPctError(last.restPct, last.restPctError)}`)}
         </span>
-        {figure(WEIGHT_COLOR, fmtLbsError(last.weight, last.weightError), 'font-semibold')}
+        {figure(WEIGHT_COLOR, fmtUnitError(last.weight, last.weightError, unit), 'font-semibold')}
+      </div>
+      <div className="mx-3 mt-2 flex gap-1 rounded-lg bg-surface-2 p-0.5">
+        {MEASURES.map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            aria-pressed={m.value === measure}
+            onClick={() => setMeasure(m.value)}
+            className={`min-h-[30px] flex-1 rounded-md text-xs font-medium ${
+              m.value === measure ? 'bg-surface text-neutral-100' : 'text-neutral-500'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
       <ResponsiveContainer width="100%" height={240}>
         <ComposedChart data={rows} margin={{ top: 8, right: 18, bottom: 0, left: -12 }} {...readout.chart}>
@@ -178,7 +218,7 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
           <XAxis {...timeXAxis} ticks={ticks} interval={0} tick={axisTick} />
           <YAxis tick={axisTick} width={40} domain={yScale.domain} ticks={yScale.ticks} />
-          <Tooltip {...readout.tooltip} content={<WholeBodyTooltip colors={colors} />} />
+          <Tooltip {...readout.tooltip} content={<WholeBodyTooltip colors={colors} measure={measure} unit={unit} />} />
           {band('rest', 'rest', ids.frame, colors.frame.edge)}
           {band('muscle', 'muscle', ids.muscle, colors.muscle.edge)}
           {band('fat', 'fat', ids.fat, colors.fat.edge)}

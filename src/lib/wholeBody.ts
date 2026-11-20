@@ -151,6 +151,66 @@ export function wholeBody(
   }
 }
 
+/**
+ * What a kilogram of each compartment takes up, kg per litre: Siri 1961's two
+ * figures, the same pair every body-fat reading — callipers, a tape, a scale's
+ * current — is calibrated against. Fat is light and everything else is not, so
+ * a body that is 15% fat on the scale is nearer 18% fat in the mirror. The
+ * muscle and the rest share the fat-free figure: muscle alone runs about 1.06
+ * and bone well over, but that four percent is inside what the muscle estimate
+ * is already unsure by, and one figure keeps the fat-free mass at the density
+ * the reading assumed.
+ */
+export const FAT_KG_PER_L = 0.9007
+export const FAT_FREE_KG_PER_L = 1.1
+
+/**
+ * The same weeks by volume: every pound figure and its give-or-take in litres,
+ * `weight` the whole body's volume, and the shares shares of that volume, the
+ * fat's still to a tenth. `bodyFat` stays the scale's, by weight.
+ *
+ * The give-or-takes go over at the density of the tissue that would be gained
+ * or lost. The whole volume has one the weight does not: a pound called fat
+ * that was muscle is the same pound on the scale and a different size, so the
+ * fat's doubt widens the top of the stack by the difference.
+ */
+export function wholeBodyByVolume(points: WholeBodyPoint[]): WholeBodyPoint[] {
+  const fatL = (lbs: number) => lbs / LB_PER_KG / FAT_KG_PER_L
+  const leanL = (lbs: number) => lbs / LB_PER_KG / FAT_FREE_KG_PER_L
+  return points.map((p) => {
+    const fatLbs = (p.weight * p.bodyFat) / 100
+    const fat = fatL(fatLbs)
+    const rest = leanL(p.rest)
+    const muscle = leanL(p.weight - fatLbs) - rest
+    const volume = fat + rest + muscle
+    const muscleError = leanL(p.muscleError)
+    const fatError = fatL(p.fatError)
+    const restError = leanL(p.restError)
+    const pct = (n: number) => Math.round((100 * n) / volume)
+    const pctError = (litres: number) => round1((100 * litres) / volume)
+    return {
+      date: p.date,
+      weighIns: p.weighIns,
+      weight: round1(volume),
+      bodyFat: p.bodyFat,
+      muscle: round1(muscle),
+      fat: round1(fat),
+      rest: round1(rest),
+      musclePct: pct(muscle),
+      // Off the two figures as printed, so the share can be checked against them.
+      fatPct: round1((100 * round1(fat)) / round1(volume)),
+      restPct: pct(rest),
+      muscleError: round1(muscleError),
+      fatError: round1(fatError),
+      restError: round1(restError),
+      musclePctError: pctError(muscleError),
+      fatPctError: pctError(fatError),
+      restPctError: pctError(restError),
+      weightError: round1(leanL(p.weightError) + fatError - leanL(p.fatError)),
+    }
+  })
+}
+
 /** A whole percentage with its give-or-take in points: "38 ± 3.4%", or just "15%" when there is none to speak of. */
 export function fmtPctError(pct: number, error: number): string {
   return error > 0 ? `${pct} ± ${error}%` : `${pct}%`
@@ -158,5 +218,10 @@ export function fmtPctError(pct: number, error: number): string {
 
 /** A pound figure with its give-or-take: "186 ± 0.8 lbs", or "186 lbs" when the figure is sure. */
 export function fmtLbsError(lbs: number, error: number): string {
-  return error > 0 ? `${lbs} ± ${error} lbs` : `${lbs} lbs`
+  return fmtUnitError(lbs, error, 'lbs')
+}
+
+/** The same in any unit: "81.2 ± 0.4 L". */
+export function fmtUnitError(n: number, error: number, unit: string): string {
+  return error > 0 ? `${n} ± ${error} ${unit}` : `${n} ${unit}`
 }
