@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildSessionSteps } from './flexSteps'
-import { burstLeadSec, coldGate, gateAfterStep } from './photoSteps'
+import { burstLeadSec, coldGate, gateAfterStep, ladderGate, shotMeasurement } from './photoSteps'
 import type { FlexBlock } from '../config/flexPlan'
 
 const ex = (key: string, maxSets: number): FlexBlock['exercises'][number] => ({
@@ -167,5 +167,41 @@ describe('burstLeadSec', () => {
 
   it("doesn't burst the side split, whose two poses aren't one mat apart", () => {
     expect(coldGate('side_split').burst).toBeUndefined()
+  })
+})
+
+describe('ladderGate', () => {
+  it('opens one pose on its warm shots, and both legs for the leg lift', () => {
+    expect(ladderGate('split').shots).toEqual(['warm-split'])
+    expect(ladderGate('tailors').shots).toEqual(['warm-tailors'])
+    expect(ladderGate('toeTouch').shots).toEqual(['warm-toe-touch'])
+    expect(ladderGate('legLift').shots).toEqual(['warm-leg-lift-left', 'warm-leg-lift-right'])
+  })
+
+  it('never bursts: there is no routine rhythm to keep', () => {
+    expect(ladderGate('legLift').burst).toBeUndefined()
+  })
+})
+
+describe('shotMeasurement', () => {
+  it('files a reading under the temperature the shot was taken at', () => {
+    expect(shotMeasurement('warm-split', { splitDeg: 142 })).toEqual({ note: 'measurement', warmSplitDeg: 142 })
+    expect(shotMeasurement('cold-split', { splitDeg: 120 })).toEqual({ note: 'measurement', coldSplitDeg: 120 })
+  })
+
+  it('carries both sides of a paired pose', () => {
+    expect(shotMeasurement('warm-tailors', { tailorsLeftDeg: 55, tailorsRightDeg: 54 })).toEqual({
+      note: 'measurement',
+      tailorsWarmLeftDeg: 55,
+      tailorsWarmRightDeg: 54,
+    })
+  })
+
+  it('follows the angle the reading carries, not the pose the shot was named for', () => {
+    expect(shotMeasurement('warm-split', { toeTouchDeg: 98 })).toEqual({ note: 'measurement', warmToeTouchDeg: 98 })
+    expect(shotMeasurement('cold-leg-lift-left', { legLiftRightDeg: 80 })).toEqual({
+      note: 'measurement',
+      coldLegLiftRightDeg: 80,
+    })
   })
 })

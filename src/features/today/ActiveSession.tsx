@@ -273,12 +273,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Keyed once: a movement the short form left out can be added from the list
   // before the checklist opens the day up, and then the day prescribes what the
   // addition already carries. The day's own entry wins, since the log is one.
+  //
+  // A workout of one movement (see lib/soloSession) takes nothing from the day:
+  // the movement it was opened for is carried as an addition, and is the list.
   const dayExercises = useMemo(() => {
-    const own = performedExercises(day, session)
+    const own = session.solo ? [] : performedExercises(day, session)
     const have = new Set(own.map((e) => e.key))
     return [...own, ...(session.adHocExercises ?? []).filter((e) => !have.has(e.key))]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [day, session.variant, session.length, session.startSide, session.restAbs, session.restNeck, session.adHocExercises])
+  }, [day, session.solo, session.variant, session.length, session.startSide, session.restAbs, session.restNeck, session.adHocExercises])
   // And as the checklist has been dragged into shape since: reordered, and with
   // the circuits made or unmade there (see lib/arrangement). Everything below
   // reads this list, so a circuit made by hand is rotated, rested and listed by

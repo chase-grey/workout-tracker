@@ -23,16 +23,25 @@ export function PhotoStep({
   gate,
   onCapture,
   onDone,
+  offerNever = true,
 }: {
   gate: PhotoGate
   onCapture: (kind: PhotoKind, result: MeasureResult) => void
   onDone: (tookAny: boolean) => void
+  /**
+   * Whether the screen offers to stop asking for photos. A routine's photo
+   * moments do; a photo that was asked for (a goal tapped on the progress tab)
+   * has nothing to stop.
+   */
+  offerNever?: boolean
 }) {
   const { flexEntries, settings, updateSettings } = useData()
-  const never = () => {
-    updateSettings({ ...settings, photosOff: true })
-    onDone(false)
-  }
+  const never = offerNever
+    ? () => {
+        updateSettings({ ...settings, photosOff: true })
+        onDone(false)
+      }
+    : undefined
   // The shots to measure, each with its frame if a burst already took it. A
   // burst's are unknown until it's done.
   const [queue, setQueue] = useState<{ kind: PhotoKind; frame?: BurstFrame }[] | null>(() =>

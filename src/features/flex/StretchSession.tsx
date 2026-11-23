@@ -27,10 +27,10 @@ import {
   type CoreSetStep,
   type SessionStep,
 } from '../../lib/flexSteps'
-import { coldGate, PHOTO_SHOT, gateAfterStep, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
+import { coldGate, gateAfterStep, shotMeasurement, type PhotoGate, type PhotoKind } from '../../lib/photoSteps'
 import { dueGate } from '../../lib/photoCadence'
 import { type MeasureResult } from '../../lib/measure'
-import { type FlexMeasurement, type StretchFinishSummary } from '../../store/DataContext'
+import { type StretchFinishSummary } from '../../store/DataContext'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import { priceStretchFlow, remainingTiming, stretchTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
 import { useStepElapsed } from '../../lib/useStepElapsed'
@@ -759,33 +759,7 @@ export function StretchSession({
   // which pose it lands in follows the angles the camera actually returned, so
   // switching pose mid-capture still logs the reading somewhere sensible.
   const logMeasurement = (kind: PhotoKind, result: MeasureResult) => {
-    const { cold } = PHOTO_SHOT[kind]
-    const m: FlexMeasurement = { note: 'measurement' }
-    if (result.splitDeg != null) {
-      if (cold) m.coldSplitDeg = result.splitDeg
-      else m.warmSplitDeg = result.splitDeg
-    }
-    if (result.tailorsLeftDeg != null) {
-      if (cold) m.tailorsColdLeftDeg = result.tailorsLeftDeg
-      else m.tailorsWarmLeftDeg = result.tailorsLeftDeg
-    }
-    if (result.tailorsRightDeg != null) {
-      if (cold) m.tailorsColdRightDeg = result.tailorsRightDeg
-      else m.tailorsWarmRightDeg = result.tailorsRightDeg
-    }
-    if (result.toeTouchDeg != null) {
-      if (cold) m.coldToeTouchDeg = result.toeTouchDeg
-      else m.warmToeTouchDeg = result.toeTouchDeg
-    }
-    if (result.legLiftLeftDeg != null) {
-      if (cold) m.coldLegLiftLeftDeg = result.legLiftLeftDeg
-      else m.warmLegLiftLeftDeg = result.legLiftLeftDeg
-    }
-    if (result.legLiftRightDeg != null) {
-      if (cold) m.coldLegLiftRightDeg = result.legLiftRightDeg
-      else m.warmLegLiftRightDeg = result.legLiftRightDeg
-    }
-    void logFlex(m)
+    void logFlex(shotMeasurement(kind, result))
   }
 
   const toggleDone = (key: string) =>

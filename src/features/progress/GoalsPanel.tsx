@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -24,6 +24,7 @@ import {
   isReadyToAttempt,
   liveLocks,
   projectGoal,
+  PULLUP_GOAL_SETS,
   reachedDate,
   type GoalSpec,
 } from '../../lib/goals'
@@ -33,7 +34,7 @@ import { repsForE1RM } from '../../lib/epley'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
 import { isLiftLadder } from '../../lib/liftLadder'
 import { goalsFor, TARGET_WEIGHT_GOAL_ID } from '../../lib/profileGoals'
-import { hasPillar, weighsIn } from '../../lib/profile'
+import { hasPillar, readsBodyFat, weighsIn } from '../../lib/profile'
 import type { SixPackStatus } from '../../services/storage'
 import {
   adoptModel,
@@ -75,6 +76,10 @@ import { LiftLadderBlock } from './LiftLadderBlock'
 import { GoalTooltip } from './GoalTooltip'
 import { goalLineMarks } from './goalLineMarks'
 import { targetAtEta } from '../../lib/goalLine'
+import { ladderGate, shotMeasurement, type FlexLadder } from '../../lib/photoSteps'
+import { useBackGuard } from '../../lib/useBackGuard'
+import { PhotoStep } from '../flex/PhotoStep'
+import { WeightLogSheet } from '../today/WeightLogSheet'
 import { MdBolt, MdCelebration, MdEditCalendar, MdLockOutline } from 'react-icons/md'
 
 function fmtDate(iso: string | null): string {
@@ -84,6 +89,15 @@ function fmtDate(iso: string | null): string {
 }
 
 const axisTick = { fill: '#737373', fontSize: 10 }
+
+/**
+ * Spread on anything inside a goal row that a tap is a reach for rather than a
+ * tap on the goal: its charts, which answer a touch with a readout, and the
+ * commitment prompts, whose finish line is dragged. The row opens its entry
+ * screen from everywhere else (see GoalRow `onOpen`).
+ */
+const ROW_SHIELD = { 'data-goal-shield': '' } as const
+const ROW_SHIELDED = 'button, input, label, a, [data-goal-shield]'
 
 /** Merge the actual series with the locked projection into one row per date. */
 function mergeActualProjected(actual: Point[], projected: Point[], currentPace: Point[]) {
@@ -166,7 +180,7 @@ function LockChart({
   const revisedNudge = rising ? 12 : -12
 
   return (
-    <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card}>
+    <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card} {...ROW_SHIELD}>
       <ResponsiveContainer width="100%" height={140}>
         <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }} {...readout.chart}>
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
@@ -292,7 +306,7 @@ function DataChart({
   const yScale = useMemo(() => niceScale([...points.map((p) => p.value), target]), [points, target])
 
   return (
-    <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card}>
+    <div className="mt-3 rounded-xl bg-surface-2 p-1" {...readout.card} {...ROW_SHIELD}>
       <ResponsiveContainer width="100%" height={120}>
         <LineChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }} {...readout.chart}>
           <CartesianGrid stroke={CHART_SURFACE_2} vertical={false} />
@@ -364,7 +378,7 @@ function LockInPrompt({
   const valid = date >= range.soonest && date <= range.latest
 
   return (
-    <div className="mt-2 rounded-xl bg-accent-2/10 p-3">
+    <div className="mt-2 rounded-xl bg-accent-2/10 p-3" {...ROW_SHIELD}>
       <p className="text-sm font-medium text-accent-2">
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
         in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
@@ -452,7 +466,7 @@ function RecommitPrompt({
   const valid = range != null && date >= range.soonest && date <= range.latest
 
   return (
-    <div className="mt-2 rounded-xl bg-accent-2/10 p-3">
+    <div className="mt-2 rounded-xl bg-accent-2/10 p-3" {...ROW_SHIELD}>
       <div className="flex items-baseline gap-2">
         <p className="text-sm font-medium text-accent-2">
           <MdLockOutline className="inline align-text-bottom mr-1" aria-hidden />
@@ -595,7 +609,7 @@ function AttemptPrompt({
   }
 
   return (
-    <div className="mt-2 rounded-xl bg-accent-bright/10 p-3">
+    <div className="mt-2 rounded-xl bg-accent-bright/10 p-3" {...ROW_SHIELD}>
       <p className="text-sm font-medium text-accent-bright">
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
         {exerciseName(exerciseKey)} {capped ? `set at ${needed}` : 'single'}
@@ -644,11 +658,17 @@ function AttemptPrompt({
  * lock-in ({@link LockInPrompt}). Once locked, the row shows how the real numbers
  * track against the committed line, with a chart of actual vs projected and a way
  * to change the date or let the commitment go ({@link RecommitPrompt}).
+ *
+ * A goal still open is also the way in to logging toward it: a tap on the row
+ * opens the screen its readings come off (see `onOpen`), wherever the tap lands
+ * that isn't a control or a chart of the row's own ({@link ROW_SHIELD}). The
+ * title is the same action as a real button, for a keyboard or a screen reader.
  */
 function GoalRow({
   goal,
   proj,
   lock,
+  onOpen,
   onDrop,
   onLock,
   onLogAttempt,
@@ -661,6 +681,11 @@ function GoalRow({
   goal: GoalSpec
   proj: Projection
   lock?: LockedProjection
+  /**
+   * Open the screen this goal is logged on: the workout, for the one lift it's
+   * read off; the camera, for the one pose; the weigh-in sheet.
+   */
+  onOpen?: () => void
   /** Let a commitment go, putting the goal back to a live projection. */
   onDrop: () => void
   /** Commit the goal to a target date — the first one, or a changed one. */
@@ -739,11 +764,29 @@ function GoalRow({
       ? paceAgainstLock(lock, proj.current, lastReadingDate, proj.slopePerWeek, undefined, proj)
       : null
   const ring = grouped ? '' : goalRing(lockable, !!lock && !reached, reached, ready)
+  // A goal already met has nothing left to enter.
+  const open = reached ? undefined : onOpen
+  const onRowClick = open
+    ? (e: MouseEvent<HTMLDivElement>) => {
+        if (!(e.target as Element).closest(ROW_SHIELDED)) open()
+      }
+    : undefined
 
   return (
-    <div className={`rounded-2xl bg-surface p-4 ${ring}`}>
+    <div
+      className={`rounded-2xl bg-surface p-4 ${ring} ${open ? 'cursor-pointer active:bg-surface-2' : ''}`}
+      onClick={onRowClick}
+    >
       <div className="flex items-baseline justify-between gap-2">
-        <h4 className="font-semibold">{goal.title}</h4>
+        <h4 className="font-semibold">
+          {open ? (
+            <button onClick={open} className="text-left font-semibold">
+              {goal.title}
+            </button>
+          ) : (
+            goal.title
+          )}
+        </h4>
         {/* A goal charted above already shows how far along it is, so the row
             spends its corner on the thing the chart no longer says: the date it
             lands on — committed if it's locked, projected if it isn't. */}
@@ -894,6 +937,13 @@ function goalFamily(g: GoalSpec): string {
   return `flex:${g.id.split('_')[0]}`
 }
 
+const FLEX_LADDERS: FlexLadder[] = ['split', 'tailors', 'toeTouch', 'legLift']
+
+/** The pose a flexibility rung is measured on, or null for any other goal. */
+function flexLadderOf(g: GoalSpec): FlexLadder | null {
+  return FLEX_LADDERS.find((l) => goalFamily(g) === `flex:${l}`) ?? null
+}
+
 const SIX_PACK_OPTIONS: { value: SixPackStatus; label: string }[] = [
   { value: 'none', label: 'not yet' },
   { value: 'close', label: 'close' },
@@ -946,7 +996,30 @@ function SixPackRow({
  * weigh-ins the weight chart does and belong in the same card rather than a
  * screen further down.
  */
-export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode }) {
+export function GoalsPanel({
+  underBodyWeight,
+  onStartLift,
+}: {
+  underBodyWeight?: ReactNode
+  /**
+   * Start a workout of one movement, for the lift goal that was tapped (see
+   * lib/soloSession). `minSets` is the sets a goal counted across sets reads.
+   */
+  onStartLift?: (exerciseKey: string, minSets?: number) => void
+}) {
+  // The pose whose photo screen a tapped stretch goal has opened, and whether a
+  // tapped bodyweight goal has the weigh-in sheet up.
+  const [photoLadder, setPhotoLadder] = useState<FlexLadder | null>(null)
+  const [weighing, setWeighing] = useState(false)
+  useBackGuard(photoLadder != null || weighing, () => {
+    setPhotoLadder(null)
+    setWeighing(false)
+  })
+  // Read through a ref: the ladder blocks below are memoised on the goals, not on
+  // this prop, and would otherwise keep calling the handler they were built with.
+  const startLift = useRef(onStartLift)
+  startLift.current = onStartLift
+
   const {
     workouts,
     bodyWeights,
@@ -956,8 +1029,25 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     calorieEntries,
     updateSettings,
     logMaxAttempt,
+    logFlex,
   } = useData()
   const heightIn = settings.heightIn ?? 0
+
+  // Where a tapped goal goes to be logged: the screen its readings already come
+  // off, narrowed to the one thing the goal is about. A lift goal opens a workout
+  // of that lift, a stretch rung the camera on that pose (which takes a typed
+  // angle too — see CameraMeasure), a bodyweight goal the weigh-in sheet. The
+  // six-pack is answered in its own row and never comes through here.
+  const openGoal = (g: GoalSpec) => {
+    if (isWeightGoal(g)) {
+      setWeighing(true)
+    } else if (g.exerciseKey) {
+      startLift.current?.(g.exerciseKey, g.measure === 'reps' ? PULLUP_GOAL_SETS : undefined)
+    } else {
+      const ladder = flexLadderOf(g)
+      if (ladder) setPhotoLadder(ladder)
+    }
+  }
   const dietOn = hasPillar(settings.profile, 'diet')
   const scale = weighsIn(settings.profile)
 
@@ -1094,6 +1184,7 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
       goal={g}
       proj={projections.get(g.id)!}
       lock={locked[g.id]}
+      onOpen={() => openGoal(g)}
       onDrop={() => dropCommitment(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       onLogAttempt={(weightLbs, reps) => {
@@ -1386,6 +1477,17 @@ export function GoalsPanel({ underBodyWeight }: { underBodyWeight?: ReactNode })
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
       {ordered}
+      {photoLadder && (
+        <PhotoStep
+          gate={ladderGate(photoLadder)}
+          onCapture={(kind, result) => void logFlex(shotMeasurement(kind, result))}
+          onDone={() => setPhotoLadder(null)}
+          offerNever={false}
+        />
+      )}
+      {weighing && (
+        <WeightLogSheet scale bodyFat={readsBodyFat(settings.profile)} onClose={() => setWeighing(false)} />
+      )}
     </div>
   )
 }

@@ -60,6 +60,12 @@ export type WorkoutSession = {
    */
   length?: import('../config/plan').SessionLength
   /**
+   * A workout of one movement, opened from a goal (see lib/soloSession). The day
+   * prescribes nothing: the movement rides in `adHocExercises`, and `dayType` is
+   * only where its rows are filed.
+   */
+  solo?: boolean
+  /**
    * Whether this session leaves its ab block out because the abs were trained
    * the day before (or earlier today) — see lib/absRest. Pinned at start like
    * `length`, and cleared by the kebab's bring-abs-back action, which puts the

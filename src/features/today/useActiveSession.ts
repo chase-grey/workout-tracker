@@ -13,6 +13,7 @@ import type { SessionLength, VariantKey } from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
 import { nextStartSide } from '../../lib/pushSide'
 import { expandToFull as expandSession } from '../../lib/sessionLength'
+import { soloExercise } from '../../lib/soloSession'
 import { restoreGroup, type RestRule } from '../../lib/groupRest'
 import { performedExercises, restingFlags } from '../../lib/performed'
 import type { Arrangement } from '../../lib/arrangement'
@@ -100,6 +101,50 @@ export function useActiveSession() {
       })
     },
     [plan, workouts, defaultLength],
+  )
+
+  // A workout of one movement, for the goal that movement settles (see
+  // lib/soloSession). Prefilled the way a day's set of it would be, and full
+  // length: there is no longer form of one movement to open it up to.
+  const startSolo = useCallback(
+    (exerciseKey: string, minSets?: number) => {
+      const solo = soloExercise(plan, exerciseKey, minSets)
+      if (!solo) return
+      storage.saveActiveStep(0)
+      storage.saveActiveStepKey(null)
+      storage.saveActiveRest(null)
+      storage.saveRestTally(null)
+      storage.saveActiveExerciseTimes(null)
+      storage.saveSetClock(null)
+      storage.saveFastMode('off')
+      storage.saveSkipped(null)
+      const { dayType, exercise } = solo
+      const target = nextTargets(workouts, [exercise], {
+        variantFor: (key) => progressionVariant(key, undefined),
+      }).get(exercise.key) ?? { weightLbs: null, reps: exercise.repMin }
+      setSession({
+        sessionId: uuid(),
+        date: toISODate(new Date()),
+        dayType,
+        isHistorical: false,
+        startedAt: new Date().toISOString(),
+        length: 'full',
+        solo: true,
+        adHocExercises: [exercise],
+        exercises: [
+          {
+            exercise: exercise.key,
+            sets: Array.from({ length: exercise.sets }, (_, i) => ({
+              setNumber: i + 1,
+              weightLbs: target.weightLbs,
+              reps: target.reps,
+              done: false,
+            })),
+          },
+        ],
+      })
+    },
+    [plan, workouts],
   )
 
   // Open a short session up to the whole day: the movements the short form left
@@ -260,5 +305,5 @@ export function useActiveSession() {
     setSession(null)
   }, [])
 
-  return { session, start, expandToFull, restoreRested, addSet, addExercise, arrange, updateSet, carrySet, removeSet, clear }
+  return { session, start, startSolo, expandToFull, restoreRested, addSet, addExercise, arrange, updateSet, carrySet, removeSet, clear }
 }

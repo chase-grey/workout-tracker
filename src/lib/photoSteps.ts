@@ -1,5 +1,5 @@
 import type { SessionStep } from './flexSteps'
-import { MEASURE_LABEL, type MeasureMode } from './measure'
+import { MEASURE_LABEL, type MeasureMode, type MeasureResult } from './measure'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../config/flexRoutines'
 
 /**
@@ -52,7 +52,7 @@ const burst = (routine: FlexRoutineKey) => (FLEX_ROUTINES[routine].burstShots ? 
  * The two routines' gates have ids of their own, so a day that runs both doesn't
  * have one routine's cold screen suppress the other's.
  */
-export type PhotoGateId = 'cold' | 'warm-tailors' | 'warm-split' | 'cold-h2t' | 'warm-h2t'
+export type PhotoGateId = 'cold' | 'warm-tailors' | 'warm-split' | 'cold-h2t' | 'warm-h2t' | 'goal'
 
 export const PHOTO_SHOT: Record<PhotoKind, { label: string; mode: MeasureMode; cold: boolean }> = {
   'cold-split': { label: `${MEASURE_LABEL.split} · cold`, mode: 'split', cold: true },
@@ -145,4 +145,58 @@ export function gateAfterStep(
   if (atLastTailors) return { id: 'warm-tailors', title: "warm tailor's photo", shots: ['warm-tailors'] }
   if (atLastFlex) return { id: 'warm-split', title: 'warm split photo', shots: ['warm-split'] }
   return null
+}
+
+/** The flexibility ladders the goals panel draws, by the pose each one measures. */
+export type FlexLadder = 'split' | 'tailors' | 'toeTouch' | 'legLift'
+
+const LADDER_SHOTS: Record<FlexLadder, { title: string; shots: PhotoKind[] }> = {
+  split: { title: 'split photo', shots: ['warm-split'] },
+  tailors: { title: "tailor's photo", shots: ['warm-tailors'] },
+  toeTouch: { title: 'toe touch photo', shots: ['warm-toe-touch'] },
+  legLift: { title: 'leg lift photos', shots: ['warm-leg-lift-left', 'warm-leg-lift-right'] },
+}
+
+/**
+ * The photo screen a flexibility goal opens when it's tapped: that pose's shots
+ * and nothing else, outside any routine. Warm, because the warm reading is the
+ * series every rung is judged on (see goals.buildGoals) — a reading taken to
+ * settle a goal is a reading of the pose at its best.
+ */
+export function ladderGate(ladder: FlexLadder): PhotoGate {
+  return { id: 'goal', ...LADDER_SHOTS[ladder] }
+}
+
+/** The stretch-log fields one shot's reading fills in. */
+export type ShotMeasurement = {
+  note: string
+  coldSplitDeg?: number
+  warmSplitDeg?: number
+  tailorsColdLeftDeg?: number
+  tailorsColdRightDeg?: number
+  tailorsWarmLeftDeg?: number
+  tailorsWarmRightDeg?: number
+  coldToeTouchDeg?: number
+  warmToeTouchDeg?: number
+  coldLegLiftLeftDeg?: number
+  coldLegLiftRightDeg?: number
+  warmLegLiftLeftDeg?: number
+  warmLegLiftRightDeg?: number
+}
+
+/**
+ * Route a captured angle into the right field of the stretch log. The shot fixes
+ * cold vs warm; which pose it lands in follows the angles the reading actually
+ * carries, so switching pose mid-capture still logs it somewhere sensible.
+ */
+export function shotMeasurement(kind: PhotoKind, result: MeasureResult): ShotMeasurement {
+  const { cold } = PHOTO_SHOT[kind]
+  const m: ShotMeasurement = { note: 'measurement' }
+  if (result.splitDeg != null) m[cold ? 'coldSplitDeg' : 'warmSplitDeg'] = result.splitDeg
+  if (result.tailorsLeftDeg != null) m[cold ? 'tailorsColdLeftDeg' : 'tailorsWarmLeftDeg'] = result.tailorsLeftDeg
+  if (result.tailorsRightDeg != null) m[cold ? 'tailorsColdRightDeg' : 'tailorsWarmRightDeg'] = result.tailorsRightDeg
+  if (result.toeTouchDeg != null) m[cold ? 'coldToeTouchDeg' : 'warmToeTouchDeg'] = result.toeTouchDeg
+  if (result.legLiftLeftDeg != null) m[cold ? 'coldLegLiftLeftDeg' : 'warmLegLiftLeftDeg'] = result.legLiftLeftDeg
+  if (result.legLiftRightDeg != null) m[cold ? 'coldLegLiftRightDeg' : 'warmLegLiftRightDeg'] = result.legLiftRightDeg
+  return m
 }

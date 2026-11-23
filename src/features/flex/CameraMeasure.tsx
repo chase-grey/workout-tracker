@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MdCameraAlt, MdCameraswitch, MdIosShare, MdPhotoLibrary, MdSave } from 'react-icons/md'
+import { MdCameraAlt, MdCameraswitch, MdIosShare, MdKeyboard, MdPhotoLibrary, MdSave } from 'react-icons/md'
 import { detectMeasurementPose } from '../../lib/measurePose'
 import { lastPoseError, preloadPose } from '../../lib/pose'
 import { reportPoseFailure } from '../../services/saveErrors'
@@ -18,6 +18,8 @@ import {
   type MeasureTemp,
 } from '../../lib/measure'
 import { toISODate } from '../../lib/dates'
+import { MANUAL_FIELDS, manualResult } from '../../lib/manualAngle'
+import { usePressAction } from '../../lib/usePressAction'
 import { AngleEditor } from './AngleEditor'
 import { NeverAskPhotos } from '../../components/NeverAskPhotos'
 import { AngleTrends } from './AngleContextCard'
@@ -33,7 +35,7 @@ import {
   type LiveFrame,
 } from './camera'
 
-type Phase = 'setup' | 'countdown' | 'detecting' | 'editing'
+type Phase = 'setup' | 'countdown' | 'detecting' | 'editing' | 'manual'
 
 /** Pill fill per reading: the accent warm, its pale step cold. */
 // Getters, so a reading is coloured in the theme current when it's drawn.
@@ -288,11 +290,79 @@ async function renderMeasuredPhoto(
 }
 
 /**
+ * The reading, typed: one field per angle the pose produces. Both sides of a
+ * paired pose are asked for together, since the pose is charted on the two (see
+ * manualAngle.manualResult).
+ *
+ * The log button is pressed straight out of a number field, so it goes through
+ * usePressAction — the keyboard closing would otherwise move it out from under
+ * the finger before the click lands.
+ */
+function ManualAngles({
+  mode,
+  title,
+  onDone,
+  onCancel,
+}: {
+  mode: MeasureMode
+  title: string
+  onDone: (result: MeasureResult) => void
+  onCancel: () => void
+}) {
+  const fields = MANUAL_FIELDS[mode]
+  const [values, setValues] = useState<string[]>(() => fields.map(() => ''))
+  const result = manualResult(mode, values)
+  const press = usePressAction(() => {
+    if (result) onDone(result)
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-bg px-4 pt-8">
+      <h2 className="text-xl font-bold">{title}</h2>
+      <div className="mt-6 flex gap-3">
+        {fields.map((f, i) => (
+          <label key={f.key} className="min-w-0 flex-1 text-xs text-neutral-400">
+            {f.label} (°)
+            <input
+              autoFocus={i === 0}
+              type="number"
+              inputMode="decimal"
+              min="0"
+              max="180"
+              step="any"
+              value={values[i]}
+              onChange={(e) => setValues(values.map((v, j) => (j === i ? e.target.value : v)))}
+              className="mt-1 min-h-[52px] w-full rounded-xl bg-surface-2 px-3 text-center text-2xl tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button onClick={onCancel} className="min-h-[56px] flex-1 rounded-2xl bg-surface-2 font-semibold active:opacity-80">
+          cancel
+        </button>
+        <button
+          {...press}
+          disabled={!result}
+          className="min-h-[56px] flex-1 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80 disabled:opacity-30"
+        >
+          log it
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Full-screen camera flow for one shot: live preview, a self-timer (20s) so you
  * can get into position, then an auto-capture that runs pose detection and opens
  * the draggable AngleEditor. On save it shows the measured photo beside what the
  * reading means against its history, and asks whether to keep the photo — the
  * reading is logged either way, and nothing is kept here.
+ *
+ * The reading can be typed in instead (see {@link ManualAngles}) — a number read
+ * off a photo taken earlier, or a day the camera has nowhere to stand. It's
+ * handed on exactly as a measured one is, with no photo to ask about.
  *
  * The pose is fixed by the caller: the routine knows which shot this is, so
  * there's nothing to pick. A `frame` already taken (a burst, see `BurstCapture`)
@@ -588,6 +658,10 @@ export function CameraMeasure({
     )
   }
 
+  if (phase === 'manual') {
+    return <ManualAngles mode={mode} title={title} onDone={onDone} onCancel={() => setPhase('setup')} />
+  }
+
   if (phase === 'editing' && shot) {
     return (
       <AngleEditor
@@ -672,6 +746,13 @@ export function CameraMeasure({
               <MdPhotoLibrary className="text-2xl" aria-hidden />
               <input type="file" accept="image/*" onChange={onPickFile} className="hidden" />
             </label>
+            <button
+              onClick={() => setPhase('manual')}
+              aria-label="type the angle in"
+              className="flex min-h-[56px] w-14 items-center justify-center rounded-2xl bg-white/10"
+            >
+              <MdKeyboard className="text-2xl" aria-hidden />
+            </button>
           </div>
         )}
 

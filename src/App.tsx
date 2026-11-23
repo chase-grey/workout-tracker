@@ -247,6 +247,15 @@ function AppShell() {
     controls.start(dayType, variant)
   }
 
+  // A workout of one movement, for the lift goal tapped on the progress tab (see
+  // lib/soloSession). A session already running is brought back instead, the way
+  // the Today buttons do: there is one workout at a time.
+  const startLift = (exerciseKey: string, minSets?: number) => {
+    setMinimized(false)
+    if (sessionActive) return
+    controls.startSolo(exerciseKey, minSets)
+  }
+
   // Workouts and stretches take over the whole screen (no tabs / bottom nav)
   // unless they've been set aside.
   const immersive =
@@ -347,7 +356,7 @@ function AppShell() {
         {(!session || minimized) && (
           <>
             {tab === 'today' && <TodayTab onStart={startWorkout} onStartStretch={startStretch} onStartAbs={() => startStretch('side_split', true)} />}
-            {tab === 'progress' && <ProgressTab />}
+            {tab === 'progress' && <ProgressTab onStartLift={startLift} />}
             {tab === 'coach' && showChat && (
               <ChatTab answering={answering} onAnsweringDone={() => setAnswering(null)} />
             )}

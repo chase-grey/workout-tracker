@@ -204,7 +204,12 @@ const BODY_METRICS: { label: string; value: BodyMetric }[] = [
   { label: 'whole body', value: 'body' },
 ]
 
-export function ProgressTab() {
+export function ProgressTab({
+  onStartLift,
+}: {
+  /** Start a workout of one movement — what a tapped lift goal asks for. */
+  onStartLift?: (exerciseKey: string, minSets?: number) => void
+}) {
   const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries, cardioEntries, updateSettings } =
     useData()
   const profile = settings.profile
@@ -398,7 +403,7 @@ export function ProgressTab() {
   // (see components/EditableStack). The optional ones live on Today and come
   // here only when added.
   const cards: StackCard[] = [
-    { id: 'goals', label: 'goals', node: <GoalsPanel underBodyWeight={bodySection} /> },
+    { id: 'goals', label: 'goals', node: <GoalsPanel underBodyWeight={bodySection} onStartLift={onStartLift} /> },
     ...(strengthOn
       ? [
           { id: 'muscles', label: 'strength', node: <MuscleAvatar /> },
