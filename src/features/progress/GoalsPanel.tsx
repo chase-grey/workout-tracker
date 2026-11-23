@@ -32,7 +32,7 @@ import { exerciseName } from '../../config/plan'
 import { setsByDate, type DaySets } from '../../lib/goalSets'
 import { repsForE1RM } from '../../lib/epley'
 import { orderGoalUnits, type GoalUnit } from '../../lib/goalOrder'
-import { isLiftLadder } from '../../lib/liftLadder'
+import { isLiftLadder, LIFT_LADDERS } from '../../lib/liftLadder'
 import { goalsFor, TARGET_WEIGHT_GOAL_ID } from '../../lib/profileGoals'
 import { hasPillar, readsBodyFat, weighsIn } from '../../lib/profile'
 import type { SixPackStatus } from '../../services/storage'
@@ -71,7 +71,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
 import { CommitChart } from './CommitChart'
-import { FlexLadderBlock, type Ladder } from './FlexLadderBlock'
+import { FlexLadderBlock, ladderTitle, type Ladder } from './FlexLadderBlock'
 import { LiftLadderBlock } from './LiftLadderBlock'
 import { GoalTooltip } from './GoalTooltip'
 import { goalLineMarks } from './goalLineMarks'
@@ -80,7 +80,8 @@ import { ladderGate, shotMeasurement, type FlexLadder } from '../../lib/photoSte
 import { useBackGuard } from '../../lib/useBackGuard'
 import { PhotoStep } from '../flex/PhotoStep'
 import { WeightLogSheet } from '../today/WeightLogSheet'
-import { MdBolt, MdCelebration, MdEditCalendar, MdLockOutline } from 'react-icons/md'
+import { MdBolt, MdCelebration, MdEditCalendar, MdExpandMore, MdLockOutline } from 'react-icons/md'
+import { useLongPress } from '../../lib/useLongPress'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -888,13 +889,12 @@ function GoalRow({
         <p className="mt-1 text-sm text-accent-2">
           on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
         </p>
-      ) : !has || proj.basis.thin || proj.beyondHorizon ? (
+      ) : has && (proj.basis.thin || proj.beyondHorizon) ? (
+        // A goal with no reading at all says nothing here: the dash in its
+        // corner already does, and a line per goal asking for data was most of a
+        // screen of nothing.
         <p className="mt-1 text-sm text-neutral-500">
-          {!has
-            ? 'log data to project this.'
-            : proj.basis.thin
-              ? 'not enough recent data to project.'
-              : 'too far to predict yet.'}
+          {proj.basis.thin ? 'not enough recent data to project.' : 'too far to predict yet.'}
         </p>
       ) : null}
 
@@ -915,6 +915,81 @@ function GoalRow({
       )}
 
       {children}
+    </div>
+  )
+}
+
+/**
+ * A block of goals with nothing logged against any of them, folded to its name.
+ * An empty chart over three or four rungs that each say there's no data was a
+ * screen and a half per pose; the block is still one tap away.
+ */
+function EmptyGoalGroup({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="flex flex-col gap-3">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex min-h-[48px] items-center gap-2 rounded-2xl bg-surface px-4 text-left active:opacity-70"
+      >
+        {/* The name alone: a title's aside ("lower is deeper") is about a chart that isn't drawn here. */}
+        <span className="min-w-0 truncate font-semibold">{title.replace(/ \(.*\)$/, '')}</span>
+        <span className="shrink-0 text-sm text-neutral-500">
+          {count} {count === 1 ? 'goal' : 'goals'} · no data yet
+        </span>
+        <MdExpandMore className={`ml-auto shrink-0 text-xl text-neutral-500 ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open && children}
+    </div>
+  )
+}
+
+/**
+ * A reached goal, held to fold the reached goals away or to take this one off
+ * (see CLAUDE.md, "Changing something is a hold"). The innermost hold wins, so
+ * this one answers before the page's own.
+ */
+function ReachedGoal({
+  children,
+  onCollapse,
+  onRemove,
+}: {
+  children: ReactNode
+  onCollapse: () => void
+  onRemove: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const hold = useLongPress(() => setOpen(true))
+  const item = 'block w-full px-4 py-3 text-left text-sm active:bg-surface-2'
+  return (
+    <div className="relative" {...hold}>
+      {children}
+      {open && (
+        <div data-no-hold>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="menu-pop absolute right-2 top-10 z-50 w-56 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+            <button
+              className={item}
+              onClick={() => {
+                setOpen(false)
+                onCollapse()
+              }}
+            >
+              collapse reached goals
+            </button>
+            <button
+              className={item}
+              onClick={() => {
+                setOpen(false)
+                onRemove()
+              }}
+            >
+              remove this goal
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1253,6 +1328,10 @@ export function GoalsPanel({
     </div>
   )
 
+  // A block none of whose goals has a single reading: nothing to chart, nothing
+  // to project. It folds to its name (see EmptyGoalGroup).
+  const nothingLogged = (rungs: GoalSpec[]): boolean => rungs.length > 0 && rungs.every((g) => g.points.length === 0)
+
   // The flexibility ladders, each collapsed into one block the way the bodyweight
   // pair is: every rung reading off a single chart of the stretch log, in place of
   // a row per rung that re-plotted that log apiece — and in place of the side
@@ -1267,19 +1346,26 @@ export function GoalsPanel({
     () =>
       (['split', 'tailors', 'toeTouch', 'legLift'] as Ladder[]).map((ladder) => {
         const rungs = goals.filter((g) => goalFamily(g) === `flex:${ladder}`)
+        const block = (
+          <FlexLadderBlock
+            key={ladder}
+            ladder={ladder}
+            entries={flexEntries}
+            rungs={rungs}
+            locked={locked}
+            ring={blockRing(rungs)}
+            renderRow={(g) => goalRow(g, true)}
+          />
+        )
         return {
           ladder,
           rungs,
-          node: (
-            <FlexLadderBlock
-              key={ladder}
-              ladder={ladder}
-              entries={flexEntries}
-              rungs={rungs}
-              locked={locked}
-              ring={blockRing(rungs)}
-              renderRow={(g) => goalRow(g, true)}
-            />
+          node: nothingLogged(rungs) ? (
+            <EmptyGoalGroup key={ladder} title={ladderTitle(ladder)} count={rungs.length}>
+              {block}
+            </EmptyGoalGroup>
+          ) : (
+            block
           ),
         }
       }),
@@ -1306,10 +1392,8 @@ export function GoalsPanel({
         // panel — so the block goes rather than standing as a chart on its own.
         // The cleared rungs are up in the reached band either way.
         .filter(([, rungs]) => rungs.some((g) => !isReached(g)))
-        .map(([lift, rungs]) => ({
-          lift,
-          rungs,
-          node: (
+        .map(([lift, rungs]) => {
+          const block = (
             <LiftLadderBlock
               key={lift}
               lift={lift}
@@ -1319,8 +1403,19 @@ export function GoalsPanel({
               ring={blockRing(rungs)}
               renderRow={(g) => goalRow(g, true)}
             />
-          ),
-        }))
+          )
+          return {
+            lift,
+            rungs,
+            node: nothingLogged(rungs) ? (
+              <EmptyGoalGroup key={lift} title={LIFT_LADDERS[lift].title} count={rungs.length}>
+                {block}
+              </EmptyGoalGroup>
+            ) : (
+              block
+            ),
+          }
+        })
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, locked, projections])
@@ -1379,7 +1474,7 @@ export function GoalsPanel({
   // still open, which is exactly where a finished goal shouldn't be. The block
   // keeps the chart and the rungs still being chased; the cleared ones go up top.
   const units = useMemo(() => {
-    const out: (GoalUnit & { node: React.ReactNode })[] = []
+    const out: (GoalUnit & { node: React.ReactNode; id?: string })[] = []
     const drawn = new Set<string>()
     for (const g of goals) {
       if (g.id === GOAL_IDS.sixPack) {
@@ -1395,6 +1490,7 @@ export function GoalsPanel({
           ready: false,
           family: goalFamily(g),
           last: true,
+          id: g.id,
           node: (
             <SixPackRow
               key={g.id}
@@ -1436,6 +1532,7 @@ export function GoalsPanel({
           lockable: false,
           ready: false,
           family: goalFamily(g),
+          id: g.id,
           node: goalRow(g),
         })
       } else if (!block) {
@@ -1471,12 +1568,56 @@ export function GoalsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, locked, projections, settings, ladders, liftLadders, underBodyWeight, scale])
 
-  const ordered = useMemo(() => orderGoalUnits(units).map((u) => u.node), [units])
+  // Reached goals stay in view unless they've been folded away or taken off one
+  // at a time, both from a hold on one of them (see ReachedGoal).
+  const collapsed = !!settings.reachedGoalsCollapsed
+  const removed = settings.hiddenReachedGoals ?? []
+  const reachedShown = units.filter((u) => u.done && !removed.includes(u.id ?? '')).length
+  const removedCount = units.filter((u) => u.done && removed.includes(u.id ?? '')).length
+
+  const ordered = orderGoalUnits(
+    units.filter((u) => !u.done || (!collapsed && !removed.includes(u.id ?? ''))),
+  ).map((u) =>
+    u.done ? (
+      <ReachedGoal
+        key={u.id}
+        onCollapse={() => updateSettings({ ...settings, reachedGoalsCollapsed: true })}
+        onRemove={() => updateSettings({ ...settings, hiddenReachedGoals: [...removed, u.id ?? ''] })}
+      >
+        {u.node}
+      </ReachedGoal>
+    ) : (
+      u.node
+    ),
+  )
+
+  const quiet = 'flex min-h-[48px] items-center gap-2 rounded-2xl bg-surface px-4 text-left text-sm active:opacity-70'
 
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
+      {collapsed && reachedShown > 0 && (
+        <button
+          onClick={() => updateSettings({ ...settings, reachedGoalsCollapsed: false })}
+          aria-expanded={false}
+          className={`${quiet} text-accent-2`}
+        >
+          <MdCelebration aria-hidden />
+          {reachedShown} {reachedShown === 1 ? 'goal' : 'goals'} reached
+          <MdExpandMore className="ml-auto shrink-0 text-xl text-neutral-500" aria-hidden />
+        </button>
+      )}
       {ordered}
+      {/* The way back for a goal taken off: with it gone there may be nothing
+          left to hold. */}
+      {removedCount > 0 && (
+        <button
+          onClick={() => updateSettings({ ...settings, hiddenReachedGoals: [] })}
+          className={`${quiet} text-neutral-500`}
+        >
+          show {removedCount} removed {removedCount === 1 ? 'goal' : 'goals'}
+        </button>
+      )}
       {photoLadder && (
         <PhotoStep
           gate={ladderGate(photoLadder)}

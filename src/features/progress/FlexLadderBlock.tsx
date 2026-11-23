@@ -63,6 +63,11 @@ const ladders = (): Record<
   },
 })
 
+/** What a ladder is called, for anything that names it without drawing it. */
+export function ladderTitle(ladder: Ladder): string {
+  return ladders()[ladder].title
+}
+
 /** One number to spell out beside the ladder's name, and what to call it. */
 type Reading = [value: number | null, label: string]
 

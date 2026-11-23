@@ -234,6 +234,13 @@ export type Settings = {
    */
   hiddenAnimations?: string[]
   /**
+   * Reached goals folded into one line on Progress. Off by default: a goal
+   * already met stays in view as a reminder of it.
+   */
+  reachedGoalsCollapsed?: boolean
+  /** Reached goals taken off Progress one at a time, by goal id. */
+  hiddenReachedGoals?: string[]
+  /**
    * The cardio log's quick picks, as the person has edited them (see
    * lib/cardio.cardioKinds). Unset means the defaults; an empty list means they
    * removed every one.
