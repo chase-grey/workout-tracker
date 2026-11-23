@@ -81,8 +81,11 @@ if (typeof window !== 'undefined') {
  * so React's StrictMode double-invoke can't leave the stack with a stray entry
  * or a phantom back navigation in flight. A guard that goes inactive by other
  * means drops its claim, so it can't swallow a later back press.
+ *
+ * A `floor` guard is the one under all the others, whenever it was claimed: it
+ * answers only the press nothing else wanted (see App's use of it).
  */
-export function useBackGuard(active: boolean, onBack: () => void) {
+export function useBackGuard(active: boolean, onBack: () => void, { floor = false } = {}) {
   const guard = useRef<Guard | null>(null)
   if (!guard.current) guard.current = { onBack }
   guard.current.onBack = onBack
@@ -99,11 +102,12 @@ export function useBackGuard(active: boolean, onBack: () => void) {
   useEffect(() => {
     const g = guard.current!
     if (!active) return
-    claims.push(g)
+    if (floor) claims.unshift(g)
+    else claims.push(g)
     sync()
     return () => {
       claims.splice(claims.indexOf(g), 1)
       sync()
     }
-  }, [active])
+  }, [active, floor])
 }

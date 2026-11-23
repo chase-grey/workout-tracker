@@ -92,6 +92,10 @@ function Gate() {
   )
 }
 
+/** Running as the installed app, where back has no page behind this one to go to. */
+const INSTALLED =
+  typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches
+
 function AppShell() {
   // A reload the app kicked off itself (the update check) picks its own landing
   // tab; everything else starts on Today.
@@ -160,6 +164,22 @@ function AppShell() {
   // it is all that press does (see useBackGuard); so does a session with a step
   // of its own to take back — the rest a tap just cut short (see lib/leftRest).
   useBackGuard(sessionActive && !minimized, () => setMinimized(true))
+
+  // The press nothing else claims. With no entry of ours under it, back walks
+  // out of the document, and the installed app has nowhere to go: Firefox on
+  // Android leaves its window standing on the empty page it opened with, a grey
+  // screen that isn't ours to draw on or to report from. So the installed app
+  // always holds one entry, and back at the bottom of everything goes to Today
+  // and then stays there; leaving is the home gesture. A browser tab keeps its
+  // back button: there the page before this one is somewhere real.
+  useBackGuard(
+    INSTALLED,
+    () => {
+      setTab('today')
+      mainRef.current?.scrollTo({ top: 0 })
+    },
+    { floor: true },
+  )
 
   // Month/year in review, once per new period. On the feature's first run the
   // markers are unset — seed them to the current period so we never backfill a
