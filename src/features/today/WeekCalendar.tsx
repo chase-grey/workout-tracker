@@ -43,6 +43,14 @@ type Session = CalendarItem & { pillar: PinnablePillar }
 
 const isSession = (i: CalendarItem): i is Session => i.pillar !== 'diet'
 
+/**
+ * Whether a session earns a chip under the small calendar's strip. A lift and
+ * a stretch don't: the dumbbell and the seated figure in the day's column are
+ * the whole of what the small view says about them, and which day or routine
+ * it was belongs to the open week. Cardio's kind and amount are not in its mark.
+ */
+const saysMoreThanItsMark = (i: Session) => i.pillar === 'cardio'
+
 function weekTitle(weekStart: string, today: string): string {
   const current = weekStartISO(today)
   if (weekStart === current) return 'this week'
@@ -60,8 +68,9 @@ function weekTitle(weekStart: string, today: string): string {
  * sets them.
  *
  * It opens small — one strip of marks, a shape to each pillar (PillarMark),
- * and under it the sessions of the day picked — because most looks at it are
- * "what's today". The chevron
+ * and under it only what a mark can't say of the day picked, a cardio
+ * session's kind and amount — because most looks at it are "what's today".
+ * The chevron
  * opens the whole week at a row per day, and `keep open` there makes that the
  * way it opens from then on. Either way a session is a button that shows what
  * it holds (CalendarItemSheet) rather than one that starts it, and which days
@@ -88,10 +97,11 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
   // "rest" is a word for a day off from a plan. With no days chosen and no
   // cardio plan there is no plan to be off from, and an empty day is just empty.
   const planned = plannedCardio.length > 0 || hasSchedule(settings.calendarPins, settings.calendarWeeks, weekStart)
-  // Under the strip a stretch says nothing its mark in the strip hasn't: the
-  // line is for sessions with a name or an amount, and "rest" on a planned day.
+  // Under the strip a lift or a stretch says nothing its mark in the strip
+  // hasn't: the line is for a cardio session, which has a kind and an amount,
+  // and for "rest" on a planned day.
   const under = picked?.items.filter(isSession) ?? []
-  const underLine = under.length === 0 ? planned : under.some((i) => i.pillar !== 'flexibility')
+  const underLine = under.length === 0 ? planned : under.some(saysMoreThanItsMark)
 
   const iconButton =
     'flex h-9 w-9 items-center justify-center rounded-lg text-xl text-neutral-400 active:opacity-60 disabled:opacity-30'
@@ -182,8 +192,8 @@ function itemText(i: CalendarItem): string {
 /**
  * A day's sessions, each a button onto its details. `chip` gives them the
  * filled, thumb-sized form the small calendar shows for the one day picked,
- * and leaves a stretch to its mark in the strip above; a row of the open week
- * sets them all as plain text.
+ * and leaves a lift and a stretch to their marks in the strip above; a row of
+ * the open week sets them all as plain text.
  */
 function Sessions({
   day,
@@ -202,7 +212,7 @@ function Sessions({
   if (all.length === 0) return <span className={`text-sm text-neutral-600 ${chip ? 'px-1' : ''}`}>rest</span>
   return (
     <>
-      {(chip ? all.filter((i) => i.pillar !== 'flexibility') : all).map((i, n) => (
+      {(chip ? all.filter(saysMoreThanItsMark) : all).map((i, n) => (
         <button
           key={n}
           onClick={(e) => {
