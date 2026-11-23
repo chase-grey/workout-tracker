@@ -156,6 +156,12 @@ export type MassTrendPoint = {
    * under it.
    */
   scale: number
+  /**
+   * True of the newest week only: its `weight` and `bodyFat` are the latest
+   * weigh-in and the latest body-fat reading as logged, not the trends — see
+   * {@link massTrend}.
+   */
+  live: boolean
   /** Lean and fat put on by the trends, against where they started. */
   muscleGain: number
   fatGain: number
@@ -173,10 +179,9 @@ export type MassTrendPoint = {
 export type MassTrend = {
   points: MassTrendPoint[]
   /**
-   * The most recent weigh-in and body-fat reading, as logged. The chart marks
-   * the weigh-in over the newest week, on the stack's own axis, so the number
-   * just entered is on the chart the moment it is logged; nothing is split
-   * off it.
+   * The most recent weigh-in and body-fat reading, as logged: what the newest
+   * week's point is made of. The chart marks the weigh-in with a dot and its
+   * figure where the stack ends on it.
    */
   latest: { date: string; weight: number; bodyFat: number }
   /** From the first week's Monday to the last's. */
@@ -225,18 +230,21 @@ export type MassTrend = {
  * of the two. The seam between the bands is still drawn with the fat's: given
  * the top, that is how far the split could move it.
  *
- * Every week is on the trends, the newest included, because that is the body:
- * muscle and fat go on a little a day, and a morning a pound and a half over
- * the fortnight before it is water, not tissue. Two other cuts were tried and
- * sent back. The newest week as its latest weigh-in and reading put a kink at
- * the end of the stack and split a morning's water into muscle and fat; every
- * week as its own average gave the history dips the body never made. What the
- * trends cost is that the end of the stack trails a fast week, so a weigh-in
- * just logged seemed not to have arrived. That is answered beside the stack
- * rather than by bending it: {@link MassTrend.latest} is the weigh-in as
- * logged, and the chart marks it over the newest week. The rates are measured
- * along the trends, end to end, so the header's figures and the grade under
- * them are one bulk.
+ * The weeks that are over are on the trends, because that is the body: muscle
+ * and fat go on a little a day, and a week drawn as its own average or its
+ * last weigh-in gave the history dips and teeth the body never made. The
+ * newest week is the exception, and is not read off the trends at all. Its
+ * weight is the latest weigh-in and its body fat the latest reading, as
+ * logged ({@link MassTrend.latest}), so the stack ends on the number just
+ * entered, the morning it is entered. A trend at its newest end trails a fast
+ * week by a pound or more, and a weigh-in that could not be found on the
+ * chart was the complaint every time. Drawing it as a dot above a stack that
+ * stayed on the trend was tried and sent back: the fill itself is to reach
+ * it. The rates are measured to the same end, so the header's figures and the
+ * grade under them are one bulk. The costs, accepted: a kink at the end of an
+ * otherwise smooth stack, an end and a grade that move with every weigh-in,
+ * water and all, and a newest week that settles back onto the trend when the
+ * next one opens. Its give-or-takes are still the trends'.
  */
 export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null {
   const points = massPoints(weights, bodyFat)
@@ -301,15 +309,30 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
     }
   }
 
-  const out: MassTrendPoint[] = points.map((p) => {
-    const here = read(mid(p))
-    const se = errors(here)
+  // The newest week as logged: the latest weigh-in, split by the latest reading.
+  const lastWeighIn = used[used.length - 1]
+  const lastReading = inSpan[inSpan.length - 1]
+  const nowFat = (lastWeighIn.value * lastReading.value) / 100
+  const now = {
+    day: x(lastWeighIn.date),
+    weight: lastWeighIn.value,
+    bodyFat: lastReading.value,
+    fat: nowFat,
+    lean: lastWeighIn.value - nowFat,
+  }
+
+  const out: MassTrendPoint[] = points.map((p, i) => {
+    const smoothed = read(mid(p))
+    const se = errors(smoothed)
+    const live = i === points.length - 1
+    const here = live ? now : smoothed
     return {
       date: p.date,
       weighIns: p.weighIns,
       weight: round1(here.weight),
       bodyFat: round1(here.bodyFat),
       scale: latest.get(p.date) ?? p.weight,
+      live,
       muscleGain: round1(here.lean - start.lean),
       fatGain: round1(here.fat - start.fat),
       weightError: round1(BAND_ERROR_SE * se.weightSE),
@@ -320,16 +343,14 @@ export function massTrend(weights: Point[], bodyFat: Point[]): MassTrend | null 
 
   const first = out[0]
   const last = out[out.length - 1]
-  const endDay = mid(points[points.length - 1])
-  const end = read(endDay)
-  const spanWeeks = (endDay - startDay) / 7
+  const end = read(mid(points[points.length - 1]))
+  const spanWeeks = (now.day - startDay) / 7
   const perWeek = (n: number) => (spanWeeks > 0 ? n / spanWeeks : 0)
-  const weightPerWeek = perWeek(end.weight - start.weight)
-  const fatPerWeek = perWeek(end.fat - start.fat)
-  const lastWeighIn = used[used.length - 1]
+  const weightPerWeek = perWeek(now.weight - start.weight)
+  const fatPerWeek = perWeek(now.fat - start.fat)
   return {
     points: out,
-    latest: { date: lastWeighIn.date, weight: lastWeighIn.value, bodyFat: inSpan[inSpan.length - 1].value },
+    latest: { date: lastWeighIn.date, weight: now.weight, bodyFat: now.bodyFat },
     days: daysBetween(first.date, last.date),
     startWeight: round1(start.weight),
     weightPerWeek: round2(weightPerWeek),

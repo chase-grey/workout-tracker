@@ -165,11 +165,13 @@ describe('massTrend', () => {
     expect(t.fatPerWeek).toBeCloseTo(0.14, 1)
     expect(t.leanPerWeek).toBeCloseTo(0.56, 1)
     expect(t.fatPerWeekSE).toBeCloseTo(0)
+    // The newest week is its last morning, day 27 at 182.7, not the middle of the week.
     const last = t.points[3]
-    expect(last.weight).toBeCloseTo(182.4, 1)
+    expect(last.weight).toBeCloseTo(182.7, 1)
     expect(last.bodyFat).toBe(20)
-    expect(last.muscleGain).toBeCloseTo(1.7, 1)
-    expect(last.fatGain).toBeCloseTo(0.4, 1)
+    expect(last.muscleGain).toBeCloseTo(1.9, 1)
+    expect(last.fatGain).toBeCloseTo(0.5, 1)
+    expect(t.points[2].weight).toBeCloseTo(181.7, 1)
     expect(last.weightError).toBe(0)
     expect(last.muscleError).toBe(0)
     expect(last.fatError).toBe(0)
@@ -231,7 +233,7 @@ describe('massTrend', () => {
     expect(t.weightPerWeek).toBeCloseTo(0.7, 0)
   })
 
-  it('marks the latest weigh-in as logged, from the first morning of the week, and leaves the stack on the trend', () => {
+  it('ends the stack on the weight and body fat logged last, from the first morning of the week', () => {
     // Three weeks at 176 and 14 %, then Monday of a new week at 179.7 and 14.4 %.
     const before = Array.from({ length: 21 }, (_, i) => ({ date: day(i), value: 176 }))
     const fats = Array.from({ length: 11 }, (_, i) => ({ date: day(i * 2), value: 14 }))
@@ -241,7 +243,7 @@ describe('massTrend', () => {
     )
     if (!monday) throw new Error('no trend')
     expect(monday.latest).toEqual({ date: day(21), weight: 179.7, bodyFat: 14.4 })
-    expect(monday.points.at(-1)?.date).toBe(day(21))
+    expect(monday.points.at(-1)).toMatchObject({ date: day(21), weight: 179.7, bodyFat: 14.4, live: true, weighIns: 1 })
 
     // By Friday it is whatever was logged last, not an average of the week.
     const friday = massTrend(
@@ -250,29 +252,32 @@ describe('massTrend', () => {
     )
     if (!friday) throw new Error('no trend')
     expect(friday.latest).toEqual({ date: day(25), weight: 179.8, bodyFat: 14.5 })
-    // The stack has moved toward the week without jumping to it: tissue does not go on in a morning.
     const last = friday.points.at(-1)
+    expect(last).toMatchObject({ weight: 179.8, bodyFat: 14.5, live: true, weighIns: 3 })
     if (!last) return
-    expect(last.weight).toBeGreaterThan(176.5)
-    expect(last.weight).toBeLessThan(179)
-    expect(friday.startWeight + last.muscleGain + last.fatGain).toBeCloseTo(last.weight, 0)
+    // The stack ends on that weight, split by that body fat.
+    expect(friday.startWeight + last.muscleGain + last.fatGain).toBeCloseTo(179.8, 0)
+    expect(last.fatGain).toBeCloseTo((179.8 * 14.5 - 176 * 14) / 100, 0)
+    // Only the newest week is read this way.
+    expect(friday.points.slice(0, -1).every((p) => !p.live)).toBe(true)
   })
 
-  it('marks the latest weigh-in when the newest week on the chart is already over', () => {
+  it('ends on the latest weigh-in when the newest week on the chart is already over', () => {
     const before = Array.from({ length: 27 }, (_, i) => ({ date: day(i), value: 176 + i * 0.05 }))
     const t = massTrend([...before, { date: day(27), value: 178 }], readings(28, 7, 14))
     expect(t?.latest).toMatchObject({ date: day(27), weight: 178 })
+    expect(t?.points.at(-1)).toMatchObject({ weight: 178, live: true })
   })
 
-  it('draws no step between any two weeks of a bulk that jumped four pounds in its last week', () => {
+  it('keeps the weeks behind a four pound jump smooth, and puts the whole jump at the end', () => {
     // Six weeks at 176, weighed daily, then a week four pounds up.
     const flat = Array.from({ length: 42 }, (_, i) => ({ date: day(i), value: 176 }))
     const up = Array.from({ length: 5 }, (_, i) => ({ date: day(42 + i), value: 180 }))
     const t = massTrend([...flat, ...up], readings(49, 7, 14))
     if (!t) throw new Error('no trend')
     const tops = t.points.map((p) => p.weight)
-    for (let i = 1; i < tops.length; i++) expect(Math.abs(tops[i] - tops[i - 1])).toBeLessThan(2)
-    expect(t.latest.weight).toBe(180)
+    for (let i = 1; i < tops.length - 1; i++) expect(Math.abs(tops[i] - tops[i - 1])).toBeLessThan(1)
+    expect(tops.at(-1)).toBe(180)
   })
 
   it('keeps a finished week on the trend when its last morning was heavy, and reports that morning beside it', () => {
@@ -313,7 +318,8 @@ describe('massTrend', () => {
     const swing = (i: number) => 1.5 * Math.sin(i * 2.4) + (i % 7 === 6 ? (i % 2 ? 2 : -2) : 0)
     const t = massTrend(mornings(56, 0.5 / 7, swing), readings(56, 2, 14))
     if (!t) throw new Error('no trend')
-    const muscle = t.points.map((p) => p.muscleGain)
+    // The weeks that are over; the newest is its last morning, noise and all.
+    const muscle = t.points.slice(0, -1).map((p) => p.muscleGain)
     for (let i = 1; i < muscle.length; i++) {
       // No week gives back more than half a pound of the muscle before it.
       expect(muscle[i] - muscle[i - 1]).toBeGreaterThan(-0.5)

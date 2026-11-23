@@ -19,6 +19,7 @@ const point = (over: Partial<MassTrendPoint>): MassTrendPoint => ({
   date: '2026-01-05',
   weighIns: 5,
   scale: 180,
+  live: false,
   weight: 180,
   bodyFat: 15,
   muscleGain: 0,

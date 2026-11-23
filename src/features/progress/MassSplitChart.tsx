@@ -58,14 +58,24 @@ function MassTooltip({
       <div style={{ color: colors.muscle.edge }}>muscle {fmtGainError(row.muscleGain, row.muscleError)}</div>
       <div style={{ color: colors.fat.edge }}>fat {fmtGainError(row.fatGain, row.fatError)}</div>
       {ratio && <div className="font-semibold">{ratio}</div>}
-      <div className="text-neutral-400">
-        trend {row.weight}
-        {row.weightError > 0 && ` ± ${row.weightError}`} lbs · {row.bodyFat}% fat
-      </div>
-      <div className="text-neutral-400">
-        {row.weighIns === 1 ? 'weigh-in' : 'last weigh-in'} {row.scale} lbs
-        {row.weighIns > 1 && ` · ${row.weighIns} that week`}
-      </div>
+      {/* The newest week is the latest weigh-in and reading themselves; an
+          earlier one is the trend, with its last weigh-in beside it. */}
+      {row.live ? (
+        <div className="text-neutral-400">
+          {row.weight} lbs · {row.bodyFat}% fat · latest logged
+        </div>
+      ) : (
+        <>
+          <div className="text-neutral-400">
+            trend {row.weight}
+            {row.weightError > 0 && ` ± ${row.weightError}`} lbs · {row.bodyFat}% fat
+          </div>
+          <div className="text-neutral-400">
+            {row.weighIns === 1 ? 'weigh-in' : 'last weigh-in'} {row.scale} lbs
+            {row.weighIns > 1 && ` · ${row.weighIns} that week`}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -78,11 +88,11 @@ function MassTooltip({
  * fibres and cells, in the theme's accent rather than butcher's colours.
  *
  * The axis is body weight. The stack stands on the weight the trend started
- * at, and its top is the weight trend itself, every week: tissue goes on a
- * little a day, so the stack is smooth and one morning does not bend it (see
- * lib/massSplit.massTrend). The latest weigh-in is marked over the newest
- * week as a dot with its figure, on the same axis, so the number just logged
- * is on the chart at once and can be seen against the trend under it. Inside, the bands are still gains: the axis is
+ * at, and its top is the weight trend itself, until the newest week: that one
+ * is the latest weigh-in, split by the latest body-fat reading, so the fill
+ * runs smooth through the weeks that are over and then reaches the number
+ * logged last, the day it is logged (see lib/massSplit.massTrend). A dot with
+ * its figure marks that weigh-in where the stack ends on it. Inside, the bands are still gains: the axis is
  * stretched over the few pounds that moved, with a break at its foot.
  *
  * Each edge can show a dashed line either side, as far off as it could really
@@ -115,7 +125,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
   // weight: nice round pounds are picked over the weights the stack reaches,
   // any shown dashes included, and each is set back on the gain scale to place it.
   const base = trend?.startWeight ?? 0
-  // The latest weigh-in, as logged, on the gain scale the stack is drawn on.
+  // The latest weigh-in, as logged, on the gain scale the stack is drawn on: where the stack's top ends.
   const latestGain = trend ? trend.latest.weight - trend.startWeight : 0
   const yScale = useMemo(() => {
     const seamError = (r: Row) => (bands.muscle ? r.fatError : 0)

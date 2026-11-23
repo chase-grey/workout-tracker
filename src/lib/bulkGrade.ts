@@ -21,11 +21,12 @@ import type { MassTrend } from './massSplit'
  * mostly fat; past very aggressive, Garthe's fast group gained five times the
  * fat of the slow one for a small, non-significant edge in lean mass.
  *
- * Both are read off the trends the chart draws (see massSplit.massTrend),
- * over the whole span from the first week with a body-fat reading to the
- * newest: pace is the pounds a week between the two ends, and share is the
- * lean's part of them. So the grade is the same bulk as the figures in the
- * chart's header, and one heavy morning moves neither far. A couple of weeks is too short to grade — a pound of water either
+ * Both are read off the chart (see massSplit.massTrend), over the whole span
+ * from the first week with a body-fat reading, on the trends, to the latest
+ * weigh-in and reading as logged, which is where the chart ends: pace is the
+ * pounds a week between the two, and share is the lean's part of them. So the
+ * grade is the same bulk as the figures in the chart's header, and moves with
+ * a weigh-in the way they do. A couple of weeks is too short to grade — a pound of water either
  * way swamps the signal — so under {@link MIN_GRADE_DAYS} there is no reading
  * yet.
  *
