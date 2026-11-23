@@ -245,6 +245,37 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const tracked = PILLARS.filter((p) => hasPillar(profile, p))
   const cardio = hasPillar(profile, 'cardio')
 
+  // The photo reminder sits under the start tiles rather than over the page: it's
+  // a nudge, and what the page is for comes first. With the tiles taken off the
+  // page it goes to the foot instead.
+  const photoBanner = photoDue && (
+    <div className="rounded-2xl bg-accent/15 p-3">
+      <p className="text-sm text-accent">
+        <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
+        {reminder.reason}.
+      </p>
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={() => {
+            logProgressPhoto()
+            flashMsg('photo logged')
+          }}
+          className="min-h-[40px] flex-1 rounded-xl bg-accent text-sm font-semibold text-on-accent"
+        >
+          took it
+        </button>
+        <button
+          onClick={snoozePhotoAWeek}
+          className="min-h-[40px] rounded-xl bg-surface px-3 text-sm text-neutral-400"
+        >
+          later
+        </button>
+        <NeverAskPhotos onConfirm={() => updateSettings({ ...settings, photosOff: true })} />
+      </div>
+    </div>
+  )
+  const tilesShown = !layout?.removed.includes('tiles')
+
   // Every card this person could have on Today, in the order it ships in. The
   // ones marked optional live on Progress and come here only when added.
   const cards: StackCard[] = [
@@ -305,6 +336,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         <>
           <TourCard anchor="tiles" />
           {tiles(false)}
+          {photoBanner}
         </>
       ),
       editor: tiles(true),
@@ -325,33 +357,6 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     // viewport — enough to make it scroll by a hair with nothing to scroll to.
     <div className="flex flex-col gap-2">
       <BackendBanner />
-      {photoDue && (
-        <div className="rounded-2xl bg-accent/15 p-3">
-          <p className="text-sm text-accent">
-            <MdPhotoCamera className="inline align-text-bottom mr-1" aria-hidden />
-            {reminder.reason}.
-          </p>
-          <div className="mt-2 flex gap-2">
-            <button
-              onClick={() => {
-                logProgressPhoto()
-                flashMsg('photo logged')
-              }}
-              className="min-h-[40px] flex-1 rounded-xl bg-accent text-sm font-semibold text-on-accent"
-            >
-              took it
-            </button>
-            <button
-              onClick={snoozePhotoAWeek}
-              className="min-h-[40px] rounded-xl bg-surface px-3 text-sm text-neutral-400"
-            >
-              later
-            </button>
-            <NeverAskPhotos onConfirm={() => updateSettings({ ...settings, photosOff: true })} />
-          </div>
-        </div>
-      )}
-
       {flash && (
         <div className="flex min-h-[44px] items-center justify-center gap-3 rounded-xl bg-accent-2/20 px-2 text-sm text-accent-2">
           <span>{flash.text}</span>
@@ -371,6 +376,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
       )}
 
       <EditableStack cards={cards} layout={layout} onLayout={saveLayout} gap="gap-2" />
+      {!tilesShown && photoBanner}
 
       {loggingCardio && (
         <CardioLogSheet
