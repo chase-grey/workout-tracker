@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { isReached, projectGoal, type GoalSpec } from '../../lib/goals'
 import { currentPaceSeries, type LockedProjections } from '../../lib/goalLock'
 import { LINE_PRIMARY } from '../../lib/chart'
-import type { DaySets } from '../../lib/goalSets'
+import { setsNearBest, type DaySets } from '../../lib/goalSets'
 import { LIFT_LADDERS } from '../../lib/liftLadder'
 import { targetAtEta } from '../../lib/goalLine'
 import { LadderChart, type LadderReading } from './LadderChart'
@@ -44,10 +44,20 @@ export function LiftLadderBlock({
   // Every rung reads the same series, so the first one carries it for the block.
   const points = rungs[0]?.points
   const unit = rungs[0]?.unit ?? ''
+  const byReps = rungs[0]?.measure === 'reps'
 
   const readings = useMemo<LadderReading[]>(
-    () => (points ?? []).map((p) => ({ date: p.date, value: p.value, from: p.from ?? null })),
-    [points],
+    () =>
+      (points ?? []).map((p) => ({
+        date: p.date,
+        value: p.value,
+        from: p.from ?? null,
+        // Only a ladder counted in reps: its dot sits on the day's best set, and
+        // how many sets held that number is the rest of the story. An e1RM
+        // reading already weighs the whole day (see goals).
+        sets: byReps ? setsNearBest(sets?.[p.date]) : null,
+      })),
+    [points, sets, byReps],
   )
 
   const series = useMemo(() => [{ key: 'value', name: seriesName, color: LINE_PRIMARY }], [seriesName])

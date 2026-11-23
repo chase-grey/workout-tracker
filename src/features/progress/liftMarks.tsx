@@ -1,5 +1,6 @@
 import { exerciseName } from '../../config/plan'
 import { LINE_PRIMARY, MARK_OTHER_LIFT } from '../../lib/chart'
+import { setsDotRadius } from '../../lib/goalSets'
 
 /**
  * Marks for a goal line that reads more than one lift: the bench goals take the
@@ -10,12 +11,16 @@ import { LINE_PRIMARY, MARK_OTHER_LIFT } from '../../lib/chart'
  */
 
 /** The props recharts hands a custom dot. */
-type DotProps = { cx?: number; cy?: number; index?: number; payload?: { from?: string } }
+type DotProps = { cx?: number; cy?: number; index?: number; payload?: { from?: string; sets?: number | null } }
 
 /**
  * A `dot` renderer for a goal's actual line: the goal's own lift in the line's
  * accent, a reading off the companion lift in a lighter (or, on paper, darker)
  * shade of it and a touch larger so it reads at a glance.
+ *
+ * A reading that carries a set count (a rep goal's — see goalSets.setsNearBest)
+ * is sized by it instead, so a number held for four sets outweighs the same
+ * number hit once.
  */
 export function liftDot(mainLift: string | null) {
   return function LiftDot({ cx, cy, index, payload }: DotProps) {
@@ -26,7 +31,7 @@ export function liftDot(mainLift: string | null) {
         key={index}
         cx={cx}
         cy={cy}
-        r={other ? 3 : 2}
+        r={payload?.sets != null ? setsDotRadius(payload.sets) : other ? 3 : 2}
         fill={other ? MARK_OTHER_LIFT : LINE_PRIMARY}
         stroke={other ? MARK_OTHER_LIFT : LINE_PRIMARY}
       />

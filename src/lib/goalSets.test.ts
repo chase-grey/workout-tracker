@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { setsByDate } from './goalSets'
+import { setsByDate, setsDotRadius, setsNearBest, type DaySets } from './goalSets'
 import type { WorkoutRow } from '../types'
 
 function r(over: Partial<WorkoutRow>): WorkoutRow {
@@ -60,5 +60,36 @@ describe('setsByDate', () => {
     )
     expect(sets['2026-08-10'][0].sets.map((s) => s.reps)).toEqual([9, 4])
     expect(sets['2026-08-12'][0].sets.map((s) => s.reps)).toEqual([10])
+  })
+})
+
+describe('setsNearBest', () => {
+  const day = (...reps: number[]): DaySets[] => [
+    { exercise: 'weighted_pullups', sets: reps.map((n) => ({ weightLbs: null, reps: n })) },
+  ]
+
+  it('counts every set of a day that held its number', () => {
+    expect(setsNearBest(day(7, 7, 7, 7))).toBe(4)
+    expect(setsNearBest(day(7))).toBe(1)
+  })
+
+  it('counts a set one rep short of the best', () => {
+    expect(setsNearBest(day(8, 7, 7, 7))).toBe(4)
+  })
+
+  it('leaves out the sets that fell away from the best one', () => {
+    expect(setsNearBest(day(10, 3, 3, 3))).toBe(1)
+    expect(setsNearBest(day(10, 9, 6, 5))).toBe(2)
+  })
+
+  it('is zero for a day with nothing logged', () => {
+    expect(setsNearBest(undefined)).toBe(0)
+    expect(setsNearBest([])).toBe(0)
+  })
+})
+
+describe('setsDotRadius', () => {
+  it('grows a pixel a set and stops at four', () => {
+    expect([0, 1, 2, 3, 4, 6].map(setsDotRadius)).toEqual([2, 2, 3, 4, 5, 5])
   })
 })

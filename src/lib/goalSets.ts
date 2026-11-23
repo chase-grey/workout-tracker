@@ -57,3 +57,33 @@ export function setsByDate(rows: WorkoutRow[], keys: Iterable<string>): Record<s
   }
   return out
 }
+
+/** How far under the day's best a set can fall and still count as done at that number. */
+export const NEAR_BEST_REPS = 1
+
+/** Past this many sets a mark stops growing — the count the plan trains everywhere. */
+export const FULL_SETS = 4
+
+/**
+ * How many of a day's sets came within a rep of its best one.
+ *
+ * A rep goal plots the day's best set and nothing else, so 7 once and 7 four
+ * times land on the same spot. This is what tells them apart: the number of
+ * sets that backed the plotted one up. Only sets near the top count, because a
+ * 10 followed by three 3s is one set of ten, not four.
+ */
+export function setsNearBest(day: DaySets[] | undefined): number {
+  const reps = (day ?? []).flatMap((d) => d.sets.map((s) => s.reps))
+  if (reps.length === 0) return 0
+  const best = Math.max(...reps)
+  return reps.filter((n) => n >= best - NEAR_BEST_REPS).length
+}
+
+/**
+ * The radius of a reading's dot, given the sets behind it (see
+ * {@link setsNearBest}): the usual 2 for one set, a pixel more for each set
+ * after it, and no bigger once the day is a full {@link FULL_SETS}.
+ */
+export function setsDotRadius(sets: number): number {
+  return 2 + Math.min(Math.max(sets, 1), FULL_SETS) - 1
+}
