@@ -1,3 +1,4 @@
+import { loadWord } from '../../lib/sessionWords'
 import { useState } from 'react'
 import { MdBlock, MdCheckCircle, MdDragIndicator, MdKeyboardArrowDown, MdRadioButtonUnchecked } from 'react-icons/md'
 import type { PlannedExercise } from '../../config/plan'
@@ -321,7 +322,7 @@ function StationFields({
             disabled={off}
             className={field}
           />
-          <span className="text-xs text-neutral-500">lb</span>
+          <span className="shrink-0 text-xs text-neutral-500">{loadWord(exercise)}</span>
         </label>
       )}
       <label className="flex min-w-0 flex-1 items-center gap-1">

@@ -1,3 +1,4 @@
+import { finishEarlyPrompt, loadWord } from '../../lib/sessionWords'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSessionFade } from '../../lib/useSessionFade'
 import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
@@ -1041,8 +1042,24 @@ export function StretchSession({
         ]
       : []),
     { label: 'pause routine', onClick: () => setPaused(true) },
-    { label: 'finish and log', onClick: () => finishWith(done) },
-    { label: 'exit without logging', danger: true, onClick: onClose },
+    {
+      label: 'finish and log',
+      // Asks first while sets are left, as the lift workout's menu does: the
+      // routine's own finish button only shows once there's nothing left to do.
+      onClick: () => {
+        const ask = finishEarlyPrompt(completed, N)
+        if (!ask || confirm(ask)) finishWith(done)
+      },
+    },
+    {
+      label: 'exit without logging',
+      danger: true,
+      // Nothing done is nothing lost; anything done is asked about, the way the
+      // lift workout asks before it's discarded.
+      onClick: () => {
+        if (completed === 0 || confirm('exit without logging this routine?')) onClose()
+      },
+    },
   ]
 
   // The top of the screen, built once and rendered on the set screen and on every
@@ -1171,11 +1188,11 @@ export function StretchSession({
               plate is part of what was done, and prescribing the next set needs it. */}
           <div className="flex items-end justify-center gap-3">
             <label className="flex flex-1 flex-col items-center gap-1">
-              <span className="text-xs tracking-wide text-neutral-500">weight</span>
+              <span className="text-xs tracking-wide text-neutral-500">{loadWord({})}</span>
               <input
                 type="number"
                 inputMode="decimal"
-                placeholder="lbs"
+                placeholder=""
                 value={coreWeightFor(step.round) ?? ''}
                 onChange={(e) =>
                   setCoreWeights((prev) => ({ ...prev, [step.round]: toWeight(e.target.value) }))

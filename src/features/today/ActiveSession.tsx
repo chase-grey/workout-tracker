@@ -1,3 +1,4 @@
+import { finishEarlyPrompt, loadWord } from '../../lib/sessionWords'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   MdAdd,
@@ -1309,7 +1310,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           <>
             <label className="flex flex-1 flex-col items-center gap-1">
               <span className="text-xs tracking-wide text-neutral-500">
-                {at.ex.bodyweight ? 'added lbs' : at.ex.stackSetting ? 'setting' : 'weight'}
+                {loadWord(at.ex)}
               </span>
               {/* A numbered stack is pinned at a whole setting, never a pound
                   figure, so its field reads as the 1–15 it is (see
@@ -1317,7 +1318,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               <input
                 type="number"
                 inputMode={at.ex.stackSetting ? 'numeric' : 'decimal'}
-                placeholder={at.ex.bodyweight ? 'bw' : at.ex.stackSetting ? `1–${at.ex.weightCapLbs}` : 'lbs'}
+                placeholder={at.ex.bodyweight ? 'bw' : at.ex.stackSetting ? `1–${at.ex.weightCapLbs}` : ''}
                 value={logged.weightLbs ?? ''}
                 onChange={(e) => edit({ weightLbs: toWeight(e.target.value) })}
                 className={field}
@@ -1362,7 +1363,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       onClick: () => bringBack(rule),
     })),
     { label: 'pause workout', onClick: () => setPaused(true) },
-    { label: 'finish and log', onClick: finish },
+    {
+      label: 'finish and log',
+      // The last set's own button finishes a workout that's done; from here it can
+      // be one set in, so it asks first, the way discarding does.
+      onClick: () => {
+        const ask = finishEarlyPrompt(totals.done, totals.all)
+        if (!ask || confirm(ask)) finish()
+      },
+    },
     {
       label: 'discard workout',
       danger: true,
@@ -1431,8 +1440,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         </p>
       ) : (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
-          set <span className="tabular-nums">{position.number}/{position.of}</span> ·{' '}
-          {repRangeLabel(planned, target?.weightLbs)} {planned.timed ? 'sec' : 'reps'}
+          set <span className="tabular-nums">{position.number}/{position.of}</span>
+          {/* The plan's range is said only when there's no target for the set: the
+              card under this states the one number to go for, and a range beside
+              it read as a second, different ask. */}
+          {!target && ` · ${repRangeLabel(planned)} ${planned.timed ? 'sec' : 'reps'}`}
           {restListed}
         </p>
       )}
@@ -1459,10 +1471,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {!roundMode && set && (
         <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
           {/* What to go for on this set. */}
-          {challenging && targetNumbers ? (
+          {challenging && hint ? (
             <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
               <MdBolt aria-hidden />
-              {targetNumbers}
+              {hint}
             </p>
           ) : (
             hint && (
@@ -2011,7 +2023,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                                     disabled={isSetSkipped}
                                     className={field}
                                   />
-                                  <span className="text-xs text-neutral-500">lb</span>
+                                  <span className="shrink-0 text-xs text-neutral-500">{loadWord(e)}</span>
                                 </label>
                               )}
                               <label className="flex min-w-0 flex-1 items-center gap-1">
