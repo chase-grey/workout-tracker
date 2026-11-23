@@ -5,6 +5,7 @@ import type { MassTrend } from './massSplit'
 /** A trend over `days` that put on `lbsPerWeek`, `leanShare` of it lean, from 180 lbs. */
 const trend = (days: number, lbsPerWeek: number, leanShare: number): MassTrend => ({
   points: [],
+  latest: { date: '2026-01-01', weight: 180, bodyFat: 15 },
   days,
   startWeight: 180,
   weightPerWeek: lbsPerWeek,

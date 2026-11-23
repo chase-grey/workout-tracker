@@ -4,6 +4,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -25,6 +26,9 @@ const tooltipStyle = { background: 'var(--color-surface)', border: '1px solid va
 const BOUND_DASH = '3 3'
 const BOUND_WIDTH = 1.25
 const HALO_WIDTH = 3.5
+
+/** The latest weigh-in's dot and figure: neither tissue's colour, since it is the scale and not a split. */
+const LATEST_COLOR = '#d4d4d4'
 
 /** A week on the chart: the trend point, plus where its two edges sit above the start. */
 type Row = MassTrendPoint & { t: number; seam: number; top: number }
@@ -55,11 +59,12 @@ function MassTooltip({
       <div style={{ color: colors.fat.edge }}>fat {fmtGainError(row.fatGain, row.fatError)}</div>
       {ratio && <div className="font-semibold">{ratio}</div>}
       <div className="text-neutral-400">
-        {row.weight}
+        trend {row.weight}
         {row.weightError > 0 && ` ± ${row.weightError}`} lbs · {row.bodyFat}% fat
       </div>
       <div className="text-neutral-400">
-        {row.weighIns === 1 ? '1 weigh-in' : `average of ${row.weighIns} weigh-ins`}
+        {row.weighIns === 1 ? 'weigh-in' : 'last weigh-in'} {row.scale} lbs
+        {row.weighIns > 1 && ` · ${row.weighIns} that week`}
       </div>
     </div>
   )
@@ -72,11 +77,12 @@ function MassTooltip({
  * under a thin rind is the picture you want. Both are drawn as their tissue,
  * fibres and cells, in the theme's accent rather than butcher's colours.
  *
- * The axis is body weight. The stack stands on the first week's average
- * weight, and its top each week is that week's average weigh-in, split by the
- * week's average body fat. The week in progress is the average of what it has
- * so far, so the chart's end moves the day something is logged (see
- * lib/massSplit.massTrend). Inside, the bands are still gains: the axis is
+ * The axis is body weight. The stack stands on the weight the trend started
+ * at, and its top is the weight trend itself, every week: tissue goes on a
+ * little a day, so the stack is smooth and one morning does not bend it (see
+ * lib/massSplit.massTrend). The latest weigh-in is marked over the newest
+ * week as a dot with its figure, on the same axis, so the number just logged
+ * is on the chart at once and can be seen against the trend under it. Inside, the bands are still gains: the axis is
  * stretched over the few pounds that moved, with a break at its foot.
  *
  * Each edge can show a dashed line either side, as far off as it could really
@@ -109,17 +115,19 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
   // weight: nice round pounds are picked over the weights the stack reaches,
   // any shown dashes included, and each is set back on the gain scale to place it.
   const base = trend?.startWeight ?? 0
+  // The latest weigh-in, as logged, on the gain scale the stack is drawn on.
+  const latestGain = trend ? trend.latest.weight - trend.startWeight : 0
   const yScale = useMemo(() => {
     const seamError = (r: Row) => (bands.muscle ? r.fatError : 0)
     const topError = (r: Row) => (bands.fat ? r.weightError : 0)
-    const reach = rows.flatMap((r) => [
+    const reach = [latestGain, ...rows.flatMap((r) => [
       0,
       r.seam + seamError(r),
       r.seam - seamError(r),
       r.top + topError(r),
       r.top - topError(r),
       Math.min(0, r.muscleGain) + Math.min(0, r.fatGain),
-    ])
+    ])]
     // Six ticks rather than four, so a stack under five pounds gets a step of
     // one: the coarser step framed four pounds of stack in eight of axis.
     const lbs = niceScale(reach.map((g) => base + g), 6)
@@ -128,7 +136,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
       ticks: lbs.ticks.map((v) => v - base),
       broken: lbs.broken,
     }
-  }, [rows, base, bands])
+  }, [rows, base, bands, latestGain])
   const fmtLbs = (gain: number) => String(Math.round((base + gain) * 10) / 10)
   const hasLoss = rows.some((r) => r.muscleGain < 0 || r.fatGain < 0)
   // One label per week while they fit, then every other, every third… — see spacedTicks.
@@ -198,7 +206,7 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
         <ComposedChart
           data={rows}
           stackOffset="sign"
-          margin={{ top: 8, right: 18, bottom: 0, left: -12 }}
+          margin={{ top: 18, right: 18, bottom: 0, left: -12 }}
           {...readout.chart}
         >
           <TissuePatterns ids={{ muscle: muscleId, fat: fatId }} colors={colors} />
@@ -236,6 +244,26 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
           />
           {bands.muscle && bounds('seam', colors.muscle.edge, (r) => r.seam, (r) => r.fatError)}
           {bands.fat && bounds('top', colors.fat.edge, (r) => r.top, (r) => r.weightError)}
+          {trend && (
+            <ReferenceDot
+              x={last.t}
+              y={latestGain}
+              r={3.5}
+              fill={LATEST_COLOR}
+              stroke={CHART_SURFACE}
+              strokeWidth={1.5}
+              ifOverflow="extendDomain"
+              label={{
+                value: String(trend.latest.weight),
+                position: 'top',
+                fill: LATEST_COLOR,
+                fontSize: 11,
+                stroke: CHART_SURFACE,
+                strokeWidth: 3,
+                paintOrder: 'stroke',
+              }}
+            />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

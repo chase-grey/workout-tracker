@@ -13,7 +13,7 @@ import type { MassTrend } from './massSplit'
  * doubt on the seam, where it belongs, so the three bands read as what they
  * are: one measured line and one guessed one.
  *
- * The guess is made once, on the first week's average, and from it the rest of
+ * The guess is made once, at the start of the trend, and from it the rest of
  * the body is taken: fat-free mass less the muscle the equation puts there.
  * That remainder is then held fixed across the span, and each week's muscle
  * is whatever fat-free mass is left over it. Bone and organs do not move in
@@ -52,7 +52,7 @@ export type WholeBodyPoint = {
   /** The Monday the week starts on. */
   date: string
   weighIns: number
-  /** The week's average weigh-in, lbs, and its average body fat, %. */
+  /** The weight trend that week, lbs, and the body-fat trend, %. */
   weight: number
   bodyFat: number
   muscle: number
