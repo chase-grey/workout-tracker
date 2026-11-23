@@ -59,6 +59,14 @@ export type PinnablePillar = keyof CalendarPins
 
 export const PINNABLE: PinnablePillar[] = ['strength', 'flexibility', 'cardio']
 
+/**
+ * The pillars whose days are chosen by hand, of the ones tracked. A week the
+ * cardio plan lays out takes its cardio days from the plan, not from here.
+ */
+export function schedulablePillars(pillars: readonly Pillar[], plannedCardio: readonly unknown[]): PinnablePillar[] {
+  return PINNABLE.filter((p) => pillars.includes(p) && !(p === 'cardio' && plannedCardio.length > 0))
+}
+
 /** What a schedule row calls each pillar's sessions. */
 export const PIN_LABEL: Record<PinnablePillar, string> = { strength: 'lift', flexibility: 'stretch', cardio: 'cardio' }
 

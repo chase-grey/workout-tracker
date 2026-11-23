@@ -27,6 +27,7 @@ import {
 import { CHART_SURFACE, CHART_SURFACE_2, LINE_GOAL, LINE_PRIMARY, fmtTick, niceScale, timeXAxis } from '../../lib/chart'
 import { parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import { usePressAction } from '../../lib/usePressAction'
+import { useLongPress } from '../../lib/useLongPress'
 import { CardioGoalSheet } from '../today/CardioGoalSheet'
 import { LiveCompanion } from '../companion/CompanionFlow'
 import { goalLineMarks } from './goalLineMarks'
@@ -51,7 +52,7 @@ function checkpointValue(c: CardioCheckpoint, plan: CardioPlan): number | null {
  * the goal line, and the checkpoints along it — drawn the way a committed
  * strength goal is, the plan dashed in the goal colour like a committed curve
  * and the log solid over it. Below it, this week's sessions, the checkpoints
- * (editable), and the plan's own controls. With no plan, the way to set one.
+ * (held to edit), and the plan's own controls. With no plan, the way to set one.
  * Either way the copy-paste companion, opened on cardio, is a press away.
  */
 export function CardioPlanCard() {
@@ -112,6 +113,7 @@ function PlanBlock({
 }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [editing, setEditing] = useState(false)
+  const holdCheckpoints = useLongPress(() => setEditing(true), editing)
   const statuses = useMemo(() => checkpointStatuses(plan, entries), [plan, entries])
   const standing = useMemo(() => planStanding(plan, entries, today), [plan, entries, today])
   const reached = statuses.find((s) => s.checkpoint.goal)?.hit ?? null
@@ -163,15 +165,17 @@ function PlanBlock({
         </ul>
       )}
 
-      <ul className="flex flex-col px-1">
-        <li className="mb-1 flex items-center justify-between">
+      <ul className="flex flex-col px-1" {...holdCheckpoints}>
+        <li className="mb-1 flex min-h-[36px] items-center justify-between">
           <span className="text-xs tracking-wider text-neutral-500">checkpoints</span>
-          <button
-            onClick={() => setEditing((e) => !e)}
-            className="min-h-[36px] rounded-xl px-2 text-xs font-semibold text-accent active:opacity-80"
-          >
-            {editing ? 'done' : 'edit'}
-          </button>
+          {editing && (
+            <button
+              onClick={() => setEditing(false)}
+              className="min-h-[36px] rounded-xl px-2 text-xs font-semibold text-accent active:opacity-80"
+            >
+              done
+            </button>
+          )}
         </li>
         {statuses.map((s) => (
           <li key={s.checkpoint.id} className="flex min-h-[36px] items-center justify-between gap-2 text-sm">

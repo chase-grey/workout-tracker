@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { MdAdd, MdClose, MdEdit } from 'react-icons/md'
 import { v4 as uuid } from 'uuid'
-import { Collapse } from '../../components/Collapse'
 import { ControlWord } from '../../components/ControlWord'
 import { useControlLabel } from '../../lib/useControlLabel'
 import { useData } from '../../store/DataContext'
@@ -39,11 +38,6 @@ import type { DayType } from '../../types'
 const tileButton =
   'min-h-[52px] w-full rounded-2xl bg-surface px-2 text-lg font-bold leading-tight active:bg-surface-2'
 
-/** How long a tile is held before the grid goes into edit mode. */
-const HOLD_MS = 450
-/** How far a finger may wander during the hold and still be holding, not scrolling. */
-const HOLD_SLOP_PX = 8
-
 const GOAL_LABELS: Partial<Record<Pillar, string>> = {
   strength: 'workouts a week',
   flexibility: 'stretches a week',
@@ -77,20 +71,24 @@ type Props = {
   detail?: (t: HomeTile) => string | undefined
   dimmed: (t: HomeTile) => boolean
   onOpen: (t: HomeTile) => void
+  /**
+   * The page is being edited and this card is open (see
+   * components/EditableStack): the tiles drag, come off and go on.
+   */
+  editing?: boolean
 }
 
 /**
- * The buttons at the foot of Today. A tap starts or logs; holding one puts the
- * grid into edit mode with that tile already under the finger, where tiles
- * drag into a new order, an × takes one off and + puts one back or pins a
- * cardio session.
+ * The buttons at the foot of Today. A tap starts or logs; holding the page
+ * opens it for editing, where tiles drag into a new order, an × takes one off
+ * and + puts one back or pins a cardio session.
  *
  * Taking off the last tile of a pillar asks whether it's still being tracked,
  * with its weekly goal right there to change; putting on a tile from a pillar
  * that's off asks for the goal to track it at. The tiles are the everyday face
  * of what the profile tracks, so this is where changing it comes naturally.
  */
-export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) {
+export function HomeTiles({ candidates, label, detail, dimmed, onOpen, editing = false }: Props) {
   const { settings, updateSettings } = useData()
   const [fallbackProfile] = useState(() => ownerProfile())
   const profile: Profile = settings.profile ?? fallbackProfile
@@ -104,7 +102,6 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
   const layout: HomeLayout = settings.homeLayout ?? { order: ids, removed: [] }
   const offGrid = candidates.filter((t) => !ids.includes(tileId(t)) && t.type !== 'pin')
 
-  const [editing, setEditing] = useState(false)
   const [adding, setAdding] = useState(false)
   const [pinning, setPinning] = useState(false)
   /** The lift day whose plan is open in the editor sheet. */
@@ -112,27 +109,17 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
   const [question, setQuestion] = useState<Question | null>(null)
   const [drag, setDragState] = useState<Drag | null>(null)
   const dragRef = useRef<Drag | null>(null)
-  const press = useRef<{ id: string; pointerId: number; x: number; y: number; timer: number } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const els = useRef(new Map<string, HTMLElement>())
 
-  useBackGuard(editing, () => setEditing(false))
-
-  // The hold that opens edit mode is invisible, so while labels are on there's
-  // a plain edit button under the grid too. Holding counts as a use of it: by
-  // the third time in, you know where it is.
-  const editLabel = useControlLabel('editTiles')
   const addLabel = useControlLabel('addTile')
-  const editEverShown = useRef(false)
-  if (editLabel.show) editEverShown.current = true
 
   const setDrag = (d: Drag | null) => {
     dragRef.current = d
     setDragState(d)
   }
 
-  // Once a tile is picked up the page mustn't scroll under it. A hold starts
-  // as an ordinary touch, which the browser is free to pan, so the pan is
+  // Once a tile is picked up the page mustn't scroll under it. The pan is
   // refused here — non-passive, which React's own touch handlers can't be.
   useEffect(() => {
     const grid = gridRef.current
@@ -143,11 +130,6 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
     grid.addEventListener('touchmove', stop, { passive: false })
     return () => grid.removeEventListener('touchmove', stop)
   }, [])
-
-  const clearPress = () => {
-    if (press.current) window.clearTimeout(press.current.timer)
-    press.current = null
-  }
 
   const pickUp = (id: string, pointerId: number, x: number, y: number) => {
     const from = ids.indexOf(id)
@@ -175,34 +157,10 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
 
   const onPointerDown = (e: ReactPointerEvent<HTMLElement>, id: string) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return
-    if (editing) {
-      pickUp(id, e.pointerId, e.clientX, e.clientY)
-      return
-    }
-    clearPress()
-    const { pointerId, clientX: x, clientY: y } = e
-    press.current = {
-      id,
-      pointerId,
-      x,
-      y,
-      timer: window.setTimeout(() => {
-        const held = press.current
-        press.current = null
-        if (!held) return
-        editLabel.used()
-        setEditing(true)
-        navigator.vibrate?.(10)
-        pickUp(id, pointerId, held.x, held.y)
-      }, HOLD_MS),
-    }
+    if (editing) pickUp(id, e.pointerId, e.clientX, e.clientY)
   }
 
   const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
-    const held = press.current
-    if (held && held.pointerId === e.pointerId && Math.hypot(e.clientX - held.x, e.clientY - held.y) > HOLD_SLOP_PX) {
-      clearPress()
-    }
     const d = dragRef.current
     if (!d || d.pointerId !== e.pointerId) return
     const dx = e.clientX - d.startX
@@ -211,17 +169,13 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
   }
 
   const onPointerUp = (e: ReactPointerEvent<HTMLElement>) => {
-    clearPress()
     const d = dragRef.current
     if (!d || d.pointerId !== e.pointerId) return
     setDrag(null)
     if (d.to !== d.from) save({ homeLayout: { ...layout, order: moveItem(ids, d.from, d.to) } })
   }
 
-  const onPointerCancel = () => {
-    clearPress()
-    setDrag(null)
-  }
+  const onPointerCancel = () => setDrag(null)
 
   const week = weekStartISO(toISODate(new Date()))
   const goalFor = (p: Pillar) => {
@@ -281,11 +235,7 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
 
   return (
     <>
-      <div
-        ref={gridRef}
-        className="grid grid-cols-2 gap-2"
-        onContextMenu={(e) => e.preventDefault()}
-      >
+      <div ref={gridRef} className={`grid grid-cols-2 gap-2 ${editing ? 'pt-3' : ''}`}>
         {order.map((t, i) => {
           const id = tileId(t)
           const dragged = drag?.id === id
@@ -306,9 +256,6 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
                 transform: shift,
                 zIndex: dragged ? 10 : undefined,
                 touchAction: editing ? 'none' : undefined,
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                WebkitTouchCallout: 'none',
               }}
               onPointerDown={(e) => onPointerDown(e, id)}
               onPointerMove={onPointerMove}
@@ -319,7 +266,7 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
                 onClick={() => {
                   if (!editing) onOpen(t)
                 }}
-                className={`${tileButton} ${dimmed(t) && !editing ? 'opacity-50' : ''} ${
+                className={`${tileButton} ${editing ? 'bg-surface-2' : ''} ${dimmed(t) && !editing ? 'opacity-50' : ''} ${
                   editing && !dragged ? 'tile-wiggle' : ''
                 } ${dragged ? 'scale-105 shadow-lg shadow-black/40' : ''}`}
               >
@@ -355,42 +302,18 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen }: Props) 
         })}
       </div>
 
-      {editEverShown.current && (
-        <Collapse id="home-tiles-edit" open={editLabel.show && !editing}>
-          <button
-            onClick={() => {
-              editLabel.used()
-              setEditing(true)
-            }}
-            aria-label="edit tiles"
-            className="flex min-h-[44px] w-full items-center justify-center rounded-2xl text-xl text-neutral-400 active:bg-surface"
-          >
-            <MdEdit aria-hidden />
-            <ControlWord show={editLabel.show} word={editLabel.word} layout="inline" />
-          </button>
-        </Collapse>
-      )}
-
       {editing && (
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => {
-              addLabel.used()
-              setAdding(true)
-            }}
-            aria-label="add"
-            className="flex min-h-[52px] items-center justify-center rounded-2xl border-2 border-dashed border-surface-2 text-2xl text-neutral-400 active:bg-surface"
-          >
-            <MdAdd aria-hidden />
-            <ControlWord show={addLabel.show} word={addLabel.word} layout="inline" />
-          </button>
-          <button
-            onClick={() => setEditing(false)}
-            className="min-h-[52px] rounded-2xl bg-accent text-lg font-bold text-on-accent"
-          >
-            done
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            addLabel.used()
+            setAdding(true)
+          }}
+          aria-label="add tile"
+          className="mt-2 flex min-h-[52px] w-full items-center justify-center rounded-2xl border-2 border-dashed border-surface-2 text-2xl text-neutral-400 active:bg-surface-2"
+        >
+          <MdAdd aria-hidden />
+          <ControlWord show={addLabel.show} word={addLabel.word} layout="inline" />
+        </button>
       )}
 
       {adding && (

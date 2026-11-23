@@ -48,6 +48,10 @@ import { bodyFatSeries } from '../../lib/bodyComp'
 import { massTrend } from '../../lib/massSplit'
 import { wholeBody } from '../../lib/wholeBody'
 import { ReviewOverlay } from '../../components/ReviewOverlay'
+import { EditableStack, type StackCard } from '../../components/EditableStack'
+import { WeightCard } from '../today/WeightCard'
+import { DailyHabits } from '../today/DailyHabits'
+import { weighsIn } from '../../lib/profile'
 import {
   buildReview,
   monthKeyOf,
@@ -201,7 +205,8 @@ const BODY_METRICS: { label: string; value: BodyMetric }[] = [
 ]
 
 export function ProgressTab() {
-  const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries, cardioEntries } = useData()
+  const { workouts, bodyWeights, measurements, settings, calorieEntries, flexEntries, cardioEntries, updateSettings } =
+    useData()
   const profile = settings.profile
   // What was built around the owner — the bulk charts, the bench as the lift to
   // watch — stays his; everyone else sees the pillars they asked for.
@@ -389,6 +394,63 @@ export function ProgressTab() {
     )
   }, [bodyFatOn, owner, bodyMetric, latestBf, massSeries, body, heightIn, bodyFatPoints, weeklyCalories, bodyFatGoalLines])
 
+  // Every card this person could have on Progress, in the order it ships in
+  // (see components/EditableStack). The optional ones live on Today and come
+  // here only when added.
+  const cards: StackCard[] = [
+    { id: 'goals', label: 'goals', node: <GoalsPanel underBodyWeight={bodySection} /> },
+    ...(strengthOn
+      ? [
+          { id: 'muscles', label: 'strength', node: <MuscleAvatar /> },
+          {
+            id: 'lifts',
+            label: 'lifts',
+            node: (
+              <>
+                <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
+                {exercise === '' ? (
+                  <div className="flex h-24 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
+                    no lifts logged yet
+                  </div>
+                ) : (
+                  <>
+                    <ExercisePicker options={exerciseOptions} value={exercise} onChange={setPicked} />
+                    <Pills options={METRICS} value={metric} onChange={setMetric} />
+                    {exercise === BENCH_COMBO ? (
+                      <BenchChart data={benchSeries} unit={unit} />
+                    ) : (
+                      <MetricChart data={series} unit={unit} label={exerciseLabel} offSlot={offSeries} />
+                    )}
+                  </>
+                )}
+              </>
+            ),
+          },
+        ]
+      : []),
+    ...(cardioOn
+      ? [
+          { id: 'cardioChart', label: 'cardio', node: <CardioChart entries={cardioEntries} /> },
+          { id: 'cardioPlan', label: 'cardio goal', node: <CardioPlanCard /> },
+        ]
+      : []),
+    { id: 'timeSpent', label: 'time spent', node: <TimeSpent /> },
+    ...(weighsIn(profile) || bodyFatOn
+      ? [{ id: 'weight', label: 'body measurement', node: <WeightCard />, optional: true }]
+      : []),
+    ...(dietOn
+      ? [
+          {
+            id: 'calories',
+            label: 'daily calories',
+            node: <DailyHabits weekStart={null} onShowCurrentWeek={() => {}} />,
+            editor: <DailyHabits weekStart={null} onShowCurrentWeek={() => {}} editing />,
+            optional: true,
+          },
+        ]
+      : []),
+  ]
+
   return (
     <div className="flex flex-col gap-4 pb-4">
       <h2 className="text-xl font-bold">progress</h2>
@@ -414,39 +476,12 @@ export function ProgressTab() {
         </div>
       )}
 
-      <GoalsPanel underBodyWeight={bodySection} />
-
-      {strengthOn && <MuscleAvatar />}
-
-      {strengthOn && (
-        <>
-          <h3 className="mt-2 text-sm font-semibold tracking-wider text-neutral-500">lifts</h3>
-          {exercise === '' ? (
-            <div className="flex h-24 items-center justify-center rounded-2xl bg-surface text-sm text-neutral-500">
-              no lifts logged yet
-            </div>
-          ) : (
-            <>
-              <ExercisePicker options={exerciseOptions} value={exercise} onChange={setPicked} />
-              <Pills options={METRICS} value={metric} onChange={setMetric} />
-              {exercise === BENCH_COMBO ? (
-                <BenchChart data={benchSeries} unit={unit} />
-              ) : (
-                <MetricChart data={series} unit={unit} label={exerciseLabel} offSlot={offSeries} />
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {cardioOn && (
-        <>
-          <CardioChart entries={cardioEntries} />
-          <CardioPlanCard />
-        </>
-      )}
-
-      <TimeSpent />
+      <EditableStack
+        cards={cards}
+        layout={settings.progressLayout}
+        onLayout={(next) => updateSettings({ ...settings, progressLayout: next })}
+        gap="gap-4"
+      />
 
       {recap && <ReviewOverlay review={recap} onClose={() => setRecap(null)} />}
     </div>

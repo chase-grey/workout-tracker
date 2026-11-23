@@ -49,6 +49,29 @@ So: any change to how a session is paced, advanced, rested, or ended goes into
 **both** files, or the commit body says why it belongs to only one. When touching
 either file, check the other before you finish.
 
+## Changing something is a hold, never an edit button
+
+Outside Settings and the forms a sheet opens, nothing on a page wears an
+`edit` button. Holding it (`lib/useLongPress`, 450 ms) is how it's changed:
+
+- **Today and Progress are stacks of cards** (`components/EditableStack`,
+  `lib/cardLayout`). A hold anywhere folds the page to its cards by name: drag
+  by the grip, × takes one off, the ones not showing wait underneath to be
+  added. A card with settings of its own passes an `editor`, opened under its
+  name — the calendar's schedule, the calorie buttons' amounts, the order of
+  the week's goals, the tiles. The card that was held opens already.
+- **A new card goes in the tab's `cards` list**, gated by pillar there, and
+  `optional: true` if it shouldn't show until added. A new thing a card lets
+  you customise is that card's `editor`, not a button on the card.
+- **A list inside a card or a sheet takes its own hold** (the cardio kinds, a
+  cardio plan's checkpoints). The innermost hold wins.
+- **A hold never starts on a field or a chart**: a finger resting on a chart is
+  reading it. `useChartReadout` opts its card out with `data-no-hold`; anything
+  else that needs a resting finger does the same.
+- The hold is invisible, so while control labels are on (`lib/controlLabels`,
+  `editTiles`) the stack shows a labelled edit button that retires with use.
+  That is the only one.
+
 ## Other people use this now
 
 The app has more than one user. Each has a **profile** (`src/lib/profile.ts`,

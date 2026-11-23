@@ -94,6 +94,8 @@ export function useChartReadout() {
     card: {
       ref: card, onPointerDown, onPointerMove, onPointerUp, onPointerCancel,
       style: { touchAction: 'pan-y' },
+      // A finger resting on a chart is reading it, not holding the page to edit (see lib/useLongPress).
+      'data-no-hold': '',
     },
     chart: { accessibilityLayer: false, onMouseMove: onSelection, onClick: onSelection, onTouchMove: onSelection, throttleDelay: 0 },
     tooltip: {

@@ -26,7 +26,15 @@ import { CardioGoalSheet } from './CardioGoalSheet'
 import { cardioSessionsForWeek, goalLabel, planActive, plannedDone, plannedOn } from '../../lib/cardioPlan'
 import { candidateTiles, type HomeTile } from '../../lib/homeTiles'
 import { WeekCalendar } from './WeekCalendar'
-import { defaultCalendarDate, type CalendarAction, type PlannedCardio } from '../../lib/weekCalendar'
+import { defaultCalendarDate, schedulablePillars, type CalendarAction, type PlannedCardio } from '../../lib/weekCalendar'
+import { EditableStack, type StackCard } from '../../components/EditableStack'
+import type { CardLayout } from '../../lib/cardLayout'
+import { PILLARS } from '../../lib/profile'
+import { WeekGoalOrder } from './WeekGoalOrder'
+import { MuscleAvatar } from '../progress/MuscleAvatar'
+import { CardioChart } from '../progress/CardioChart'
+import { CardioPlanCard } from '../progress/CardioPlanCard'
+import { TimeSpent } from '../progress/TimeSpent'
 import { weekStartISO } from '../../lib/dates'
 import { StretchLogCard } from './StretchLogCard'
 import { logsStretchOnly, stretchRoutinesFor } from '../../lib/flexSkills'
@@ -58,10 +66,26 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const [habitWeek, setHabitWeek] = useState<string | null>(null)
   const habitsRef = useRef<HTMLDivElement>(null)
 
+  // The page's cards as they've been arranged (see components/EditableStack).
+  // The calendar can also be switched off in Settings, so the two are kept as
+  // one answer: off there is off here, and putting it back here turns it on there.
+  const calendarOff = settings.showWeekCalendar === false
+  const saved = settings.todayLayout
+  const layout: CardLayout | undefined =
+    saved || calendarOff
+      ? {
+          order: saved?.order ?? [],
+          added: saved?.added,
+          removed: [...(saved?.removed ?? []).filter((id) => id !== 'calendar'), ...(calendarOff ? ['calendar'] : [])],
+        }
+      : undefined
+  const saveLayout = (next: CardLayout) =>
+    updateSettings({ ...settings, todayLayout: next, showWeekCalendar: !next.removed.includes('calendar') })
+
   // The week calendar and the calorie card show the same week, and with the
   // calendar up its day is the one the calorie card logs to — the card's own
   // Mon–Sun strip steps aside for it.
-  const showCalendar = settings.showWeekCalendar !== false
+  const showCalendar = !calendarOff
   const calendarRef = useRef<HTMLDivElement>(null)
   const [calendarDate, setCalendarDate] = useState<string | null>(null)
   const today = toISODate(new Date())
@@ -189,6 +213,112 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     }
   }
 
+  const calendar = (editing: boolean) => (
+    <WeekCalendar
+      weekStart={shownWeek}
+      onWeekChange={showWeek}
+      selected={pickedDate}
+      onSelect={setCalendarDate}
+      plannedCardio={plannedCardio}
+      onAction={runCalendarAction}
+      editing={editing}
+    />
+  )
+  const habits = (editing: boolean) => (
+    <DailyHabits
+      weekStart={habitWeek}
+      onShowCurrentWeek={() => showWeek(weekStartISO(today))}
+      {...(showCalendar ? { date: pickedDate, onSelectDate: setCalendarDate } : {})}
+      editing={editing}
+    />
+  )
+  const tiles = (editing: boolean) => (
+    <HomeTiles
+      candidates={candidates}
+      label={tileLabel}
+      detail={tileDetail}
+      dimmed={tileDimmed}
+      onOpen={openTile}
+      editing={editing}
+    />
+  )
+  const tracked = PILLARS.filter((p) => hasPillar(profile, p))
+  const cardio = hasPillar(profile, 'cardio')
+
+  // Every card this person could have on Today, in the order it ships in. The
+  // ones marked optional live on Progress and come here only when added.
+  const cards: StackCard[] = [
+    {
+      id: 'week',
+      label: 'this week',
+      node: (
+        <>
+          <TourCard anchor="week" />
+          <ThisWeek onSelectWeek={showHabitWeek} />
+        </>
+      ),
+      editor: <WeekGoalOrder />,
+    },
+    {
+      id: 'calendar',
+      label: 'week calendar',
+      node: <div ref={calendarRef}>{calendar(false)}</div>,
+      editor: schedulablePillars(tracked, plannedCardio).length > 0 ? calendar(true) : undefined,
+    },
+    ...(hasPillar(profile, 'diet')
+      ? [
+          {
+            id: 'calories',
+            label: 'daily calories',
+            node: (
+              <div ref={habitsRef} className="flex flex-col gap-2">
+                <TourCard anchor="habits" />
+                {habits(false)}
+              </div>
+            ),
+            editor: habits(true),
+          },
+        ]
+      : []),
+    ...(logsStretchOnly(profile)
+      ? [
+          {
+            id: 'stretchLog',
+            label: 'stretching',
+            node: (
+              <StretchLogCard
+                entries={flexEntries}
+                goal={goals.flex}
+                onLog={(date) => void logFlex({ date, note: 'logged' })}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(weighsIn(profile) || readsBodyFat(profile)
+      ? [{ id: 'weight', label: 'body measurement', node: <WeightCard /> }]
+      : []),
+    {
+      id: 'tiles',
+      label: 'quick tiles',
+      node: (
+        <>
+          <TourCard anchor="tiles" />
+          {tiles(false)}
+        </>
+      ),
+      editor: tiles(true),
+    },
+    ...(strength ? [{ id: 'muscles', label: 'strength', node: <MuscleAvatar />, optional: true }] : []),
+    ...(cardio
+      ? [
+          { id: 'cardioChart', label: 'cardio', node: <CardioChart entries={cardioEntries} />, optional: true },
+          { id: 'cardioPlan', label: 'cardio goal', node: <CardioPlanCard />, optional: true },
+        ]
+      : []),
+    { id: 'timeSpent', label: 'time spent', node: <TimeSpent />, optional: true },
+  ]
+
   return (
     // No bottom padding of its own: `main` already pads below the scroll area, and
     // stacking a second 1rem on top of it pushed the home page just past the
@@ -240,51 +370,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         </div>
       )}
 
-      <TourCard anchor="week" />
-      <ThisWeek onSelectWeek={showHabitWeek} />
-
-      {showCalendar && (
-        <div ref={calendarRef}>
-          <WeekCalendar
-            weekStart={shownWeek}
-            onWeekChange={showWeek}
-            selected={pickedDate}
-            onSelect={setCalendarDate}
-            plannedCardio={plannedCardio}
-            onAction={runCalendarAction}
-          />
-        </div>
-      )}
-
-      {hasPillar(profile, 'diet') && (
-        <div ref={habitsRef}>
-          <TourCard anchor="habits" />
-          <DailyHabits
-            weekStart={habitWeek}
-            onShowCurrentWeek={() => showWeek(weekStartISO(today))}
-            {...(showCalendar ? { date: pickedDate, onSelectDate: setCalendarDate } : {})}
-          />
-        </div>
-      )}
-
-      {logsStretchOnly(profile) && (
-        <StretchLogCard
-          entries={flexEntries}
-          goal={goals.flex}
-          onLog={(date) => void logFlex({ date, note: 'logged' })}
-        />
-      )}
-
-      {(weighsIn(profile) || readsBodyFat(profile)) && <WeightCard />}
-
-      <TourCard anchor="tiles" />
-      <HomeTiles
-        candidates={candidates}
-        label={tileLabel}
-        detail={tileDetail}
-        dimmed={tileDimmed}
-        onOpen={openTile}
-      />
+      <EditableStack cards={cards} layout={layout} onLayout={saveLayout} gap="gap-2" />
 
       {loggingCardio && (
         <CardioLogSheet

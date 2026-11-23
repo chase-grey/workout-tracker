@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
-import { MdChevronLeft, MdChevronRight, MdEditCalendar, MdExpandLess, MdExpandMore } from 'react-icons/md'
+import { MdChevronLeft, MdChevronRight, MdExpandLess, MdExpandMore } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { parseISODate, weekStartISO } from '../../lib/dates'
 import type { Pillar } from '../../lib/profile'
 import {
-  PINNABLE,
   WEEKDAY_SHORT as DOW,
   hasSchedule,
   pillarMarks,
+  schedulablePillars,
   shiftWeek,
   weekCalendar,
   type CalendarAction,
@@ -18,7 +18,7 @@ import {
 } from '../../lib/weekCalendar'
 import { CalendarItemSheet } from './CalendarItemSheet'
 import { PillarMark } from './PillarMark'
-import { ScheduleSheet } from './ScheduleSheet'
+import { ScheduleEditor } from './ScheduleEditor'
 import { useCalendarInput } from './useCalendarInput'
 
 type Props = {
@@ -30,6 +30,12 @@ type Props = {
   onSelect: (date: string) => void
   plannedCardio: PlannedCardio[]
   onAction: (action: CalendarAction) => void
+  /**
+   * The page is being edited and this card is open (see
+   * components/EditableStack): the week's header over the days each kind of
+   * session falls on, in place of the week itself.
+   */
+  editing?: boolean
 }
 
 /** A session on the calendar: every item but the day's calorie target. */
@@ -50,7 +56,8 @@ function weekTitle(weekStart: string, today: string): string {
  * (see lib/weekCalendar).
  *
  * Left alone it is a record of what was done; days ahead appear only once
- * some are chosen from the header (ScheduleSheet), or a cardio plan sets them.
+ * some are chosen by holding the calendar (ScheduleEditor), or a cardio plan
+ * sets them.
  *
  * It opens small — one strip of marks, a shape to each pillar (PillarMark),
  * and under it the sessions of the day picked — because most looks at it are
@@ -58,17 +65,16 @@ function weekTitle(weekStart: string, today: string): string {
  * opens the whole week at a row per day, and `keep open` there makes that the
  * way it opens from then on. Either way a session is a button that shows what
  * it holds (CalendarItemSheet) rather than one that starts it, and which days
- * the sessions fall on is set from the header (ScheduleSheet).
+ * the sessions fall on is set by holding the card (ScheduleEditor).
  *
  * The calorie figures stay off it: the calorie card below logs to the day
  * picked here and says them once. A day's target shows only as its mark.
  */
-export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plannedCardio, onAction }: Props) {
+export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plannedCardio, onAction, editing }: Props) {
   const { settings, updateSettings } = useData()
   const kept = settings.weekCalendarView === 'full'
   const [expanded, setExpanded] = useState(kept)
   const [detail, setDetail] = useState<{ day: CalendarDay; item: Session } | null>(null)
-  const [scheduling, setScheduling] = useState(false)
 
   const input = useCalendarInput()
   const { today, pillars } = input
@@ -76,8 +82,7 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
 
   const furthest = shiftWeek(today, 1)
   const title = weekTitle(weekStart, today)
-  // A week the cardio plan lays out takes its days from the plan, not from here.
-  const schedulable = PINNABLE.filter((p) => pillars.includes(p) && !(p === 'cardio' && plannedCardio.length > 0))
+  const schedulable = schedulablePillars(pillars, plannedCardio)
   const open = (day: CalendarDay, item: Session) => setDetail({ day, item })
   const picked = days.find((d) => d.date === selected)
   // "rest" is a word for a day off from a plan. With no days chosen and no
@@ -92,7 +97,7 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
     'flex h-9 w-9 items-center justify-center rounded-lg text-xl text-neutral-400 active:opacity-60 disabled:opacity-30'
 
   return (
-    <div className="rounded-2xl bg-surface p-3">
+    <div className={editing ? '' : 'rounded-2xl bg-surface p-3'}>
       <div className="mb-1 flex items-center justify-between gap-1">
         <h2 className="text-sm font-semibold tracking-wide text-neutral-500">{title}</h2>
         <div className="-mr-1 flex items-center">
@@ -107,23 +112,22 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
           >
             <MdChevronRight aria-hidden />
           </button>
-          {schedulable.length > 0 && (
-            <button onClick={() => setScheduling(true)} aria-label="schedule" className={iconButton}>
-              <MdEditCalendar aria-hidden />
+          {!editing && (
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              aria-label={expanded ? 'show less' : 'show the whole week'}
+              aria-expanded={expanded}
+              className={iconButton}
+            >
+              {expanded ? <MdExpandLess aria-hidden /> : <MdExpandMore aria-hidden />}
             </button>
           )}
-          <button
-            onClick={() => setExpanded((e) => !e)}
-            aria-label={expanded ? 'show less' : 'show the whole week'}
-            aria-expanded={expanded}
-            className={iconButton}
-          >
-            {expanded ? <MdExpandLess aria-hidden /> : <MdExpandMore aria-hidden />}
-          </button>
         </div>
       </div>
 
-      {expanded ? (
+      {editing ? (
+        <ScheduleEditor weekStart={weekStart} weekLabel={title} today={today} days={days} pillars={schedulable} />
+      ) : expanded ? (
         <>
           <ul className="flex flex-col">
             {days.map((day) => (
@@ -165,16 +169,6 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
           item={detail.item}
           onAction={onAction}
           onClose={() => setDetail(null)}
-        />
-      )}
-      {scheduling && (
-        <ScheduleSheet
-          weekStart={weekStart}
-          weekLabel={title}
-          today={today}
-          days={days}
-          pillars={schedulable}
-          onClose={() => setScheduling(false)}
         />
       )}
     </div>

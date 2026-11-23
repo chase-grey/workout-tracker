@@ -23,11 +23,10 @@ import {
   macroGoalOn,
   trackedMacros,
 } from '../../lib/macros'
+import { calorieAdds, formatAdd, macroAdds } from '../../lib/quickAdds'
+import { AmountEditor } from '../../components/AmountEditor'
 
 const DOW = ['m', 't', 'w', 't', 'f', 's', 's']
-const QUICK_ADDS = [100, 500]
-/** The grams each macro's buttons add; the first is also what its minus takes off. */
-const MACRO_ADDS: Record<Macro, number[]> = { protein: [10, 25], carbs: [10, 25], fat: [5, 10] }
 const ADD_BUTTON = 'min-h-[44px] flex-1 rounded-xl bg-surface-2 text-xs font-semibold active:opacity-80'
 
 type Props = {
@@ -40,11 +39,19 @@ type Props = {
    */
   date?: string
   onSelectDate?: (date: string) => void
+  /**
+   * The page is being edited and this card is open (see
+   * components/EditableStack): the amounts its buttons add, in place of the log.
+   */
+  editing?: boolean
 }
 
-/** The daily food log and its editable Mon-Sun timeline. */
-export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }: Props) {
-  const { calorieEntries, logCalories, bodyWeights, settings } = useData()
+/**
+ * The daily food log and its editable Mon-Sun timeline. What its buttons add
+ * is the person's to set (see lib/quickAdds), by holding the card.
+ */
+export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate, editing }: Props) {
+  const { calorieEntries, logCalories, bodyWeights, settings, updateSettings } = useData()
 
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -105,6 +112,31 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
     const grams = formatMacros(macros, tracked)
     const showCalories = calories !== 0 && (!derived || grams === '')
     return [showCalories && formatHelping(calories), grams].filter(Boolean).join(' · ')
+  }
+
+  const quickAdds = calorieAdds(settings.calorieAdds)
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-4">
+        {!derived && (
+          <AmountEditor
+            label="calories"
+            values={quickAdds}
+            onChange={(next) => updateSettings({ ...settings, calorieAdds: next })}
+          />
+        )}
+        {tracked.map((macro) => (
+          <AmountEditor
+            key={macro}
+            label={MACRO_LABELS[macro]}
+            unit="g"
+            values={macroAdds(settings.macroAdds, macro)}
+            onChange={(next) => updateSettings({ ...settings, macroAdds: { ...settings.macroAdds, [macro]: next } })}
+          />
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -207,26 +239,32 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
 
       {!derived && (
         <div className="mt-2 flex gap-1.5">
-          {QUICK_ADDS.map((calories) => (
-            <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
-              +{calories}
-            </button>
-          ))}
+          {quickAdds
+            .filter((calories) => calories > 0)
+            .map((calories) => (
+              <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
+                {formatAdd(calories)}
+              </button>
+            ))}
           {selDate < today && (
             <button onClick={() => addFood(selGoal)} className={ADD_BUTTON}>
               +{selGoal}
             </button>
           )}
-          <button onClick={() => addFood(-100)} className={ADD_BUTTON}>
-            −100
-          </button>
+          {quickAdds
+            .filter((calories) => calories < 0)
+            .map((calories) => (
+              <button key={calories} onClick={() => addFood(calories)} className={ADD_BUTTON}>
+                {formatAdd(calories)}
+              </button>
+            ))}
         </div>
       )}
 
       {tracked.map((macro) => {
         const grams = selMacros[macro]
         const goal = macroGoalOn(macro, selDate, bodyWeights, profile, selGoal)
-        const adds = MACRO_ADDS[macro]
+        const adds = macroAdds(settings.macroAdds, macro)
         return (
           <div key={macro} role="group" aria-label={MACRO_LABELS[macro]} className="mt-3">
             <div className="flex items-center gap-2">
@@ -249,18 +287,17 @@ export function DailyHabits({ weekStart, onShowCurrentWeek, date, onSelectDate }
               </p>
             </div>
             <div className="mt-1.5 flex gap-1.5">
-              {adds.map((g) => (
-                <button key={g} onClick={() => addMacro(macro, g)} className={ADD_BUTTON}>
-                  +{formatGrams(g)}
+              {/* The ones that add, then the ones that take back, whatever order they were made in. */}
+              {[...adds.filter((g) => g > 0), ...adds.filter((g) => g < 0)].map((g) => (
+                <button
+                  key={g}
+                  onClick={() => addMacro(macro, g)}
+                  disabled={g < 0 && grams <= 0}
+                  className={`${ADD_BUTTON} disabled:text-neutral-600`}
+                >
+                  {formatAdd(g, 'g')}
                 </button>
               ))}
-              <button
-                onClick={() => addMacro(macro, -adds[0])}
-                disabled={grams <= 0}
-                className={`${ADD_BUTTON} disabled:text-neutral-600`}
-              >
-                −{formatGrams(adds[0])}
-              </button>
             </div>
           </div>
         )

@@ -32,7 +32,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     id: 'tiles',
     anchor: 'tiles',
     title: 'quick tiles',
-    body: 'these start a workout or a stretch, or log cardio. hold one to rearrange or remove it, or tap edit.',
+    body: 'these start a workout or a stretch, or log cardio. hold anywhere on this page to rearrange it, take a card off, or change what one does.',
   },
   {
     id: 'streak',

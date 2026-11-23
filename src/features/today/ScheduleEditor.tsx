@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useData } from '../../store/DataContext'
-import { useBackGuard } from '../../lib/useBackGuard'
 import { PillarMark } from './PillarMark'
 import {
   PIN_LABEL,
@@ -22,20 +21,20 @@ import { mondayIndexOrder } from '../../lib/dates'
 /**
  * Which days each kind of session falls on: for the one week on the calendar,
  * or for every week from here on (see lib/weekCalendar WeekPins and
- * CalendarPins). Each tap is saved as it lands, so the calendar behind the
- * sheet is the preview.
+ * CalendarPins). Drawn in the calendar's own card while the page is being
+ * edited (see components/EditableStack): holding the calendar opens it. Each
+ * tap is saved as it lands.
  *
  * A week's own days open on what the calendar already shows for it, so moving
  * Thursday's lift to Friday is two taps rather than a week rebuilt from blank.
  * Days already behind you can't be planned.
  */
-export function ScheduleSheet({
+export function ScheduleEditor({
   weekStart,
   weekLabel,
   today,
   days,
   pillars,
-  onClose,
 }: {
   weekStart: string
   /** "this week", "next week". */
@@ -44,10 +43,8 @@ export function ScheduleSheet({
   days: CalendarDay[]
   /** The pillars whose days are set here, in order. */
   pillars: PinnablePillar[]
-  onClose: () => void
 }) {
   const { settings, updateSettings } = useData()
-  useBackGuard(true, onClose)
 
   const dates = weekDates(weekStart)
   // A week wholly behind you has nothing left to plan.
@@ -73,14 +70,7 @@ export function ScheduleSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={onClose}>
-      <div
-        className="max-h-[85dvh] w-full overflow-y-auto rounded-t-3xl bg-surface p-5"
-        onClick={(e) => e.stopPropagation()}
-        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
-      >
-        <h2 className="mb-4 text-lg font-bold">schedule</h2>
-
+    <div>
         {weekOpen && (
           <div className="mb-4 flex gap-1 rounded-xl bg-surface-2 p-1">
             {(
@@ -138,13 +128,6 @@ export function ScheduleSheet({
             back to the usual week
           </button>
         )}
-        <button
-          onClick={onClose}
-          className="mt-3 min-h-[52px] w-full rounded-2xl bg-accent text-lg font-bold text-on-accent"
-        >
-          done
-        </button>
-      </div>
     </div>
   )
 }

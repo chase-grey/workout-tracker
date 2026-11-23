@@ -13,6 +13,7 @@ import {
 import { parseISODate, toISODate, weekStartISO } from '../../lib/dates'
 import { useBackGuard } from '../../lib/useBackGuard'
 import { usePressAction } from '../../lib/usePressAction'
+import { useLongPress } from '../../lib/useLongPress'
 import type { CardioPin } from '../../lib/homeTiles'
 import type { PlannedCardio } from '../../lib/cardioPlan'
 import { useData } from '../../store/DataContext'
@@ -39,7 +40,7 @@ function optional(text: string): { value?: number; valid: boolean } {
  * minutes, since the tap that logs it asks nothing. A kind measured in time
  * alone (soccer, tennis) never shows a distance field.
  *
- * The quick picks are the person's own (Settings.cardioKinds): the edit chip
+ * The quick picks are the person's own (Settings.cardioKinds): holding them
  * turns each into a removal and opens a field for a new one.
  *
  * With a cardio plan, today's planned session (see lib/cardioPlan) heads the
@@ -77,6 +78,7 @@ export function CardioLogSheet({
   const opening = pinning ? 'soccer' : 'run'
   const [kind, setKind] = useState<CardioKind>(plan ? plan.kind : kinds.includes(opening) ? opening : kinds[0] ?? '')
   const [editing, setEditing] = useState(false)
+  const holdKinds = useLongPress(() => setEditing(true), editing)
   const [newKind, setNewKind] = useState('')
   const [minutes, setMinutes] = useState(plan?.minutes != null ? String(plan.minutes) : '')
   const [distance, setDistance] = useState(plan?.distanceMi != null ? String(plan.distanceMi) : '')
@@ -147,7 +149,7 @@ export function CardioLogSheet({
           )}
         </div>
         {plan && <p className="-mt-2 mb-3 text-sm text-accent-2">today: {plan.label}</p>}
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap gap-2" {...holdKinds}>
           {kindChips(kinds, kind).map((k) =>
             editing ? (
               <button
@@ -169,16 +171,17 @@ export function CardioLogSheet({
               </button>
             ),
           )}
-          <button
-            onClick={() => {
-              setEditing((v) => !v)
-              setNewKind('')
-            }}
-            aria-pressed={editing}
-            className={`${chipClass} ${editing ? 'bg-accent text-on-accent' : 'text-neutral-500'}`}
-          >
-            {editing ? 'done' : 'edit'}
-          </button>
+          {editing && (
+            <button
+              onClick={() => {
+                setEditing(false)
+                setNewKind('')
+              }}
+              className={`${chipClass} bg-accent text-on-accent`}
+            >
+              done
+            </button>
+          )}
         </div>
         {editing && (
           <div className="mb-4 flex gap-2">

@@ -20,6 +20,9 @@ import { toFastMode, type FastMode } from '../lib/fastMode'
 import type { SkippedExercises } from '../lib/skipped'
 import type { Profile } from '../lib/profile'
 import type { CardioPin, HomeLayout } from '../lib/homeTiles'
+import type { CardLayout } from '../lib/cardLayout'
+import type { Macro } from '../lib/calories'
+import type { MetricKey } from '../lib/weekPace'
 import type { CardioEntry } from '../lib/cardio'
 import type { CalendarPins, WeekCalendarView, WeekPins } from '../lib/weekCalendar'
 import type { CardioPlan } from '../lib/cardioPlan'
@@ -260,6 +263,19 @@ export type Settings = {
    * (see lib/homeTiles). Unset is the default grouping.
    */
   homeLayout?: HomeLayout
+  /**
+   * The cards on Today and on Progress, as they've been dragged, taken off and
+   * put on (see lib/cardLayout and components/EditableStack). Unset is the
+   * default page.
+   */
+  todayLayout?: CardLayout
+  progressLayout?: CardLayout
+  /** The order the week's goals are listed in on the this-week card. Unset is the shipped order. */
+  weekGoalOrder?: MetricKey[]
+  /** The calorie buttons' amounts, signed (see lib/quickAdds). Unset is +100, +500, −100. */
+  calorieAdds?: number[]
+  /** The same for each macro's row of buttons, in grams. */
+  macroAdds?: Partial<Record<Macro, number[]>>
   /**
    * Whether the icon-only controls wear their starter word (see
    * lib/controlLabels). Unset follows whose device it is: bare for the owner,

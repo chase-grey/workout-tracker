@@ -15,7 +15,9 @@ import { parseISODate } from '../../lib/dates'
 import { caloriePR } from '../../lib/calories'
 import { goalsHitInWeek } from '../../lib/goals'
 import { goalsFor } from '../../lib/profileGoals'
-import { weekPace, type MetricKey, type MetricPace } from '../../lib/weekPace'
+import { weekPace, type MetricPace } from '../../lib/weekPace'
+import { orderBy } from '../../lib/cardLayout'
+import { METRIC_LABELS } from './WeekGoalOrder'
 import { overallProgress } from '../../lib/celebration'
 import { StreakHistoryPanel } from './StreakHistoryPanel'
 import { Tick } from '../../components/Tick'
@@ -63,13 +65,6 @@ function MetricBar({ label, m }: { label: string; m: Pick<MetricPace, 'done' | '
       </div>
     </div>
   )
-}
-
-const METRIC_LABELS: Record<MetricKey, string> = {
-  workouts: 'workouts',
-  flex: 'stretch sessions',
-  calDays: 'days on calorie target',
-  cardio: 'cardio days',
 }
 
 /** Weeks of weight history listed before the rest fold behind a ⋯. */
@@ -126,6 +121,8 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
     }
   }, [])
   const pace = weekPace(wp, goals, now)
+  // Listed in the order they were dragged into (see WeekGoalOrder); the bar above averages them all the same.
+  const metrics = orderBy(pace.metrics, (m) => m.key, settings.weekGoalOrder)
 
   return (
     <div className="rounded-2xl bg-surface p-3">
@@ -175,7 +172,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
-        {pace.metrics.map((m) => (
+        {metrics.map((m) => (
           <MetricBar key={m.key} label={METRIC_LABELS[m.key]} m={m} />
         ))}
       </div>
