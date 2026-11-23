@@ -22,13 +22,12 @@ import type { MassTrend } from './massSplit'
  * fat of the slow one for a small, non-significant edge in lean mass.
  *
  * Both are read off the chart (see massSplit.massTrend), over the whole span
- * from the first week with a body-fat reading, on the trends, to the latest
- * weigh-in and reading as logged, which is where the chart ends: pace is the
- * pounds a week between the two, and share is the lean's part of them. So the
- * grade is the same bulk as the figures in the chart's header, and moves with
- * a weigh-in the way they do. A couple of weeks is too short to grade — a pound of water either
- * way swamps the signal — so under {@link MIN_GRADE_DAYS} there is no reading
- * yet.
+ * from the first week with a body-fat reading to the newest, each taken as
+ * its own average: pace is the pounds a week between the two, and share is
+ * the lean's part of them. So the grade is the same bulk as the figures in
+ * the chart's header, and moves with a weigh-in the way they do. A couple of
+ * weeks is too short to grade — a pound of water either way swamps the
+ * signal — so under {@link MIN_GRADE_DAYS} there is no reading yet.
  *
  * There is deliberately no one-word verdict rolled up from the two. An earlier
  * cut printed one — "leaning dirty" over a track lit at "clean" whenever the

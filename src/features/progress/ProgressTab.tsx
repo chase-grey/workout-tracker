@@ -249,8 +249,8 @@ export function ProgressTab() {
   const bodyFatPoints = useMemo(() => bodyFatSeries(measurements), [measurements])
   const latestBf = bodyFatPoints.at(-1)?.value ?? null
   // The weight put on since body fat was first read, split into muscle and fat
-  // by trends through the weigh-ins and the readings since — see massTrend.
-  // Null until there are two weeks and three of each to fit a line through.
+  // a week at a time, each week its own average — see massTrend. Null until
+  // there are two weeks, and three weigh-ins and readings for its give-or-takes.
   const massSeries = useMemo(
     () => massTrend(bodyWeightPoints(bodyWeights), bodyFatPoints),
     [bodyWeights, bodyFatPoints],
