@@ -14,6 +14,7 @@ import { holdChallenge } from '../../lib/holdChallenge'
 import { isChallenge } from '../../lib/challenge'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { PauseOverlay } from '../../components/PauseOverlay'
+import { ConfirmSheet } from '../../components/ConfirmSheet'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { startsNewExercise } from '../../lib/fastMode'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
@@ -373,6 +374,8 @@ export function StretchSession({
   // and not when the session is already running itself forward.
   const [preparing, setPreparing] = useState(rest == null && !fast && started)
   const [showList, setShowList] = useState(false)
+  // The question the menu is waiting on an answer to, as in ActiveSession.
+  const [asking, setAsking] = useState<'finish' | 'exit' | null>(null)
   // A one-off, longer get-into-position count that replaces the upcoming set's
   // own — set when a photo screen hands the routine straight to a stretch, and
   // when a side switch replaces the settle-in with a reposition.
@@ -521,6 +524,7 @@ export function StretchSession({
   // it is open. Close the sheet and keep the routine underneath active; the
   // session-level guard in App can handle a later press.
   useBackGuard(showList, () => setShowList(false))
+  useBackGuard(asking != null, () => setAsking(null))
 
   // Back into the rest the last tap cut short, with the seconds it had left (see
   // lib/leftRest). The same interval, not a new one: the slice before the tap was
@@ -568,7 +572,7 @@ export function StretchSession({
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
   const readyToFinish = N > 0 && steps.every((step) => done.has(step.stepKey)) && photos == null
-  const routineLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList
+  const routineLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && asking == null
   const setLive = routineLive && !preparing
 
   // With nothing over the routine — the get-into-position count included, which
@@ -1116,8 +1120,8 @@ export function StretchSession({
       // Asks first while sets are left, as the lift workout's menu does: the
       // routine's own finish button only shows once there's nothing left to do.
       onClick: () => {
-        const ask = finishEarlyPrompt(completed, N)
-        if (!ask || confirm(ask)) finishWith(done)
+        if (finishEarlyPrompt(completed, N)) setAsking('finish')
+        else finishWith(done)
       },
     },
     {
@@ -1126,7 +1130,8 @@ export function StretchSession({
       // Nothing done is nothing lost; anything done is asked about, the way the
       // lift workout asks before it's discarded.
       onClick: () => {
-        if (completed === 0 || confirm('exit without logging this routine?')) onClose()
+        if (completed === 0) onClose()
+        else setAsking('exit')
       },
     },
   ]
@@ -1385,6 +1390,30 @@ export function StretchSession({
             setReadyOverrideSec(ready > 0 ? ready : null)
             setPreparing(ready > 0)
             setShowList(false)
+          }}
+        />
+      )}
+
+      {asking === 'finish' && (
+        <ConfirmSheet
+          question={finishEarlyPrompt(completed, N) ?? 'finish and log?'}
+          action="finish and log"
+          onCancel={() => setAsking(null)}
+          onConfirm={() => {
+            setAsking(null)
+            finishWith(done)
+          }}
+        />
+      )}
+      {asking === 'exit' && (
+        <ConfirmSheet
+          question="exit without logging this routine?"
+          action="exit without logging"
+          danger
+          onCancel={() => setAsking(null)}
+          onConfirm={() => {
+            setAsking(null)
+            onClose()
           }}
         />
       )}

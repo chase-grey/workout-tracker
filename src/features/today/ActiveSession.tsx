@@ -91,6 +91,7 @@ import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from
 import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
+import { ConfirmSheet } from '../../components/ConfirmSheet'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { ControlWord } from '../../components/ControlWord'
@@ -178,6 +179,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // appears in the flow once the log it's counted from has updated (see addSet).
   const [pendingStepKey, setPendingStepKey] = useState<string | null>(null)
   const [showList, setShowList] = useState(false)
+  // The question the menu is waiting on an answer to (see ConfirmSheet). Which
+  // question rather than what to do about it, so the answer acts on the workout
+  // as it stands when it's given, not as it stood when the menu was opened.
+  const [asking, setAsking] = useState<'finish' | 'discard' | null>(null)
   const [showAddExercise, setShowAddExercise] = useState(false)
   // The movement picked from the list, by key — '' is the blank name field.
   const [newExercisePick, setNewExercisePick] = useState('')
@@ -523,7 +528,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // left alone, nor under an open sheet: a sheet sits above the pause curtain, and
   // reading one isn't being away.
   useIdleTimeout(
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest,
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest && asking == null,
     IDLE_PAUSE_MS,
     () => {
       // Drop this set's active-time slice rather than carry it into the pause: it
@@ -541,6 +546,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   useBackGuard(showAddExercise, () => setShowAddExercise(false))
   useBackGuard(historyKey != null, () => setHistoryKey(null))
   useBackGuard(showCircuitRest, () => setShowCircuitRest(false))
+  useBackGuard(asking != null, () => setAsking(null))
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its clocks are wall-clock, so they'd otherwise keep advancing
@@ -638,7 +644,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }
 
   const readActiveSec = useStepElapsed(step.stepKey, !opening && !set?.done &&
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest)
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest && asking == null)
   const [estimateNow, setEstimateNow] = useState(Date.now)
   useEffect(() => {
     if (!rest) return
@@ -1154,7 +1160,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // both the turbo wait and a self-ending hold need to be true before they can
   // close a set on their own.
   const setScreenLive =
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest && asking == null
   // With nothing over the set, Android back steps the workout itself back: into
   // the rest the last tap cut short, picking up the seconds it had left. That one
   // step only — a rest that ran out, or that the flow has since moved past,
@@ -1368,16 +1374,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       // The last set's own button finishes a workout that's done; from here it can
       // be one set in, so it asks first, the way discarding does.
       onClick: () => {
-        const ask = finishEarlyPrompt(totals.done, totals.all)
-        if (!ask || confirm(ask)) finish()
+        if (finishEarlyPrompt(totals.done, totals.all)) setAsking('finish')
+        else finish()
       },
     },
     {
       label: 'discard workout',
       danger: true,
-      onClick: () => {
-        if (confirm('discard this in-progress workout?')) controls.clear()
-      },
+      onClick: () => setAsking('discard'),
     },
   ]
 
@@ -2155,6 +2159,30 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             </div>
           </form>
         </div>
+      )}
+
+      {asking === 'finish' && (
+        <ConfirmSheet
+          question={finishEarlyPrompt(totals.done, totals.all) ?? 'finish and log?'}
+          action="finish and log"
+          onCancel={() => setAsking(null)}
+          onConfirm={() => {
+            setAsking(null)
+            finish()
+          }}
+        />
+      )}
+      {asking === 'discard' && (
+        <ConfirmSheet
+          question="discard this in-progress workout?"
+          action="discard workout"
+          danger
+          onCancel={() => setAsking(null)}
+          onConfirm={() => {
+            setAsking(null)
+            controls.clear()
+          }}
+        />
       )}
     </div>
   )
