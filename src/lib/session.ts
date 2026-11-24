@@ -1,7 +1,7 @@
 import type { DayType, WorkoutRow, WorkoutSession } from '../types'
 import { DEAD_BUG_KEY, MAT_SITUP_KEY } from '../config/plan'
 import { noteSegments } from './discomfort'
-import { isMaxAttempt } from './maxAttempt'
+import { GOAL_SET_NOTE, isMaxAttempt } from './maxAttempt'
 import { isAdHocKey } from './adHocExercise'
 
 /**
@@ -41,13 +41,49 @@ export function isSupplementalSet(row: { exercise: string; notes?: string }): bo
   return noteSegments(row.notes).some((s) => s.toLowerCase() === CORE_SESSION_NOTE)
 }
 
+/**
+ * The note written on the rows of a session opened from a goal (see
+ * lib/soloSession): one movement, done to settle the goal it was tapped from.
+ *
+ * It's logged on the workout screen and its sets are real sets — they chart, they
+ * set PRs, the next session is prescribed off them. What they aren't is a workout:
+ * clearing ten pull-ups and walking away banks no day against the week's goal.
+ * The session is flat rows by the time anything counts it, so the rows have to
+ * say where they came from, the way the core block's do.
+ */
+export const GOAL_SESSION_NOTE = 'goal session'
+
+/**
+ * The days a goal-opened session was saved without {@link GOAL_SESSION_NOTE}: it
+ * shipped on the first of these and the note followed the day after. A session
+ * of a single movement on either day is read as one, since nothing on its rows
+ * says so and those are the only sessions the note is missing from.
+ */
+const UNMARKED_GOAL_SESSION_DATES = new Set(['2026-11-23', '2026-11-24'])
+
+/**
+ * Whether a logged set was done for a goal rather than as part of a workout: a
+ * set of a goal-opened session, or the lone set the goal prompt logs for a lift
+ * that can't be loaded to a single (see maxAttempt.GOAL_SET_NOTE).
+ */
+export function isGoalSet(row: { notes?: string }): boolean {
+  return noteSegments(row.notes).some((s) => {
+    const note = s.toLowerCase()
+    return note === GOAL_SESSION_NOTE || note === GOAL_SET_NOTE
+  })
+}
+
 export type TrainingSession = { sessionId: string; date: string; dayType: DayType }
 
 /**
  * One entry per distinct workout session that counts as training — i.e. sessions
- * with at least one set that was neither supplemental nor a lone max attempt —
- * keeping each session's first-seen date and day type. Rows without a session_id
- * are ignored.
+ * with at least one set that was neither supplemental, nor a lone max attempt,
+ * nor done for a goal — keeping each session's first-seen date and day type. Rows
+ * without a session_id are ignored.
+ *
+ * A session opened from a goal is the goal's and not the week's (see
+ * {@link GOAL_SESSION_NOTE}). A movement added to one from the menu is saved
+ * without the note, and carries the session the way any real set would.
  *
  * A max attempt logged on its own is one rep (see maxAttempt): worth logging, and
  * not a workout. Walking in to take a single and walking out shouldn't bank a day
@@ -55,17 +91,31 @@ export type TrainingSession = { sessionId: string; date: string; dayType: DayTyp
  * real session is carried by that session's other sets, which is right.
  */
 export function trainingSessions(rows: WorkoutRow[]): TrainingSession[] {
-  const meta = new Map<string, { date: string; dayType: DayType; real: boolean }>()
+  const meta = new Map<
+    string,
+    { date: string; dayType: DayType; real: boolean; movements: Set<string> }
+  >()
   for (const r of rows) {
     if (!r.session_id) continue
-    const isReal = !isSupplementalSet(r) && !isMaxAttempt(r)
+    const isReal = !isSupplementalSet(r) && !isMaxAttempt(r) && !isGoalSet(r)
     const prev = meta.get(r.session_id)
-    if (!prev) meta.set(r.session_id, { date: r.date, dayType: r.day_type, real: isReal })
-    else if (isReal) prev.real = true
+    if (!prev) {
+      meta.set(r.session_id, {
+        date: r.date,
+        dayType: r.day_type,
+        real: isReal,
+        movements: new Set([r.exercise]),
+      })
+    } else {
+      if (isReal) prev.real = true
+      prev.movements.add(r.exercise)
+    }
   }
   const out: TrainingSession[] = []
   for (const [sessionId, v] of meta) {
-    if (v.real) out.push({ sessionId, date: v.date, dayType: v.dayType })
+    if (!v.real) continue
+    if (UNMARKED_GOAL_SESSION_DATES.has(v.date) && v.movements.size === 1) continue
+    out.push({ sessionId, date: v.date, dayType: v.dayType })
   }
   return out
 }
@@ -91,8 +141,13 @@ export function sessionToRows(s: WorkoutSession): WorkoutRow[] {
   const adHocNames = new Map(
     (s.adHocExercises ?? []).filter((e) => isAdHocKey(e.key)).map((e) => [e.key, e.name]),
   )
+  // A session opened from a goal that stayed the one movement it was opened on
+  // (see GOAL_SESSION_NOTE). One that had a movement added to it has become a
+  // workout, and is filed as one.
+  const forGoal = s.solo === true && new Set(s.exercises.map((ex) => ex.exercise)).size <= 1
   for (const ex of s.exercises) {
     for (const set of ex.sets) {
+      const notes = set.notes ?? ex.notes ?? ''
       rows.push({
         session_id: s.sessionId,
         date: s.date,
@@ -101,7 +156,7 @@ export function sessionToRows(s: WorkoutSession): WorkoutRow[] {
         set_number: set.setNumber,
         weight_lbs: set.weightLbs,
         reps: set.reps,
-        notes: set.notes ?? ex.notes ?? '',
+        notes: forGoal ? [...noteSegments(notes), GOAL_SESSION_NOTE].join('; ') : notes,
         is_historical: s.isHistorical,
         // Pinned onto every row, not just the day: which press led decides what
         // the next target for this lift is read from (see lastPerformance).

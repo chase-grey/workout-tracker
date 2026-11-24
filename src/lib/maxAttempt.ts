@@ -28,8 +28,9 @@ export const MAX_ATTEMPT_NOTE = '1rm attempt'
  * Note on the set the goal prompt logs for a lift that can't be loaded to a
  * single: the heaviest load there is, for the reps that settle the goal (see
  * goals.attemptReps). It's a set of many reps at a working weight, so unlike a
- * single it IS a working set — nothing here needs to tell the rest of the app
- * otherwise, and the note is only so the sheet says why it stands alone.
+ * single it IS a working set, and the next session is prescribed off it like any
+ * other. It still isn't a workout: the note is how the week's count knows to
+ * leave a set logged for a goal out (see session.isGoalSet).
  */
 export const GOAL_SET_NOTE = 'goal set'
 

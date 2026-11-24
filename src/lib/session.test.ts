@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type { WorkoutRow } from '../types'
 import {
   CORE_SESSION_NOTE,
+  GOAL_SESSION_NOTE,
   hasLoggedSets,
   isSupplementalSet,
   sessionToRows,
   trainingDates,
   trainingSessions,
 } from './session'
-import { discomfortReports, withDiscomfort } from './discomfort'
+import { discomfortReports, parseDiscomfort, withDiscomfort } from './discomfort'
 import { MAT_SITUP_KEY } from '../config/plan'
 
 function row(p: Partial<WorkoutRow> = {}): WorkoutRow {
@@ -238,5 +239,83 @@ describe('a max attempt is not a workout on its own', () => {
   it('still counts a bodyweight set logged as one rep — there is no weight to max', () => {
     const rows = [row({ session_id: 'pull', exercise: 'weighted_pullups', weight_lbs: null, reps: 1 })]
     expect(trainingSessions(rows)).toHaveLength(1)
+  })
+})
+
+describe('a session opened from a goal is not a workout', () => {
+  const solo = {
+    sessionId: 'goal',
+    date: '2026-12-01',
+    dayType: 'pull' as const,
+    isHistorical: false,
+    solo: true,
+    exercises: [
+      { exercise: 'weighted_pullups', sets: [{ setNumber: 1, weightLbs: null, reps: 10 }] },
+    ],
+  }
+
+  it('says so on its rows, and banks no day', () => {
+    const rows = sessionToRows(solo)
+    expect(rows[0].notes).toBe(GOAL_SESSION_NOTE)
+    expect(trainingSessions(rows)).toEqual([])
+    expect(trainingDates(rows)).toEqual([])
+  })
+
+  it('keeps a discomfort flag beside the note', () => {
+    const flagged = withDiscomfort('', ['elbow'])
+    const rows = sessionToRows({
+      ...solo,
+      exercises: [{ ...solo.exercises[0], notes: flagged }],
+    })
+    expect(rows[0].notes).toBe(flagged + '; ' + GOAL_SESSION_NOTE)
+    expect(parseDiscomfort(rows[0].notes)).toEqual(['elbow'])
+    expect(trainingSessions(rows)).toEqual([])
+  })
+
+  it('counts once a second movement was added to it', () => {
+    const rows = sessionToRows({
+      ...solo,
+      exercises: [
+        ...solo.exercises,
+        { exercise: 'barbell_row', sets: [{ setNumber: 1, weightLbs: 95, reps: 8 }] },
+      ],
+    })
+    expect(rows.every((r) => r.notes === '')).toBe(true)
+    expect(trainingSessions(rows)).toHaveLength(1)
+  })
+
+  it('leaves an ordinary session of one movement alone', () => {
+    const rows = sessionToRows({ ...solo, solo: undefined })
+    expect(rows[0].notes).toBe('')
+    expect(trainingSessions(rows)).toHaveLength(1)
+  })
+
+  it('leaves out the lone set the goal prompt logs at a capped weight', () => {
+    const rows = [
+      row({ session_id: 'cap', date: '2026-12-01', weight_lbs: 100, reps: 12, notes: 'goal set' }),
+    ]
+    expect(trainingSessions(rows)).toEqual([])
+  })
+
+  it('reads the one-movement sessions saved before the note existed as goal sessions', () => {
+    const before = [
+      row({
+        session_id: 'a',
+        date: '2026-11-24',
+        day_type: 'pull',
+        exercise: 'weighted_pullups',
+        weight_lbs: null,
+        reps: 10,
+      }),
+    ]
+    expect(trainingSessions(before)).toEqual([])
+    const whole = [
+      ...before,
+      row({ session_id: 'b', date: '2026-11-24', exercise: 'flat_bench' }),
+      row({ session_id: 'b', date: '2026-11-24', exercise: 'incline_bench' }),
+    ]
+    expect(trainingSessions(whole).map((s) => s.sessionId)).toEqual(['b'])
+    const later = [row({ session_id: 'c', date: '2026-11-25', exercise: 'weighted_pullups' })]
+    expect(trainingSessions(later)).toHaveLength(1)
   })
 })
