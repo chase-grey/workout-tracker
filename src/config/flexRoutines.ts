@@ -1,5 +1,5 @@
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from './flexPlan'
-import { HIP_THRUST } from './plan'
+import { HIP_THRUST, RKC_PLANK } from './plan'
 import type { PhotoKind } from '../lib/photoSteps'
 
 /**
@@ -47,6 +47,12 @@ export type FlexRoutine = {
    * the day's is done.
    */
   weeklyDays?: number
+  /**
+   * The first day those days were owed. The week's stretch goal is held to them
+   * from the week this falls in (see weeklyStreak.weeklyGoalsFor), and no week
+   * before it is re-scored.
+   */
+  weeklyDaysFrom?: string
 }
 
 /**
@@ -394,9 +400,10 @@ const SHOULDER_BLOCKS: FlexBlock[] = [
  * stretches go last, warm. Both stretches are held with the same tuck — without
  * it a lunge stretch arches the low back instead of opening the hip.
  *
- * The plank is prescribed as a max hold. An RKC plank is everything clenched at
- * once, which is spent in well under a minute, and a stretch hold here ends on
- * its clock (see HoldTimer.onTargetEnd), so it gets a number: thirty seconds.
+ * The plank is prescribed as a max hold, and it is one (`openHold`): the clock
+ * counts up until a tap ends it, the time is logged, and the time to beat is a
+ * little past the last one (see lib/holdChallenge). Thirty seconds is only where
+ * the first one starts from.
  *
  * The thrust is the one set that's typed in rather than paced (`load`): ten or
  * more reps, with whatever weight is to hand or none.
@@ -444,14 +451,15 @@ const PELVIC_TILT_BLOCKS: FlexBlock[] = [
     label: 'abs',
     exercises: [
       {
-        key: 'rkc_plank',
-        name: 'RKC plank',
-        sets: '2',
-        maxSets: 2,
+        key: RKC_PLANK.key,
+        name: RKC_PLANK.name,
+        sets: String(RKC_PLANK.sets),
+        maxSets: RKC_PLANK.sets,
         reps: 1,
         tempo: '',
-        holdSec: 30,
-        restSec: 45,
+        holdSec: RKC_PLANK.repMin,
+        openHold: true,
+        restSec: RKC_PLANK.restSec,
       },
     ],
   },
@@ -544,6 +552,7 @@ export const FLEX_ROUTINES: Record<FlexRoutineKey, FlexRoutine> = {
     coldShots: ['pelvic-tilt'],
     warmShots: [],
     weeklyDays: 6,
+    weeklyDaysFrom: '2026-11-23',
   },
 }
 

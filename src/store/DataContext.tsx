@@ -135,6 +135,8 @@ export type StretchFinishInput = {
   coreSets: CoreSet[]
   /** The exercise those sets were of, when it isn't the core block's sit-up. */
   coreExercise?: string
+  /** The open holds held, by exercise, each set's `reps` its seconds (see lib/holdChallenge). */
+  holds?: { exercise: string; sets: CoreSet[] }[]
   /** The wall clock, absent for a session whose start was never recorded. */
   duration?: SessionDurationInput
 }
@@ -1094,6 +1096,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         })
       }
       const prs = logCore(coreSets, CORE_SESSION_NOTE, input.coreExercise)
+      for (const hold of input.holds ?? []) logCore(hold.sets, CORE_SESSION_NOTE, hold.exercise)
       // Which routine was done is what the alternation reads off the log. The note
       // says whether the core block was part of it, since with it skipped "stretch
       // + core" would be a plain misstatement of what happened.

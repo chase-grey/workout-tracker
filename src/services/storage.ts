@@ -120,6 +120,8 @@ export type StretchState = {
    * than falling back to the prescribed weight the way a missing key does.
    */
   coreWeights?: Record<number, number | null>
+  /** Seconds each open hold ran before it was ended, by step key (see FlexExercise.openHold). */
+  heldSecs?: Record<string, number>
   /** Rep the current stretch set's rhythm guide had reached (1-based). */
   rep?: number
   /** Exercise keys omitted from this run of the routine. */

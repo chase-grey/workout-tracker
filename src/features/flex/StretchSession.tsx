@@ -1,7 +1,7 @@
 import { finishEarlyPrompt, loadWord } from '../../lib/sessionWords'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSessionFade } from '../../lib/useSessionFade'
-import { MdBlock, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
+import { MdBlock, MdBolt, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
@@ -9,6 +9,9 @@ import { ChecklistClock } from '../../components/ChecklistClock'
 import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
 import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
+import { ChallengeHold } from '../../components/ChallengeHold'
+import { holdChallenge } from '../../lib/holdChallenge'
+import { isChallenge } from '../../lib/challenge'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { RhythmGuide } from '../../components/RhythmGuide'
@@ -22,6 +25,7 @@ import {
   buildSessionSteps,
   buildCoreSteps,
   carriedWeight,
+  heldSets,
   loadedExerciseOf,
   flexRoundKey,
   skipsFinalRepRest,
@@ -331,6 +335,13 @@ export function StretchSession({
   const [coreWeights, setCoreWeights] = useState<Record<number, number | null>>(
     () => saved?.coreWeights ?? {},
   )
+  // What each open hold ran to before it was tapped off (see lib/holdChallenge),
+  // by step key. The ref is the copy the finish reads: the last one is written
+  // in the same breath the session may be logged in.
+  const [heldSecs, setHeldSecs] = useState<Record<string, number>>(() => saved?.heldSecs ?? {})
+  const heldSecsRef = useRef(heldSecs)
+  // The hold on screen, as its clock last read.
+  const openHoldSec = useRef(0)
   // Rep the current stretch set has reached, persisted so a refresh mid-set
   // resumes the count instead of restarting at rep 1.
   const [rep, setRep] = useState(saved?.rep ?? 1)
@@ -448,6 +459,11 @@ export function StretchSession({
     () => nextTarget(workouts, loaded.key, { repMin: loaded.repMin, repMax: loaded.repMax, increment: loaded.increment }),
     [workouts, loaded],
   )
+  // Whether that target asks for more than was done last time (see lib/challenge).
+  const coreChallenge = useMemo(
+    () => isChallenge(workouts, loaded.key, coreTarget, loaded.repMin),
+    [workouts, loaded, coreTarget],
+  )
   const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget.reps
   // The sit-ups keep a weight per set. A routine's own loaded exercise carries
   // the last one set forward: it's done with a plate or without, and the day
@@ -469,6 +485,7 @@ export function StretchSession({
       officeAbs,
       coreReps,
       coreWeights,
+      heldSecs,
       rep,
       skipped: [...skipped],
       skippedSteps: [...skippedSteps],
@@ -482,7 +499,7 @@ export function StretchSession({
       photoGates: [...seenGates],
       fast,
     })
-  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, rep, skipped, skippedSteps, rest, seenGates, fast])
+  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, heldSecs, rep, skipped, skippedSteps, rest, seenGates, fast])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -525,6 +542,14 @@ export function StretchSession({
   // sits above the empty-routine return and needs it.
   const onScreen = steps[safeCurrent]
   const holdSec = onScreen?.kind === 'flex' ? onScreen.holdSec : undefined
+  // A hold with nothing prescribed (see FlexExercise.openHold), and the time it
+  // is asked to beat: a little past the last one, off that movement's own rows.
+  const openHold = onScreen?.kind === 'flex' && !!onScreen.openHold
+  const openHoldKey = openHold ? onScreen.exKey : null
+  const holdTarget = useMemo(
+    () => holdChallenge(workouts, openHoldKey ?? '', holdSec ?? 30),
+    [workouts, openHoldKey, holdSec],
+  )
 
   // Nothing between you and the set: no rest, no get-into-position count, no photo
   // screen, no sheet, no pause curtain. The rhythm guide paces only while this
@@ -631,6 +656,7 @@ export function StretchSession({
       withCore: withCore && !skipped.has(STRETCH_CORE.key),
       coreSets,
       coreExercise: loaded.key,
+      holds: heldSets(steps, doneSet, heldSecsRef.current),
       duration: startedAt
         ? {
             totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,
@@ -657,6 +683,12 @@ export function StretchSession({
   // sessions. It is disabled while an overlay or completion screen owns input.
   const screenTap = useScreenTap((at) => {
     if (N === 0 || !setLive) return
+    // An open hold is over when you say so: the one tap, as a lift's hold takes,
+    // since the clock was only ever waiting on it.
+    if (openHold) {
+      completeSetAndAdvance()
+      return
+    }
     if (holdSec) {
       const now = Date.now()
       if (!isSecondTap(tapMark?.at ?? null, now)) {
@@ -958,6 +990,10 @@ export function StretchSession({
       const work = step.kind === 'flex' ? stepWorkSec(step) : coreRepsFor(step.round) * SEC_PER_REP
       timingSamples.current[step.stepKey] = { exercise: stretchTimingKey(step, work), totalActiveSec: seconds, sets: 1 }
     }
+    if (step.kind === 'flex' && step.openHold) {
+      heldSecsRef.current = { ...heldSecsRef.current, [step.stepKey]: Math.round(openHoldSec.current) }
+      setHeldSecs(heldSecsRef.current)
+    }
     const nextDone = new Set(done).add(step.stepKey)
     setDone(nextDone)
     // A photo moment holds the flow on its own screen first: the rest clock only
@@ -1148,7 +1184,19 @@ export function StretchSession({
       )}
 
       {step.kind === 'flex' ? (
-        holdSec ? (
+        openHold ? (
+          // Nothing prescribed: the clock counts up against the time to beat and
+          // waits on the tap that ends it.
+          <ChallengeHold
+            key={step.stepKey}
+            targetSec={holdTarget.targetSec}
+            lastSec={holdTarget.lastSec}
+            running={setLive}
+            onTick={(sec) => {
+              openHoldSec.current = sec
+            }}
+          />
+        ) : holdSec ? (
           <HoldTimer
             key={step.stepKey}
             targetSec={holdSec}
@@ -1194,10 +1242,19 @@ export function StretchSession({
         // end the set (TAP_SHIELD); the blank screen around it does. A hold or a
         // paced set has nothing to edit, so its whole screen stays the target.
         <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
-          <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
-            <MdTrackChanges aria-hidden />
-            {targetLabel(coreTarget)}
-          </p>
+          {/* What to go for, said the way the lift session says it: a target that
+              is a step up from last time is a challenge, and wears the bolt. */}
+          {coreChallenge ? (
+            <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
+              <MdBolt aria-hidden />
+              {targetLabel(coreTarget)}
+            </p>
+          ) : (
+            <p className="flex items-center justify-center gap-1 text-sm font-medium text-accent">
+              <MdTrackChanges aria-hidden />
+              {targetLabel(coreTarget)}
+            </p>
+          )}
           {/* The same weight-and-reps pair the guided workout logs a set with — the
               plate is part of what was done, and prescribing the next set needs it. */}
           <div className="flex items-end justify-center gap-3">
@@ -1271,7 +1328,7 @@ export function StretchSession({
           }}
         />
       )}
-      {tapMark && setLive && !!holdSec && (
+      {tapMark && setLive && !!holdSec && !openHold && (
         <span key={tapMark.at} aria-hidden className="hold-tap-mark" style={{ left: tapMark.x, top: tapMark.y }} />
       )}
       {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}

@@ -1,7 +1,9 @@
 /** Pure weekly-goal streak engine. */
 
 import { weekStartISO, toISODate, enumerateWeeks } from './dates'
-import { profileWeeklyGoals } from './profile'
+import { profileWeeklyGoals, type Profile } from './profile'
+import { dailyStretchDays } from './dailyRoutine'
+import { flexSkillsOf } from './flexSkills'
 import { activeCardioPlan, activeProfile } from './profileStore'
 import { plannedSessionCount } from './cardioPlan'
 
@@ -39,7 +41,20 @@ export const DEFAULT_WEEKLY_GOALS: WeeklyGoalConfig =
 export function weeklyGoalsFor(week: string): WeeklyGoalConfig {
   const profile = activeProfile()
   const goals = profile ? profileWeeklyGoals(profile, week) : shippedGoalsFor(week)
-  return withPlannedCardio(goals, week)
+  return withPlannedCardio(withDailyStretch(goals, week, profile), week)
+}
+
+/**
+ * A week a daily stretch routine is trained in is held to its days rather than
+ * to a smaller stretch goal (see lib/dailyRoutine): the pelvic tilt corrective
+ * is owed six days of seven, so the week asks for six. Only where flexibility
+ * was being tracked that week, and never downward — a goal already above it
+ * stands.
+ */
+function withDailyStretch(goals: WeeklyGoalConfig, week: string, profile: Profile | null): WeeklyGoalConfig {
+  if (goals.flex <= 0) return goals
+  const owed = dailyStretchDays(flexSkillsOf(profile), week)
+  return owed > goals.flex ? { ...goals, flex: owed } : goals
 }
 
 function shippedGoalsFor(week: string): WeeklyGoalConfig {

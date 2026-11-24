@@ -1,4 +1,4 @@
-import { buildFlexSteps, buildSessionSteps, carriedWeight, loadedExerciseOf, stepWorkSec } from '../lib/flexSteps'
+import { buildFlexSteps, buildSessionSteps, carriedWeight, heldSets, loadedExerciseOf, stepWorkSec } from '../lib/flexSteps'
 import { settleInSec } from '../lib/settleIn'
 import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, flexRoutineOf } from './flexRoutines'
@@ -98,6 +98,19 @@ describe('a loaded exercise in a routine', () => {
   it('names the exercise the session logs its sets under', () => {
     expect(loadedExerciseOf(steps)).toMatchObject({ key: 'hip_thrust', repMin: 10, repMax: 20 })
     expect(loadedExerciseOf(buildSessionSteps(FLEX_ROUTINES.head_to_toe.blocks, { core: false }))).toBeNull()
+  })
+
+  it('runs the plank as an open hold, and logs what each one ran to', () => {
+    const planks = steps.filter((s) => s.exKey === 'rkc_plank')
+    expect(planks.map((s) => s.kind === 'flex' && s.openHold)).toEqual([true, true])
+    const [a, b] = planks.map((s) => s.stepKey)
+    expect(heldSets(steps, new Set([a, b]), { [a]: 34, [b]: 29 })).toEqual([
+      { exercise: 'rkc_plank', sets: [{ reps: 34, weightLbs: null }, { reps: 29, weightLbs: null }] },
+    ])
+    // One not finished, or with no time on its clock, isn't logged.
+    expect(heldSets(steps, new Set([a]), { [a]: 34, [b]: 29 })[0].sets).toHaveLength(1)
+    expect(heldSets(steps, new Set([a, b]), { [a]: 0 })).toEqual([])
+    expect(steps.filter((s) => s.kind === 'flex' && s.openHold && s.exKey !== 'rkc_plank')).toEqual([])
   })
 
   it('is left out of the stretch-only steps', () => {

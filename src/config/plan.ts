@@ -429,6 +429,25 @@ export const HIP_THRUST: PlannedExercise = {
 }
 
 /**
+ * The RKC plank the pelvic tilt routine holds (see config/flexRoutines): held as
+ * long as it can be, twice, and logged at what the clock read. Like the hip
+ * thrust beside it, no training day prescribes it; it's here for a name to chart
+ * under and so its rows read as seconds rather than reps.
+ */
+export const RKC_PLANK: PlannedExercise = {
+  key: 'rkc_plank',
+  name: 'RKC plank',
+  sets: 2,
+  repMin: 30,
+  repMax: 30,
+  restSec: 45,
+  timed: true,
+  bodyweight: true,
+  repsOnly: true,
+  group: 'core',
+}
+
+/**
  * The dead bug, retired: it held the Stretch + Core session's core slot until the
  * weighted sit-up took it over. A key rather than an exercise now — nothing new is
  * logged to it, but the sets it did log still need a name, still belong in the
@@ -1129,6 +1148,7 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     DB_OVERHEAD_PRESS,
     INCLINE_DUMBBELL_CURL,
     HIP_THRUST,
+    RKC_PLANK,
     STRETCH_CORE,
   ]) {
     if (seen.has(e.key)) continue

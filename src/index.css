@@ -297,6 +297,24 @@ html {
   padding: 0;
   overflow: hidden;
 }
+/* The open hold's dial (components/ChallengeHold): as large as the stage lets a
+   circle be, and once the target is passed the ring breathes rather than
+   sitting still under the laps drawn outside it. */
+.challenge-dial {
+  width: min(96cqw, 100cqh);
+  height: min(96cqw, 100cqh);
+  overflow: visible;
+}
+.challenge-dial-hit {
+  animation: challenge-breathe 1.8s ease-in-out infinite;
+}
+@keyframes challenge-breathe {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 0 currentColor); }
+  50% { opacity: 0.8; filter: drop-shadow(0 0 5px currentColor); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .challenge-dial-hit { animation: none; }
+}
 .stretch-session .countdown-shape {
   width: min(calc(100cqw * var(--hold-grow, 1)), 100cqh);
   flex-shrink: 0;

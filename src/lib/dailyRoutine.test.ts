@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { FlexRoutineKey } from '../config/flexRoutines'
 import type { FlexEntry } from './flex'
-import { dailyStanding, nextStretchUp, plannedStretchRotation, routineDaysThisWeek } from './dailyRoutine'
+import { dailyStanding, dailyStretchDays, nextStretchUp, plannedStretchRotation, routineDaysThisWeek } from './dailyRoutine'
+import type { Profile } from './profile'
+import { setActiveProfile } from './profileStore'
+import { weeklyGoalsFor } from './weeklyStreak'
 
 const entry = (date: string, routines: FlexRoutineKey[], note = 'stretch'): FlexEntry => ({
   date,
@@ -84,5 +87,47 @@ describe('plannedStretchRotation', () => {
       'head_to_toe',
       'side_split',
     ])
+  })
+})
+
+describe('the week a daily routine is owed in', () => {
+  it('is held to its days from the week it began, and not before', () => {
+    expect(dailyStretchDays(OWNER, MON)).toBe(6)
+    expect(dailyStretchDays(OWNER, '2026-11-16')).toBe(0)
+    expect(dailyStretchDays(['side_split', 'head_to_toe'], MON)).toBe(0)
+  })
+
+  it('raises the stretch goal to them, for the owner with or without a saved profile', () => {
+    const profile: Profile = {
+      name: '',
+      owner: true,
+      pillars: ['strength', 'flexibility', 'diet'],
+      weeklyGoals: [{ from: '0000-01-01', goals: { workouts: 2, flex: 2, calDays: 6 } }],
+      calorieGoals: [],
+      createdAt: '2026-01-05T00:00:00Z',
+    }
+    try {
+      setActiveProfile(profile)
+      expect(weeklyGoalsFor(MON).flex).toBe(6)
+      expect(weeklyGoalsFor('2026-11-16').flex).toBe(2)
+      // Untouched beside it.
+      expect(weeklyGoalsFor(MON)).toMatchObject({ workouts: 2, calDays: 6 })
+
+      // Someone who trains only skills that take turns keeps their own number,
+      setActiveProfile({ ...profile, owner: false, flexSkills: ['side_split'] })
+      expect(weeklyGoalsFor(MON).flex).toBe(2)
+      // a goal already above it stands,
+      setActiveProfile({ ...profile, weeklyGoals: [{ from: '0000-01-01', goals: { workouts: 2, flex: 7, calDays: 6 } }] })
+      expect(weeklyGoalsFor(MON).flex).toBe(7)
+      // and flexibility switched off stays off.
+      setActiveProfile({ ...profile, weeklyGoals: [{ from: '0000-01-01', goals: { workouts: 2, flex: 0, calDays: 6 } }] })
+      expect(weeklyGoalsFor(MON).flex).toBe(0)
+
+      setActiveProfile(undefined)
+      expect(weeklyGoalsFor(MON).flex).toBe(6)
+      expect(weeklyGoalsFor('2026-11-16').flex).toBe(2)
+    } finally {
+      setActiveProfile(undefined)
+    }
   })
 })

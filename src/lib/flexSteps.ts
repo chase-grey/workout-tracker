@@ -27,6 +27,8 @@ export type FlexSetStep = {
   setLabel?: string
   /** A timed hold: `tempo` and `reps` are unused, and the step renders HoldTimer. */
   holdSec?: number
+  /** A hold with nothing prescribed, ended by a tap and logged (see FlexExercise.openHold). */
+  openHold?: boolean
   /**
    * Seconds to reposition before the *other* side of this round, set only on the
    * step a side switch follows. A reposition rather than a rest — so it must not
@@ -91,6 +93,29 @@ export function carriedWeight(
  * weight they were done with, null for a set taken unloaded.
  */
 export type CoreSet = { reps: number; weightLbs: number | null }
+
+/**
+ * The open holds a session finished, as the sets to log: one entry per
+ * exercise, in the order they were done, each set's `reps` the seconds its
+ * clock read when it was tapped off. A hold with no time on record — skipped
+ * through, or never started — is left out rather than logged as nothing.
+ */
+export function heldSets(
+  steps: SessionStep[],
+  done: Set<string>,
+  heldSecs: Record<string, number>,
+): { exercise: string; sets: CoreSet[] }[] {
+  const out: { exercise: string; sets: CoreSet[] }[] = []
+  for (const s of steps) {
+    if (s.kind !== 'flex' || !s.openHold || !done.has(s.stepKey)) continue
+    const sec = heldSecs[s.stepKey] ?? 0
+    if (sec <= 0) continue
+    let entry = out.find((e) => e.exercise === s.exKey)
+    if (!entry) out.push((entry = { exercise: s.exKey, sets: [] }))
+    entry.sets.push({ reps: sec, weightLbs: null })
+  }
+  return out
+}
 
 /** A step in the Stretch + Core session: a mobility set or a core set. */
 export type SessionStep = FlexSetStep | CoreSetStep
@@ -187,6 +212,7 @@ export function buildRoutineSteps(plan: FlexBlock[], startSide: Side = 'left'): 
         round: r,
         maxSets: ex.maxSets,
         ...(ex.holdSec ? { holdSec: ex.holdSec } : {}),
+        ...(ex.openHold ? { openHold: true } : {}),
         ...(ex.setLabels?.[r] ? { setLabel: ex.setLabels[r] } : {}),
       }
       if (!ex.perSide) {

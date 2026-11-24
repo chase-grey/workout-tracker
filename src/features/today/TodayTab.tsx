@@ -17,7 +17,7 @@ import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
 import { hasPillar, ownerFlavour, readsBodyFat, weighsIn } from '../../lib/profile'
-import { dailyStanding, nextStretchUp } from '../../lib/dailyRoutine'
+import { nextStretchUp } from '../../lib/dailyRoutine'
 import { cardioSummary } from '../../lib/cardio'
 import { HomeTiles } from './HomeTiles'
 import { CardioLogSheet } from './CardioLogSheet'
@@ -179,11 +179,6 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
   const tileDetail = (t: HomeTile) => {
     if (t.type === 'pin') return cardioSummary({ minutes: t.pin.minutes, distanceMi: t.pin.distanceMi })
     if (t.type === 'cardio' && todaysCardio) return `today: ${todaysCardio.label}`
-    if (t.type === 'stretch') {
-      // A routine owed by the day says where its week stands.
-      const week = dailyStanding(flexEntries, t.routine, todayISO)
-      if (week) return `${week.done}/${week.goal} this week`
-    }
     return undefined
   }
   const tileNext = (t: HomeTile) =>

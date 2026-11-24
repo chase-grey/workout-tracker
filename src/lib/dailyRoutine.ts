@@ -12,13 +12,31 @@
  */
 
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../config/flexRoutines'
-import { weekStartISO } from './dates'
+import { addDaysISO, weekStartISO } from './dates'
 import type { FlexEntry } from './flex'
 import { stretchRotationFor } from './flexSkills'
 import { completedRoutinesOf, lastStretchRoutine } from './stretchRotation'
 
 /** Whether a routine is owed by the day rather than trained in turn. */
 export const isDailyRoutine = (routine: FlexRoutineKey): boolean => FLEX_ROUTINES[routine].weeklyDays != null
+
+/**
+ * The stretch days the week starting `week` is owed by the daily routines among
+ * `skills`: the most any of them asks for, and 0 where none does or the week is
+ * from before it did. This is what the week's stretch goal is held to (see
+ * weeklyStreak.weeklyGoalsFor) — any stretch day counts toward it, as it always
+ * has, and six of them is what doing the routine six days comes to.
+ */
+export function dailyStretchDays(skills: FlexRoutineKey[], week: string): number {
+  let days = 0
+  for (const key of skills) {
+    const { weeklyDays, weeklyDaysFrom } = FLEX_ROUTINES[key]
+    if (weeklyDays == null) continue
+    if (weeklyDaysFrom && addDaysISO(week, 6) < weeklyDaysFrom) continue
+    days = Math.max(days, weeklyDays)
+  }
+  return days
+}
 
 /** The dates in `today`'s week, up to today, on which `routine` was finished. Oldest first. */
 export function routineDaysThisWeek(entries: FlexEntry[], routine: FlexRoutineKey, today: string): string[] {

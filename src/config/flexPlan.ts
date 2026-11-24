@@ -39,6 +39,13 @@ export type FlexExercise = {
    * stretch: knee straight / knee bent). Indexed by round.
    */
   setLabels?: string[]
+  /**
+   * A hold with nothing prescribed: the clock counts up, a tap ends it, and what
+   * it read is logged as a workout row under `key`, seconds for reps (see
+   * lib/holdChallenge). `holdSec` is then only where the first one starts from
+   * and what the time-left estimate assumes. The RKC plank.
+   */
+  openHold?: boolean
   /** Seconds to switch legs between the two sides of a round. Default 5. */
   sideSwitchSec?: number
   /** The rest lands after both sides of a round, not after each side. */
