@@ -6,7 +6,7 @@ const ALL: RhythmVariant[] = [
   'orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo',
   'reach', 'fold', 'dive', 'drip', 'stairs', 'press',
   'anvil', 'chevrons', 'gauge', 'wave',
-  'beads', 'thread', 'wake', 'grass', 'slats', 'tiles', 'capsule', 'kite', 'helix', 'fill', 'scan',
+  'beads', 'wake', 'capsule', 'helix', 'fill', 'scan',
 ]
 const MASKED: SpreadMode[] = ['bloom', 'rise', 'fall', 'sweep', 'clock', 'split']
 

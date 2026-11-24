@@ -2,7 +2,7 @@ import { useId } from 'react'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { isFlossVariant, type FlossVariant, type RhythmVariant } from '../lib/rhythmVariant'
 
-/** The glide runs between these two points of the frame's width; forward is right. */
+/** The glide runs between these two points of the frame's height; forward is up. */
 const RUN_START = 12
 const RUN_SPAN = 76
 /** The same floor and ceiling the other shapes light their parts within. */
@@ -16,11 +16,6 @@ const WAKE_GAIN = 24
 /** The front stays tight, so every figure leans into the way it's going. */
 const FRONT = 6
 
-/**
- * The figures that run up the phone instead of across it. They draw the same glide
- * on the same clock; only the axis turns, and forward is up.
- */
-const VERTICAL: ReadonlySet<FlossVariant> = new Set(['kite', 'helix', 'fill', 'scan'])
 /** The frame's `top` for a point so far along the run, forward being up. */
 const up = (along: number) => 100 - along
 
@@ -68,41 +63,29 @@ function positionAt(phaseIndex: number, progress: number): number {
 }
 
 /**
- * The sciatic floss's guide: a figure that glides forward and back across the
- * frame, the way the nerve glides through its sheath, and says which way it's
- * going by its shape alone — a sharp edge in front and a long, fading wake behind,
- * so the heading reads from the lean. No track, no arrow, no word. Each phase is
- * sine-eased, so the end of one is where the next begins, and the wake gathers in
- * at each turn so the reversal is visible before it happens. Reduced motion parks
- * the crest at the end it's heading to with a middling wake, so it still leans.
+ * The sciatic floss's guide: a figure that glides forward and back, the way the
+ * nerve glides through its sheath. Forward is away from you — up the phone — and
+ * back is toward you, never side to side: the leg goes out in front, and so does
+ * the figure. It says which way it's going by its shape alone — a sharp edge in
+ * front and a long, fading wake behind, so the heading reads from the lean. No
+ * track, no arrow, no word. Each phase is sine-eased, so the end of one is where
+ * the next begins, and the wake gathers in at each turn so the reversal is visible
+ * before it happens. Reduced motion parks the crest at the end it's heading to
+ * with a middling wake, so it still leans.
  *
  * The frame is whatever the session has under its header — on a phone, much taller
  * than it is wide — so the run and everything laid along or across it is in shares
- * of the frame, and whatever has to keep its own shape (a bead, a knot, the kite)
+ * of the frame, and whatever has to keep its own shape (a bead, a mote, the capsule)
  * is sized in `cqmin`, a hundredth of the frame's short side.
  *
- * Four figures draw the same glide; the rotation picks one per set (see
+ * Six figures draw the same glide; the rotation picks one per set (see
  * lib/rhythmVariant), and the kebab can hide one like any other shape:
- * - 'beads': a strand of beads with a swell running through it — the beads under
- *   the crest rise, grow and light, and a soft glow rides along like the halo's core.
- * - 'thread': a thread drawn through a sheath, with a knot for the crest — taut
- *   ahead of the knot, and behind it the slack it drags, waving in its wake.
+ * - 'beads': a strand of beads with a swell running up it — the beads under the
+ *   crest bow out, grow and light, and a soft glow rides along like the halo's core.
  * - 'wake': a mote shedding rings as it goes, each one spreading and fading behind
  *   it, so where it has been is written on the water and where it's going is clear.
- * - 'grass': a field of stalks combed by a gust — the stalks under it brighten and
- *   bend the way it's going, and the ones it has passed are still coming back up.
- * Three more are plain geometry, for the sets where the organic ones have worn in:
- * - 'slats': a row of bars that rise and light under the crest and shear as one
- *   into the heading, a histogram leaning the way it's read.
- * - 'tiles': a grid of squares; the column under the crest turns to diamonds and
- *   the ones behind are still turning back, with the whole grid skewed into the lean.
  * - 'capsule': one pill with two echoes behind it; it stretches with speed and
  *   squares off its trailing end, so at speed it's a slug and at the turn a circle.
- * Four more run up the phone instead of across it — forward climbs toward the top
- * of the screen and back sinks toward the bottom — so they read differently from
- * the rest at a glance before any of them has moved:
- * - 'kite': a diamond with a ribbon tail of bows, the tail trailing behind it and
- *   swaying, and its nose drawn out into the heading with speed.
  * - 'helix': a mote climbing a spiral, nearer and farther as it goes round, with a
  *   string of fading motes behind it tracing the turns it has made.
  * - 'fill': a tube that fills toward the top and drains toward the bottom; the
@@ -137,7 +120,6 @@ export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
     trail: (back) => (reduced ? crest - heading * back * RUN_SPAN : positionAt(phaseIndex, progress - back)),
   }
   const figure: FlossVariant = isFlossVariant(variant) ? variant : 'beads'
-  const vertical = VERTICAL.has(figure)
 
   return (
     <div
@@ -146,31 +128,16 @@ export function FlossGuide({ phaseIndex, progress, variant = 'beads' }: {
       aria-label={forward ? 'forward' : 'back'}
       data-direction={forward ? 'forward' : 'back'}
       data-variant={figure}
-      data-axis={vertical ? 'vertical' : 'horizontal'}
     >
-      {vertical ? (
-        <Glow x={50} y={up(crest)} />
-      ) : (
-        <Glow x={crest} y={figure === 'beads' ? 42 : 50} />
-      )}
-      {figure === 'kite' ? (
-        <Kite glide={glide} />
-      ) : figure === 'helix' ? (
+      <Glow x={50} y={up(crest)} />
+      {figure === 'helix' ? (
         <Helix glide={glide} />
       ) : figure === 'fill' ? (
         <Fill glide={glide} />
       ) : figure === 'scan' ? (
         <Scan glide={glide} />
-      ) : figure === 'thread' ? (
-        <Thread glide={glide} />
       ) : figure === 'wake' ? (
         <Wake glide={glide} />
-      ) : figure === 'grass' ? (
-        <Grass glide={glide} />
-      ) : figure === 'slats' ? (
-        <Slats glide={glide} />
-      ) : figure === 'tiles' ? (
-        <Tiles glide={glide} />
       ) : figure === 'capsule' ? (
         <Capsule glide={glide} />
       ) : (
@@ -201,86 +168,31 @@ const hairline = (width: number) =>
 /** A gradient id with the punctuation stripped, so it's safe inside a url() wherever React writes it. */
 const useGradientId = () => `floss-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
 
-/** Beads strung evenly across the frame, a little past either end of the run. */
+/** Beads strung evenly up the frame, a little past either end of the run. */
 const BEADS = Array.from({ length: 13 }, (_, k) => 6 + k * 7.333)
-/** How far the swell lifts the strand at its crest, in % of the frame. */
-const LIFT = 24
+/** Where the strand hangs, and how far the swell bows it out at its crest, in % of the frame. */
+const STRAND = 40
+const BOW = 20
 
 function Beads({ glide }: { glide: Glide }) {
   return (
     <>
-      {BEADS.map((x, k) => {
+      {BEADS.map((along, k) => {
         // Distance along the way of travel: positive is ahead of the crest.
-        const l = lit((x - glide.crest) * glide.heading, glide)
+        const l = lit((along - glide.crest) * glide.heading, glide)
         return (
           <div
             key={k}
             className="absolute h-[7cqmin] w-[7cqmin] rounded-full bg-current"
             style={{
-              left: `${x}%`,
-              top: `${58 - l * LIFT}%`,
+              left: `${r(STRAND + l * BOW)}%`,
+              top: `${r(up(along))}%`,
               opacity: DIM + l * (BRIGHT - DIM),
               transform: `translate(-50%, -50%) scale(${0.7 + l * 1.3})`,
             }}
           />
         )
       })}
-    </>
-  )
-}
-
-/** How far the slack lifts the thread off its line at the knot, in % of the frame. */
-const SLACK = 9
-/** The length of one wave in the slack. */
-const SLACK_WAVE = 14
-/** How far ahead of the knot the thread is lit, and how far behind at a standstill. */
-const KNOT_LIGHT = FRONT * 1.5
-
-function Thread({ glide }: { glide: Glide }) {
-  const { crest, heading, speed, wake } = glide
-  const id = useGradientId()
-  // Taut ahead of the knot; behind it, the slack the knot drags waves and dies away.
-  const y = (x: number) => {
-    const ahead = (x - crest) * heading
-    if (ahead >= 0) return 50
-    return 50 + speed * SLACK * Math.exp(ahead / wake) * Math.sin((2 * Math.PI * ahead) / SLACK_WAVE)
-  }
-  const points: string[] = []
-  for (let x = 0; x <= 100; x += 0.5) points.push(`${x} ${r(y(x))}`)
-  const d = `M ${points.join(' L ')}`
-  // The light on the thread, drawn left to right whichever way the knot heads:
-  // brightest at the knot, dying out ahead within the front and behind along the
-  // wake. At a standstill the two reaches match, so the turn changes nothing.
-  const behind = KNOT_LIGHT + speed * WAKE_GAIN * 3
-  const left = heading > 0 ? behind : KNOT_LIGHT
-  const right = heading > 0 ? KNOT_LIGHT : behind
-  const knot = r(6.5 + speed * 3)
-  return (
-    <>
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-        <defs>
-          <linearGradient id={id} gradientUnits="userSpaceOnUse" x1={r(crest - left)} x2={r(crest + right)} y1="0" y2="0">
-            <stop offset="0" stopColor="currentColor" stopOpacity={DIM} />
-            <stop offset={r(left / (left + right))} stopColor="currentColor" stopOpacity={BRIGHT} />
-            <stop offset="1" stopColor="currentColor" stopOpacity={DIM} />
-          </linearGradient>
-        </defs>
-        <rect x="30" y="37" width="40" height="26" rx="10" fill="none" stroke="currentColor" strokeOpacity={DIM} {...hairline(0.9)} />
-        <path d={d} fill="none" stroke={`url(#${id})`} strokeLinejoin="round" {...hairline(1.6)} />
-      </svg>
-      {/* Outside the drawing above, which is stretched to the frame: a circle in
-          there would come out as tall as the frame is. */}
-      <div
-        className="absolute rounded-full bg-current"
-        style={{
-          left: `${r(crest)}%`,
-          top: '50%',
-          width: `${knot}cqmin`,
-          height: `${knot}cqmin`,
-          opacity: CREST,
-          transform: 'translate(-50%, -50%)',
-        }}
-      />
     </>
   )
 }
@@ -302,8 +214,8 @@ function Wake({ glide }: { glide: Glide }) {
             key={k}
             className="absolute rounded-full border-2 border-current"
             style={{
-              left: `${r(trail(age))}%`,
-              top: '50%',
+              left: '50%',
+              top: `${r(up(trail(age)))}%`,
               width: `${r(size)}cqmin`,
               height: `${r(size)}cqmin`,
               opacity: r(DIM + fade * (BRIGHT - DIM)),
@@ -315,8 +227,8 @@ function Wake({ glide }: { glide: Glide }) {
       <div
         className="absolute h-[8cqmin] w-[8cqmin] rounded-full bg-current"
         style={{
-          left: `${r(crest)}%`,
-          top: '50%',
+          left: '50%',
+          top: `${r(up(crest))}%`,
           opacity: CREST,
           transform: `translate(-50%, -50%) scale(${r(1 + speed * 0.5)})`,
         }}
@@ -325,124 +237,27 @@ function Wake({ glide }: { glide: Glide }) {
   )
 }
 
-/** Stalks planted evenly across the frame, a little past either end of the run. */
-const STALKS = Array.from({ length: 17 }, (_, k) => 6 + k * 5.5)
-/** How far the gust bends a stalk at full speed, in degrees. */
-const BEND = 38
-
-function Grass({ glide }: { glide: Glide }) {
-  const { crest, heading, speed, wake } = glide
-  return (
-    <>
-      {STALKS.map((x, k) => {
-        const ahead = (x - crest) * heading
-        const l = lit(ahead, glide)
-        // The gust bends what's under it the way it's going, and the stalks it has
-        // passed are still coming back up; the ones ahead of it stand straight.
-        const bend = heading * speed * BEND * (ahead >= 0 ? front(ahead) : Math.exp(ahead / wake))
-        return (
-          <div
-            key={k}
-            className="absolute w-[2.2%] origin-bottom rounded-full bg-current"
-            style={{
-              left: `${x}%`,
-              bottom: '32%',
-              height: `${r(18 + l * 22)}%`,
-              opacity: r(DIM + l * (BRIGHT - DIM)),
-              transform: `translateX(-50%) rotate(${r(bend)}deg)`,
-            }}
-          />
-        )
-      })}
-    </>
-  )
-}
-
-/** Slats set evenly across the frame, a little past either end of the run. */
-const SLATS = Array.from({ length: 15 }, (_, k) => 8 + k * 6)
-/** How far the row shears into the heading at full speed, in degrees. */
-const SHEAR = 12
-
-function Slats({ glide }: { glide: Glide }) {
-  const { crest, heading, speed } = glide
-  // CSS skewX leans the top of a bar the other way from its sign, so a forward
-  // lean is a negative skew. The whole row shears as one; the bump travels.
-  const shear = -heading * speed * SHEAR
-  return (
-    <>
-      {SLATS.map((x, k) => {
-        const l = lit((x - crest) * heading, glide)
-        const height = 14 + l * 46
-        return (
-          <div
-            key={k}
-            className="absolute w-[3.4%] rounded-[1px] bg-current"
-            style={{
-              left: `${x}%`,
-              top: `${r(50 - height / 2)}%`,
-              height: `${r(height)}%`,
-              opacity: r(DIM + l * (BRIGHT - DIM)),
-              transform: `translateX(-50%) skewX(${r(shear)}deg)`,
-            }}
-          />
-        )
-      })}
-    </>
-  )
-}
-
-/** The grid: columns a little past either end of the run, rows about the midline. */
-const TILE_COLUMNS = Array.from({ length: 9 }, (_, c) => 14 + c * 9)
-const TILE_ROWS = Array.from({ length: 5 }, (_, row) => 20 + row * 15)
-/** How far the grid skews into the heading at full speed, in degrees. */
-const TILT = 6
-
-function Tiles({ glide }: { glide: Glide }) {
-  const { crest, heading, speed } = glide
-  return (
-    <div className="absolute inset-0" style={{ transform: `skewX(${r(-heading * speed * TILT)}deg)` }}>
-      {TILE_COLUMNS.map((x) => {
-        // A column turns toward the diamond as the crest reaches it and turns back
-        // along the wake. The turn itself is unsigned: the lean is all in the skew.
-        const l = lit((x - crest) * heading, glide)
-        return TILE_ROWS.map((y, row) => (
-          <div
-            key={`${x}:${row}`}
-            className="absolute h-[6.5cqmin] w-[6.5cqmin] rounded-[12%] bg-current"
-            style={{
-              left: `${x}%`,
-              top: `${y}%`,
-              opacity: r(DIM + l * (BRIGHT - DIM)),
-              transform: `translate(-50%, -50%) rotate(${r(l * 45)}deg) scale(${r(0.8 + l * 0.5)})`,
-            }}
-          />
-        ))
-      })}
-    </div>
-  )
-}
-
 /**
- * The capsule's height, its width at a standstill, and the extra at full speed —
+ * The capsule's width, its height at a standstill, and the extra at full speed —
  * all in hundredths of the frame's short side, so the ends stay round in a frame
  * that isn't square.
  */
-const CAPSULE_HEIGHT = 26
 const CAPSULE_WIDTH = 26
+const CAPSULE_HEIGHT = 26
 const CAPSULE_STRETCH = 24
 /** Echoes behind the capsule, so many phase-lengths back. */
 const ECHOES = [0.07, 0.14]
 
 function Capsule({ glide }: { glide: Glide }) {
   const { crest, heading, speed, trail } = glide
-  const width = CAPSULE_WIDTH + speed * CAPSULE_STRETCH
-  // Horizontal radii in percent of the width; fully round is half the height.
-  const round = (CAPSULE_HEIGHT / 2 / width) * 100
+  const height = CAPSULE_HEIGHT + speed * CAPSULE_STRETCH
+  // Vertical radii in percent of the height; fully round is half the width.
+  const round = (CAPSULE_WIDTH / 2 / height) * 100
   // The leading end stays round and the trailing end squares off with speed. At
   // a standstill both ends are round, so the turn changes nothing.
   const tail = round * (1 - speed * 0.85)
-  const [left, right] = heading > 0 ? [tail, round] : [round, tail]
-  const radius = `${r(left)}% ${r(right)}% ${r(right)}% ${r(left)}% / 50% 50% 50% 50%`
+  const [top, bottom] = heading > 0 ? [round, tail] : [tail, round]
+  const radius = `50% 50% 50% 50% / ${r(top)}% ${r(top)}% ${r(bottom)}% ${r(bottom)}%`
   return (
     <>
       {ECHOES.map((back, k) => (
@@ -450,8 +265,8 @@ function Capsule({ glide }: { glide: Glide }) {
           key={k}
           className="absolute rounded-full bg-current"
           style={{
-            left: `${r(trail(back))}%`,
-            top: '50%',
+            left: '50%',
+            top: `${r(up(trail(back)))}%`,
             width: `${r(CAPSULE_WIDTH * (0.8 - k * 0.2))}cqmin`,
             height: `${r(CAPSULE_HEIGHT * (0.8 - k * 0.2))}cqmin`,
             opacity: r(DIM + (BRIGHT - DIM) * (0.5 - k * 0.2)),
@@ -462,103 +277,13 @@ function Capsule({ glide }: { glide: Glide }) {
       <div
         className="absolute bg-current"
         style={{
-          left: `${r(crest)}%`,
-          top: '50%',
-          width: `${r(width)}cqmin`,
-          height: `${CAPSULE_HEIGHT}cqmin`,
+          left: '50%',
+          top: `${r(up(crest))}%`,
+          width: `${CAPSULE_WIDTH}cqmin`,
+          height: `${r(height)}cqmin`,
           borderRadius: radius,
           opacity: CREST,
           transform: 'translate(-50%, -50%)',
-        }}
-      />
-    </>
-  )
-}
-
-/**
- * The kite's half-height and half-width at a standstill, and the nose it grows
- * with speed, in hundredths of the frame's short side: it flies up a frame much
- * taller than it is wide, and has to stay a kite in it.
- */
-const KITE_HALF_HEIGHT = 12
-const KITE_HALF_WIDTH = 8.5
-const KITE_NOSE = 8
-/** The tail: how far back it reaches in phase-lengths, how far it sways, the length of a sway, and where its bows sit. */
-const TAIL_REACH = 0.3
-const TAIL_SWAY = 6
-const TAIL_WAVE = 22
-const BOWS = [0.08, 0.16, 0.24]
-/** A bow's side, in the same hundredths. */
-const BOW_SIZE = 4.5
-
-function Kite({ glide }: { glide: Glide }) {
-  const { crest, heading, speed, trail } = glide
-  const cy = up(crest)
-  // The tail follows the glide round its turns, swaying side to side as a wave
-  // fixed in the frame: where the kite has been it draws, and after a turn it
-  // folds back over the way the kite is now going, which is how the turn reads.
-  const sway = (along: number) => 50 + TAIL_SWAY * Math.sin((2 * Math.PI * along) / TAIL_WAVE)
-  const at = (back: number) => {
-    const along = trail(back)
-    return { x: sway(along), y: up(along) }
-  }
-  const points: string[] = []
-  for (let back = 0; back <= TAIL_REACH + 1e-9; back += 0.01) {
-    const p = at(back)
-    points.push(`${r(p.x)} ${r(p.y)}`)
-  }
-  // The nose reaches into the heading with speed; the trailing tip stays put. At a
-  // standstill the diamond is even, so the turn changes nothing. Its widest point
-  // stays on the crest, so the box is measured out from there: `above` of it over
-  // the crest and the rest under, whichever end is the nose, and the markup is
-  // the same across the turn too.
-  const nose = speed * KITE_NOSE
-  const above = KITE_HALF_HEIGHT + (heading > 0 ? nose : 0)
-  const height = 2 * KITE_HALF_HEIGHT + nose
-  const waist = r((above / height) * 100)
-  return (
-    <>
-      {/* Only the tail's line is drawn stretched to the frame. The bows and the
-          kite itself are laid over it in `cqmin`, or the stretch would pull a
-          diamond into a sliver. */}
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-        <path
-          d={`M ${points.join(' L ')}`}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity={DIM + (BRIGHT - DIM) * 0.5}
-          strokeLinejoin="round"
-          {...hairline(1.1)}
-        />
-      </svg>
-      {BOWS.map((back, k) => {
-        const p = at(back)
-        const fade = 1 - k / BOWS.length
-        return (
-          <div
-            key={k}
-            className="absolute rounded-[12%] bg-current"
-            style={{
-              left: `${r(p.x)}%`,
-              top: `${r(p.y)}%`,
-              width: `${BOW_SIZE}cqmin`,
-              height: `${BOW_SIZE}cqmin`,
-              opacity: r(DIM + (BRIGHT - DIM) * fade),
-              transform: 'translate(-50%, -50%) rotate(45deg)',
-            }}
-          />
-        )
-      })}
-      <div
-        className="absolute bg-current"
-        style={{
-          left: '50%',
-          top: `calc(${r(cy)}% - ${r(above)}cqmin)`,
-          width: `${2 * KITE_HALF_WIDTH}cqmin`,
-          height: `${r(height)}cqmin`,
-          opacity: CREST,
-          clipPath: `polygon(50% 0%, 100% ${waist}%, 50% 100%, 0% ${waist}%)`,
-          transform: 'translateX(-50%)',
         }}
       />
     </>

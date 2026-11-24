@@ -59,15 +59,10 @@ const MODES: Record<RhythmVariant, SpreadMode> = {
   chevrons: 'split',
   gauge: 'split',
   wave: 'own',
-  // floss: the white spreads along the strand from its middle, whichever way it runs
+  // floss: the white spreads up and down the run from its middle
   beads: 'bloom',
-  thread: 'bloom',
   wake: 'bloom',
-  grass: 'bloom',
-  slats: 'bloom',
-  tiles: 'bloom',
   capsule: 'bloom',
-  kite: 'bloom',
   helix: 'bloom',
   fill: 'bloom',
   scan: 'bloom',

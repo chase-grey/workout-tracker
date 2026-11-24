@@ -29,10 +29,10 @@ describe('createRhythmVariantSelector', () => {
   })
 
   it('tells the draw when the set is a forward/back one, so the floss gets its own figures', () => {
-    const draw = vi.fn<(tempo: string, forwardBack: boolean) => RhythmVariant>().mockReturnValue('thread')
+    const draw = vi.fn<(tempo: string, forwardBack: boolean) => RhythmVariant>().mockReturnValue('capsule')
     const select = createRhythmVariantSelector(draw)
 
-    expect(select('floss:0', '3s forward · 3s back', true)).toBe('thread')
+    expect(select('floss:0', '3s forward · 3s back', true)).toBe('capsule')
     expect(draw).toHaveBeenCalledWith('3s forward · 3s back', true)
     select('pike:0', '5 press down · 3 rest · 5 pull up · 3 rest')
     expect(draw).toHaveBeenLastCalledWith('5 press down · 3 rest · 5 pull up · 3 rest', false)
@@ -42,10 +42,11 @@ describe('createRhythmVariantSelector', () => {
 describe('isFlossVariant', () => {
   it('knows the floss figures from the other families', () => {
     expect(isFlossVariant('beads')).toBe(true)
-    expect(isFlossVariant('grass')).toBe(true)
+    expect(isFlossVariant('wake')).toBe(true)
     expect(isFlossVariant('capsule')).toBe(true)
-    expect(isFlossVariant('kite')).toBe(true)
     expect(isFlossVariant('scan')).toBe(true)
+    expect(isFlossVariant('grass')).toBe(false)
+    expect(isFlossVariant('kite')).toBe(false)
     expect(isFlossVariant('orb')).toBe(false)
     expect(isFlossVariant('wave')).toBe(false)
   })

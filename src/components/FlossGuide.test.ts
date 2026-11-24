@@ -11,11 +11,8 @@ function setup(reduced = false) {
   vi.stubGlobal('window', { matchMedia: () => ({ matches: reduced }) })
 }
 
-/** The figures that glide across the frame, forward being right. */
-const ACROSS: readonly FlossVariant[] = ['beads', 'thread', 'wake', 'grass', 'slats', 'tiles', 'capsule']
-/** The figures that run up it, forward being toward the top of the phone. */
-const UPWARD: readonly FlossVariant[] = ['kite', 'helix', 'fill', 'scan']
-const FIGURES: readonly FlossVariant[] = [...ACROSS, ...UPWARD]
+/** Every figure runs up the frame, forward being toward the top of the phone. */
+const FIGURES: readonly FlossVariant[] = ['beads', 'wake', 'capsule', 'helix', 'fill', 'scan']
 
 const frame = (phaseIndex: number, progress: number, variant: FlossVariant = 'beads') =>
   renderToStaticMarkup(createElement(FlossGuide, { phaseIndex, progress, seconds: 3, variant }))
@@ -23,9 +20,8 @@ const frame = (phaseIndex: number, progress: number, variant: FlossVariant = 'be
 /** Where the crest sits — the glow that travels with it, in every figure. */
 const crestLeft = (html: string) => Number(html.match(/blur-2xl" style="left:([\d.]+)%/)?.[1])
 const crestTop = (html: string) => Number(html.match(/blur-2xl" style="left:[\d.]+%;top:([\d.]+)%/)?.[1])
-/** How far along the run the crest is, whichever way the figure lays the run out. */
-const crestAlong = (html: string, figure: FlossVariant) =>
-  UPWARD.includes(figure) ? 100 - crestTop(html) : crestLeft(html)
+/** How far along the run the crest is, forward being up. */
+const crestAlong = (html: string) => 100 - crestTop(html)
 
 /** Every number in the markup, in order: positions, sizes, opacities, path points. */
 const numbers = (html: string) => (html.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
@@ -33,7 +29,7 @@ const numbers = (html: string) => (html.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Num
 describe.each(FIGURES)('sciatic floss figure: %s', (figure) => {
   it('travels forward then back', () => {
     setup()
-    const along = (phaseIndex: number, progress: number) => crestAlong(frame(phaseIndex, progress, figure), figure)
+    const along = (phaseIndex: number, progress: number) => crestAlong(frame(phaseIndex, progress, figure))
     expect(frame(0, 0, figure)).toContain('data-direction="forward"')
     expect(along(0, 0)).toBeCloseTo(12)
     expect(along(0, 0.5)).toBeCloseTo(50)
@@ -72,25 +68,15 @@ describe.each(FIGURES)('sciatic floss figure: %s', (figure) => {
 
   it('parks the crest at the end it is heading to with reduced motion', () => {
     setup(true)
-    expect(crestAlong(frame(0, 0.5, figure), figure)).toBeCloseTo(88)
-    expect(crestAlong(frame(1, 0.5, figure), figure)).toBeCloseTo(12)
+    expect(crestAlong(frame(0, 0.5, figure))).toBeCloseTo(88)
+    expect(crestAlong(frame(1, 0.5, figure))).toBeCloseTo(12)
     expect(frame(0, 0.5, figure)).not.toBe(frame(1, 0.5, figure))
   })
 })
 
-describe.each(ACROSS)('across-the-frame figure: %s', (figure) => {
-  it('goes right on forward and left on back, holding the midline', () => {
+describe.each(FIGURES)('up-the-phone figure: %s', (figure) => {
+  it('climbs toward the top of the phone on forward and sinks on back, never side to side', () => {
     setup()
-    expect(frame(0, 0.5, figure)).toContain('data-axis="horizontal"')
-    expect(crestLeft(frame(0, 1, figure))).toBeCloseTo(88)
-    expect(crestLeft(frame(1, 1, figure))).toBeCloseTo(12)
-  })
-})
-
-describe.each(UPWARD)('up-the-phone figure: %s', (figure) => {
-  it('climbs toward the top of the phone on forward and sinks on back, holding the centre line', () => {
-    setup()
-    expect(frame(0, 0.5, figure)).toContain('data-axis="vertical"')
     const start = frame(0, 0, figure)
     const end = frame(0, 1, figure)
     expect(crestTop(start)).toBeCloseTo(88)
@@ -98,6 +84,9 @@ describe.each(UPWARD)('up-the-phone figure: %s', (figure) => {
     expect(crestTop(frame(1, 1, figure))).toBeCloseTo(88)
     expect(crestLeft(start)).toBeCloseTo(50)
     expect(crestLeft(end)).toBeCloseTo(50)
+    // Nothing is placed across the frame by where the crest is: neither end of
+    // the run ever turns up as a `left`.
+    for (const html of [start, end]) expect(html).not.toMatch(/left:(12|88)%/)
   })
 })
 
@@ -118,9 +107,9 @@ describe('the floss figures', () => {
   it.each(['3s up · 3s down', '3s forward · 3s back'])(
     'pace saved and current floss tempos, in the figure the session chose: %s', (tempo) => {
       setup()
-      const guide = renderToStaticMarkup(createElement(RhythmGuide, { tempo, forwardBack: true, variant: 'thread' }))
+      const guide = renderToStaticMarkup(createElement(RhythmGuide, { tempo, forwardBack: true, variant: 'capsule' }))
       expect(guide).toContain('data-direction')
-      expect(guide).toContain('data-variant="thread"')
+      expect(guide).toContain('data-variant="capsule"')
       expect(renderToStaticMarkup(createElement(RhythmGuide, { tempo }))).not.toContain('data-direction')
     },
   )
