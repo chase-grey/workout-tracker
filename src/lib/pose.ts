@@ -18,6 +18,9 @@ const WASM_URL = `${import.meta.env.BASE_URL}mediapipe`
 const MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`
 const LITE_MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_lite.task`
 
+/** How sure the detector has to be that it's looking at a body — see `build`. */
+export const POSE_CONFIDENCE = 0.3
+
 /** A landmark plus MediaPipe's confidence that the point is really in frame. */
 export type Landmark = Pt & { visibility?: number }
 
@@ -96,6 +99,14 @@ async function build(modelUrl = MODEL_URL): Promise<Landmarker> {
       baseOptions: { modelAssetPath: modelUrl },
       runningMode: 'IMAGE',
       numPoses: 1,
+      // Below MediaPipe's 0.5 on both. A body seen side-on, with the far arm and
+      // leg hidden behind the near ones, routinely scores under that and came
+      // back as "no body found" on a photo with one squarely in it. Every pose
+      // still checks the joints it reads from for visibility (measure.ts
+      // MIN_VISIBILITY), and the dots are dragged afterwards either way, so a
+      // rougher fit costs far less here than no fit at all.
+      minPoseDetectionConfidence: POSE_CONFIDENCE,
+      minPosePresenceConfidence: POSE_CONFIDENCE,
     }),
   )
 }
