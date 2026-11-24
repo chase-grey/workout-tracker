@@ -56,6 +56,7 @@ function input(over: Partial<WeekCalendarInput> = {}): WeekCalendarInput {
       pancake: 'pancake',
       bridge: 'bridge',
       shoulders: 'shoulders',
+      pelvic_tilt: 'pelvic tilt',
     },
     cardioEntries: [],
     calorieEntries: [],

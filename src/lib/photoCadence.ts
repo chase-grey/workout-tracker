@@ -5,6 +5,7 @@ import {
   coldTailorsLeftOf,
   coldTailorsRightOf,
   coldToeTouchOf,
+  pelvicTiltOf,
   warmLegLiftLeftOf,
   warmLegLiftRightOf,
   warmSplitOf,
@@ -37,6 +38,7 @@ const CAPTURED: Record<PhotoKind, (e: FlexEntry) => boolean> = {
   'cold-leg-lift-right': (e) => coldLegLiftRightOf(e) != null,
   'warm-leg-lift-left': (e) => warmLegLiftLeftOf(e) != null,
   'warm-leg-lift-right': (e) => warmLegLiftRightOf(e) != null,
+  'pelvic-tilt': (e) => pelvicTiltOf(e) != null,
 }
 
 /** The shots already logged in the Mon–Sun week containing `today`. */

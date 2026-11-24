@@ -27,6 +27,7 @@ function input(over: Partial<WeekCalendarInput> = {}): Omit<WeekCalendarInput, '
       pancake: 'pancake',
       bridge: 'bridge',
       shoulders: 'shoulders',
+      pelvic_tilt: 'pelvic tilt',
     },
     cardioEntries: [],
     calorieEntries: [],

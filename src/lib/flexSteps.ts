@@ -36,9 +36,14 @@ export type FlexSetStep = {
 }
 
 /**
- * One set of the core work appended after the mobility flow. Unlike a stretch, the
- * user enters the weight and reps performed and each set is logged as a workout row
- * (see DataContext.logCore), so it feeds the movement's own history and the charts.
+ * One set of strength work in the flow: the office-abs block's sit-ups, or a
+ * routine's own loaded exercise (see FlexExercise.load — the pelvic tilt
+ * routine's hip thrust). Unlike a stretch, the user enters the weight and reps
+ * performed and each set is logged as a workout row (see DataContext.logCore),
+ * so it feeds the movement's own history and the charts.
+ *
+ * A session carries at most one such exercise, which is what lets the reps and
+ * weights typed in be kept by round alone (see {@link loadedExerciseOf}).
  */
 export type CoreSetStep = {
   kind: 'core'
@@ -47,10 +52,38 @@ export type CoreSetStep = {
   exName: string
   repMin: number
   repMax: number
+  /** The step the next target climbs by; the progression's default when absent. */
+  increment?: number
   restSec: number
   round: number // 0-based set number
   maxSets: number
   stepKey: string
+}
+
+/**
+ * The exercise a session's typed-in sets belong to, with the range its next
+ * target is read against — or null for a session that has none.
+ */
+export function loadedExerciseOf(
+  steps: SessionStep[],
+): { key: string; repMin: number; repMax: number; increment?: number } | null {
+  const s = steps.find((x): x is CoreSetStep => x.kind === 'core')
+  return s ? { key: s.exKey, repMin: s.repMin, repMax: s.repMax, increment: s.increment } : null
+}
+
+/**
+ * The weight a typed-in set shows before it's been touched: whatever the
+ * nearest earlier round was set to — cleared to none included — and the
+ * progression's target with nothing set before it. Clearing the first set of a
+ * day with no plate to hand clears the rest with it.
+ */
+export function carriedWeight(
+  weights: Record<number, number | null>,
+  round: number,
+  target: number | null,
+): number | null {
+  for (let r = round; r >= 0; r--) if (r in weights) return weights[r]
+  return target
 }
 
 /**
@@ -111,10 +144,38 @@ export const stepWorkSec = (s: FlexSetStep): number => {
  * for the session and alternates between completed sessions of the routine.
  */
 export function buildFlexSteps(plan: FlexBlock[], startSide: Side = 'left'): FlexSetStep[] {
-  const steps: FlexSetStep[] = []
+  return buildRoutineSteps(plan, startSide).filter((s): s is FlexSetStep => s.kind === 'flex')
+}
+
+/**
+ * A routine's whole flow, in plan order: its stretch sets as {@link buildFlexSteps}
+ * lays them out, with any loaded exercise (see FlexExercise.load) standing where
+ * the plan put it as typed-in sets.
+ */
+export function buildRoutineSteps(plan: FlexBlock[], startSide: Side = 'left'): SessionStep[] {
+  const steps: SessionStep[] = []
   plan.forEach((block, bi) => {
     /** The steps one round of one exercise is: a pair for a per-side stretch, else one. */
-    const round = (ex: FlexExercise, r: number): FlexSetStep[] => {
+    const round = (ex: FlexExercise, r: number): SessionStep[] => {
+      // A loaded exercise is counted and typed in, not paced: a core-kind step,
+      // standing where the plan put it.
+      if (ex.load) {
+        return [
+          {
+            kind: 'core',
+            blockLabel: block.label,
+            exKey: ex.key,
+            exName: ex.name,
+            repMin: ex.load.repMin,
+            repMax: ex.load.repMax,
+            increment: ex.load.increment,
+            restSec: ex.restSec,
+            round: r,
+            maxSets: ex.maxSets,
+            stepKey: `${bi}:${ex.key}:${r}`,
+          },
+        ]
+      }
       const base = {
         kind: 'flex' as const,
         blockLabel: block.label,
@@ -135,7 +196,7 @@ export function buildFlexSteps(plan: FlexBlock[], startSide: Side = 'left'): Fle
       // first side prescribes none — which is also what earns it a side switch.
       const firstRest = ex.restAfterSides ? 0 : ex.restSec
       const switchSec = ex.sideSwitchSec ?? SIDE_SWITCH_SEC
-      return ([startSide, startSide === 'left' ? 'right' : 'left'] as Side[]).map((side, index) => ({
+      return ([startSide, startSide === 'left' ? 'right' : 'left'] as Side[]).map((side, index): FlexSetStep => ({
         ...base,
         side,
         restSec: index === 0 ? firstRest : ex.restSec,
@@ -173,6 +234,7 @@ export function buildCoreSteps(): CoreSetStep[] {
       exName: STRETCH_CORE.name,
       repMin: STRETCH_CORE.repMin,
       repMax: STRETCH_CORE.repMax,
+      increment: STRETCH_CORE.increment,
       restSec: STRETCH_CORE.restSec,
       round: r,
       maxSets: STRETCH_CORE.sets,
@@ -194,5 +256,5 @@ export function buildSessionSteps(
   opts?: { core?: boolean; startSide?: Side },
 ): SessionStep[] {
   const core = opts?.core ?? true
-  return [...buildFlexSteps(plan, opts?.startSide), ...(core ? buildCoreSteps() : [])]
+  return [...buildRoutineSteps(plan, opts?.startSide), ...(core ? buildCoreSteps() : [])]
 }

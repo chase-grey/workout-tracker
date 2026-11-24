@@ -30,6 +30,7 @@ export type MeasureMode =
   | 'toe_touch'
   | 'leg_lift_left'
   | 'leg_lift_right'
+  | 'pelvic_tilt'
 
 /** Every mode, in the order a picker should offer them. */
 export const MEASURE_MODES: MeasureMode[] = [
@@ -38,6 +39,7 @@ export const MEASURE_MODES: MeasureMode[] = [
   'toe_touch',
   'leg_lift_left',
   'leg_lift_right',
+  'pelvic_tilt',
 ]
 
 /** Whether a shot is a cold or warm reading; absent when it's neither. */
@@ -54,6 +56,7 @@ export type MeasureResult = {
   toeTouchDeg?: number | null
   legLiftLeftDeg?: number | null
   legLiftRightDeg?: number | null
+  pelvicTiltDeg?: number | null
 }
 
 export type HandleSpec = { key: string; label: string }
@@ -76,6 +79,19 @@ export const ROLE_COLOR: Record<Segment['role'], string> = {
 
 /** Straight up in image coords (y grows downward), the vertical we measure off. */
 export const UP: Pt = { x: 0, y: -1 }
+
+/**
+ * How far below the back hip bone the front one sits, as an angle off level:
+ * the pelvic tilt. Zero when the front bone is level with the back one or above
+ * it — that is a neutral or tucked pelvis, and there is no forward tilt to report.
+ * `back` and `front` share a scale on both axes (see `sub`).
+ */
+export function tiltBelowLevel(back: Pt, front: Pt): number {
+  const dx = Math.abs(front.x - back.x)
+  const dy = front.y - back.y
+  if (dy <= 0 || dx < 1e-9) return dy > 0 ? 90 : 0
+  return Math.round(((Math.atan2(dy, dx) * 180) / Math.PI) * 10) / 10
+}
 
 /**
  * Where a reading actually sits on the photo: the vertex the angle opens from,
@@ -204,6 +220,11 @@ type ModeSpec = {
    * lines and the angle between them is visible on its own.
    */
   verticalRef: string | null
+  /**
+   * The handle a level line runs from, and the one it runs toward, for a pose
+   * measured off horizontal (the pelvic tilt). Null for every other pose.
+   */
+  levelRef?: [string, string]
   /** The left/right handle pair the pose has, if any — what `swapSides` trades. */
   sidePair: [string, string] | null
   /**
@@ -448,6 +469,87 @@ const MODE: Record<MeasureMode, ModeSpec> = {
 
   leg_lift_left: legLift('left'),
   leg_lift_right: legLift('right'),
+
+  // Standing side-on, unposed. The reading is the line between the two bony
+  // points of the pelvis on the near side — the front hip bone (ASIS) and the
+  // dimple-height bone at the back (PSIS) — against level: the way a pelvic tilt
+  // is measured with an inclinometer. The front bone sitting lower is a forward
+  // tilt, and the further it drops the bigger the number, so SMALLER is better
+  // here, as it is for the toe touch.
+  //
+  // Pose detection can't see either bone; it finds the hip joint and nothing of
+  // the pelvis around it. So the dots are only ever *placed near* the pelvis from
+  // the landmarks, and the reading is as good as where they're dragged to: a
+  // fingertip or a strip of tape on each bone is what makes it one.
+  pelvic_tilt: {
+    label: 'pelvic tilt',
+    handles: [
+      { key: 'back', label: 'back hip bone' },
+      { key: 'front', label: 'front hip bone' },
+    ],
+    segments: [{ from: 'back', to: 'front', role: 'a' }],
+    verticalRef: null,
+    levelRef: ['back', 'front'],
+    sidePair: null,
+    defaults: {
+      back: { x: 0.42, y: 0.49 },
+      front: { x: 0.58, y: 0.505 },
+    },
+    // The near side's shoulder and hip give the pelvis its place and its size;
+    // which way the body faces is read off the knee, which stands ahead of the
+    // hip in a relaxed stance far more reliably than the shoulder does. The
+    // offsets are a starting place and nothing more — see above.
+    fromLandmarks: (lms) => {
+      const sides = [
+        [POSE.LEFT_SHOULDER, POSE.LEFT_HIP, POSE.LEFT_KNEE],
+        [POSE.RIGHT_SHOULDER, POSE.RIGHT_HIP, POSE.RIGHT_KNEE],
+      ]
+        .map((indices) => indices.map((i) => lms[i]))
+        .filter((points) => points.every(seen))
+        .sort((a, b) => Math.min(...b.map((p) => p.visibility ?? 1))
+          - Math.min(...a.map((p) => p.visibility ?? 1)))
+      const side = sides[0]
+      if (!side) return null
+      const [shoulder, hip, knee] = side
+      const torso = Math.abs(hip.y - shoulder.y)
+      if (torso < 0.05) return null
+      const facing = knee.x >= hip.x ? 1 : -1
+      // A torso is roughly three pelvis-depths tall; x is normalized against the
+      // shorter side of a portrait photo, so the same distance is a wider step.
+      const half = torso * 0.24
+      return {
+        back: { x: hip.x - facing * half, y: hip.y - torso * 0.24 },
+        front: { x: hip.x + facing * half, y: hip.y - torso * 0.18 },
+      }
+    },
+    angles: (h, aspect) => ({
+      pelvicTiltDeg:
+        h.back && h.front
+          ? tiltBelowLevel({ x: h.back.x * aspect, y: h.back.y }, { x: h.front.x * aspect, y: h.front.y })
+          : null,
+    }),
+    // The arc opens at the back bone, between level and the line to the front one.
+    marks: (h, r) => {
+      const { back, front } = h
+      if (!back || !front || r.pelvicTiltDeg == null) return []
+      const line = vec(back, front)
+      const u = unitVec(line)
+      if (!u) return []
+      const level: Pt = { x: front.x >= back.x ? 1 : -1, y: 0 }
+      return [
+        {
+          vertex: back,
+          rays: [level, u],
+          bisector: bisect(level, u),
+          reach: Math.hypot(line.x, line.y),
+          deg: r.pelvicTiltDeg,
+          role: 'a',
+        },
+      ]
+    },
+    summarize: (r) => `${r.pelvicTiltDeg ?? 0}°`,
+    readings: (r) => [{ label: 'pelvic tilt', deg: r.pelvicTiltDeg ?? 0 }],
+  },
 }
 
 /** Project one field of every mode's spec into the per-mode record the UI reads. */
@@ -487,6 +589,21 @@ export function verticalGuide(mode: MeasureMode, h: Handles): { from: Pt; toY: n
     .filter((p): p is Pt => p !== undefined)
   if (ends.length === 0) return null
   return { from, toY: Math.min(...ends.map((p) => p.y), from.y - MIN_GUIDE) }
+}
+
+/**
+ * The level line to draw for a mode measured off horizontal: from its reference
+ * handle, across to the handle it's measured toward and a little past it. In
+ * normalized coords, like the handles.
+ */
+export function levelGuide(mode: MeasureMode, h: Handles): { from: Pt; toX: number } | null {
+  const ref = MODE[mode].levelRef
+  if (!ref) return null
+  const from = h[ref[0]]
+  const to = h[ref[1]]
+  if (!from || !to) return null
+  const span = to.x - from.x
+  return { from, toX: to.x + Math.sign(span || 1) * Math.max(0.04, Math.abs(span) * 0.25) }
 }
 
 /**

@@ -14,6 +14,7 @@ export const MANUAL_FIELDS: Record<MeasureMode, { key: keyof MeasureResult; labe
   toe_touch: [{ key: 'toeTouchDeg', label: 'toe touch' }],
   leg_lift_left: [{ key: 'legLiftLeftDeg', label: 'left leg lift' }],
   leg_lift_right: [{ key: 'legLiftRightDeg', label: 'right leg lift' }],
+  pelvic_tilt: [{ key: 'pelvicTiltDeg', label: 'pelvic tilt' }],
 }
 
 /** One typed angle as a whole number of degrees, or null if it isn't an angle. */

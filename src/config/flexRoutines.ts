@@ -1,4 +1,5 @@
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from './flexPlan'
+import { HIP_THRUST } from './plan'
 import type { PhotoKind } from '../lib/photoSteps'
 
 /**
@@ -7,15 +8,18 @@ import type { PhotoKind } from '../lib/photoSteps'
  * Each is one of the flexibility skills a profile can choose to train (see
  * lib/flexSkills) — the six core skills of the Mobility & Flexibility Toolkit
  * (matthewismith.com) much of this is built on. Today offers the ones chosen and
- * dims whichever was done last (see lib/stretchRotation). One place knows what a
+ * borders the one that's up next (see lib/dailyRoutine). One place knows what a
  * routine *is* — its blocks, its name, and the photos it offers — so adding one
  * doesn't mean teaching the session flow, the photo gates and the plan editor
  * about it separately.
  *
- * The side split and head to toe were the owner's, and are the only two with
- * measured photos. The other four are starter routines with no shots: plain,
- * editable in Settings and by the coach, and no attempt at the toolkit's own
- * programming.
+ * The side split and head to toe were the owner's, and with the pelvic tilt
+ * corrective are the only ones with measured photos. The other four are starter
+ * routines with no shots: plain, editable in Settings and by the coach, and no
+ * attempt at the toolkit's own programming.
+ *
+ * The pelvic tilt corrective isn't one of the six skills. It's posture work done
+ * most days (`weeklyDays`), so it stands outside the turns the others take.
  */
 export type FlexRoutineKey =
   | 'side_split'
@@ -24,6 +28,7 @@ export type FlexRoutineKey =
   | 'pancake'
   | 'bridge'
   | 'shoulders'
+  | 'pelvic_tilt'
 
 export type FlexRoutine = {
   key: FlexRoutineKey
@@ -35,6 +40,13 @@ export type FlexRoutine = {
   warmShots: PhotoKind[]
   /** Its shots are taken back to back off one timer, and measured after. */
   burstShots?: boolean
+  /**
+   * A corrective done most days rather than a skill trained in turn: the days a
+   * week it's owed. It stands outside the rotation the other routines take
+   * turns in (see lib/dailyRoutine), and is what Today marks as up next until
+   * the day's is done.
+   */
+  weeklyDays?: number
 }
 
 /**
@@ -372,6 +384,109 @@ const SHOULDER_BLOCKS: FlexBlock[] = [
   },
 ]
 
+/**
+ * The anterior pelvic tilt corrective (Built With Science's daily routine): find
+ * the posterior tilt lying down, find it again standing, load it with the glutes
+ * and the abs, then lengthen the two hip flexors that pull the pelvis forward.
+ *
+ * The order is theirs and it's the right one: the tilts teach the position, the
+ * thrust and the plank are both cued off it ("tuck, then squeeze"), and the
+ * stretches go last, warm. Both stretches are held with the same tuck — without
+ * it a lunge stretch arches the low back instead of opening the hip.
+ *
+ * The plank is prescribed as a max hold. An RKC plank is everything clenched at
+ * once, which is spent in well under a minute, and a stretch hold here ends on
+ * its clock (see HoldTimer.onTargetEnd), so it gets a number: thirty seconds.
+ *
+ * The thrust is the one set that's typed in rather than paced (`load`): ten or
+ * more reps, with whatever weight is to hand or none.
+ */
+const PELVIC_TILT_BLOCKS: FlexBlock[] = [
+  {
+    label: 'pelvic tilts',
+    exercises: [
+      {
+        key: 'lying_pelvic_tilt',
+        name: 'lying pelvic tilt',
+        sets: '1',
+        maxSets: 1,
+        reps: 10,
+        tempo: '2s press down · 2s hold · 2s rest',
+        restSec: 0,
+      },
+      {
+        key: 'standing_pelvic_tilt',
+        name: 'standing pelvic tilt',
+        sets: '1',
+        maxSets: 1,
+        reps: 10,
+        tempo: '2s press down · 2s hold · 2s rest',
+        restSec: 0,
+      },
+    ],
+  },
+  {
+    label: 'glutes',
+    exercises: [
+      {
+        key: HIP_THRUST.key,
+        name: HIP_THRUST.name,
+        sets: String(HIP_THRUST.sets),
+        maxSets: HIP_THRUST.sets,
+        reps: HIP_THRUST.repMin,
+        tempo: '',
+        restSec: HIP_THRUST.restSec,
+        load: { repMin: HIP_THRUST.repMin, repMax: HIP_THRUST.repMax, increment: HIP_THRUST.increment ?? 5 },
+      },
+    ],
+  },
+  {
+    label: 'abs',
+    exercises: [
+      {
+        key: 'rkc_plank',
+        name: 'RKC plank',
+        sets: '2',
+        maxSets: 2,
+        reps: 1,
+        tempo: '',
+        holdSec: 30,
+        restSec: 45,
+      },
+    ],
+  },
+  {
+    label: 'hip flexors',
+    exercises: [
+      {
+        key: 'lunge_stretch',
+        name: 'lunge stretch',
+        sets: '2',
+        maxSets: 2,
+        reps: 1,
+        tempo: '',
+        holdSec: 30,
+        perSide: true,
+        restSec: 0,
+        // A kneel and a re-set, like the front split's leg changes.
+        sideSwitchSec: 10,
+      },
+      {
+        key: 'rectus_femoris_stretch',
+        name: 'rectus femoris stretch',
+        sets: '2',
+        maxSets: 2,
+        reps: 1,
+        tempo: '',
+        holdSec: 30,
+        perSide: true,
+        restSec: 0,
+        sideSwitchSec: 10,
+      },
+    ],
+  },
+]
+
 export const FLEX_ROUTINES: Record<FlexRoutineKey, FlexRoutine> = {
   side_split: {
     key: 'side_split',
@@ -420,6 +535,16 @@ export const FLEX_ROUTINES: Record<FlexRoutineKey, FlexRoutine> = {
     coldShots: [],
     warmShots: [],
   },
+  pelvic_tilt: {
+    key: 'pelvic_tilt',
+    label: 'pelvic tilt',
+    blocks: PELVIC_TILT_BLOCKS,
+    // One standing side-on photo before anything has been tucked or stretched:
+    // posture is what you stand in unprompted, so there is no warm one.
+    coldShots: ['pelvic-tilt'],
+    warmShots: [],
+    weeklyDays: 6,
+  },
 }
 
 /**
@@ -433,6 +558,7 @@ export const FLEX_ROUTINE_KEYS: FlexRoutineKey[] = [
   'pancake',
   'bridge',
   'shoulders',
+  'pelvic_tilt',
 ]
 
 /** The routine a stored key names, falling back to the side split. */

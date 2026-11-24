@@ -28,12 +28,14 @@ function TrendRow({ t }: { t: AngleTrend }) {
     <div className="rounded-2xl bg-surface p-4">
       <div className="flex items-baseline justify-between">
         <span className="font-semibold">{t.label}</span>
-        <span
-          className="rounded-full px-2 py-0.5 text-xs font-bold"
-          style={{ background: color, color: on }}
-        >
-          {t.temp}
-        </span>
+        {!t.plain && (
+          <span
+            className="rounded-full px-2 py-0.5 text-xs font-bold"
+            style={{ background: color, color: on }}
+          >
+            {t.temp}
+          </span>
+        )}
       </div>
 
       <div className="mt-1 flex items-end gap-3">
@@ -68,7 +70,7 @@ function TrendRow({ t }: { t: AngleTrend }) {
       <div className="mt-3 flex flex-col gap-1.5 text-sm">
         {t.isBest ? (
           <span className="flex items-center gap-1.5 font-semibold text-amber-400">
-            <MdEmojiEvents aria-hidden /> best {t.temp} {t.label} yet
+            <MdEmojiEvents aria-hidden /> best {t.plain ? '' : `${t.temp} `}{t.label} yet
             {t.priorBest != null && (
               <span className="font-normal text-neutral-500">(was {t.priorBest}°)</span>
             )}
@@ -91,7 +93,7 @@ function TrendRow({ t }: { t: AngleTrend }) {
         )}
 
         {t.prev == null && t.priorBest == null && (
-          <span className="text-neutral-500">first {t.temp} reading of this angle</span>
+          <span className="text-neutral-500">first {t.plain ? '' : `${t.temp} `}reading of this angle</span>
         )}
       </div>
 
@@ -108,7 +110,7 @@ function TrendRow({ t }: { t: AngleTrend }) {
           </div>
         </div>
       ) : (
-        <p className="mt-3 text-sm font-semibold text-amber-400">every goal for this angle cleared</p>
+        !t.plain && <p className="mt-3 text-sm font-semibold text-amber-400">every goal for this angle cleared</p>
       )}
     </div>
   )

@@ -12,6 +12,7 @@ import {
   defaultHandles,
   summarizeResult,
   verticalGuide,
+  levelGuide,
   type Handles,
   type MeasureMode,
   type MeasureResult,
@@ -173,6 +174,20 @@ async function renderMeasuredPhoto(
     ctx.stroke()
     ctx.restore()
   }
+  // Level line, for the pose measured off horizontal — the same job, sideways.
+  const level = levelGuide(mode, handles)
+  if (level) {
+    const from = px(level.from)
+    ctx.save()
+    ctx.setLineDash([lineW * 3, lineW * 2])
+    ctx.beginPath()
+    ctx.moveTo(from.x, from.y)
+    ctx.lineTo(level.toX * W, from.y)
+    ctx.strokeStyle = ROLE_COLOR.ref
+    ctx.lineWidth = Math.max(2, lineW * 0.7)
+    ctx.stroke()
+    ctx.restore()
+  }
 
   // Angle lines.
   ctx.lineCap = 'round'
@@ -237,7 +252,9 @@ async function renderMeasuredPhoto(
     ctx.lineWidth = Math.max(2, lineW * 0.8)
     ctx.stroke()
 
-    const reachOut = rad + font * 0.85
+    // A wedge too narrow to hold its number — the pelvic tilt's dozen degrees —
+    // puts it past the end of the lines instead of on top of them.
+    const reachOut = Math.abs(delta) < 0.4 ? m.reach + font * 1.7 : rad + font * 0.85
     stamp(
       `${m.deg}°`,
       // Kept clear of the edges and the caption, so a wide angle whose wedge

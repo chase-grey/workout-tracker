@@ -1,4 +1,4 @@
-import { buildFlexSteps, stepWorkSec } from '../lib/flexSteps'
+import { buildFlexSteps, buildSessionSteps, carriedWeight, loadedExerciseOf, stepWorkSec } from '../lib/flexSteps'
 import { settleInSec } from '../lib/settleIn'
 import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, flexRoutineOf } from './flexRoutines'
@@ -11,7 +11,7 @@ import {
   phaseDrives,
   phaseEfforts,
 } from '../lib/rhythmMotion'
-import { PHOTO_SHOT } from '../lib/photoSteps'
+import { PHOTO_SHOT, coldGate } from '../lib/photoSteps'
 
 const HEAD_TO_TOE = FLEX_ROUTINES.head_to_toe
 const exercises = HEAD_TO_TOE.blocks.flatMap((b) => b.exercises)
@@ -52,10 +52,68 @@ describe('the routine registry', () => {
       const r = FLEX_ROUTINES[key]
       expect(r.coldShots.every((s) => PHOTO_SHOT[s].cold)).toBe(true)
       expect(r.warmShots.some((s) => PHOTO_SHOT[s].cold)).toBe(false)
+      // Posture doesn't warm up: a plain shot is taken once, at the top.
       expect(r.warmShots.map((s) => PHOTO_SHOT[s].mode).sort()).toEqual(
-        r.coldShots.map((s) => PHOTO_SHOT[s].mode).sort(),
+        r.coldShots.filter((s) => !PHOTO_SHOT[s].plain).map((s) => PHOTO_SHOT[s].mode).sort(),
       )
     }
+  })
+
+  it('ships the pelvic tilt corrective as posted: six moves, the thrust the one that is loaded', () => {
+    const r = FLEX_ROUTINES.pelvic_tilt
+    expect(r.weeklyDays).toBe(6)
+    const moves = r.blocks.flatMap((b) => b.exercises)
+    expect(moves.map((e) => [e.key, e.maxSets, e.holdSec ?? e.reps, !!e.perSide])).toEqual([
+      ['lying_pelvic_tilt', 1, 10, false],
+      ['standing_pelvic_tilt', 1, 10, false],
+      ['hip_thrust', 3, 10, false],
+      ['rkc_plank', 2, 30, false],
+      ['lunge_stretch', 2, 30, true],
+      ['rectus_femoris_stretch', 2, 30, true],
+    ])
+    expect(moves.filter((e) => e.load).map((e) => e.key)).toEqual(['hip_thrust'])
+    expect(r.coldShots).toEqual(['pelvic-tilt'])
+    expect(coldGate('pelvic_tilt')).toMatchObject({ id: 'posture', title: 'posture photo' })
+  })
+})
+
+describe('a loaded exercise in a routine', () => {
+  const steps = buildSessionSteps(FLEX_ROUTINES.pelvic_tilt.blocks, { core: false })
+
+  it('stands where the plan put it, as typed-in sets', () => {
+    expect(steps.map((s) => `${s.kind}:${s.exKey}`).filter((k, i, all) => k !== all[i - 1])).toEqual([
+      'flex:lying_pelvic_tilt',
+      'flex:standing_pelvic_tilt',
+      'core:hip_thrust',
+      'flex:rkc_plank',
+      'flex:lunge_stretch',
+      'flex:rectus_femoris_stretch',
+    ])
+    const thrusts = steps.filter((s) => s.kind === 'core')
+    expect(thrusts).toHaveLength(3)
+    expect(thrusts[0]).toMatchObject({ repMin: 10, repMax: 20, restSec: 45, round: 0 })
+    expect(new Set(steps.map((s) => s.stepKey)).size).toBe(steps.length)
+  })
+
+  it('names the exercise the session logs its sets under', () => {
+    expect(loadedExerciseOf(steps)).toMatchObject({ key: 'hip_thrust', repMin: 10, repMax: 20 })
+    expect(loadedExerciseOf(buildSessionSteps(FLEX_ROUTINES.head_to_toe.blocks, { core: false }))).toBeNull()
+  })
+
+  it('is left out of the stretch-only steps', () => {
+    expect(buildFlexSteps(FLEX_ROUTINES.pelvic_tilt.blocks).some((s) => s.exKey === 'hip_thrust')).toBe(false)
+  })
+
+  it('carries the weight forward from the last set it was changed on', () => {
+    // Untouched: the progression's target.
+    expect(carriedWeight({}, 0, 45)).toBe(45)
+    expect(carriedWeight({}, 2, null)).toBeNull()
+    // Cleared on the first set of a day with no plate: the rest follow.
+    expect(carriedWeight({ 0: null }, 1, 45)).toBeNull()
+    expect(carriedWeight({ 0: null }, 2, 45)).toBeNull()
+    // Changed again later: from there on.
+    expect(carriedWeight({ 0: 25, 2: 35 }, 1, 45)).toBe(25)
+    expect(carriedWeight({ 0: 25, 2: 35 }, 2, 45)).toBe(35)
   })
 })
 

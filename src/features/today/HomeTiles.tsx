@@ -69,7 +69,8 @@ type Props = {
   candidates: HomeTile[]
   label: (t: HomeTile) => string
   detail?: (t: HomeTile) => string | undefined
-  dimmed: (t: HomeTile) => boolean
+  /** The tile that's up next in the plan: it wears the accent border. */
+  next: (t: HomeTile) => boolean
   onOpen: (t: HomeTile) => void
   /**
    * The page is being edited and this card is open (see
@@ -83,12 +84,15 @@ type Props = {
  * opens it for editing, where tiles drag into a new order, an × takes one off
  * and + puts one back or pins a cardio session.
  *
+ * What's up next is marked by an accent border, never by fading the rest: a
+ * faded button reads as one that can't be pressed, and every one of these can.
+ *
  * Taking off the last tile of a pillar asks whether it's still being tracked,
  * with its weekly goal right there to change; putting on a tile from a pillar
  * that's off asks for the goal to track it at. The tiles are the everyday face
  * of what the profile tracks, so this is where changing it comes naturally.
  */
-export function HomeTiles({ candidates, label, detail, dimmed, onOpen, editing = false }: Props) {
+export function HomeTiles({ candidates, label, detail, next, onOpen, editing = false }: Props) {
   const { settings, updateSettings } = useData()
   const [fallbackProfile] = useState(() => ownerProfile())
   const profile: Profile = settings.profile ?? fallbackProfile
@@ -266,7 +270,7 @@ export function HomeTiles({ candidates, label, detail, dimmed, onOpen, editing =
                 onClick={() => {
                   if (!editing) onOpen(t)
                 }}
-                className={`${tileButton} ${editing ? 'bg-surface-2' : ''} ${dimmed(t) && !editing ? 'opacity-50' : ''} ${
+                className={`${tileButton} ${editing ? 'bg-surface-2' : ''} ${next(t) && !editing ? 'ring-2 ring-inset ring-accent' : ''} ${
                   editing && !dragged ? 'tile-wiggle' : ''
                 } ${dragged ? 'scale-105 shadow-lg shadow-black/40' : ''}`}
               >

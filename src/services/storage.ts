@@ -260,6 +260,12 @@ export type Settings = {
    */
   sixPackStatus?: SixPackStatus
   /**
+   * Whether the pelvis stands neutral yet, called off the weekly side-on photo
+   * the pelvic tilt routine takes. The angle read off that photo is shown beside
+   * it, but it's the eye that settles it. Unset means not yet.
+   */
+  pelvicTiltStatus?: SixPackStatus
+  /**
    * Who is using the app and what they asked it to track (see lib/profile).
    * Absent on the original owner's devices, which is what keeps every shipped
    * target applying to them unchanged. Synced: it's the account's, not the phone's.

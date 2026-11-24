@@ -9,6 +9,7 @@ import {
   hasSides,
   swapSides,
   verticalGuide,
+  levelGuide,
   type Handles,
   type MeasureMode,
   type MeasureResult,
@@ -72,6 +73,7 @@ export function AngleEditor({
   // Tailor's angles are read off straight up, so the vertical has to be on screen
   // too — otherwise the lines being dragged have nothing to be judged against.
   const guide = verticalGuide(mode, handles)
+  const level = levelGuide(mode, handles)
 
   /** Pointer position in 0..1 image space, unclamped so grab offsets stay accurate at the edges. */
   const coordFromEvent = (e: PointerEvent): { x: number; y: number } | null => {
@@ -151,6 +153,18 @@ export function AngleEditor({
                 y1={guide.from.y * 100}
                 x2={guide.from.x * 100}
                 y2={Math.max(0, guide.toY) * 100}
+                stroke={ROLE_COLOR.ref}
+                strokeWidth={1}
+                strokeDasharray="2 1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {level && (
+              <line
+                x1={level.from.x * 100}
+                y1={level.from.y * 100}
+                x2={Math.min(1, Math.max(0, level.toX)) * 100}
+                y2={level.from.y * 100}
                 stroke={ROLE_COLOR.ref}
                 strokeWidth={1}
                 strokeDasharray="2 1.5"

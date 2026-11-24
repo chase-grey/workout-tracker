@@ -11,14 +11,20 @@
  */
 
 import { FLEX_ROUTINE_KEYS, type FlexRoutineKey } from '../config/flexRoutines'
-import { hasPillar, type Profile } from './profile'
+import { hasPillar, ownerFlavour, type Profile } from './profile'
 
 /** What a profile that never answered trains: the two routines the app shipped with. */
 export const LEGACY_FLEX_SKILLS: FlexRoutineKey[] = ['side_split', 'head_to_toe']
 
+/**
+ * What the owner trains without having been asked: those two, and the pelvic
+ * tilt corrective he added after them. Anyone else picks it like any skill.
+ */
+export const OWNER_FLEX_SKILLS: FlexRoutineKey[] = [...LEGACY_FLEX_SKILLS, 'pelvic_tilt']
+
 /** The skills a profile trains, in the order Today offers them; [] when it only logs. */
 export function flexSkillsOf(profile: Profile | null | undefined): FlexRoutineKey[] {
-  const chosen = profile?.flexSkills ?? LEGACY_FLEX_SKILLS
+  const chosen = profile?.flexSkills ?? (ownerFlavour(profile) ? OWNER_FLEX_SKILLS : LEGACY_FLEX_SKILLS)
   return FLEX_ROUTINE_KEYS.filter((k) => chosen.includes(k))
 }
 

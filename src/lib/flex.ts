@@ -23,6 +23,9 @@ export type FlexEntry = {
   coldLegLiftRightDeg?: number | null
   warmLegLiftLeftDeg?: number | null
   warmLegLiftRightDeg?: number | null
+  /* Standing pelvic tilt, off a side-on photo (see measure.MODE.pelvic_tilt).
+   * Posture rather than range, so there's no cold and warm of it: one reading. */
+  pelvicTiltDeg?: number | null
   /**
    * Routines completed on this date, in completion order. Absent on legacy
    * entries, which were all side splits (see lib/stretchRotation).
@@ -50,6 +53,7 @@ const ANGLE_FIELDS = [
   'coldLegLiftRightDeg',
   'warmLegLiftLeftDeg',
   'warmLegLiftRightDeg',
+  'pelvicTiltDeg',
 ] as const
 
 /**
@@ -83,6 +87,19 @@ export const coldLegLiftLeftOf = (e: FlexEntry): number | null => e.coldLegLiftL
 export const coldLegLiftRightOf = (e: FlexEntry): number | null => e.coldLegLiftRightDeg ?? null
 export const warmLegLiftLeftOf = (e: FlexEntry): number | null => e.warmLegLiftLeftDeg ?? null
 export const warmLegLiftRightOf = (e: FlexEntry): number | null => e.warmLegLiftRightDeg ?? null
+
+/** The standing pelvic tilt for an entry, or null if none was measured. */
+export const pelvicTiltOf = (e: FlexEntry): number | null => e.pelvicTiltDeg ?? null
+
+/** Every pelvic tilt reading as {date, value}, oldest first. */
+export function pelvicTiltSeries(entries: FlexEntry[]): { date: string; value: number }[] {
+  const out: { date: string; value: number }[] = []
+  for (const e of dedupeFlexByDate(entries)) {
+    const v = pelvicTiltOf(e)
+    if (v != null) out.push({ date: e.date, value: v })
+  }
+  return out
+}
 
 /**
  * Collapse to one merged entry per date. For each angle field, keep the latest
@@ -118,6 +135,7 @@ export function dedupeFlexByDate(entries: FlexEntry[]): FlexEntry[] {
         coldLegLiftRightDeg: e.coldLegLiftRightDeg ?? null,
         warmLegLiftLeftDeg: e.warmLegLiftLeftDeg ?? null,
         warmLegLiftRightDeg: e.warmLegLiftRightDeg ?? null,
+        pelvicTiltDeg: e.pelvicTiltDeg ?? null,
         ...(e.routines?.length ? { routines: [...new Set(e.routines)] } : {}),
         ...(e.startSides ? { startSides: { ...e.startSides } } : {}),
         ...(e.note != null && e.note !== '' ? { note: e.note } : {}),

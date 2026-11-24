@@ -37,7 +37,7 @@ describe('weekly abs', () => {
   it('offers core on its own and neither stretching routine includes it', () => {
     expect(buildCoreSteps()).toHaveLength(4)
     for (const routine of Object.values(FLEX_ROUTINES)) {
-      expect(buildSessionSteps(routine.blocks, { core: false }).every((s) => s.kind === 'flex')).toBe(true)
+      expect(buildSessionSteps(routine.blocks, { core: false }).some((s) => s.exKey === MAT_SITUP_KEY)).toBe(false)
     }
   })
 })

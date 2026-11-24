@@ -21,6 +21,8 @@ import { formatDuration, type ExerciseTimeSample } from '../../lib/estimate'
 import {
   buildSessionSteps,
   buildCoreSteps,
+  carriedWeight,
+  loadedExerciseOf,
   flexRoundKey,
   skipsFinalRepRest,
   stepWorkSec,
@@ -427,22 +429,33 @@ export function StretchSession({
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
-  // Progression target for the core sets — weight and reps both prefilled and both
-  // editable. Read from the mat sit-up's own history and nothing else: what the
-  // training days press out on a strapped-in incline says nothing about what to
-  // hold on the floor (see plan.MAT_SITUP_KEY).
-  const coreTarget = useMemo(
+  // Progression target for the typed-in sets — weight and reps both prefilled and
+  // both editable. Read from that movement's own history and nothing else: what
+  // the training days press out on a strapped-in incline says nothing about what
+  // to hold on the floor (see plan.MAT_SITUP_KEY). The movement is the office-abs
+  // block's sit-up, or the routine's own loaded exercise (the hip thrust).
+  const loaded = useMemo(
     () =>
-      nextTarget(workouts, STRETCH_CORE.key, {
+      loadedExerciseOf(allSteps) ?? {
+        key: STRETCH_CORE.key,
         repMin: STRETCH_CORE.repMin,
         repMax: STRETCH_CORE.repMax,
         increment: STRETCH_CORE.increment,
-      }),
-    [workouts],
+      },
+    [allSteps],
+  )
+  const coreTarget = useMemo(
+    () => nextTarget(workouts, loaded.key, { repMin: loaded.repMin, repMax: loaded.repMax, increment: loaded.increment }),
+    [workouts, loaded],
   )
   const coreRepsFor = (round: number) => coreReps[round] ?? coreTarget.reps
+  // The sit-ups keep a weight per set. A routine's own loaded exercise carries
+  // the last one set forward: it's done with a plate or without, and the day
+  // there's none is said once, on the first set.
   const coreWeightFor = (round: number) =>
-    round in coreWeights ? coreWeights[round] : coreTarget.weightLbs
+    officeAbs
+      ? round in coreWeights ? coreWeights[round] : coreTarget.weightLbs
+      : carriedWeight(coreWeights, round, coreTarget.weightLbs)
 
   useEffect(() => {
     storage.saveStretch({
@@ -617,6 +630,7 @@ export function StretchSession({
       // from the checklist; don't describe that session as "stretch + core".
       withCore: withCore && !skipped.has(STRETCH_CORE.key),
       coreSets,
+      coreExercise: loaded.key,
       duration: startedAt
         ? {
             totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,

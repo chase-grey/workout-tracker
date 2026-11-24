@@ -17,7 +17,7 @@ import type { DayType } from '../../types'
 import { MdPhotoCamera } from 'react-icons/md'
 import { weeklyAbsDays, WEEKLY_ABS_GOAL } from '../../lib/weeklyAbs'
 import { hasPillar, ownerFlavour, readsBodyFat, weighsIn } from '../../lib/profile'
-import { lastStretchRoutine } from '../../lib/stretchRotation'
+import { dailyStanding, nextStretchUp } from '../../lib/dailyRoutine'
 import { cardioSummary } from '../../lib/cardio'
 import { HomeTiles } from './HomeTiles'
 import { TourCard } from './TourCard'
@@ -131,41 +131,37 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     flashTimer.current = window.setTimeout(() => setFlash(null), undo ? 5000 : 1800)
   }
 
-  // The lift days are one rotation: exactly one is up next and the others are
-  // dimmed. Which one is lib/liftRotation's call — the day that has waited
+  // The lift days are one rotation: exactly one is up next, and it wears the
+  // accent border. Which one is lib/liftRotation's call — the day that has waited
   // longest, with full body held until the day after a rest day. Stretch + core
-  // isn't training and never changes this. Dimming is only a hint — a dimmed
-  // button still starts its session.
+  // isn't training and never changes this. The border is only a hint — every
+  // button is as live as it looks, and starts its session.
   const liftDays = dayOrder(plan).filter((t) => plan[t].exercises.length > 0)
   const nextDay: DayType | null = nextLiftDay(trainingSessions(workouts), todayISO, liftDays)
 
-  // The two stretch routines would dim the same way and for the same reason —
-  // whichever was done last steps back so the other reads as up next — but for
-  // now head to toe is the focus, so the side split is pinned dim and head to
-  // toe always reads as up next. Dimming is only a hint; the side split still
-  // starts. To go back to alternating, read `lastStretchRoutine` from
-  // lib/stretchRotation off `flexEntries` here instead of the constant.
-  // That pin is the owner's focus; anyone else's two routines take turns.
-  const dimmedStretch: FlexRoutineKey | null = owner ? 'side_split' : lastStretchRoutine(flexEntries)
-  const abDays = weeklyAbsDays(workouts, plan, toISODate(new Date()))
+  // The stretch that's up next: a routine owed by the day (the pelvic tilt
+  // corrective, six days of seven) until today's is done, and otherwise the next
+  // of the routines that take turns. With a daily routine trained, the ones that
+  // take turns are never marked — see lib/dailyRoutine.
+  const routines = stretchRoutinesFor(profile)
+  const nextStretch: FlexRoutineKey | null = nextStretchUp(routines, flexEntries, todayISO)
+  const abDays = weeklyAbsDays(workouts, plan, todayISO)
   const absRemaining = Math.max(0, WEEKLY_ABS_GOAL - abDays.length)
 
-  // Whichever half of an alternating pair reads as up next takes the top row:
-  // the dimmed one was just done, so it steps down and the button you're
-  // likelier to want is the first one your eye and thumb land on. With nothing
-  // dimmed — no history yet — the pair keeps the order it already had. The lift
-  // days do the same with three: the one up next leads, the rest keep their order.
-  const nextUpFirst = <T,>(pair: T[], dimmed: T | null) =>
-    dimmed && pair.length === 2 && pair[0] === dimmed ? [pair[1], pair[0]] : pair
+  // Whatever is up next leads its own kind: it's the button you're likelier to
+  // want, so it's the first one your eye and thumb land on, and the rest keep
+  // their order behind it.
+  const nextUpFirst = <T,>(all: T[], next: T | null) =>
+    next != null && all.includes(next) ? [next, ...all.filter((t) => t !== next)] : all
 
   // That rotation only orders the tiles until they've been dragged into an
   // order of their own (see HomeTiles); from then on that order holds.
   const candidates = candidateTiles({
-    liftDays: nextDay ? [nextDay, ...liftDays.filter((t) => t !== nextDay)] : liftDays,
+    liftDays: nextUpFirst(liftDays, nextDay),
     // The core block is the owner's.
     core: owner,
     // Only the skills this person trains; one who just counts sessions gets the log card instead.
-    routines: nextUpFirst(stretchRoutinesFor(profile), dimmedStretch),
+    routines: nextUpFirst(routines, nextStretch),
     pins: settings.cardioPins ?? [],
   })
 
@@ -181,16 +177,20 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
         return t.type
     }
   }
-  const tileDetail = (t: HomeTile) =>
-    t.type === 'pin'
-      ? cardioSummary({ minutes: t.pin.minutes, distanceMi: t.pin.distanceMi })
-      : t.type === 'cardio' && todaysCardio
-        ? `today: ${todaysCardio.label}`
-        : undefined
-  const tileDimmed = (t: HomeTile) =>
-    (t.type === 'lift' && t.day !== nextDay) ||
-    (t.type === 'stretch' && t.routine === dimmedStretch) ||
-    (t.type === 'core' && absRemaining === 0)
+  const tileDetail = (t: HomeTile) => {
+    if (t.type === 'pin') return cardioSummary({ minutes: t.pin.minutes, distanceMi: t.pin.distanceMi })
+    if (t.type === 'cardio' && todaysCardio) return `today: ${todaysCardio.label}`
+    if (t.type === 'stretch') {
+      // A routine owed by the day says where its week stands.
+      const week = dailyStanding(flexEntries, t.routine, todayISO)
+      if (week) return `${week.done}/${week.goal} this week`
+    }
+    return undefined
+  }
+  const tileNext = (t: HomeTile) =>
+    (t.type === 'lift' && t.day === nextDay) ||
+    (t.type === 'stretch' && t.routine === nextStretch) ||
+    (t.type === 'core' && absRemaining > 0 && !abDays.includes(todayISO))
 
   const openTile = (t: HomeTile) => {
     switch (t.type) {
@@ -237,7 +237,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
       candidates={candidates}
       label={tileLabel}
       detail={tileDetail}
-      dimmed={tileDimmed}
+      next={tileNext}
       onOpen={openTile}
       editing={editing}
     />

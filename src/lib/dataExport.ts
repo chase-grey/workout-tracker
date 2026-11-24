@@ -281,6 +281,7 @@ const FLEX_ANGLES = [
   'coldLegLiftRightDeg',
   'warmLegLiftLeftDeg',
   'warmLegLiftRightDeg',
+  'pelvicTiltDeg',
 ] as const satisfies readonly (keyof FlexEntry)[]
 
 const angleName = (k: string): string => k.replace(/Deg$/, '')

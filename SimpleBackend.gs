@@ -129,6 +129,8 @@ const FLEX_HEADERS = [
   'warm_leg_lift_left_deg',
   'warm_leg_lift_right_deg',
   'start_sides',
+  // Standing pelvic tilt off a side-on photo: one reading, neither cold nor warm.
+  'pelvic_tilt_deg',
 ]
 const CONFIG_HEADERS = ['key', 'value']
 const CALORIE_HEADERS = ['date', 'calories', 'label', 'logged_at', 'last_amount', 'helpings', 'protein', 'carbs', 'fat']
@@ -164,7 +166,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 11
+const BACKEND_VERSION = 12
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -543,7 +545,9 @@ function flexSheet() {
     })
   }
 
-  if (header[18] !== 'start_sides') {
+  // A sheet from before the newest column: every existing column keeps its
+  // index, so only the header row widens.
+  if (header[FLEX_HEADERS.length - 1] !== FLEX_HEADERS[FLEX_HEADERS.length - 1]) {
     sh.getRange(1, 1, 1, FLEX_HEADERS.length).setValues([FLEX_HEADERS])
   }
 
@@ -624,6 +628,7 @@ function getFlex(since) {
       warmLegLiftLeftDeg: numOrNull(r[16]),
       warmLegLiftRightDeg: numOrNull(r[17]),
       startSides: r[18] ? JSON.parse(String(r[18])) : undefined,
+      pelvicTiltDeg: numOrNull(r[19]),
     })
   }
   return out
@@ -674,6 +679,7 @@ function appendFlex(body) {
             keep(e.warmLegLiftLeftDeg, 16),
             keep(e.warmLegLiftRightDeg, 17),
             e.startSides ? JSON.stringify(Object.assign({}, cur[18] ? JSON.parse(String(cur[18])) : {}, e.startSides)) : cur[18] || '',
+            keep(e.pelvicTiltDeg, 19),
           ],
         ])
       } else {
@@ -697,6 +703,7 @@ function appendFlex(body) {
           numOrBlank(e.warmLegLiftLeftDeg),
           numOrBlank(e.warmLegLiftRightDeg),
           e.startSides ? JSON.stringify(e.startSides) : '',
+          numOrBlank(e.pelvicTiltDeg),
         ])
         rowByDate[e.date] = sh.getLastRow()
       }

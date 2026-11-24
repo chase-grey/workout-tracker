@@ -5,6 +5,7 @@ import {
   coldTailorsLeftOf,
   coldTailorsRightOf,
   coldToeTouchOf,
+  pelvicTiltOf,
   warmLegLiftLeftOf,
   warmLegLiftRightOf,
   warmSplitOf,
@@ -40,6 +41,7 @@ export type AngleMetric =
   | 'toeTouch'
   | 'legLiftLeft'
   | 'legLiftRight'
+  | 'pelvicTilt'
 
 /** How many readings the trend line carries, newest reading included. */
 export const TREND_POINTS = 6
@@ -48,6 +50,8 @@ export type AngleTrend = {
   metric: AngleMetric
   label: string
   temp: MeasureTemp
+  /** A reading that is neither cold nor warm (posture): `temp` is not shown. */
+  plain?: boolean
   /** The reading just taken. */
   value: number
   /** Newest reading of this metric/temp from an earlier date. */
@@ -78,6 +82,8 @@ type MetricSpec = {
   goals: readonly number[]
   /** Which way this reading improves. Higher unless said otherwise. */
   dir?: MetricDir
+  /** Neither cold nor warm — see AngleTrend.plain. */
+  plain?: boolean
 }
 
 /**
@@ -134,6 +140,18 @@ const METRICS: MetricSpec[] = [
     read: { cold: coldLegLiftRightOf, warm: warmLegLiftRightOf },
     goals: LEG_LIFT_GOALS,
   },
+  {
+    // Posture: one reading, no ladder. The number is only as steady as the two
+    // dots were placed, so it's shown against its own history and judged by eye
+    // (see the goals panel's posture row) rather than against rungs.
+    metric: 'pelvicTilt',
+    label: 'pelvic tilt',
+    field: 'pelvicTiltDeg',
+    read: { cold: pelvicTiltOf, warm: pelvicTiltOf },
+    goals: [],
+    dir: LOWER_IS_BETTER,
+    plain: true,
+  },
 ]
 
 const COLD_READER: Record<AngleMetric, (e: FlexEntry) => number | null> = {
@@ -143,6 +161,7 @@ const COLD_READER: Record<AngleMetric, (e: FlexEntry) => number | null> = {
   toeTouch: coldToeTouchOf,
   legLiftLeft: coldLegLiftLeftOf,
   legLiftRight: coldLegLiftRightOf,
+  pelvicTilt: pelvicTiltOf,
 }
 
 /**
@@ -177,7 +196,7 @@ export function angleTrends(
     )
     // A warm reading is worth reading against the cold one it started from.
     let coldToday: number | null = null
-    if (temp === 'warm') {
+    if (temp === 'warm' && !spec.plain) {
       for (const e of entries) {
         if (e.date !== today) continue
         const v = COLD_READER[spec.metric](e)
@@ -192,6 +211,7 @@ export function angleTrends(
       metric: spec.metric,
       label: spec.label,
       temp,
+      ...(spec.plain ? { plain: true } : {}),
       value,
       prev,
       delta: prev ? Math.round(dir.gain(prev.value, value) * 10) / 10 : null,

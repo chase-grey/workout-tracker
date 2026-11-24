@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   LEGACY_FLEX_SKILLS,
+  OWNER_FLEX_SKILLS,
   flexSkillsOf,
   logsStretchOnly,
   sameSkills,
@@ -21,8 +22,14 @@ const profile = (over: Partial<Profile> = {}): Profile => ({
 })
 
 describe('flexSkillsOf', () => {
-  it('keeps the original two for a device with no profile', () => {
-    expect(flexSkillsOf(null)).toEqual(LEGACY_FLEX_SKILLS)
+  it('gives the owner the original two and the pelvic tilt corrective', () => {
+    expect(flexSkillsOf(null)).toEqual(OWNER_FLEX_SKILLS)
+    expect(flexSkillsOf(profile({ owner: true }))).toEqual(['side_split', 'head_to_toe', 'pelvic_tilt'])
+    expect(LEGACY_FLEX_SKILLS).toEqual(['side_split', 'head_to_toe'])
+  })
+
+  it('leaves the owner what he chose once he has chosen', () => {
+    expect(flexSkillsOf(profile({ owner: true, flexSkills: ['side_split'] }))).toEqual(['side_split'])
   })
 
   it('keeps the original two for a profile that never answered', () => {

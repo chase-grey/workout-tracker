@@ -25,6 +25,7 @@ export type PhotoKind =
   | 'cold-leg-lift-right'
   | 'warm-leg-lift-left'
   | 'warm-leg-lift-right'
+  | 'pelvic-tilt'
 
 /**
  * A photo screen: the shots it offers, all of them optional. A `burst` gate
@@ -52,9 +53,13 @@ const burst = (routine: FlexRoutineKey) => (FLEX_ROUTINES[routine].burstShots ? 
  * The two routines' gates have ids of their own, so a day that runs both doesn't
  * have one routine's cold screen suppress the other's.
  */
-export type PhotoGateId = 'cold' | 'warm-tailors' | 'warm-split' | 'cold-h2t' | 'warm-h2t' | 'goal'
+export type PhotoGateId = 'cold' | 'warm-tailors' | 'warm-split' | 'cold-h2t' | 'warm-h2t' | 'posture' | 'goal'
 
-export const PHOTO_SHOT: Record<PhotoKind, { label: string; mode: MeasureMode; cold: boolean }> = {
+/**
+ * `plain` is a shot that is neither cold nor warm — posture, which doesn't warm
+ * up. It's taken where a cold one would be and says nothing of temperature.
+ */
+export const PHOTO_SHOT: Record<PhotoKind, { label: string; mode: MeasureMode; cold: boolean; plain?: boolean }> = {
   'cold-split': { label: `${MEASURE_LABEL.split} · cold`, mode: 'split', cold: true },
   'cold-tailors': { label: `${MEASURE_LABEL.tailors} · cold`, mode: 'tailors', cold: true },
   'warm-tailors': { label: `${MEASURE_LABEL.tailors} · warm`, mode: 'tailors', cold: false },
@@ -81,13 +86,15 @@ export const PHOTO_SHOT: Record<PhotoKind, { label: string; mode: MeasureMode; c
     mode: 'leg_lift_right',
     cold: false,
   },
+  'pelvic-tilt': { label: MEASURE_LABEL.pelvic_tilt, mode: 'pelvic_tilt', cold: true, plain: true },
 }
 
 /** The cold screen a routine opens with, offering all of its cold shots. */
 export function coldGate(routine: FlexRoutineKey): PhotoGate {
+  const posture = FLEX_ROUTINES[routine].coldShots.every((k) => PHOTO_SHOT[k].plain)
   return {
-    id: routine === 'head_to_toe' ? 'cold-h2t' : 'cold',
-    title: 'cold photos',
+    id: routine === 'head_to_toe' ? 'cold-h2t' : posture ? 'posture' : 'cold',
+    title: posture ? 'posture photo' : 'cold photos',
     shots: FLEX_ROUTINES[routine].coldShots,
     ...burst(routine),
   }
@@ -150,6 +157,9 @@ export function gateAfterStep(
 /** The flexibility ladders the goals panel draws, by the pose each one measures. */
 export type FlexLadder = 'split' | 'tailors' | 'toeTouch' | 'legLift'
 
+/** The posture photo, asked for from the goals panel rather than from the routine. */
+export const postureGate = (): PhotoGate => ({ id: 'goal', title: 'posture photo', shots: ['pelvic-tilt'] })
+
 const LADDER_SHOTS: Record<FlexLadder, { title: string; shots: PhotoKind[] }> = {
   split: { title: 'split photo', shots: ['warm-split'] },
   tailors: { title: "tailor's photo", shots: ['warm-tailors'] },
@@ -182,6 +192,7 @@ export type ShotMeasurement = {
   coldLegLiftRightDeg?: number
   warmLegLiftLeftDeg?: number
   warmLegLiftRightDeg?: number
+  pelvicTiltDeg?: number
 }
 
 /**
@@ -198,5 +209,6 @@ export function shotMeasurement(kind: PhotoKind, result: MeasureResult): ShotMea
   if (result.toeTouchDeg != null) m[cold ? 'coldToeTouchDeg' : 'warmToeTouchDeg'] = result.toeTouchDeg
   if (result.legLiftLeftDeg != null) m[cold ? 'coldLegLiftLeftDeg' : 'warmLegLiftLeftDeg'] = result.legLiftLeftDeg
   if (result.legLiftRightDeg != null) m[cold ? 'coldLegLiftRightDeg' : 'warmLegLiftRightDeg'] = result.legLiftRightDeg
+  if (result.pelvicTiltDeg != null) m.pelvicTiltDeg = result.pelvicTiltDeg
   return m
 }

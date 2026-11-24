@@ -43,6 +43,13 @@ export type FlexExercise = {
   sideSwitchSec?: number
   /** The rest lands after both sides of a round, not after each side. */
   restAfterSides?: boolean
+  /**
+   * Strength work inside a routine: its sets are counted and typed in rather
+   * than paced, with a weight that can be left empty, and each is logged as a
+   * workout row under `key` (see flexSteps.CoreSetStep). The hip thrust — done
+   * with a plate when there is one and without when there isn't.
+   */
+  load?: { repMin: number; repMax: number; increment: number }
 }
 
 export type FlexBlock = {

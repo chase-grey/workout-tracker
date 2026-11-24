@@ -133,6 +133,8 @@ export type StretchFinishInput = {
   withCore: boolean
   /** The core sets actually completed, in order. */
   coreSets: CoreSet[]
+  /** The exercise those sets were of, when it isn't the core block's sit-up. */
+  coreExercise?: string
   /** The wall clock, absent for a session whose start was never recorded. */
   duration?: SessionDurationInput
 }
@@ -181,6 +183,7 @@ export type FlexMeasurement = {
   coldLegLiftRightDeg?: number | null
   warmLegLiftLeftDeg?: number | null
   warmLegLiftRightDeg?: number | null
+  pelvicTiltDeg?: number | null
   /** The routine(s) this log completes — omitted by a pure measurement. */
   routines?: FlexRoutineKey[]
   startSides?: FlexEntry['startSides']
@@ -206,6 +209,7 @@ const FLEX_ANGLE_KEYS = [
   'coldLegLiftRightDeg',
   'warmLegLiftLeftDeg',
   'warmLegLiftRightDeg',
+  'pelvicTiltDeg',
 ] as const
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
@@ -254,7 +258,7 @@ type DataContextValue = {
    * The core sets of a Stretch + Core session — see the implementation. Returns
    * the PRs they set, which the finish recap leads with.
    */
-  logCore: (sets: CoreSet[], note?: string) => PR[]
+  logCore: (sets: CoreSet[], note?: string, exerciseKey?: string) => PR[]
   /** File a finished Stretch + Core session and hand back its recap. */
   finishStretch: (input: StretchFinishInput) => Promise<StretchFinishSummary>
   /** A single at `weightLbs` on `exerciseKey`, the way a strength goal is settled. */
@@ -822,6 +826,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         coldLegLiftRightDeg: m.coldLegLiftRightDeg ?? null,
         warmLegLiftLeftDeg: m.warmLegLiftLeftDeg ?? null,
         warmLegLiftRightDeg: m.warmLegLiftRightDeg ?? null,
+        pelvicTiltDeg: m.pelvicTiltDeg ?? null,
         ...(m.routines?.length ? { routines: m.routines } : {}),
         ...(m.startSides ? { startSides: m.startSides } : {}),
         note: m.note,
@@ -1040,7 +1045,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Synchronous, so the recap can be built in the same breath as the write: the
   // push to the backend is kicked off and left to finish on its own.
   const logCore = useCallback(
-    (sets: CoreSet[], note = CORE_SESSION_NOTE): PR[] => {
+    (sets: CoreSet[], note = CORE_SESSION_NOTE, exerciseKey: string = STRETCH_CORE.key): PR[] => {
       const done = sets.filter((s) => s.reps > 0)
       if (done.length === 0) return []
       const sessionId = uuid()
@@ -1049,7 +1054,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         session_id: sessionId,
         date,
         day_type: 'push',
-        exercise: STRETCH_CORE.key,
+        exercise: exerciseKey,
         set_number: i + 1,
         weight_lbs: s.weightLbs,
         reps: s.reps,
@@ -1088,7 +1093,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           restSec: duration.restSec,
         })
       }
-      const prs = logCore(coreSets)
+      const prs = logCore(coreSets, CORE_SESSION_NOTE, input.coreExercise)
       // Which routine was done is what the alternation reads off the log. The note
       // says whether the core block was part of it, since with it skipped "stretch
       // + core" would be a plain misstatement of what happened.

@@ -72,6 +72,8 @@ export function PhotoStep({
   const { kind, frame } = queue[at]
   const shot = PHOTO_SHOT[kind]
   const temp = shot.cold ? 'cold' : 'warm'
+  // Posture is neither: nothing on the photo or its file says cold.
+  const shown = shot.plain ? undefined : temp
   const left = queue.length - at
 
   const next = (took: boolean) => {
@@ -90,7 +92,7 @@ export function PhotoStep({
         // A fresh camera per shot, so nothing from the last one carries over.
         key={kind}
         mode={shot.mode}
-        temp={temp}
+        temp={shown}
         title={shot.label}
         frame={frame}
         // Read the history before the capture is logged, so the reading is

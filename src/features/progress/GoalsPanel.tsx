@@ -76,7 +76,9 @@ import { LiftLadderBlock } from './LiftLadderBlock'
 import { GoalTooltip } from './GoalTooltip'
 import { goalLineMarks } from './goalLineMarks'
 import { targetAtEta } from '../../lib/goalLine'
-import { ladderGate, shotMeasurement, type FlexLadder } from '../../lib/photoSteps'
+import { ladderGate, postureGate, shotMeasurement, type FlexLadder } from '../../lib/photoSteps'
+import { pelvicTiltSeries } from '../../lib/flex'
+import { stretchRoutinesFor } from '../../lib/flexSkills'
 import { useBackGuard } from '../../lib/useBackGuard'
 import { PhotoStep } from '../flex/PhotoStep'
 import { WeightLogSheet } from '../today/WeightLogSheet'
@@ -1014,6 +1016,9 @@ function goalFamily(g: GoalSpec): string {
 
 const FLEX_LADDERS: FlexLadder[] = ['split', 'tailors', 'toeTouch', 'legLift']
 
+/** The posture goal's id, for the reached band's hide and show. Not a GoalSpec: nothing projects it. */
+const POSTURE_GOAL_ID = 'neutral_pelvis'
+
 /** The pose a flexibility rung is measured on, or null for any other goal. */
 function flexLadderOf(g: GoalSpec): FlexLadder | null {
   return FLEX_LADDERS.find((l) => goalFamily(g) === `flex:${l}`) ?? null
@@ -1029,22 +1034,43 @@ const SIX_PACK_OPTIONS: { value: SixPackStatus; label: string }[] = [
  * The six-pack goal, answered rather than projected. A body-fat estimate off a
  * tape measure can't see abs, and the mirror can — so this one is called by eye,
  * and calling it "got it" is what draws the ab lines on the strength map.
+ *
+ * The posture goal is called the same way, off the weekly side-on photo. The
+ * tilt measured on that photo rides along as `reading` — it's only as steady as
+ * the two dots were placed, so it informs the call rather than making it — and
+ * `onOpen` takes a tap on the title to the camera for a new one.
  */
 function SixPackRow({
   title,
   status,
   onChange,
+  reading,
+  onOpen,
 }: {
   title: string
   status: SixPackStatus
   onChange: (s: SixPackStatus) => void
+  reading?: React.ReactNode
+  onOpen?: () => void
 }) {
   // Called "got it" is this goal's version of reached, so it wears the same ring
   // the projected goals get when they land — it sits in the reached band with
   // them, and one of the group missing the outline would read as unfinished.
+  const head = (
+    <>
+      <h4 className="font-semibold">{title}</h4>
+      {reading}
+    </>
+  )
   return (
     <div className={`rounded-2xl bg-surface p-4 ${goalRing(false, false, status === 'have')}`}>
-      <h4 className="font-semibold">{title}</h4>
+      {onOpen ? (
+        <button onClick={onOpen} className="flex min-h-11 w-full items-baseline justify-between gap-3 text-left active:opacity-70">
+          {head}
+        </button>
+      ) : (
+        head
+      )}
       <div role="radiogroup" aria-label={title} className="mt-3 flex gap-1 rounded-xl bg-surface-2 p-1">
         {SIX_PACK_OPTIONS.map((o) => (
           <button
@@ -1084,7 +1110,7 @@ export function GoalsPanel({
 }) {
   // The pose whose photo screen a tapped stretch goal has opened, and whether a
   // tapped bodyweight goal has the weigh-in sheet up.
-  const [photoLadder, setPhotoLadder] = useState<FlexLadder | null>(null)
+  const [photoLadder, setPhotoLadder] = useState<FlexLadder | 'posture' | null>(null)
   const [weighing, setWeighing] = useState(false)
   useBackGuard(photoLadder != null || weighing, () => {
     setPhotoLadder(null)
@@ -1552,6 +1578,42 @@ export function GoalsPanel({
     // see: the block draws with no goal rows, and ranks as the open, undated
     // thing it is. Someone with neither a scale nor a body fat reading has
     // nothing in it to see.
+    // The posture goal, for whoever trains the pelvic tilt routine: called by
+    // eye off the weekly photo, like the six-pack, with the measured tilt beside
+    // it — the latest reading, and the first one it's come from.
+    if (stretchRoutinesFor(settings.profile).includes('pelvic_tilt')) {
+      const tilt = pelvicTiltSeries(flexEntries)
+      const latest = tilt.at(-1)
+      const status = settings.pelvicTiltStatus ?? 'none'
+      out.push({
+        done: status === 'have',
+        doneDate: null,
+        eta: null,
+        projEta: null,
+        lockable: false,
+        ready: false,
+        family: 'flex:pelvicTilt',
+        last: true,
+        id: POSTURE_GOAL_ID,
+        node: (
+          <SixPackRow
+            key={POSTURE_GOAL_ID}
+            title="neutral pelvis"
+            status={status}
+            onChange={(s) => updateSettings({ ...settings, pelvicTiltStatus: s })}
+            onOpen={() => setPhotoLadder('posture')}
+            reading={
+              latest && (
+                <span className="shrink-0 text-sm tabular-nums text-neutral-400">
+                  {tilt.length > 1 && `${tilt[0].value}° → `}
+                  <span className="font-semibold text-neutral-50">{latest.value}°</span>
+                </span>
+              )
+            }
+          />
+        ),
+      })
+    }
     if (!drawn.has('bodyweight') && (scale || underBodyWeight)) {
       out.push({
         done: false,
@@ -1566,7 +1628,7 @@ export function GoalsPanel({
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, locked, projections, settings, ladders, liftLadders, underBodyWeight, scale])
+  }, [goals, locked, projections, settings, ladders, liftLadders, underBodyWeight, scale, flexEntries])
 
   // Reached goals stay in view unless they've been folded away or taken off one
   // at a time, both from a hold on one of them (see ReachedGoal).
@@ -1620,7 +1682,7 @@ export function GoalsPanel({
       )}
       {photoLadder && (
         <PhotoStep
-          gate={ladderGate(photoLadder)}
+          gate={photoLadder === 'posture' ? postureGate() : ladderGate(photoLadder)}
           onCapture={(kind, result) => void logFlex(shotMeasurement(kind, result))}
           onDone={() => setPhotoLadder(null)}
           offerNever={false}

@@ -411,6 +411,24 @@ export const STRETCH_CORE: PlannedExercise = {
 }
 
 /**
+ * The hip thrust the pelvic tilt routine loads (see config/flexRoutines): ten or
+ * more reps, with a plate or a dumbbell across the hips when there's one to hand
+ * and none when there isn't. Not a movement any training day prescribes — its
+ * sets are logged the way the core block's are, as supplemental workout rows, so
+ * it has a history to prefill from and a name to chart under.
+ */
+export const HIP_THRUST: PlannedExercise = {
+  key: 'hip_thrust',
+  name: 'hip thrust',
+  sets: 3,
+  repMin: 10,
+  repMax: 20,
+  restSec: 45,
+  increment: 10,
+  group: 'legs',
+}
+
+/**
  * The dead bug, retired: it held the Stretch + Core session's core slot until the
  * weighted sit-up took it over. A key rather than an exercise now — nothing new is
  * logged to it, but the sets it did log still need a name, still belong in the
@@ -1110,6 +1128,7 @@ export const ALL_EXERCISES: PlannedExercise[] = (() => {
     NECK_EXTENSION,
     DB_OVERHEAD_PRESS,
     INCLINE_DUMBBELL_CURL,
+    HIP_THRUST,
     STRETCH_CORE,
   ]) {
     if (seen.has(e.key)) continue
