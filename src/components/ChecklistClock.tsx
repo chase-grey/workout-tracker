@@ -11,7 +11,9 @@ type Halves = Pick<WorkoutSplit, 'activeSec' | 'restSec'>
  * projected is behind or ahead, and the total row says it in one pair of numbers.
  * Ticks on its own, since the sheet holds the session still underneath it.
  */
-export function ChecklistClock({ startedAt, readRestSec, readPhotoSec, projected, left }: {
+export function ChecklistClock({ startedAt, readRestSec, readPhotoSec, projected, left, activeLabel = 'working out' }: {
+  /** What the time not spent resting is called: a stretch routine isn't a workout. */
+  activeLabel?: string
   startedAt?: string
   /** Time on photo screens so far, which the session's clock leaves out (see lib/photoTime). */
   readPhotoSec?: (now: number) => number
@@ -31,7 +33,7 @@ export function ChecklistClock({ startedAt, readRestSec, readPhotoSec, projected
   const elapsed = Number.isFinite(start) ? Math.max(0, (now - start) / 1000 - (readPhotoSec?.(now) ?? 0)) : null
   const rest = elapsed == null ? null : Math.min(elapsed, Math.max(0, readRestSec(now)))
   const rows = [
-    { label: 'working out', soFar: elapsed == null || rest == null ? null : elapsed - rest, projected: projected.activeSec, left: left.activeSec },
+    { label: activeLabel, soFar: elapsed == null || rest == null ? null : elapsed - rest, projected: projected.activeSec, left: left.activeSec },
     { label: 'resting', soFar: rest, projected: projected.restSec, left: left.restSec },
     { label: 'total', soFar: elapsed, projected: projected.activeSec + projected.restSec, left: left.activeSec + left.restSec },
   ]

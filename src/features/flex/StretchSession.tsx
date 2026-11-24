@@ -49,7 +49,7 @@ import { leaveRest, resumeLeftRest, type LeftRest } from '../../lib/leftRest'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
-import { STRETCH_CORE, repRangeLabel } from '../../config/plan'
+import { STRETCH_CORE } from '../../config/plan'
 import {
   GET_READY_SEC,
   CORE_ENTRY_GET_READY_SEC,
@@ -119,14 +119,13 @@ function setOfLabel(s: SessionStep, inPlay?: readonly SessionStep[]): string {
 const stepTitle = (s: SessionStep) => stepPosition(s) || s.exName
 
 /**
- * The line under the title: the move, where the title gave its place away, the
- * set, and the core block's rep range. A flex set is paced by the guide and
- * brightens when it's done, so it has no count to state; core reps are typed in,
- * and their target does need saying.
+ * The line under the title: the move, where the title gave its place away, and
+ * the set. A flex set is paced by the guide and brightens when it's done, so it
+ * has no count to state; a core set's target is said once, on its card, as the
+ * lift workout's is, and a rep range beside it read as a second ask.
  */
 function stepDetail(s: SessionStep, inPlay: readonly SessionStep[]): string {
-  return [stepPosition(s) ? s.exName : '', setOfLabel(s, inPlay), s.kind === 'core' && `${repRangeLabel(s)} reps`]
-    .filter(Boolean).join(' · ')
+  return [stepPosition(s) ? s.exName : '', setOfLabel(s, inPlay)].filter(Boolean).join(' · ')
 }
 
 type RoutineChecklistProps = {
@@ -624,6 +623,7 @@ export function StretchSession({
   const checklistTiming = {
     clock: (
       <ChecklistClock
+        activeLabel="stretching"
         startedAt={startedAt}
         readPhotoSec={(now) => photoSecAt(photoTime.current, now)}
         readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
@@ -1125,7 +1125,7 @@ export function StretchSession({
       },
     },
     {
-      label: 'exit without logging',
+      label: 'discard routine',
       danger: true,
       // Nothing done is nothing lost; anything done is asked about, the way the
       // lift workout asks before it's discarded.
@@ -1407,8 +1407,8 @@ export function StretchSession({
       )}
       {asking === 'exit' && (
         <ConfirmSheet
-          question="exit without logging this routine?"
-          action="exit without logging"
+          question="discard this in-progress routine?"
+          action="discard routine"
           danger
           onCancel={() => setAsking(null)}
           onConfirm={() => {

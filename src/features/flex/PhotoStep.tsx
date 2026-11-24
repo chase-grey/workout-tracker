@@ -135,7 +135,9 @@ export function PhotoStep({
         key={kind}
         mode={shot.mode}
         temp={shown}
-        title={shot.label}
+        // Says what the camera is up for: the pose's name alone, over a black
+        // screen, didn't.
+        title={`measure ${shot.label}`}
         frame={frame}
         // Read the history before the capture is logged, so the reading is
         // compared against the sessions before it rather than itself.
