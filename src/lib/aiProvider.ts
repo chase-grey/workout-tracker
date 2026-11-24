@@ -127,6 +127,13 @@ export function chatCompletionsUrl(baseUrl: string): string {
 const FORMER_ANTHROPIC_DEFAULT = 'claude-opus-5-5'
 
 /**
+ * The model a device's settings start with (storage's DEFAULT_SETTINGS), from
+ * when the coach spoke only to OpenAI. A device that never picked a model still
+ * holds it, and with no provider picked either it is now read as Anthropic's.
+ */
+const SHIPPED_MODEL = 'gpt-4o-mini'
+
+/**
  * The model to ask for: the chosen one, else the provider's default.
  *
  * The former default counts as a choice only once a model has been picked by
@@ -136,8 +143,12 @@ const FORMER_ANTHROPIC_DEFAULT = 'claude-opus-5-5'
 export function modelFor(s: ProviderSettings): string {
   const provider = providerOf(s.aiProvider, s.openAiKey)
   const stored = s.openAiModel?.trim()
+  // Neither is a choice: one is the old default, the other the model every
+  // device starts with, which Anthropic has never served.
   const inherited =
-    provider.id === 'anthropic' && stored === FORMER_ANTHROPIC_DEFAULT && !s.coachModelPicked
+    provider.id === 'anthropic' &&
+    (stored === FORMER_ANTHROPIC_DEFAULT || stored === SHIPPED_MODEL) &&
+    !s.coachModelPicked
   return stored && !inherited ? stored : provider.defaultModel
 }
 

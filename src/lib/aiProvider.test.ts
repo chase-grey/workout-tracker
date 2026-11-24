@@ -54,6 +54,12 @@ describe('chatCompletionsUrl', () => {
 })
 
 describe('modelFor', () => {
+  it("doesn't ask Anthropic for the OpenAI model a fresh device starts with", () => {
+    expect(modelFor({ openAiModel: 'gpt-4o-mini' })).toBe('claude-sonnet-5-5')
+    expect(modelFor({ aiProvider: 'anthropic', openAiModel: 'gpt-4o-mini' })).toBe('claude-sonnet-5-5')
+    expect(modelFor({ aiProvider: 'openai', openAiModel: 'gpt-4o-mini' })).toBe('gpt-4o-mini')
+  })
+
   it('prefers the typed model and falls back to the provider default', () => {
     expect(modelFor({ aiProvider: 'anthropic', openAiModel: ' claude-haiku-5-5 ' })).toBe(
       'claude-haiku-5-5',
