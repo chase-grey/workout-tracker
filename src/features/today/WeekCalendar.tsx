@@ -91,6 +91,9 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
 
   const furthest = shiftWeek(today, 1)
   const title = weekTitle(weekStart, today)
+  // The card above is already headed "this week". This one is named for what it
+  // is, and says which week only once it has been paged off the current one.
+  const heading = weekStart === weekStartISO(today) ? 'calendar' : title
   const schedulable = schedulablePillars(pillars, plannedCardio)
   const open = (day: CalendarDay, item: Session) => setDetail({ day, item })
   const picked = days.find((d) => d.date === selected)
@@ -109,7 +112,7 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
   return (
     <div className={editing ? '' : 'rounded-2xl bg-surface p-3'}>
       <div className="mb-1 flex items-center justify-between gap-1">
-        <h2 className="text-sm font-semibold tracking-wide text-neutral-500">{title}</h2>
+        <h2 className="text-sm font-semibold tracking-wide text-neutral-500">{heading}</h2>
         <div className="-mr-1 flex items-center">
           <button onClick={() => onWeekChange(shiftWeek(weekStart, -1))} aria-label="previous week" className={iconButton}>
             <MdChevronLeft aria-hidden />

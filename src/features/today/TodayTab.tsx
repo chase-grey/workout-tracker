@@ -281,7 +281,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     },
     {
       id: 'calendar',
-      label: 'week calendar',
+      label: 'calendar',
       node: <div ref={calendarRef}>{calendar(false)}</div>,
       editor: schedulablePillars(tracked, plannedCardio).length > 0 ? calendar(true) : undefined,
     },

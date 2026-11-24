@@ -15,7 +15,7 @@ export function WeekCalendarSetting() {
     )
   return (
     <section className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-neutral-300">week calendar</label>
+      <label className="text-sm font-medium text-neutral-300">calendar</label>
       <div className="flex gap-1 rounded-xl bg-surface p-1">
         {CHOICES.map((c) => (
           <button
