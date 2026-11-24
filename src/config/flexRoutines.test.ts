@@ -69,7 +69,8 @@ describe('the routine registry', () => {
       ['hip_thrust', 3, 10, false],
       ['rkc_plank', 2, 30, false],
       ['lunge_stretch', 2, 30, true],
-      ['rectus_femoris_stretch', 2, 30, true],
+      // The one departure from the post: a single minute a side.
+      ['rectus_femoris_stretch', 1, 60, true],
     ])
     expect(moves.filter((e) => e.load).map((e) => e.key)).toEqual(['hip_thrust'])
     expect(r.coldShots).toEqual(['pelvic-tilt'])

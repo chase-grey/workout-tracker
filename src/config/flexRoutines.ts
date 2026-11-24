@@ -482,11 +482,14 @@ const PELVIC_TILT_BLOCKS: FlexBlock[] = [
       {
         key: 'rectus_femoris_stretch',
         name: 'rectus femoris stretch',
-        sets: '2',
-        maxSets: 2,
+        // One long hold a side, not the two short ones as posted: it is the time
+        // under stretch that counts, and getting the foot up behind you twice
+        // is the slow part.
+        sets: '1',
+        maxSets: 1,
         reps: 1,
         tempo: '',
-        holdSec: 30,
+        holdSec: 60,
         perSide: true,
         restSec: 0,
         sideSwitchSec: 10,
