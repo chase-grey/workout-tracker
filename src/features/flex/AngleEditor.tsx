@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from 'react'
+import { useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
 import {
   HANDLES,
   SEGMENTS,
@@ -14,15 +14,29 @@ import {
   type MeasureMode,
   type MeasureResult,
 } from '../../lib/measure'
+import { TAG_OVERHANG, labelAnchors, type LabelAnchor } from '../../lib/handleLabels'
+import { PoseGuide } from './PoseGuide'
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
 
 /** Distance from a dot to the tab you grab it by, so a finger never covers the dot. */
 const GRIP_OFFSET_PX = 44
 
+/** Where a name tag sits across its dot, per anchor. */
+const TAG_SHIFT: Record<LabelAnchor, string> = {
+  start: `-${TAG_OVERHANG}px`,
+  center: '-50%',
+  end: `calc(-100% + ${TAG_OVERHANG}px)`,
+}
+
 /**
  * Overlay the captured photo with draggable handles + lines so the user can
  * correct the auto-detected angle. Live-recomputes the angle(s) as they drag.
+ *
+ * Nothing here scrolls: the photo is sized to whatever the header, the reading
+ * and the save button leave, so the number being logged is on screen the whole
+ * time a dot is being dragged. Each dot is grabbed by a tag that carries its
+ * name, and the figure beside the reading shows the same dots on the pose.
  *
  * `aspect` is the photo's width / height — handles are normalized per-axis, so
  * the angle can't be computed without it. `note` reports a detection that
@@ -58,6 +72,20 @@ export function AngleEditor({
   const activeKey = useRef<string | null>(null)
   /** Dot position minus pointer position at grab time, so the dot keeps its offset from the finger. */
   const grabOffset = useRef({ x: 0, y: 0 })
+  /** The room left for the photo, measured, so it can be fitted without scrolling. */
+  const stageRef = useRef<HTMLDivElement>(null)
+  const [stage, setStage] = useState<{ w: number; h: number } | null>(null)
+  useLayoutEffect(() => {
+    const el = stageRef.current
+    if (!el) return
+    const measure = () => setStage({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  /** The tags' sides as they stood when a drag began, so one can't jump mid-drag. */
+  const [heldAnchors, setHeldAnchors] = useState<Record<string, LabelAnchor> | null>(null)
 
   // A retry hands down fresh handles, which replace whatever is on screen.
   const shown = useRef(initial)
@@ -74,6 +102,10 @@ export function AngleEditor({
   // too — otherwise the lines being dragged have nothing to be judged against.
   const guide = verticalGuide(mode, handles)
   const level = levelGuide(mode, handles)
+  // The largest box of the photo's shape that fits the room there is.
+  const boxW = stage ? Math.max(0, Math.min(stage.w, stage.h * aspect, 448)) : 0
+  const box = { width: boxW, height: boxW / aspect }
+  const anchors = heldAnchors ?? labelAnchors(handles, specs, boxW, stage ? (stage.w - boxW) / 2 : 0)
 
   /** Pointer position in 0..1 image space, unclamped so grab offsets stay accurate at the edges. */
   const coordFromEvent = (e: PointerEvent): { x: number; y: number } | null => {
@@ -92,6 +124,7 @@ export function AngleEditor({
     const p = handles[key]
     grabOffset.current = pt && p ? { x: p.x - pt.x, y: p.y - pt.y } : { x: 0, y: 0 }
     containerRef.current?.setPointerCapture(e.pointerId)
+    setHeldAnchors(anchors)
   }
 
   const onMove = (e: PointerEvent) => {
@@ -105,42 +138,45 @@ export function AngleEditor({
 
   const onUp = (e: PointerEvent) => {
     activeKey.current = null
+    setHeldAnchors(null)
     containerRef.current?.releasePointerCapture?.(e.pointerId)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
+      <header className="flex items-center justify-between border-b border-border px-4 py-1.5">
         <h2 className="text-lg font-bold">adjust {MEASURE_LABEL[mode].toLowerCase()} lines</h2>
         <button onClick={onCancel} className="min-h-[44px] px-2 text-sm text-neutral-400">
           retake
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        {note && (
-          <div className="mb-3 flex items-center gap-3 rounded-xl bg-surface p-3 text-sm text-neutral-300">
-            <span className="flex-1">{note}</span>
-            {onRedetect && (
-              <button
-                onClick={onRedetect}
-                disabled={detecting}
-                className="min-h-[40px] shrink-0 rounded-xl bg-surface-2 px-3 font-semibold disabled:opacity-40"
-              >
-                {detecting ? 'detecting…' : 'try again'}
-              </button>
-            )}
-          </div>
-        )}
+      {note && (
+        <div className="mx-3 mt-2 flex items-center gap-3 rounded-xl bg-surface px-3 py-1.5 text-sm text-neutral-300">
+          <span className="flex-1">{note}</span>
+          {onRedetect && (
+            <button
+              onClick={onRedetect}
+              disabled={detecting}
+              className="min-h-[40px] shrink-0 rounded-xl bg-surface-2 px-3 font-semibold disabled:opacity-40"
+            >
+              {detecting ? 'detecting…' : 'try again'}
+            </button>
+          )}
+        </div>
+      )}
 
+      <div className="min-h-0 flex-1 p-3">
+      <div ref={stageRef} className="flex h-full w-full items-center justify-center">
         <div
           ref={containerRef}
           onPointerMove={onMove}
           onPointerUp={onUp}
           onPointerCancel={onUp}
-          className="relative mx-auto w-full max-w-md touch-none select-none overflow-hidden rounded-2xl bg-black"
+          style={box}
+          className="relative shrink-0 touch-none select-none"
         >
-          <img src={imageUrl} alt="measurement" className="block h-auto w-full" draggable={false} />
+          <img src={imageUrl} alt="measurement" className="block h-full w-full rounded-2xl bg-black" draggable={false} />
 
           <svg
             className="pointer-events-none absolute inset-0 h-full w-full"
@@ -215,12 +251,14 @@ export function AngleEditor({
                 <button
                   onPointerDown={onHandleDown(spec.key)}
                   aria-label={`move ${spec.label}`}
-                  className="absolute flex h-11 w-11 items-center justify-center active:scale-110"
-                  style={{ ...pos, transform: `translate(-50%, calc(-50% + ${dir * GRIP_OFFSET_PX}px))` }}
+                  className="absolute flex h-11 items-center active:scale-105"
+                  style={{
+                    ...pos,
+                    transform: `translate(${TAG_SHIFT[anchors[spec.key] ?? 'center']}, calc(-50% + ${dir * GRIP_OFFSET_PX}px))`,
+                  }}
                 >
-                  <span className="flex h-6 w-9 items-center justify-center gap-1 rounded-full border-2 border-white bg-accent/80 shadow">
-                    <span className="h-3 w-0.5 rounded-full bg-black/50" />
-                    <span className="h-3 w-0.5 rounded-full bg-black/50" />
+                  <span className="flex h-7 items-center whitespace-nowrap rounded-full border-2 border-white bg-accent px-2.5 text-xs font-semibold text-on-accent shadow">
+                    {spec.label}
                   </span>
                 </button>
               </div>
@@ -228,18 +266,19 @@ export function AngleEditor({
           })}
         </div>
 
-        <div className="mt-4 rounded-2xl bg-surface p-4 text-center">
-          {/* One reading gets the whole width and the big type; a pose that
-              produces a pair splits it between them. */}
-          <div className="flex justify-around">
+      </div>
+      </div>
+
+      <div className="border-t border-border px-4 pt-2" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+        <div className="mb-2 flex items-center gap-3">
+          <PoseGuide mode={mode} handles={handles} className="h-[72px] w-[72px] shrink-0" />
+          {/* One reading gets the big type; a pose that produces a pair splits
+              the row between them. */}
+          <div className="flex min-w-0 flex-1 justify-around text-center">
             {readings.map((r) => (
               <div key={r.label}>
                 <p className="text-xs tracking-wide text-neutral-500">{r.label}</p>
-                <p
-                  className={`font-bold tabular-nums ${
-                    readings.length > 1 ? 'text-4xl' : 'text-5xl'
-                  }`}
-                >
+                <p className={`font-bold tabular-nums ${readings.length > 1 ? 'text-3xl' : 'text-4xl'}`}>
                   {r.deg}°
                 </p>
               </div>
@@ -248,15 +287,12 @@ export function AngleEditor({
           {hasSides(mode) && (
             <button
               onClick={() => setHandles((prev) => swapSides(mode, prev))}
-              className="mt-3 min-h-[40px] rounded-xl bg-surface-2 px-4 text-sm font-semibold"
+              className="min-h-[44px] shrink-0 rounded-xl bg-surface-2 px-3 text-sm font-semibold"
             >
-              swap left / right
+              swap sides
             </button>
           )}
         </div>
-      </div>
-
-      <div className="border-t border-border p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         <button
           onClick={() => onSave(result, handles)}
           disabled={saving}
