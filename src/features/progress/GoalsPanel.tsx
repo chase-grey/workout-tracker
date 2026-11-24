@@ -352,9 +352,19 @@ function DataChart({
  * top set reading +23 lbs of 1RM a week looks like the app lost the plot when it
  * projects the ceiling instead.
  */
+/**
+ * A weekly pace at the precision it's good for: a tenth, or a hundredth for a
+ * pace too slow to show in tenths. The fit carries three decimals, which read
+ * as more than a few weeks of readings can know.
+ */
+function roundPace(perWeek: number): number {
+  const places = Math.abs(perWeek) < 0.1 ? 100 : 10
+  return Math.round(perWeek * places) / places
+}
+
 function paceLabel(proj: Projection, unit: string): string {
   const sign = proj.slopePerWeek > 0 ? '+' : ''
-  return `${sign}${proj.slopePerWeek} ${unit}/wk${isPaceCapped(proj) ? ' max' : ''}`
+  return `${sign}${roundPace(proj.slopePerWeek)} ${unit}/wk${isPaceCapped(proj) ? ' max' : ''}`
 }
 
 /**
@@ -384,7 +394,7 @@ function LockInPrompt({
     <div className="mt-2 rounded-xl bg-accent-2/10 p-3" {...ROW_SHIELD}>
       <p className="text-sm font-medium text-accent-2">
         <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
-        in reach · projected {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
+        on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
       </p>
       <CommitChart
         goalId={goal.id}
