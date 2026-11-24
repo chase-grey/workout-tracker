@@ -110,7 +110,7 @@ describe('the floss figures', () => {
       const guide = renderToStaticMarkup(createElement(RhythmGuide, { tempo, forwardBack: true, variant: 'capsule' }))
       expect(guide).toContain('data-direction')
       expect(guide).toContain('data-variant="capsule"')
-      expect(renderToStaticMarkup(createElement(RhythmGuide, { tempo }))).not.toContain('data-direction')
+      expect(renderToStaticMarkup(createElement(RhythmGuide, { tempo, variant: 'orb' }))).not.toContain('data-direction')
     },
   )
 })

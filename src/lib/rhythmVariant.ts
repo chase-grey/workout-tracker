@@ -2,6 +2,7 @@ import { motionForPhases, type MotionKind } from './rhythmMotion'
 import { parseTempo } from './tempo'
 import { createRotation, type Rotation } from './variantRotation'
 import { isAnimationHidden } from './hiddenAnimations'
+import { createRoundVariantSelector } from './roundVariant'
 
 const BREATHE_VARIANTS = ['orb', 'square', 'rings', 'tide', 'petals', 'bars', 'halo'] as const
 const DESCENT_VARIANTS = ['reach', 'fold', 'dive', 'drip', 'stairs', 'press'] as const
@@ -55,20 +56,17 @@ export function nextRhythmVariant(tempo: string, forwardBack = false): RhythmVar
 }
 
 /**
- * Keep one draw per session round, including both halves of a per-side round —
- * unless the shape was hidden in between, in which case the second side draws
- * fresh rather than bringing it back.
+ * Keep one draw per session round, including both halves of a per-side round:
+ * the rhythm guide's share of the rule every animation follows (see
+ * lib/roundVariant, which also says what happens to a shape hidden mid-round).
  */
 export function createRhythmVariantSelector(
   draw: (tempo: string, forwardBack: boolean) => RhythmVariant = nextRhythmVariant,
   hidden: (variant: RhythmVariant) => boolean = rhythmHidden,
 ) {
-  const selected = new Map<string, RhythmVariant>()
-  return (roundKey: string, tempo: string, forwardBack = false): RhythmVariant => {
-    const existing = selected.get(roundKey)
-    if (existing && !hidden(existing)) return existing
-    const chosen = draw(tempo, forwardBack)
-    selected.set(roundKey, chosen)
-    return chosen
-  }
+  const select = createRoundVariantSelector(draw, hidden)
+  const rhythm = (roundKey: string, tempo: string, forwardBack = false): RhythmVariant =>
+    select(roundKey, tempo, forwardBack)
+  rhythm.keep = select.keep
+  return rhythm
 }

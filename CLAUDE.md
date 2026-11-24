@@ -49,6 +49,29 @@ So: any change to how a session is paced, advanced, rested, or ended goes into
 **both** files, or the commit body says why it belongs to only one. When touching
 either file, check the other before you finish.
 
+## Left and right wear the same animation
+
+A per-side round is two steps and one set, and its two sides show **the same
+animation**. Variety comes between rounds, never between sides. This holds for
+every animation a set wears, in both sessions:
+
+- **A component never picks its own shape.** `RhythmGuide` and `HoldTimer`
+  take `variant` as a required prop. The session draws it from a selector
+  built on `lib/roundVariant` (`createRhythmVariantSelector`,
+  `createHoldVariantSelector`), keyed by the **round**, not the step:
+  `flexRoundKey(step)` for a stretch, `sidedRoundKey(inPlay, key, setIndex)`
+  for a lift. Never key a draw by `stepKey`, which differs by side.
+- **A new animated component, or a new family of shapes, joins the same way**:
+  a rotation in the component's module, a selector from
+  `createRoundVariantSelector`, a required `variant` prop, and
+  `onVariantChange` wired to the selector's `keep` so a shape hidden from the
+  kebab on one side is the swap the other side shows too.
+- Rest is not a side of anything: its shape rotates every rest, including the
+  reposition between two sides.
+
+`lib/roundVariant.test.ts` walks every shipped stretch routine and lift day and
+fails if a left step and its right step would ask under different keys.
+
 ## Changing something is a hold, never an edit button
 
 Outside Settings and the forms a sheet opens, nothing on a page wears an

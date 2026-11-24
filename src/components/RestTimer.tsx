@@ -15,6 +15,7 @@ import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { createRotation } from '../lib/variantRotation'
 import { isAnimationHidden } from '../lib/hiddenAnimations'
 import { useShownAnimation } from '../lib/useShownAnimation'
+import { createRoundVariantSelector } from '../lib/roundVariant'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
 import { BOXED_GLASS, TALL_GLASS } from '../lib/waterclock'
 import { ExtraRestShape } from './RestShapes'
@@ -1011,6 +1012,20 @@ function RestShape({ variant, fraction }: { variant: Variant; fraction: number }
 // and perimeter variants have no room to read.
 const holdRotation = createRotation(BOX_VARIANTS, Math.random, notHidden)
 
+/** A shape a hold's countdown can be drawn as. */
+export type HoldVariant = (typeof BOX_VARIANTS)[number]
+
+/**
+ * The hold shapes handed out a round at a time, so the left side's hold and the
+ * right's drain the same shape (see lib/roundVariant). A session keeps one of
+ * these for its length and asks it under the round's key.
+ */
+export const createHoldVariantSelector = () =>
+  createRoundVariantSelector<HoldVariant, []>(
+    () => holdRotation.next(),
+    (v) => !notHidden(v),
+  )
+
 /**
  * The boxed shapes drawn as a column up the middle of their square, and how many
  * times the width of a stretch's stage that square may be (see .stretch-session
@@ -1035,14 +1050,31 @@ const HOLD_GROW: Partial<Record<Variant, number>> = {
  * come — because a ninety-second calf stretch and a ninety-second rest are the
  * same problem: a number you can't read while your head is on the floor.
  *
- * One shape picked per mount, like rest's, so a hold varies from set to set.
+ * The shape is the session's to choose, not this component's: a hold varies
+ * from round to round, but the two sides of one round drain the same shape, and
+ * only the session knows which round a hold belongs to (see lib/roundVariant).
+ * Hidden from the kebab it swaps on the spot and says what it swapped to, so the
+ * other side can follow.
  */
-export function CountdownShape({ fraction }: { fraction: number }) {
-  const [variant, setVariant] = useState<Variant>(() => holdRotation.next())
-  useShownAnimation('rest', variant, () => setVariant(holdRotation.next()))
+export function CountdownShape({
+  fraction,
+  variant: chosen,
+  onVariantChange,
+}: {
+  fraction: number
+  variant: HoldVariant
+  onVariantChange?: (variant: HoldVariant) => void
+}) {
+  const [variant, setVariant] = useState<HoldVariant>(chosen)
+  useShownAnimation('rest', variant, () => {
+    const next = holdRotation.next()
+    setVariant(next)
+    onVariantChange?.(next)
+  })
   return (
     <div
       className="countdown-shape relative flex aspect-square w-[min(72vw,34vh,20rem)] items-center justify-center"
+      data-variant={variant}
       style={{ '--hold-grow': HOLD_GROW[variant] ?? 1 } as CSSProperties}
     >
       <RestShape variant={variant} fraction={clamp01(fraction)} />

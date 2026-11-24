@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CountdownShape } from './RestTimer'
+import { CountdownShape, type HoldVariant } from './RestTimer'
 
 /** The prescribed seconds as a clock reads them. */
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
@@ -36,12 +36,22 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
  */
 export function HoldTimer({
   targetSec,
+  variant,
+  onVariantChange,
   running,
   onStart,
   onTargetEnd,
 }: {
   /** The prescribed hold, counted down from. */
   targetSec: number
+  /**
+   * The shape that drains while it counts, chosen by the session for the round
+   * this hold belongs to — required, so the left and right of one round can't
+   * each pick their own (see lib/roundVariant).
+   */
+  variant: HoldVariant
+  /** The shape was hidden from the kebab and swapped for this one. */
+  onVariantChange?: (variant: HoldVariant) => void
   /**
    * The set is on screen and the hold is being held. Set it once the set is
    * genuinely up — a hold shouldn't be counting down behind rest, a
@@ -139,7 +149,7 @@ export function HoldTimer({
       {/* The hold drawn as well as counted, in the bright green the rest shapes
           use: the level is the time left, so the shape is the clock. */}
       <div className="hold-visual">
-        <CountdownShape fraction={fraction} />
+        <CountdownShape fraction={fraction} variant={variant} onVariantChange={onVariantChange} />
       </div>
       <span className="sr-only" role="timer">{label}</span>
     </div>

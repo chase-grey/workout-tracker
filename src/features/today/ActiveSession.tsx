@@ -46,7 +46,7 @@ import { pairKeys } from '../../lib/pairedSides'
 import { circuitMembers, circuitRunKeys, dayEntries, entryExercises, roundTally, sidelessName } from '../../lib/circuitEntry'
 import { arrange, dropAt, isComboId } from '../../lib/arrangement'
 import { DRAG_LEFT, DRAG_LIFTED, DRAG_ONTO, useDragCombine } from '../../lib/useDragCombine'
-import { roundCards, sidePairPeer, sidesAgree } from '../../lib/sidePair'
+import { roundCards, sidedRoundKey, sidePairPeer, sidesAgree } from '../../lib/sidePair'
 import { ChecklistCircuit } from './ChecklistCircuit'
 import {
   bankRest,
@@ -84,6 +84,7 @@ import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
 import { HoldTimer } from '../../components/HoldTimer'
+import { createHoldVariantSelector } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
 import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
@@ -1198,6 +1199,12 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // deliberate press.
   const holdEndsItself = rollsThroughRest(fastMode) && !atLast && setScreenLive
 
+  // A hold's shape is drawn once for the round and worn by both its sides, the
+  // way the stretch session's are (see lib/roundVariant): the Copenhagen plank's
+  // left and right are two exercises and two clocks, and one set.
+  const [holdVariantFor] = useState(() => createHoldVariantSelector())
+  const holdRoundKey = sidedRoundKey(inPlay, step.ex.key, step.setIndex)
+
   // Each set gets its own clock (see the HoldTimer's key below), so a hold left
   // running when the flow moves on doesn't leave the next set believing one is
   // under way.
@@ -1517,6 +1524,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                 // a hold that's already run past its time.
                 key={step.stepKey}
                 targetSec={target?.reps ?? planned.repMin}
+                variant={holdVariantFor(holdRoundKey)}
+                onVariantChange={(v) => holdVariantFor.keep(holdRoundKey, v)}
                 // Started by the set being up rather than by a press, and stood
                 // back down the moment it isn't: rest, the pause curtain and any
                 // open sheet all hold the clock with its

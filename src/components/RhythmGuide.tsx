@@ -706,6 +706,7 @@ export function RhythmGuide({
   tempo,
   reps,
   variant: chosenVariant,
+  onVariantChange,
   running = true,
   startRep = 1,
   onRep,
@@ -718,8 +719,14 @@ export function RhythmGuide({
   /** Directional pacing for sciatic floss, including saved up/down tempos. */
   forwardBack?: boolean
   reps?: number
-  /** A session-owned choice, used when two sides belong to the same set. */
-  variant?: RhythmVariant
+  /**
+   * The shape to pace by, chosen by the session for the round this set belongs
+   * to — required, so the left and right of one round can't each pick their own
+   * (see lib/roundVariant).
+   */
+  variant: RhythmVariant
+  /** The shape was hidden from the kebab and swapped for this one. */
+  onVariantChange?: (variant: RhythmVariant) => void
   running?: boolean
   /** Rep to resume counting from — lets a reloaded session pick up where it left off. */
   startRep?: number
@@ -755,8 +762,12 @@ export function RhythmGuide({
   // The floss draws from its own family of figures (see FlossGuide), rotated and
   // hidden from the kebab like any other shape.
   const draw = () => (forwardBack ? nextFlossVariant() : rhythmVariantForMotion(motion))
-  const [variant, setVariant] = useState<Variant>(() => chosenVariant ?? draw())
-  useShownAnimation('rhythm', variant, () => setVariant(draw()))
+  const [variant, setVariant] = useState<Variant>(chosenVariant)
+  useShownAnimation('rhythm', variant, () => {
+    const next = draw()
+    setVariant(next)
+    onVariantChange?.(next)
+  })
   const [idx, setIdx] = useState(0)
   const [rep, setRep] = useState(startRep)
   // The rep count also lives in a ref so the animation loop increments from the

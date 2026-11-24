@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSessionFade } from '../../lib/useSessionFade'
 import { MdBlock, MdBolt, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
-import { RestTimer } from '../../components/RestTimer'
+import { RestTimer, createHoldVariantSelector } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
 import { clockText, closeSet, endRest, restAfter, resumeSetClock, skipSpan, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
@@ -445,8 +445,11 @@ export function StretchSession({
   )
   // A per-side round is two mounted guides, but it is one set: draw once for the
   // round so either side gets the same animation. A later round has another key
-  // and therefore takes the next random choice from the rotation.
+  // and therefore takes the next random choice from the rotation. The same goes
+  // for a hold's countdown shape — every animation a set wears is asked for by
+  // round (see lib/roundVariant).
   const [rhythmVariantFor] = useState(() => createRhythmVariantSelector())
+  const [holdVariantFor] = useState(() => createHoldVariantSelector())
   const N = steps.length
   const safeCurrent = N ? Math.min(Math.max(0, current), N - 1) : 0
 
@@ -1224,6 +1227,8 @@ export function StretchSession({
           <HoldTimer
             key={step.stepKey}
             targetSec={holdSec}
+            variant={holdVariantFor(flexRoundKey(step))}
+            onVariantChange={(v) => holdVariantFor.keep(flexRoundKey(step), v)}
             // The set being on screen is the whole of the start signal, and the
             // count leading in is what covers getting into the pose. Standing the
             // clock down when it isn't (a rest reopened over it, the curtain, the
@@ -1244,6 +1249,7 @@ export function StretchSession({
             skipFinalRepRest={skipsFinalRepRest(step)}
             reps={step.reps}
             variant={rhythmVariantFor(flexRoundKey(step), step.tempo, step.exKey === 'sciatic_floss')}
+            onVariantChange={(v) => rhythmVariantFor.keep(flexRoundKey(step), v)}
             running={setLive}
             startRep={rep}
             onRep={setRep}

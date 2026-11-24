@@ -48,6 +48,19 @@ export function sidePairPeer(exercises: readonly SidedMember[], key: string): st
 }
 
 /**
+ * Identity of one round of a lift, shared by the two sides of a sided pair: the
+ * Copenhagen plank's left set 2 and its right set 2 are one round. It is what
+ * the session asks a round's animation under (see lib/roundVariant), named for
+ * whichever side the day lays out first. An exercise with no other side is its
+ * own round.
+ */
+export function sidedRoundKey(exercises: readonly SidedMember[], key: string, setIndex: number): string {
+  const peer = sidePairPeer(exercises, key)
+  const first = peer == null ? key : (exercises.find((e) => e.key === key || e.key === peer)?.key ?? key)
+  return `${first}:${setIndex}`
+}
+
+/**
  * The session's logs with a weight or reps just typed at one side's set written
  * into the other side's set of the same index.
  *
