@@ -471,30 +471,34 @@ describe('the head-to-toe poses', () => {
       expect(right.role).toBe('b')
     })
 
-    it('takes the lifted ankle from its own side and the standing one from the other', () => {
+    it('reads the same angle with the two ankle dots traded', () => {
+      const traded = { ...lifted, ankleStand: lifted.ankleLift, ankleLift: lifted.ankleStand }
+      expect(anglesFromHandles('leg_lift_left', traded, 0.75)).toEqual(
+        anglesFromHandles('leg_lift_left', lifted, 0.75),
+      )
+    })
+
+    it('calls the higher ankle the lifted one, whichever side the model says it is', () => {
       const l = lms()
       l[POSE.LEFT_HIP] = { x: 0.4, y: 0.5, visibility: 0.9 }
       l[POSE.RIGHT_HIP] = { x: 0.6, y: 0.5, visibility: 0.9 }
       l[POSE.LEFT_ANKLE] = { x: 0.2, y: 0.5, visibility: 0.9 }
       l[POSE.RIGHT_ANKLE] = { x: 0.6, y: 0.9, visibility: 0.9 }
 
-      const left = handlesFromLandmarks('leg_lift_left', l)!
-      expect(left.hip).toEqual({ x: 0.5, y: 0.5 })
-      expect(left.ankleLift).toEqual({ x: 0.2, y: 0.5 })
-      expect(left.ankleStand).toEqual({ x: 0.6, y: 0.9 })
+      for (const mode of ['leg_lift_left', 'leg_lift_right'] as const) {
+        for (const mirrored of [false, true]) {
+          const h = handlesFromLandmarks(mode, l, mirrored)!
+          expect(h.hip).toEqual({ x: 0.5, y: 0.5 })
+          expect(h.ankleLift).toEqual({ x: 0.2, y: 0.5 })
+          expect(h.ankleStand).toEqual({ x: 0.6, y: 0.9 })
+        }
+      }
 
-      const right = handlesFromLandmarks('leg_lift_right', l)!
-      expect(right.ankleLift).toEqual({ x: 0.6, y: 0.9 })
-      expect(right.ankleStand).toEqual({ x: 0.2, y: 0.5 })
-    })
-
-    it('reads a mirrored shot onto the leg the body calls lifted', () => {
-      const l = lms()
-      l[POSE.LEFT_ANKLE] = { x: 0.2, y: 0.5, visibility: 0.9 }
-      l[POSE.RIGHT_ANKLE] = { x: 0.6, y: 0.9, visibility: 0.9 }
-      const h = handlesFromLandmarks('leg_lift_left', l, true)!
-      expect(h.ankleLift).toEqual({ x: 0.6, y: 0.9 })
-      expect(h.ankleStand).toEqual({ x: 0.2, y: 0.5 })
+      // The model's sides the other way round: the dots land where they did.
+      ;[l[POSE.LEFT_ANKLE], l[POSE.RIGHT_ANKLE]] = [l[POSE.RIGHT_ANKLE], l[POSE.LEFT_ANKLE]]
+      const h = handlesFromLandmarks('leg_lift_left', l)!
+      expect(h.ankleLift).toEqual({ x: 0.2, y: 0.5 })
+      expect(h.ankleStand).toEqual({ x: 0.6, y: 0.9 })
     })
   })
 

@@ -256,8 +256,7 @@ type ModeSpec = {
 /**
  * One leg lift per side rather than one mode with a side flag: you can only lift
  * one leg per photo, so the side is the shot. Two captures each producing one
- * field keeps `angles` and `summarize` free of side branching — and the handle
- * labels and the landmark mapping genuinely differ per side.
+ * field keeps `angles` and `summarize` free of side branching.
  */
 function legLift(side: 'left' | 'right'): ModeSpec {
   const field = side === 'left' ? 'legLiftLeftDeg' : 'legLiftRightDeg'
@@ -287,15 +286,18 @@ function legLift(side: 'left' | 'right'): ModeSpec {
       ankleStand: { x: 0.7, y: 0.9 },
       ankleLift: { x: 0.25, y: 0.62 },
     },
-    fromLandmarks: (lms, mirrored) => {
-      const own = side === 'left' ? POSE.LEFT_ANKLE : POSE.RIGHT_ANKLE
-      const other = side === 'left' ? POSE.RIGHT_ANKLE : POSE.LEFT_ANKLE
-      const [iLift, iStand] = mirrored ? [other, own] : [own, other]
+    // The lifted ankle is the higher one, whichever side the model calls it.
+    // Side-on, one leg hides the other and the model's left and right are a
+    // coin toss, and the angle is the same either way round — so the only
+    // thing its sides could decide is which dot wears which name, and height
+    // decides that better. The side being measured is the mode, not the model's.
+    fromLandmarks: (lms) => {
       const hipL = lms[POSE.LEFT_HIP]
       const hipR = lms[POSE.RIGHT_HIP]
-      const lift = lms[iLift]
-      const stand = lms[iStand]
-      if (![hipL, hipR, lift, stand].every(seen)) return null
+      const a = lms[POSE.LEFT_ANKLE]
+      const b = lms[POSE.RIGHT_ANKLE]
+      if (![hipL, hipR, a, b].every(seen)) return null
+      const [lift, stand] = a.y <= b.y ? [a, b] : [b, a]
       return { hip: midpoint(hipL, hipR), ankleStand: pt(stand), ankleLift: pt(lift) }
     },
     angles: (h, aspect) => ({ [field]: angleAtVertex(h, 'hip', 'ankleStand', 'ankleLift', aspect) }),
