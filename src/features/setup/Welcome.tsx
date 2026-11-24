@@ -284,7 +284,6 @@ function ThemeStep() {
           </PressButton>
         ))}
       </div>
-      <p className="text-xs text-neutral-500">you can change these later in settings</p>
     </div>
   )
 }
@@ -303,7 +302,6 @@ function CoachStep({ f, set }: { f: FormState; set: (patch: Partial<FormState>) 
         ]}
         onChange={(v) => set({ wantCoach: v })}
       />
-      {f.wantCoach === false && <p className="text-xs text-neutral-500">you can set one up any time in settings</p>}
       {f.wantCoach && (
         <div className="flex flex-col gap-3">
           <PressButton
