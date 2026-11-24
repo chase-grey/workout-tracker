@@ -8,7 +8,8 @@ import { snapFrame, useCameraStream, type BurstFrame, type Facing } from './came
 /**
  * Every shot of a gate off one tap: a self-timer to get into the first pose,
  * then a shorter one for each pose after, with the camera running throughout —
- * so the phone stays propped and you stay on the mat. Nothing is measured here;
+ * so the phone stays propped and you stay on the mat. Each shot flashes the
+ * screen white under the name of the pose to move to. Nothing is measured here;
  * the frames are handed back, one per shot (null where skipped), for
  * `CameraMeasure` to take through one at a time.
  *
@@ -31,7 +32,8 @@ export function BurstCapture({
   const [remaining, setRemaining] = useState(BURST_FIRST_SEC)
   const [facing, setFacing] = useState<Facing>('user')
   const [error, setError] = useState<string | null>(null)
-  const [flash, setFlash] = useState(false)
+  /** Counts the shots taken, so each one starts the flash over. Zero is none. */
+  const [flash, setFlash] = useState(0)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const frames = useRef<(BurstFrame | null)[]>([])
@@ -84,8 +86,7 @@ export function BurstCapture({
       return
     }
     navigator.vibrate?.(200)
-    setFlash(true)
-    setTimeout(() => setFlash(false), 150)
+    setFlash((n) => n + 1)
     advance(frame)
   }, [facing, advance])
   // Read by the countdown at zero, so a re-render above — the session's clock
@@ -167,8 +168,6 @@ export function BurstCapture({
           </div>
         )}
 
-        {flash && <div className="pointer-events-none absolute inset-0 bg-white/80" />}
-
         {error && (
           <div className="absolute inset-x-4 bottom-4 rounded-xl bg-black/80 p-3 text-center text-sm text-neutral-200">
             {error}
@@ -213,6 +212,18 @@ export function BurstCapture({
           </div>
         )}
       </div>
+
+      {/* The shot is taken and the next pose is up: the whole screen goes white
+          with its name on it, bright enough to catch from the mat. */}
+      {flash > 0 && (
+        <div
+          key={flash}
+          aria-hidden
+          className="burst-flash pointer-events-none fixed inset-0 z-10 flex items-center justify-center bg-white px-6"
+        >
+          <span className="text-center text-5xl font-bold text-black">{label}</span>
+        </div>
+      )}
     </div>
   )
 }

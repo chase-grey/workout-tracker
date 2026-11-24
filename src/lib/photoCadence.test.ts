@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dueGate, shotsThisWeek } from './photoCadence'
+import { dueGate, firstBurst, shotsThisWeek } from './photoCadence'
 import { coldGate, type PhotoGate } from './photoSteps'
 import type { FlexEntry } from './flex'
 
@@ -72,5 +72,23 @@ describe('dueGate', () => {
 
   it('passes a null gate through', () => {
     expect(dueGate(null, [], MON)).toBeNull()
+  })
+})
+
+describe('firstBurst', () => {
+  const H2T_COLD = coldGate('head_to_toe')
+
+  it('is the first run when no reading of its poses has ever been logged', () => {
+    expect(firstBurst(H2T_COLD, [])).toBe(true)
+    expect(firstBurst(H2T_COLD, [entry(MON, { coldSplitDeg: 90 })])).toBe(true)
+  })
+
+  it('is over once any of its poses has a reading, warm or cold, in any week', () => {
+    expect(firstBurst(H2T_COLD, [entry(MON, { warmToeTouchDeg: 40 })])).toBe(false)
+    expect(firstBurst(H2T_COLD, [entry('2025-01-06', { coldLegLiftRightDeg: 70 })])).toBe(false)
+  })
+
+  it('never applies to a gate taken a shot at a time anyway', () => {
+    expect(firstBurst(COLD_GATE, [])).toBe(false)
   })
 })

@@ -15,7 +15,7 @@ import {
   type FlexEntry,
 } from './flex'
 import { weekStartISO } from './dates'
-import type { PhotoGate, PhotoKind } from './photoSteps'
+import { PHOTO_SHOT, type PhotoGate, type PhotoKind } from './photoSteps'
 
 /**
  * Angle photos are a weekly measurement, not a per-session one — a week's worth
@@ -71,4 +71,17 @@ export function dueGate(
   const shots = gate.shots.filter((k) => !have.has(k))
   if (shots.length === 0) return null
   return shots.length === gate.shots.length ? gate : { ...gate, shots }
+}
+
+/**
+ * Whether a back-to-back gate is new to whoever is about to take it: nothing in
+ * the log, on any date, carries a reading of any pose it asks for, cold or warm.
+ * A run off one timer is only quick once you know the poses and where the phone
+ * stands, so the first one is taken a shot at a time instead (see `PhotoStep`).
+ */
+export function firstBurst(gate: PhotoGate, entries: FlexEntry[]): boolean {
+  if (!gate.burst) return false
+  const modes = new Set(gate.shots.map((k) => PHOTO_SHOT[k].mode))
+  const kinds = (Object.keys(CAPTURED) as PhotoKind[]).filter((k) => modes.has(PHOTO_SHOT[k].mode))
+  return !entries.some((e) => kinds.some((k) => CAPTURED[k](e)))
 }

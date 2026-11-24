@@ -1095,6 +1095,22 @@ input[type='number'] {
   animation: celebrate-flash 0.9s ease-out both;
 }
 
+/* The shutter of a back-to-back photo run (see BurstCapture): the whole screen
+   held white, then let go. It's read from the mat, out of the corner of an eye,
+   so it stays up long enough to notice and is the same with motion reduced. */
+@keyframes burst-flash {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.burst-flash {
+  animation: burst-flash 1.4s ease-in both;
+}
+
 /* ---- Set cheer (see SetCheer) ----
    The quiet per-set flourish: a glow swelling off the bottom edge, motes rising
    through it, and — only for beating the target — a ring thrown off the middle.
