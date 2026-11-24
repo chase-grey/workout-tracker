@@ -19,8 +19,8 @@ import { recommendWeeklyGoals } from '../../lib/recommend'
 import {
   arrangeTiles,
   gridDropIndex,
-  moveItem,
   spansRow,
+  swapItems,
   tileId,
   tilePillar,
   withAdded,
@@ -81,7 +81,7 @@ type Props = {
 
 /**
  * The buttons at the foot of Today. A tap starts or logs; holding the page
- * opens it for editing, where tiles drag into a new order, an × takes one off
+ * opens it for editing, where a tile dragged onto another trades places with it, an × takes one off
  * and + puts one back or pins a cardio session.
  *
  * What's up next is marked by an accent border, never by fading the rest: a
@@ -176,7 +176,7 @@ export function HomeTiles({ candidates, label, detail, next, onOpen, editing = f
     const d = dragRef.current
     if (!d || d.pointerId !== e.pointerId) return
     setDrag(null)
-    if (d.to !== d.from) save({ homeLayout: { ...layout, order: moveItem(ids, d.from, d.to) } })
+    if (d.to !== d.from) save({ homeLayout: { ...layout, order: swapItems(ids, d.from, d.to) } })
   }
 
   const onPointerCancel = () => setDrag(null)
@@ -234,7 +234,8 @@ export function HomeTiles({ candidates, label, detail, next, onOpen, editing = f
     if (Object.keys(patch).length) save(patch)
   }
 
-  const order = drag ? moveItem(tiles, drag.from, drag.to) : tiles
+  // A dragged tile trades places with the one it's over; nothing else moves.
+  const order = drag ? swapItems(tiles, drag.from, drag.to) : tiles
   const onlyPillar = profile.pillars.length === 1
 
   return (

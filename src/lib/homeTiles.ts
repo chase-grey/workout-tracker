@@ -112,6 +112,18 @@ export function moveItem<T>(ids: T[], from: number, to: number): T[] {
   return next
 }
 
+/**
+ * `items` with the ones at `a` and `b` trading places, and every other one
+ * where it was. What a drag on the tile grid does: a tile dropped on the one
+ * below it swaps with that one, and the tiles beside them don't move.
+ */
+export function swapItems<T>(items: T[], a: number, b: number): T[] {
+  const next = [...items]
+  if (a < 0 || b < 0 || a >= next.length || b >= next.length) return next
+  ;[next[a], next[b]] = [next[b], next[a]]
+  return next
+}
+
 /** The layout after taking `id` off the grid. */
 export function withRemoved(layout: HomeLayout, shownIds: string[], id: string): HomeLayout {
   return {

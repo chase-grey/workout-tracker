@@ -5,6 +5,7 @@ import {
   gridDropIndex,
   moveItem,
   spansRow,
+  swapItems,
   tileId,
   withAdded,
   withRemoved,
@@ -84,6 +85,25 @@ describe('moveItem', () => {
   it('moves forward and back', () => {
     expect(moveItem(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd'])
     expect(moveItem(['a', 'b', 'c', 'd'], 3, 1)).toEqual(['a', 'd', 'b', 'c'])
+  })
+})
+
+describe('swapItems', () => {
+  // A two-column grid: a b / c d / e f.
+  const grid = ['a', 'b', 'c', 'd', 'e', 'f']
+  it('trades a tile with the one below it and leaves the rest where they were', () => {
+    expect(swapItems(grid, 0, 2)).toEqual(['c', 'b', 'a', 'd', 'e', 'f'])
+    expect(swapItems(grid, 3, 1)).toEqual(['a', 'd', 'c', 'b', 'e', 'f'])
+  })
+  it('trades a tile with the one beside it', () => {
+    expect(swapItems(grid, 2, 3)).toEqual(['a', 'b', 'd', 'c', 'e', 'f'])
+  })
+  it('trades across the grid without moving the tiles in between', () => {
+    expect(swapItems(grid, 0, 5)).toEqual(['f', 'b', 'c', 'd', 'e', 'a'])
+  })
+  it('leaves the order alone for a slot that is not there', () => {
+    expect(swapItems(grid, 0, 9)).toEqual(grid)
+    expect(swapItems(grid, 2, 2)).toEqual(grid)
   })
 })
 
