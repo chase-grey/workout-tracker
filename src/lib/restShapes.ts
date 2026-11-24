@@ -32,6 +32,23 @@ export type ExtraVariant =
   | (typeof EXTRA_BOX_VARIANTS)[number]
   | (typeof EXTRA_FILL_VARIANTS)[number]
 
+/** The boxed shapes: the five drawn in components/RestTimer, then the extras. */
+export const REST_BOX_VARIANTS = [
+  'sandglass',
+  'waterglass',
+  'tide',
+  'candle',
+  'pips',
+  ...EXTRA_BOX_VARIANTS,
+] as const
+// 'perimeter' frames the screen edge; the others fill it, so they sit below the
+// up-next block rather than behind it.
+export const REST_FILL_VARIANTS = ['curtain', 'hourglass', 'waterclock', ...EXTRA_FILL_VARIANTS] as const
+export const REST_FULL_VARIANTS = ['perimeter', ...REST_FILL_VARIANTS] as const
+/** Every shape a rest can draw. A hold's countdown draws the boxed ones only. */
+export const REST_VARIANTS = [...REST_BOX_VARIANTS, ...REST_FULL_VARIANTS] as const
+export type RestVariant = (typeof REST_VARIANTS)[number]
+
 /** Whether a variant name is one of the shapes RestShapes draws. */
 export function isExtraVariant(v: string): v is ExtraVariant {
   return (

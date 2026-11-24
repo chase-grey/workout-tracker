@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- The page `npm run shots` drives: one figure or shape at a time, at a
+         named moment (see src/shots/main.tsx). Served by the dev server only;
+         the build's one entry is index.html. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>shots</title>
+    <script>
+      try {
+        var mode = JSON.parse(localStorage.getItem('wt:theme') || '{}').mode
+        if (mode === 'light') document.documentElement.dataset.mode = 'light'
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/shots/main.tsx"></script>
+  </body>
+</html>

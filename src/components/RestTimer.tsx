@@ -10,7 +10,14 @@ import {
   waveSurfacePath,
 } from '../lib/tide'
 import { createVessel, VESSEL_KINDS, type Vessel } from '../lib/vessels'
-import { EXTRA_BOX_VARIANTS, EXTRA_FILL_VARIANTS, isExtraVariant } from '../lib/restShapes'
+import {
+  isExtraVariant,
+  REST_BOX_VARIANTS,
+  REST_FILL_VARIANTS,
+  REST_FULL_VARIANTS,
+  REST_VARIANTS,
+  type RestVariant,
+} from '../lib/restShapes'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { createRotation } from '../lib/variantRotation'
 import { isAnimationHidden } from '../lib/hiddenAnimations'
@@ -40,20 +47,11 @@ import { WaterGlass } from './WaterGlass'
 // see components/WaterGlass): the same silhouette and the same two levels, but the
 // chamber drains a drop at a time through the neck and the water below answers
 // every one of them.
-const BOX_VARIANTS = [
-  'sandglass',
-  'waterglass',
-  'tide',
-  'candle',
-  'pips',
-  ...EXTRA_BOX_VARIANTS,
-] as const
-// 'perimeter' frames the screen edge; the others fill it, so they sit below the
-// up-next block rather than behind it.
-const FILL_VARIANTS = ['curtain', 'hourglass', 'waterclock', ...EXTRA_FILL_VARIANTS] as const
-const FULL_VARIANTS = ['perimeter', ...FILL_VARIANTS] as const
-const VARIANTS = [...BOX_VARIANTS, ...FULL_VARIANTS] as const
-type Variant = (typeof VARIANTS)[number]
+const BOX_VARIANTS = REST_BOX_VARIANTS
+const FILL_VARIANTS = REST_FILL_VARIANTS
+const FULL_VARIANTS = REST_FULL_VARIANTS
+const VARIANTS = REST_VARIANTS
+type Variant = RestVariant
 type FullVariant = (typeof FULL_VARIANTS)[number]
 type FillVariant = (typeof FILL_VARIANTS)[number]
 
@@ -1114,7 +1112,10 @@ export function RestTimer({
   header,
   upNextTarget,
   fastMode = 'off',
+  variant: pinned,
 }: {
+  /** One shape rather than the rotation's pick: `npm run shots` draws each in turn. */
+  variant?: RestVariant
   seconds: number
   /**
    * When this rest ends (epoch ms). Pass a saved value to resume a rest that was
@@ -1158,7 +1159,7 @@ export function RestTimer({
   // this, and rounding here would step it once a second — a staircase the drain
   // transition can't smooth over. The readout rounds for display instead.
   const [remainingMs, setRemainingMs] = useState(() => endRef.current - Date.now())
-  const [variant, setVariant] = useState<Variant>(() => rotation.next())
+  const [variant, setVariant] = useState<Variant>(() => pinned ?? rotation.next())
   useShownAnimation('rest', variant, () => setVariant(rotation.next()))
   const buzzed = useRef(false)
   // Whether this rest ends itself. Also what hides the numeric countdown: nothing

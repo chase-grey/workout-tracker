@@ -15,6 +15,14 @@ const PUSHPULL_VARIANTS = ['anvil', 'chevrons', 'gauge', 'wave'] as const
 // family, every one of them says the heading the same way: by leaning into it.
 const FLOSS_VARIANTS = ['beads', 'wake', 'capsule', 'helix', 'fill', 'scan'] as const
 
+/** Every figure, by family: what `npm run shots` walks to draw each one. */
+export const RHYTHM_FAMILIES = {
+  breathe: BREATHE_VARIANTS,
+  descent: DESCENT_VARIANTS,
+  pushpull: PUSHPULL_VARIANTS,
+  floss: FLOSS_VARIANTS,
+} as const
+
 export type FlossVariant = (typeof FLOSS_VARIANTS)[number]
 
 export type RhythmVariant =
