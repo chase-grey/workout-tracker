@@ -50,7 +50,7 @@ export function StretchFinishOverlay({
   const gap = (first: boolean) => (first ? 'mt-6' : 'mt-5')
 
   return (
-    <div className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
+    <div className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black px-6 py-8">
       {hasWins && <Confetti count={72} colors={[...GOLDS, ...currentPalette().confetti, '#ffffff']} />}
 
       <div className="recap-in mx-auto flex w-full max-w-md flex-1 flex-col">

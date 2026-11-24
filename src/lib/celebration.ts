@@ -106,8 +106,10 @@ export function baselineCelebration(names: string[]): Celebration | null {
   const [top, ...rest] = names
   return {
     tier: 'medium',
-    title: names.length > 1 ? 'new baselines set' : 'new baseline set',
-    subtitle: `${top} — you beat last session.`,
+    // Said as what happened. "New baseline" was the plan's word for it, and
+    // meant nothing on the screen.
+    title: 'beat last session',
+    subtitle: top,
     details: rest.length ? rest : undefined,
     icon: 'flag',
   }

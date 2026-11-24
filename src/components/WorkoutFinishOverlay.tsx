@@ -30,7 +30,7 @@ export function WorkoutFinishOverlay({
   const hasPRs = prs.length > 0
 
   return (
-    <div className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8">
+    <div className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black px-6 py-8">
       {hasPRs && <Confetti count={72} colors={[...GOLDS, ...currentPalette().confetti, '#ffffff']} />}
 
       <div className="recap-in mx-auto flex w-full max-w-md flex-1 flex-col">
@@ -70,7 +70,7 @@ export function WorkoutFinishOverlay({
             <div className="flex items-center gap-2 text-accent">
               <MdBolt className="text-xl" aria-hidden />
               <span className="text-sm font-bold tracking-wider">
-                {baselines.length > 1 ? 'new baselines' : 'new baseline'}
+                beat last session
               </span>
             </div>
             <ul className="mt-2 flex flex-col gap-1.5">

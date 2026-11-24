@@ -101,7 +101,8 @@ describe('baselineCelebration', () => {
   it('leads with the first name and lists the rest as details', () => {
     const c = baselineCelebration(['Bench', 'Squat'])
     expect(c?.tier).toBe('medium')
-    expect(c?.title).toBe('new baselines set')
+    expect(c?.title).toBe('beat last session')
+    expect(c?.subtitle).toBe('Bench')
     expect(c?.details).toEqual(['Squat'])
   })
 })

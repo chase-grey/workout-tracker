@@ -100,7 +100,7 @@ export function CelebrationOverlay({ celebration, onDone }: { celebration: Celeb
         // A non-ack full-screen cheer still dismisses on tap; an ack one waits for
         // the button, so a stray tap can't skip the moment it exists to mark.
         onClick={isAck ? undefined : finish}
-        className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95 px-6 py-8"
+        className="keep-dark fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black px-6 py-8"
       >
         {isEpic && (
           <div
