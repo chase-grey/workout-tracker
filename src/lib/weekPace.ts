@@ -3,7 +3,8 @@
  * on a steady ramp: a Monday evening grace period, then a smooth climb to the
  * last intended day's evening deadline. Calorie days can't be banked ahead or
  * caught up, and a day isn't settled until it ends, so their schedule is a
- * staircase that steps at midnight and counts finished days only.
+ * staircase that steps at midnight and counts finished days only, handing back
+ * each spare day a miss has spent (see {@link calDaysPaceMark}).
  */
 
 import { weekStartOf } from './dates'
@@ -64,6 +65,26 @@ export function calDaysRequiredByNow(goal: number, now: Date = new Date()): numb
   return Math.min(goal, Math.max(0, goal - daysLeft))
 }
 
+/**
+ * Where the calorie-day marker sits: one step for every finished day, less the
+ * spare days already spent on a miss.
+ *
+ * {@link calDaysRequiredByNow} alone is the floor, and with a spare day in the
+ * goal it doesn't leave zero until the spares run out: six of seven kept the
+ * marker at the start of the bar all Tuesday, beside a Monday already banked.
+ * Stepping for every finished day instead would call a missed Monday behind
+ * while six days were still there to carry six. So the marker does both. It
+ * climbs a day each midnight, a miss that a spare day covers pulls it back
+ * level with what's banked, and once the spares are gone it holds at the floor.
+ * It is therefore never ahead of the fill while the goal is in reach, and
+ * "behind" still means exactly what {@link calDaysBehind} says.
+ */
+export function calDaysPaceMark(done: number, goal: number, now: Date = new Date()): number {
+  if (goal <= 0) return 0
+  const finished = Math.min(goal, weekDaysCompleted(now))
+  return Math.max(calDaysRequiredByNow(goal, now), Math.min(finished, Math.max(0, done)))
+}
+
 /** Behind on calorie days: fewer banked than the days left can make up. */
 export function calDaysBehind(done: number, goal: number, now: Date = new Date()): boolean {
   return done < calDaysRequiredByNow(goal, now)
@@ -93,7 +114,10 @@ export type MetricPace = {
   key: MetricKey
   done: number
   goal: number
-  /** Units the schedule expects by now (see {@link requiredByNow}). */
+  /**
+   * Units the schedule expects by now (see {@link requiredByNow}); for calorie
+   * days, where their marker sits (see {@link calDaysPaceMark}).
+   */
   required: number
   /** Days of this metric's own window (see {@link METRIC_WINDOW}). */
   windowDays: number
@@ -118,8 +142,8 @@ export type WeekPace = {
    * Where the pace marker sits on the overall bar: the mean of the per-metric
    * required fractions, aggregated the same way progress is so the two are
    * directly comparable. At 1 the schedule has nothing left to say and the
-   * marker goes away; with calorie days in play it stops short of that all
-   * Sunday, since Sunday's own day is never owed before it ends.
+   * marker goes away; with calorie days short of their goal it stops short of
+   * that all Sunday, since Sunday's own day is never owed before it ends.
    */
   requiredFraction: number
   /**
@@ -171,7 +195,7 @@ export function weekPace(
       key,
       done,
       goal,
-      required: key === 'calDays' ? calDaysRequiredByNow(goal, now) : requiredByNow(goal, now, windowDays),
+      required: key === 'calDays' ? calDaysPaceMark(done, goal, now) : requiredByNow(goal, now, windowDays),
       windowDays,
       daysLeft: windowLeft,
       remaining,

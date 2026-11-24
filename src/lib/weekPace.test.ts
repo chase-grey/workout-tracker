@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest'
-import { DAYS_IN_WEEK, calDaysBehind, calDaysRequiredByNow, requiredByNow, weekDaysCompleted, weekPace } from './weekPace'
+import { DAYS_IN_WEEK, calDaysBehind, calDaysPaceMark, calDaysRequiredByNow, requiredByNow, weekDaysCompleted, weekPace } from './weekPace'
 import { WEEKLY_GOAL_HISTORY, type WeeklyGoalConfig } from './weeklyStreak'
 
 // 2026-06-15 is a Monday; the Mon–Sun week runs 06-15 … 06-21.
@@ -138,6 +138,46 @@ describe('days on calorie target is moving too soon', () => {
     }
   })
 
+  // The other half: "the progress bar for days on calorie target is still at
+  // the beginning when it's Tuesday". The floor alone doesn't leave zero until
+  // the spare day is gone.
+  it('steps on Tuesday when Monday was hit, spare day or not', () => {
+    for (const goal of [5, 6, 7]) {
+      expect(calDaysPaceMark(1, goal, at(MON, 23))).toBe(0)
+      expect(calDaysPaceMark(1, goal, at(MON + 1, 0))).toBe(1)
+      expect(calDaysPaceMark(1, goal, at(MON + 1, 20))).toBe(1)
+      // Tuesday's own plate already in: the day still isn't owed until it ends.
+      expect(calDaysPaceMark(2, goal, at(MON + 1, 20))).toBe(1)
+      expect(calDaysPaceMark(2, goal, at(MON + 2, 0))).toBe(2)
+    }
+  })
+
+  it('hands the marker back a spare day that a miss has spent', () => {
+    // Six of seven, Monday missed: level with the fill, not ahead of it.
+    expect(calDaysPaceMark(0, 6, at(MON + 1, 9))).toBe(0)
+    expect(calDaysPaceMark(1, 6, at(MON + 2, 9))).toBe(1)
+    expect(calDaysPaceMark(5, 6, at(MON + 6, 9))).toBe(5)
+    // The second miss has no spare to draw on, so the marker holds at the floor.
+    expect(calDaysPaceMark(0, 6, at(MON + 2, 9))).toBe(1)
+    // Seven of seven has none at all.
+    expect(calDaysPaceMark(0, 7, at(MON + 1, 9))).toBe(1)
+  })
+
+  it('never passes the fill while the goal is in reach, at any hour of any day', () => {
+    for (const goal of [1, 3, 5, 6, 7]) {
+      for (let d = MON; d <= MON + 6; d++) {
+        for (const h of [0, 9, 22, 23]) {
+          for (let done = 0; done <= 7; done++) {
+            const mark = calDaysPaceMark(done, goal, at(d, h))
+            expect(Number.isInteger(mark)).toBe(true)
+            expect(mark).toBeGreaterThanOrEqual(calDaysRequiredByNow(goal, at(d, h)))
+            expect(mark > done).toBe(calDaysBehind(done, goal, at(d, h)))
+          }
+        }
+      }
+    }
+  })
+
   it('is behind only once the days left cannot cover what is owed', () => {
     // Seven of seven, Monday missed: lost the moment Monday ended.
     expect(calDaysBehind(0, 7, at(MON, 23))).toBe(false)
@@ -225,13 +265,20 @@ describe('weekPace — the schedule marker', () => {
   })
 
   it('keeps the target independent of completed sessions', () => {
-    const none = weekPace({ workouts: 0, flex: 0, calDays: 0 }, G, at(MON + 3))
-    const done = weekPace({ workouts: 2, flex: 3, calDays: 6 }, G, at(MON + 3))
+    const none = weekPace({ workouts: 0, flex: 0, calDays: 2 }, G, at(MON + 3))
+    const done = weekPace({ workouts: 2, flex: 3, calDays: 2 }, G, at(MON + 3))
     expect(none.requiredFraction).toBe(done.requiredFraction)
     expect(none.metrics.map((m) => m.required)).toEqual(done.metrics.map((m) => m.required))
     // Thursday 9am: 63 of the 147 ramp hours, 63 of flex's 123, and two of six
     // calorie days: three days done, one of them the spare.
     expect(none.requiredFraction).toBeCloseTo((63 / 147 + 63 / 123 + 2 / 6) / 3)
+  })
+
+  it('moves only the calorie share with the calorie days banked', () => {
+    // Thursday with every day hit: the spare is unspent, so the marker stands
+    // on three finished days rather than the two that had to be in.
+    const p = weekPace({ workouts: 0, flex: 0, calDays: 3 }, G, at(MON + 3))
+    expect(p.requiredFraction).toBeCloseTo((63 / 147 + 63 / 123 + 3 / 6) / 3)
   })
 })
 
