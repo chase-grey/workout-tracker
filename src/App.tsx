@@ -12,6 +12,7 @@ import { ReviewOverlay } from './components/ReviewOverlay'
 import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { StretchFinishOverlay } from './components/StretchFinishOverlay'
 import { UpdateToast } from './components/UpdateToast'
+import { TourOverlay } from './components/TourOverlay'
 import { useAppUpdate } from './lib/version'
 import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
@@ -400,6 +401,8 @@ function AppShell() {
         )}
       </div>
       <UpdateToast />
+      {/* Under the recaps and never over a session: the tour is about the tabs. */}
+      {!immersive && !review && <TourOverlay tab={tab} onTab={setTab} />}
       {review && <ReviewOverlay review={review} onClose={dismissReview} />}
       {finishSummary && <WorkoutFinishOverlay summary={finishSummary} onClose={dismissFinish} />}
       {stretchSummary && (

@@ -20,7 +20,6 @@ import { hasPillar, ownerFlavour, readsBodyFat, weighsIn } from '../../lib/profi
 import { dailyStanding, nextStretchUp } from '../../lib/dailyRoutine'
 import { cardioSummary } from '../../lib/cardio'
 import { HomeTiles } from './HomeTiles'
-import { TourCard } from './TourCard'
 import { CardioLogSheet } from './CardioLogSheet'
 import { CardioGoalSheet } from './CardioGoalSheet'
 import { cardioSessionsForWeek, goalLabel, planActive, plannedDone, plannedOn } from '../../lib/cardioPlan'
@@ -282,12 +281,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     {
       id: 'week',
       label: 'this week',
-      node: (
-        <>
-          <TourCard anchor="week" />
-          <ThisWeek onSelectWeek={showHabitWeek} />
-        </>
-      ),
+      node: <ThisWeek onSelectWeek={showHabitWeek} />,
       editor: <WeekGoalOrder />,
     },
     {
@@ -303,7 +297,6 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
             label: 'daily calories',
             node: (
               <div ref={habitsRef} className="flex flex-col gap-2">
-                <TourCard anchor="habits" />
                 {habits(false)}
               </div>
             ),
@@ -334,7 +327,6 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
       label: 'quick tiles',
       node: (
         <>
-          <TourCard anchor="tiles" />
           {tiles(false)}
           {photoBanner}
         </>

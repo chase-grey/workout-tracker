@@ -62,6 +62,7 @@ export function BottomNav({
       {tabs.map((t) => (
         <button
           key={t.id}
+          data-tab={t.id}
           onClick={() => onChange(t.id)}
           aria-label={alerts.includes(t.id) ? `${t.label}, needs attention` : t.label}
           aria-current={active === t.id ? 'page' : undefined}

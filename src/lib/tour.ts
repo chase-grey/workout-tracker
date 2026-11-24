@@ -1,71 +1,81 @@
 /**
- * The first-run tour: a handful of cards, one idea each, shown in turn on Today
- * while guide mode is on.
+ * The first-run tour: a handful of steps, one idea each, shown in turn in a
+ * card that floats over the app while guide mode is on.
  *
- * The steps are data and the rules for which ones a person gets and where they
- * are in them are pure, so the card that renders them has nothing to decide.
- * Progress is a list of the ids already seen, kept in Settings, rather than a
- * position: a step added later shows up for someone mid-tour without moving
- * the ones behind them, and a step a person doesn't track (see `needs`) is
- * simply never in their list.
+ * It walks the tabs left to right, and each step says why the thing it points
+ * at gets a person to their goal rather than how to press it. The steps are
+ * data and the rules for which ones a person gets, where they are in them and
+ * where the card sits are pure, so the overlay that draws them has nothing to
+ * decide. Progress is a list of the ids already seen, kept in Settings, rather
+ * than a position: a step added later shows up for someone mid-tour without
+ * moving the ones behind them, and a step a person doesn't track (see `needs`)
+ * is simply never in their list.
  */
 
 import { hasPillar, type Pillar, type Profile } from './profile'
 
-/** Where on Today a step's card sits, above the control it is about. */
-export type TourAnchor = 'week' | 'habits' | 'tiles'
+/** The tabs a step can be about; the bottom bar's own ids. */
+export type TourTab = 'today' | 'progress' | 'coach' | 'settings'
 
 export type TourStep = {
   id: string
-  anchor: TourAnchor
+  /** The tab that is open behind the card while this step is up. */
+  tab: TourTab
+  /**
+   * The card on that tab the step lights up, by its id in the tab's stack.
+   * Without one the step is about the tab as a whole, and lights its icon.
+   */
+  card?: string
   title: string
   body: string
-  /** Added to the body when the coach is switched on. */
-  coachBody?: string
   /** The pillar a person must be tracking to be told about this. */
   needs?: Pillar
+  /** Only for someone with the coach switched on. */
+  needsCoach?: boolean
 }
 
-/** In the order they are shown. */
+/** In the order they are shown: down Today, then along the bar. */
 export const TOUR_STEPS: readonly TourStep[] = [
   {
-    id: 'tiles',
-    anchor: 'tiles',
-    title: 'quick tiles',
-    body: 'these start a workout or a stretch, or log cardio. hold anywhere on this page to rearrange it, take a card off, or change what one does.',
+    id: 'week',
+    tab: 'today',
+    card: 'week',
+    title: 'your week',
+    body: 'results come from showing up week after week, not from one big day. hit each weekly goal and your streak grows, so this is the card to keep an eye on.',
   },
   {
-    id: 'streak',
-    anchor: 'week',
-    title: 'your weekly streak',
-    body: 'hit every weekly goal you track, monday to sunday, and the streak goes up by one. tap the flame to see past weeks.',
-  },
-  {
-    id: 'freeze',
-    anchor: 'week',
-    title: 'streak freezes',
-    body: 'in a week where you hit every goal, each extra day over a goal banks a freeze. a short week spends one freeze for each day it missed, less any extra days elsewhere. with none to spend, the streak resets.',
-  },
-  {
-    id: 'calories',
-    anchor: 'habits',
-    title: 'logging calories',
-    body: 'tap +100 or +500 each time you eat. tap a day to log for it, and −100 takes some back.',
+    id: 'food',
+    tab: 'today',
+    card: 'calories',
+    title: 'what you eat',
+    body: 'food decides which way your weight moves. one tap each time you eat keeps the day honest, without weighing every bite.',
     needs: 'diet',
   },
   {
-    id: 'plan',
-    anchor: 'tiles',
-    title: 'your workout plan',
-    body: 'in edit mode, the pencil on a workout tile opens that day to change. the whole plan is in settings too.',
-    coachBody: 'or ask the coach to change it for you.',
-    needs: 'strength',
+    id: 'start',
+    tab: 'today',
+    card: 'tiles',
+    title: 'getting started',
+    body: 'one tap starts a workout, a stretch or a cardio log. the less it takes to start, the more often you will.',
   },
   {
-    id: 'progress',
-    anchor: 'tiles',
-    title: 'where progress lives',
-    body: 'the progress tab keeps your weight, lifts and streak history.',
+    id: 'progressTab',
+    tab: 'progress',
+    title: 'progress',
+    body: 'your goals, and the trend toward each one. a single day tells you nothing; the line over weeks shows whether what you are doing is working.',
+  },
+  {
+    id: 'coachTab',
+    tab: 'coach',
+    title: 'coach',
+    body: 'ask it anything about your training or food. it can see how you are doing, and change your plan when you stall or life gets in the way.',
+    needsCoach: true,
+  },
+  {
+    id: 'settingsTab',
+    tab: 'settings',
+    title: 'settings',
+    body: 'your plan, your goals and what you track all change here. a plan that fits your life is one you will keep.',
   },
 ]
 
@@ -74,12 +84,16 @@ export type TourState = { seen: readonly string[]; done: boolean }
 
 export const FRESH_TOUR: TourState = { seen: [], done: false }
 
-/** The steps this person gets: those whose pillar they track, or that need none. */
+/**
+ * The steps this person gets: those whose pillar they track, with the coach's
+ * step only when the coach is on.
+ */
 export function tourSteps(
   profile: Profile | null | undefined,
+  coachOn: boolean,
   steps: readonly TourStep[] = TOUR_STEPS,
 ): TourStep[] {
-  return steps.filter((s) => !s.needs || hasPillar(profile, s.needs))
+  return steps.filter((s) => (!s.needs || hasPillar(profile, s.needs)) && (!s.needsCoach || coachOn))
 }
 
 /** The step to show now, or null when the tour is over. */
@@ -110,7 +124,42 @@ export function restartTour(): TourState {
   return { seen: [], done: false }
 }
 
-/** A step's body as this person should read it. */
-export function tourBody(step: TourStep, coachOn: boolean): string {
-  return coachOn && step.coachBody ? `${step.body} ${step.coachBody}` : step.body
+/** A box on the screen, in viewport pixels. */
+export type TourBox = { top: number; left: number; width: number; height: number }
+
+/**
+ * The part of `target` that is on screen between `top` and `bottom`, grown by
+ * `pad` so the light doesn't sit hard against what it is lighting. Null when
+ * none of it is: a card scrolled away, or one that has no size yet.
+ */
+export function tourSpot(
+  target: TourBox,
+  bounds: { top: number; bottom: number; width: number },
+  pad: number,
+): TourBox | null {
+  if (target.width <= 0 || target.height <= 0) return null
+  const top = Math.max(target.top - pad, bounds.top)
+  const bottom = Math.min(target.top + target.height + pad, bounds.bottom)
+  const left = Math.max(target.left - pad, 0)
+  const right = Math.min(target.left + target.width + pad, bounds.width)
+  if (bottom - top <= 0 || right - left <= 0) return null
+  return { top, left, width: right - left, height: bottom - top }
+}
+
+/**
+ * Where the top of the tour's card goes, given what it is pointing at.
+ *
+ * Under the lit box when it fits there, over it when it only fits there, and
+ * otherwise against the bottom of the screen, across the lit box: a card as
+ * tall as the screen leaves nowhere clear of it. With nothing lit the card
+ * sits in the middle.
+ */
+export function tourCardTop(spot: TourBox | null, cardHeight: number, viewHeight: number, gap: number): number {
+  const lowest = Math.max(gap, viewHeight - cardHeight - gap)
+  if (!spot) return Math.max(gap, (viewHeight - cardHeight) / 2)
+  const below = spot.top + spot.height + gap
+  if (below <= lowest) return below
+  const above = spot.top - gap - cardHeight
+  if (above >= gap) return above
+  return lowest
 }
