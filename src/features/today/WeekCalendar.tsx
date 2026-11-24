@@ -72,8 +72,8 @@ function weekTitle(weekStart: string, today: string): string {
  * and under it only what a mark can't say of the day picked, a cardio
  * session's kind and amount — because most looks at it are "what's today".
  * The chevron
- * opens the whole week at a row per day, and `keep open` there makes that the
- * way it opens from then on. Either way a session is a button that shows what
+ * opens the whole week at a row per day; which way it opens to begin with is
+ * the week calendar setting (settings/WeekCalendarSetting), not a switch here. Either way a session is a button that shows what
  * it holds (CalendarItemSheet) rather than one that starts it, and which days
  * the sessions fall on is set by holding the card (ScheduleEditor).
  *
@@ -81,7 +81,7 @@ function weekTitle(weekStart: string, today: string): string {
  * picked here and says them once. A day's target shows only as its mark.
  */
 export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plannedCardio, onAction, editing }: Props) {
-  const { settings, updateSettings } = useData()
+  const { settings } = useData()
   const kept = settings.weekCalendarView === 'full'
   const [expanded, setExpanded] = useState(kept)
   const [detail, setDetail] = useState<{ day: CalendarDay; item: Session } | null>(null)
@@ -156,15 +156,6 @@ export function WeekCalendar({ weekStart, onWeekChange, selected, onSelect, plan
               </li>
             ))}
           </ul>
-          <div className="flex justify-end">
-            <button
-              onClick={() => updateSettings({ ...settings, weekCalendarView: kept ? 'simple' : 'full' })}
-              aria-pressed={kept}
-              className={`min-h-[36px] rounded-lg px-2 text-xs font-medium ${kept ? 'text-accent' : 'text-neutral-500'}`}
-            >
-              keep open
-            </button>
-          </div>
         </>
       ) : (
         <>
