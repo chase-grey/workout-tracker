@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { stashResumeTab } from './resumeTab'
+import type { Tab } from '../components/BottomNav'
 
 /**
  * Build stamp, baked in at build time by Vite `define` (see vite.config.ts).
@@ -14,6 +15,9 @@ const CONTROLLER_SWAP_TIMEOUT_MS = 10_000
 
 /** How often an open app asks whether a newer build has been deployed. */
 const BACKGROUND_CHECK_MS = 30 * 60_000
+
+/** After this long with no touch or key, an open app counts as left alone. */
+export const IDLE_MS = 5 * 60_000
 
 /** The slice of navigator.serviceWorker this needs, so it can be tested. */
 type WorkerRegistrationLike = {
@@ -117,6 +121,60 @@ export function useAppUpdate(): UpdateState {
   )
 }
 
+// --- when a reload would not be noticed --------------------------------------
+
+export type Moment = {
+  /** The app is not on screen. */
+  hidden: boolean
+  /** Something half-done is open: a workout, a sheet, a draft, or anything that asked to be left alone. */
+  held: boolean
+  /** A touch or key has landed since the app last came on screen. */
+  touchedSinceShown: boolean
+  /** How long since the last touch or key. */
+  idleMs: number
+}
+
+/**
+ * A reload now would not interrupt anything: nothing half-done, and nobody is
+ * using the app. This is the whole rule for the app updating itself; anything
+ * else waits for the Settings button.
+ */
+export function isQuietMoment(moment: Moment): boolean {
+  if (moment.held) return false
+  return moment.hidden || !moment.touchedSinceShown || moment.idleMs >= IDLE_MS
+}
+
+const holds = new Set<symbol>()
+
+/**
+ * Keep the app from reloading itself while something a reload would disturb is
+ * on screen (a workout, a recap). Returns the release.
+ */
+export function holdUpdates(): () => void {
+  const hold = Symbol('hold')
+  holds.add(hold)
+  return () => {
+    holds.delete(hold)
+  }
+}
+
+/** A sheet is open or something written is on screen: held with no hold needed. */
+function midEdit(): boolean {
+  if (document.querySelector('dialog[open]')) return true
+  // A draft counts whether or not the cursor is still in it.
+  for (const area of document.querySelectorAll('textarea')) if (area.value.trim()) return true
+  if (document.querySelector('[contenteditable="true"]')?.textContent?.trim()) return true
+  const active = document.activeElement
+  return active instanceof HTMLInputElement && active.value !== ''
+}
+
+let place: Tab = 'today'
+
+/** Say which tab is showing, so a reload the app does on its own comes back to it. */
+export function notePlace(tab: Tab) {
+  place = tab
+}
+
 // --- reloads the app triggers itself, and what to say after them ------------
 
 const FROM_KEY = 'wt:update-from'
@@ -139,6 +197,12 @@ function reloadForUpdate() {
   }
   // Come back to Settings rather than Today — that's where you asked.
   stashResumeTab('settings')
+  window.location.reload()
+}
+
+/** Reload onto the newest build without being asked: same tab, nothing said. */
+function reloadQuietly() {
+  stashResumeTab(place)
   window.location.reload()
 }
 
@@ -175,8 +239,9 @@ export async function checkForUpdate(): Promise<void> {
 }
 
 /**
- * Keep an eye out for new builds while the app is open, so Settings can wear a
- * dot the moment one is ready rather than when you think to look.
+ * Keep an eye out for new builds while the app is open. A newer build is
+ * reloaded onto at the first quiet moment (see isQuietMoment); until one comes,
+ * Settings wears a dot and its button restarts onto the build.
  *
  * The browser checks for a new worker on each launch; this adds a check when the
  * app comes back to the foreground — a phone PWA is resumed far more often than
@@ -190,15 +255,44 @@ export function watchForUpdates() {
   if (!('serviceWorker' in navigator)) return
   const sw = navigator.serviceWorker
   const wasControlled = sw.controller != null
+  let touched = false
+  let lastTouch = Date.now()
+  // After the reload the new worker already owns the page, so `ready` is not
+  // set again for the same build and this cannot loop.
+  const reloadIfQuiet = () => {
+    if (!state.ready) return
+    const quiet = isQuietMoment({
+      hidden: document.visibilityState === 'hidden',
+      held: holds.size > 0 || midEdit(),
+      touchedSinceShown: touched,
+      idleMs: Date.now() - lastTouch,
+    })
+    if (quiet) reloadQuietly()
+  }
+  const onTouch = () => {
+    touched = true
+    lastTouch = Date.now()
+  }
+  for (const type of ['pointerdown', 'keydown', 'wheel', 'touchmove']) {
+    window.addEventListener(type, onTouch, { capture: true, passive: true })
+  }
   sw.addEventListener('controllerchange', () => {
-    if (wasControlled) set({ ready: true })
+    if (!wasControlled) return
+    set({ ready: true })
+    reloadIfQuiet()
   })
   const check = () => {
     if (state.ready) return
     void sw.getRegistrations().then((regs) => regs.forEach((r) => r.update().catch(() => {})))
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') check()
+    if (document.visibilityState === 'visible') {
+      touched = false
+      check()
+    }
+    reloadIfQuiet()
   })
   setInterval(check, BACKGROUND_CHECK_MS)
+  // The idle clock: a build that arrived mid-use goes in once the app is left alone.
+  setInterval(reloadIfQuiet, 60_000)
 }

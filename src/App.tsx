@@ -13,7 +13,7 @@ import { WorkoutFinishOverlay } from './components/WorkoutFinishOverlay'
 import { StretchFinishOverlay } from './components/StretchFinishOverlay'
 import { UpdateToast } from './components/UpdateToast'
 import { TourOverlay } from './components/TourOverlay'
-import { useAppUpdate } from './lib/version'
+import { holdUpdates, notePlace, useAppUpdate } from './lib/version'
 import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
 import { CalendarSync } from './features/today/CalendarSync'
@@ -146,6 +146,12 @@ function AppShell() {
   // A newer build is ready: the dot stays until you restart onto it, the way an
   // app store badge does — it's a thing to do, not a thing to have seen.
   const { ready: updateReady } = useAppUpdate()
+  // The app updates itself only when a reload would not be noticed. A workout,
+  // a stretch or a recap on screen is never that moment, even set aside.
+  const midSession = sessionActive || review != null || finishSummary != null || stretchSummary != null
+  useEffect(() => (midSession ? holdUpdates() : undefined), [midSession])
+  // A reload the app does on its own comes back to the tab it left.
+  useEffect(() => notePlace(tab), [tab])
   const keyboardOpen = useKeyboardOpen()
 
   // Scroll back to the top when switching tabs.

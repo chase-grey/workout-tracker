@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { holdUpdates } from '../../lib/version'
 import { useData } from '../../store/DataContext'
 import { buildSystemPrompt, reportToggleLabel, type CoachSkills } from '../../lib/chatPrompt'
 import { coachFeedbackMessage } from '../../lib/coachFeedback'
@@ -462,6 +463,8 @@ export function ChatTab({
   }
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  // A reload would cut off an answer that is still arriving.
+  useEffect(() => (loading ? holdUpdates() : undefined), [loading])
   // The reply as it streams in, before it becomes a turn.
   const [pending, setPending] = useState('')
   // Off by default: each message starts a fresh conversation, so an answer is

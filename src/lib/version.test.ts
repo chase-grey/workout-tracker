@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { afterReloadToast, pullNewWorker } from './version'
+import { afterReloadToast, IDLE_MS, isQuietMoment, pullNewWorker, type Moment } from './version'
 
 /** A fake container whose registration can be told to swap in a new worker. */
 function fakeContainer(reg: { installing?: unknown; waiting?: unknown }) {
@@ -72,6 +72,33 @@ describe('pullNewWorker', () => {
     const { sw, registration } = fakeContainer({})
     registration.update.mockRejectedValueOnce(new Error('offline'))
     await expect(pullNewWorker(sw, 0)).resolves.toBe('failed')
+  })
+})
+
+describe('isQuietMoment', () => {
+  const inUse: Moment = { hidden: false, held: false, touchedSinceShown: true, idleMs: 1000 }
+
+  it('never reloads under someone using the app', () => {
+    expect(isQuietMoment(inUse)).toBe(false)
+  })
+
+  it('reloads while the app is off screen', () => {
+    expect(isQuietMoment({ ...inUse, hidden: true })).toBe(true)
+  })
+
+  it('reloads on the way back in, before anything is touched', () => {
+    expect(isQuietMoment({ ...inUse, touchedSinceShown: false })).toBe(true)
+  })
+
+  it('reloads once the app has been left alone', () => {
+    expect(isQuietMoment({ ...inUse, idleMs: IDLE_MS - 1 })).toBe(false)
+    expect(isQuietMoment({ ...inUse, idleMs: IDLE_MS })).toBe(true)
+  })
+
+  it('never reloads over a workout or a draft, however quiet it is', () => {
+    expect(
+      isQuietMoment({ hidden: true, held: true, touchedSinceShown: false, idleMs: IDLE_MS * 10 }),
+    ).toBe(false)
   })
 })
 

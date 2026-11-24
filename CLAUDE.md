@@ -221,6 +221,17 @@ layout, visual-viewport and geometry change in the next second and a half with
 its milliseconds since the tap. Read that (`npm run save-errors -- --json`)
 before changing the timing or the route.
 
+## The app updates itself only when nobody would notice
+
+A new build is reloaded onto without asking only at a quiet moment
+(`isQuietMoment` in `src/lib/version.ts`): off screen, just reopened and not yet
+touched, or left alone for five minutes. Never during a workout, a stretch or a
+recap, over an open sheet or a draft, or while the coach is answering; those
+call `holdUpdates()`, and a new screen whose state a reload would lose must too.
+Until the quiet moment comes, Settings wears its dot and the button reads
+`update ready · restart`. The same pattern runs in my-brain and my-mail and is
+written down in `~/.claude/patterns/app-update.md`; change the rule there too.
+
 ## UI copy
 
 No explanatory subtext, hint captions, or "how to use this" sentences under
