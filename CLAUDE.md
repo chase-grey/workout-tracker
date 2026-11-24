@@ -160,6 +160,25 @@ tests yet, which is why the divergence above had nothing to fail against. Logic
 worth trusting belongs in `src/lib` with a test beside it rather than inline in a
 1000-line session component.
 
+## Look before you report
+
+A change to a rhythm figure, a hold or rest shape, a chart, or anything on
+Today is not done until it has been looked at. Run `npm run shots -- <family>`
+(`rhythm`, `hold`, `rest`, `today`, `progress`, `session`; more words narrow it,
+e.g. `-- rhythm anvil`) and open `.scratch/shots/index.html` or the
+`sheet-*.png` beside it before reporting the change. It draws every figure and
+shape at the moments that matter (a push, the rest, the white arriving, the
+closing rep) in headless Edge and Firefox at 390x844, and opens the real app on
+a seeded history for the rest. Charts want the owner's own history:
+`npm run shots -- --refresh-data` snapshots it once, out of git, and later runs
+reuse it; without a snapshot the history is made up, and the sheet says which.
+
+The report says which browser the change was seen in, and that the phone was
+not observed. Desktop Firefox is the phone's engine, not the phone. For what
+the phone itself shows, ask for a screen report (`report screen` in a session's
+menu, `report screen in 5s` in Settings, beside check for updates) and read it with
+`npm run save-errors`.
+
 ## When the phone says it couldn't save
 
 Don't ask for the error text. Run `npm run save-errors` first. Every write the
