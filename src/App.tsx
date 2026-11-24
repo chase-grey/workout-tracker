@@ -14,6 +14,7 @@ import { StretchFinishOverlay } from './components/StretchFinishOverlay'
 import { UpdateToast } from './components/UpdateToast'
 import { TourOverlay } from './components/TourOverlay'
 import { holdUpdates, notePlace, useAppUpdate } from './lib/version'
+import { useBrainShare } from './store/useBrainShare'
 import { buildReview, monthKeyOf, pendingReview, yearKeyOf, type Review } from './lib/review'
 import { TodayTab } from './features/today/TodayTab'
 import { CalendarSync } from './features/today/CalendarSync'
@@ -105,6 +106,7 @@ function AppShell() {
   const [tab, setTab] = useState<Tab>(resumedTab ?? 'today')
   const mainRef = useRef<HTMLElement>(null)
   const { saveSession, settings, updateSettings, saveError } = useData()
+  useBrainShare()
   // The coach waits to be switched on in Settings, which is where its key gets
   // typed too — on every device alike. A dev build still reaches the proxy's
   // Epic key without one, but it flips the same switch to get the tab.

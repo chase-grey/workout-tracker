@@ -256,3 +256,13 @@ written down in `~/.claude/patterns/app-update.md`; change the rule there too.
 No explanatory subtext, hint captions, or "how to use this" sentences under
 controls. A clear label is enough. In particular: do not caption a tappable
 screen with "tap anywhere to advance" — the flow teaches it in one set.
+
+## What my-brain reads
+
+my-brain's body slice is this app's weekly streak and committed goals. Both apps
+are served from `chase-grey.github.io`, so `store/useBrainShare.ts` leaves a
+summary under the `wt.share.body` storage key and my-brain reads it there
+(`src/domain/bodyTracker.ts` in that repo). The summary carries results, never
+rules: change how a week or a goal is judged here and my-brain follows. Renaming
+the key or reshaping `BrainShare` in `lib/brainShare.ts` breaks that slice, so
+change both repos together.
