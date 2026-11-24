@@ -11,6 +11,7 @@ import {
 import { bulbPath, createBulbs, sandLevels, waistY } from '../lib/bulbs'
 import { CometRest } from './CometRest'
 import { NatureRest } from './NatureRest'
+import { createGlide } from '../lib/glide'
 import { type ExtraVariant } from '../lib/restShapes'
 import { createSnow, flakeLook, isSettled, stepSnow, type Snow } from '../lib/snow'
 import { createSpiral, pointAt, shareAt, spiralPath } from '../lib/spiral'
@@ -554,12 +555,46 @@ const COIL_PATH = spiralPath(COIL)
  * lib/spiral, where the work of making that true against a dash measured in arc
  * length is done. The tracer at the free end is what turns a shrinking shape into
  * something with a direction.
+ *
+ * Drawn every frame rather than transitioned from one countdown sample to the
+ * next, unlike the levels above. The free end runs the whole length of the coil,
+ * several widths of the box, so it moves an order of magnitude faster than any
+ * level does, and at that speed a transition restarted four times a second shows
+ * every late tick as a surge or a stall — and carries the tracer down a straight
+ * chord while the rope's end follows the curve. See lib/glide.
  */
 function UnspoolingSpiral({ fraction }: { fraction: number }) {
   const left = clamp01(fraction)
-  const drawn = shareAt(COIL, left)
-  const tip = pointAt(COIL, left)
+  // What React draws: the first frame only. From there the loop below owns the
+  // dash and the tracer, so these must not change under it on a re-render.
+  const [first] = useState(left)
+  const [glide] = useState(createGlide)
+  const ropeRef = useRef<SVGPathElement>(null)
+  const tipRef = useRef<SVGGElement>(null)
 
+  useEffect(() => {
+    glide.push(left, performance.now())
+  }, [glide, left])
+
+  useEffect(() => {
+    let raf = 0
+    let drawn = -1
+    const frame = (now: number) => {
+      const at = glide.read(now)
+      if (at !== drawn) {
+        drawn = at
+        const tip = pointAt(COIL, at)
+        ropeRef.current?.setAttribute('stroke-dasharray', `${shareAt(COIL, at)} 1`)
+        tipRef.current?.setAttribute('transform', `translate(${tip.x} ${tip.y})`)
+        tipRef.current?.setAttribute('visibility', at > 0 ? 'visible' : 'hidden')
+      }
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [glide])
+
+  const start = pointAt(COIL, first)
   return (
     <div className="absolute inset-0 text-accent-bright" aria-hidden>
       <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100">
@@ -569,24 +604,20 @@ function UnspoolingSpiral({ fraction }: { fraction: number }) {
           {/* pathLength normalises the dash to 0–1, so the looked-up share goes
               straight in. */}
           <path
+            ref={ropeRef}
             d={COIL_PATH}
             pathLength={1}
-            strokeDasharray={`${drawn} 1`}
-            style={drainOf('stroke-dasharray')}
+            strokeDasharray={`${shareAt(COIL, first)} 1`}
           />
         </g>
-        {/* The free end. Translated rather than moved by cx/cy so the position
-            transitions on the compositor along with everything else. */}
-        {left > 0 && (
-          <g
-            style={{
-              transform: `translate(${tip.x}px, ${tip.y}px)`,
-              ...drainOf('transform'),
-            }}
-          >
-            <circle className="rest-glow" r={4.4} fill="currentColor" />
-          </g>
-        )}
+        {/* The free end. */}
+        <g
+          ref={tipRef}
+          transform={`translate(${start.x} ${start.y})`}
+          visibility={first > 0 ? 'visible' : 'hidden'}
+        >
+          <circle className="rest-glow" r={4.4} fill="currentColor" />
+        </g>
       </svg>
     </div>
   )
