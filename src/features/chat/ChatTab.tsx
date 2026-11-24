@@ -8,6 +8,7 @@ import type { RawMessage, Tool } from '../../services/openai'
 import { coachTurn } from '../../services/coach'
 import { modelChoices, modelFor } from '../../lib/aiProvider'
 import { ownerFlavour, type Profile } from '../../lib/profile'
+import { coachStarters } from '../../lib/coachStarters'
 import { applyPlanEdits, PLAN_EDIT_OPS, type PlanEdit } from '../../lib/planTools'
 import { circuitRounds, circuitTitle, dayEntries, roundsLabel } from '../../lib/circuitEntry'
 import { applyFlexPlanEdits, type FlexEdit } from '../../lib/flexTools'
@@ -604,8 +605,11 @@ export function ChatTab({
   // than resizing it, where the browser can do that (see overlayKeyboard).
   useEffect(() => (hasKey ? overlayKeyboard() : undefined), [hasKey])
 
-  const send = async () => {
-    const text = input.trim()
+  // `preset` is a starter question tapped on an empty thread, sent as typed.
+  const starters = coachStarters(settings.profile)
+
+  const send = async (preset?: string) => {
+    const text = (preset ?? input).trim()
     if (!text || loading) return
     // Typing ahead of a question that's still loading is an answer, not a
     // message to the coach — hold it rather than sending it to the model.
@@ -856,6 +860,21 @@ export function ChatTab({
           the thread, and every pixel of tail here is blank screen holding the
           conversation up off the input. */}
       <div className="flex flex-1 flex-col gap-3 pb-5">
+        {/* An empty thread offers somewhere to start, sat just above the box the
+            questions would otherwise be typed into. They go with the first turn. */}
+        {turns.length === 0 && !loading && !answerTarget && (
+          <div className="mt-auto flex flex-col items-end gap-2">
+            {starters.map((q) => (
+              <button
+                key={q}
+                onClick={() => void send(q)}
+                className="min-h-[44px] rounded-2xl bg-surface px-4 text-left text-sm text-neutral-300 active:opacity-70"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
         {turns.map((t, i) =>
           t.proposal ? (
             <ProposalCard
