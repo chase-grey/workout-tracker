@@ -5,6 +5,7 @@ import {
   phasePrime,
   cycleCloses,
   cycleProgress,
+  finishLevel,
   hitRepTarget,
   loopFadeIn,
   nextDrive,
@@ -15,6 +16,8 @@ import {
   phaseEfforts,
   strain,
   ATTACK_SECONDS,
+  FINISH_DIM_SECONDS,
+  FINISH_REST_LEVEL,
   REST_DEPTH_KEPT,
 } from './rhythmMotion'
 
@@ -214,6 +217,57 @@ describe('repGlow', () => {
   it('never lifts a rep with no target to close on', () => {
     expect(repGlow(3, undefined, true)).toBe('base')
     expect(repGlow(3, 0, true)).toBe('base')
+  })
+})
+
+describe('finishLevel', () => {
+  it('is full on a push and the rest level on a settled rest', () => {
+    expect(finishLevel(1, 1, 1, 5, 0.5)).toBe(1)
+    expect(finishLevel(0, 0, 0, 5, 0.5)).toBe(FINISH_REST_LEVEL)
+  })
+
+  it('brightens into a push with the shape', () => {
+    expect(finishLevel(0, 1, 0, 5, 0)).toBe(FINISH_REST_LEVEL)
+    expect(finishLevel(0, 1, 0.5, 5, 0.3)).toBeCloseTo(FINISH_REST_LEVEL + 0.5 * (1 - FINISH_REST_LEVEL))
+    expect(finishLevel(0, 1, 1, 5, 1)).toBe(1)
+  })
+
+  it('takes its time dimming when the shape lets go at once', () => {
+    // A push/pull shape is at rest 0.6 s in; the white is still on its way down.
+    const early = finishLevel(1, 0, 0, 5, 0.6 / 5)
+    expect(early).toBeGreaterThan(0.75)
+    expect(finishLevel(1, 0, 0, 5, FINISH_DIM_SECONDS / 5)).toBeCloseTo(FINISH_REST_LEVEL)
+    expect(finishLevel(1, 0, 0, 5, 0.9)).toBe(FINISH_REST_LEVEL)
+  })
+
+  it('only ever falls through a rest, and starts it where the push left off', () => {
+    expect(finishLevel(1, 0, 1, 5, 0)).toBe(1)
+    let last = 1
+    for (let p = 0; p <= 1.0001; p += 0.02) {
+      const level = finishLevel(1, 0, 0, 5, p)
+      expect(level).toBeLessThanOrEqual(last + 1e-9)
+      last = level
+    }
+  })
+
+  it('never dims ahead of a shape that fades across the whole phase', () => {
+    // The descent family is still at 0.8 effort two seconds into a five-second rest.
+    expect(finishLevel(1, 0, 0.8, 5, 0.4)).toBeCloseTo(FINISH_REST_LEVEL + 0.8 * (1 - FINISH_REST_LEVEL))
+  })
+
+  it('reaches the rest level by the end of a rest shorter than the fade', () => {
+    expect(finishLevel(1, 0, 0, 1, 1)).toBeCloseTo(FINISH_REST_LEVEL)
+    expect(finishLevel(1, 0, 0, 0, 0)).toBeCloseTo(FINISH_REST_LEVEL)
+  })
+
+  it('arrives on a rest already at the rest level, with no bright white first', () => {
+    expect(finishLevel(1, 0, 1, 5, 0, true)).toBe(FINISH_REST_LEVEL)
+    expect(finishLevel(1, 0, 0.4, 5, 0.1, true)).toBe(FINISH_REST_LEVEL)
+  })
+
+  it('arriving on a push still brightens with it', () => {
+    expect(finishLevel(0, 1, 0, 5, 0, true)).toBe(FINISH_REST_LEVEL)
+    expect(finishLevel(0, 1, 1, 5, 1, true)).toBe(1)
   })
 })
 

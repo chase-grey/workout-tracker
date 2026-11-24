@@ -11,6 +11,7 @@ import {
   attack,
   cycleCloses,
   cycleProgress,
+  finishLevel,
   hitRepTarget,
   loopFadeIn,
   motionForPhases,
@@ -100,6 +101,11 @@ const scaleFromDepth = (depth: number) => 1 - depth * (1 - SCALE_MIN)
  * rep, so the finish needs a separate colour as well as higher opacity. A set
  * that ends itself turns white on its closing rep (see `repGlow`), because after
  * it there is no guide left to look at.
+ *
+ * The higher opacity is for the pushes only. White is much lighter than an accent
+ * to begin with, and a rest is told by the shape going dim, so the finished tone
+ * is drawn at `finishLevel`: full on a push, settling to grey on a rest, and
+ * arriving as that grey when it arrives on one.
  *
  * The white doesn't land in a frame. Once the set is done the shape is drawn
  * twice, in its own tone and in the finished one, and the two are masked against
@@ -427,6 +433,7 @@ function PushPullShape({
   glowStart,
   end,
   tail,
+  finish,
 }: {
   variant: Variant
   drive: number
@@ -442,6 +449,8 @@ function PushPullShape({
   end: number | null
   /** The wave past `end` (see `rhythmWaveTailPath`). */
   tail: string
+  /** How bright the finished tone is right now (see `finishLevel`); 1 until the set turns white. */
+  finish: number
 }) {
   const wavePath = useMemo(() => rhythmWavePath(phases), [phases])
   const clipId = useId().replace(/[^a-zA-Z0-9]/g, '')
@@ -517,7 +526,7 @@ function PushPullShape({
           </svg>
           <div
             className="absolute left-1/2 h-[15cqmin] w-[15cqmin] -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
-            style={{ top: `${dotY}%`, opacity: tone.brightest }}
+            style={{ top: `${dotY}%`, opacity: tone.brightest * finish }}
           />
         </div>
       )
@@ -652,17 +661,22 @@ function PushPullShape({
  * the round end of a stroke — so the mask sits on a box `SPREAD_BLEED` wider than
  * the frame all round, with the frame restored inside it for the figure to lay
  * out in. Set on the frame itself, it drew a hard edge through every one of those.
+ *
+ * `level` is the layer's own brightness on top of its share: the white drawing
+ * is dimmed to grey on a rest (see `finishLevel`), the accent one never is.
  */
-function SpreadLayer({ mode, spread, layer, children }: {
+function SpreadLayer({ mode, spread, layer, level = 1, children }: {
   mode: SpreadMode
   spread: number
   layer: 'accent' | 'white'
+  level?: number
   children: ReactNode
 }) {
+  const share = spreadStyle(mode, spread, layer)
   return (
     <div
       className={`pointer-events-none absolute ${layer === 'white' ? 'text-neutral-50' : 'text-accent-bright'}`}
-      style={{ inset: `${-SPREAD_BLEED}%`, ...spreadStyle(mode, spread, layer) }}
+      style={{ inset: `${-SPREAD_BLEED}%`, ...share, opacity: (share.opacity ?? 1) * level }}
     >
       <div className="absolute flex items-center justify-center" style={{ inset: spreadFrameInset() }}>
         {children}
@@ -808,7 +822,12 @@ export function RhythmGuide({
   }, [idx, phases, running, reps, skipFinalRepRest])
 
   const i = idx % phases.length
-  const glow = repGlow(rep, reps, endsOnTarget, skipFinalRepRest && i >= workPhaseCount(phases))
+  const glowAt = (rep: number, phase: number) =>
+    repGlow(rep, reps, endsOnTarget, skipFinalRepRest && phase >= workPhaseCount(phases))
+  const glow = glowAt(rep, i)
+  // The phase the white first shows in: the one before it was still the set's colour.
+  const arriving =
+    glow === 'done' && (i > 0 ? glowAt(rep, i - 1) : glowAt(rep - 1, phases.length - 1)) === 'base'
   const tone = useTone(glow)
   // How far the white has got across the shape (see lib/glowSpread). Mounts at
   // its target, so a set resumed past its target is simply white.
@@ -850,6 +869,12 @@ export function RhythmGuide({
     efforts[prev] +
     (efforts[i] - efforts[prev]) * (motion === 'pushpull' ? arrival : easeInOut(progress))
   const tremor = strain(effort, progress)
+  // The finished tone's brightness: white on a push, grey on a rest, so the last
+  // rep's rest still looks like one (see `finishLevel`).
+  const finish =
+    glow === 'done'
+      ? finishLevel(efforts[prev], efforts[i], effort, phases[i].seconds, progress, arriving)
+      : 1
 
   // Which way the next push goes, and how close it is: a rest fills the end it's
   // resting before, so the change of direction is known before it's asked for.
@@ -866,8 +891,8 @@ export function RhythmGuide({
   // how the guide says you're done — a change you catch out of the corner of your
   // eye rather than a number to read. Tapping your own sets it waits for the last
   // rep to end, so the brightening lands as the set closes. When the set closes
-  // itself there is no "after" to brighten in, so the closing rep is bright the
-  // whole way through it.
+  // itself there is no "after" to brighten in, so the closing rep is white the
+  // whole way through it — bright on its pushes, grey on its rests (`finish`).
   //
   // The shape is drawn by `figure`, in whatever tone it's handed. Every shape but
   // the wave is drawn twice while the white comes in — the set's own colour under
@@ -915,6 +940,7 @@ export function RhythmGuide({
           glowStart={rhythmWaveGlowStart(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
           end={rhythmWaveEnd(phases, rep, reps, endsOnTarget, skipFinalRepRest)}
           tail={waveTail}
+          finish={finish}
         />
       </div>
     ) : (
@@ -938,7 +964,7 @@ export function RhythmGuide({
               <SpreadLayer mode={mode} spread={spread} layer="accent">{figure(TONES.base)}</SpreadLayer>
             )}
             {spread > 0 && (
-              <SpreadLayer mode={mode} spread={spread} layer="white">{figure(TONES.done)}</SpreadLayer>
+              <SpreadLayer mode={mode} spread={spread} layer="white" level={finish}>{figure(TONES.done)}</SpreadLayer>
             )}
           </>
         )}

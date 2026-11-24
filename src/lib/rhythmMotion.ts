@@ -209,6 +209,53 @@ export function repGlow(
   return 'base'
 }
 
+/**
+ * How much of its full brightness the finishing white keeps on a rest. White is
+ * far lighter than any accent at the same opacity, so left alone it outshines the
+ * very dimming that says "rest" — the closing rep's rest came out several times
+ * brighter than every rest before it. At this level it's a grey about as light as
+ * the resting accent it replaces: the colour says the set is closing, and the
+ * brightness goes on saying rest.
+ */
+export const FINISH_REST_LEVEL = 0.45
+
+/** The quickest the white may dim into a rest, however fast the shape lets go. */
+export const FINISH_DIM_SECONDS = 1.5
+
+/**
+ * Brightness (FINISH_REST_LEVEL–1) of the finishing white at this moment of a
+ * phase. `from` and `to` are the efforts of the phase before and the phase
+ * you're in (see `phaseEfforts`), `shown` the effort the shape itself is drawn
+ * at right now.
+ *
+ * Into a push it brightens with the shape. Into a rest it dims no faster than
+ * the shape does and never in less than `FINISH_DIM_SECONDS` (or the phase, when
+ * that's shorter), so white settles to grey rather than dropping to it.
+ * `arriving` is the phase the white first shows in: arriving on a rest it comes
+ * in already at the rest level, since there was no bright white before it to
+ * fade down from, and a flash of one is exactly the wrong cue.
+ */
+export function finishLevel(
+  from: number,
+  to: number,
+  shown: number,
+  seconds: number,
+  progress: number,
+  arriving = false,
+): number {
+  const clamp = (n: number) => Math.max(0, Math.min(1, n))
+  let effort = clamp(shown)
+  if (to < from) {
+    if (arriving) effort = clamp(to)
+    else {
+      // A phase with no length has nowhere to fade: it's simply at rest.
+      const t = seconds > 0 ? clamp(progress / Math.min(1, FINISH_DIM_SECONDS / seconds)) : 1
+      effort = Math.max(effort, clamp(from + (to - from) * t * t * (3 - 2 * t)))
+    }
+  }
+  return FINISH_REST_LEVEL + effort * (1 - FINISH_REST_LEVEL)
+}
+
 /** Seconds spent dissolving the finished rep into the new one at the loop point. */
 export const LOOP_FADE_SECONDS = 1
 
