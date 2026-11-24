@@ -16,7 +16,7 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
  * session's controls all stay put and stay reachable while you settle in. The
  * move is named up there, so this doesn't name it again.
  *
- * `untilTap` holds the screen on "go" until you tap it, for a setup that takes
+ * `untilTap` holds the screen on "ready?" until you tap it, for a setup that takes
  * as long as it takes. By default that tap starts the set; with `tapStartsCount`
  * it starts the count instead, for a setup in two parts — gathering the gear,
  * then getting into the pose with it.
@@ -45,7 +45,7 @@ export function GetReady({
   const doneRef = useRef(onDone)
   doneRef.current = onDone
   const [remaining, setRemaining] = useState(seconds)
-  // Still on "go", waiting for the tap.
+  // Still on "ready?", waiting for the tap.
   const [holding, setHolding] = useState(untilTap)
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function GetReady({
     return () => clearInterval(id)
   }, [holding])
 
-  // The tap off "go" either starts the set or, for a two-part setup, starts the
+  // The tap off "ready?" either starts the set or, for a two-part setup, starts the
   // count from that moment. A tap during the count starts the set early.
   const tap = () => {
     if (holding && tapStartsCount && seconds > 0) {
@@ -88,7 +88,7 @@ export function GetReady({
         <div className="rest-stage-box relative flex aspect-square items-center justify-center">
           <div className="absolute h-[62%] w-[62%] rounded-full bg-accent/15 ring-1 ring-accent/30" />
           {holding ? (
-            <div className="relative text-6xl font-bold text-white">go</div>
+            <div className="relative text-6xl font-bold text-white">ready?</div>
           ) : (
             <div className="relative font-mono text-8xl font-bold tabular-nums text-white">{Math.max(0, remaining)}</div>
           )}

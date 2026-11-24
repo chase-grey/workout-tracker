@@ -359,7 +359,7 @@ export function StretchSession({
   // only mean arriving at the pose late. So does a side switch's: changing legs
   // takes the same five seconds whoever is driving, and without them the other
   // side's set starts while you're still turning over. And the way into a
-  // stretch not yet started holds that count on "go" until you tap: setting up a
+  // stretch not yet started holds that count on "ready?" until you tap: setting up a
   // new pose takes as long as it takes. Stretch sets roll into their rest either
   // way. Kept in the session's snapshot so a reload mid-routine
   // doesn't quietly start waiting for taps again.
@@ -1337,7 +1337,7 @@ export function StretchSession({
           // stay put and stay tappable while you settle into position.
           header={topBar}
           untilTap={settleInWaitsForTap(step, prevStep, routine) || (fast && intoNewExercise)}
-          // The floss's "go" says the strap is in hand, not that you're lying in
+          // The floss's "ready?" says the strap is in hand, not that you're lying in
           // position with it, so the count still runs after the tap. Hands-free
           // has no counts, and its tap goes straight in.
           tapStartsCount={settleInTapStartsCount(step, prevStep) && !fast}
