@@ -34,6 +34,7 @@ import { stretchRoutinesFor } from '../../lib/flexSkills'
 import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
 import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
 import { PROVIDERS, modelFor, providerOf, trimBaseUrl } from '../../lib/aiProvider'
+import { sendScreenReportSoon } from '../../services/screenReport'
 
 const FIELD =
   'min-h-[44px] rounded-xl bg-surface px-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent'
@@ -260,6 +261,7 @@ export function SettingsTab({
       /* no storage: the choice lasts the visit */
     }
   }
+  const [screenReport, setScreenReport] = useState<'idle' | 'pending' | 'sent' | 'failed'>('idle')
 
   const owner = ownerFlavour(settings.profile)
   const { active, closed } = partitionIssues(issues ?? [])
@@ -327,6 +329,23 @@ export function SettingsTab({
           : update.ready
             ? 'update ready · restart'
             : 'check for updates'}
+      </button>
+      {/* Five seconds, so the report is of the screen you go to, not of this one. */}
+      <button
+        onClick={() => {
+          setScreenReport('pending')
+          void sendScreenReportSoon(null, 5000).then((ok) => setScreenReport(ok ? 'sent' : 'failed'))
+        }}
+        disabled={screenReport === 'pending'}
+        className="min-h-[44px] rounded-xl bg-surface font-medium active:bg-surface-2 disabled:text-neutral-500"
+      >
+        {screenReport === 'pending'
+          ? 'reporting…'
+          : screenReport === 'sent'
+            ? 'report sent'
+            : screenReport === 'failed'
+              ? "couldn't send report"
+              : 'report screen in 5s'}
       </button>
     </section>
   )

@@ -70,6 +70,7 @@ import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { landingStep, setPosition, withSkipped } from '../../lib/skipped'
 import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
 import { offSecAt, resumeOffClock, runningOffSec, runningOffSecSince, sessionElapsedSec, stepOff, stepOn } from '../../lib/offClock'
+import { sendScreenReportSoon } from '../../services/screenReport'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -1153,6 +1154,9 @@ export function StretchSession({
         ]
       : []),
     { label: 'pause routine', onClick: pauseRoutine },
+    // What this screen looks like on this phone, sent where `npm run
+    // save-errors` reads it (see services/screenReport). In both sessions.
+    { label: 'report screen', onClick: () => void sendScreenReportSoon('stretch session') },
     {
       label: 'finish and log',
       // Asks first while sets are left, as the lift workout's menu does: the

@@ -31,6 +31,11 @@ function emit() {
 
 const top = () => stack[stack.length - 1] ?? null
 
+/** The ids of every animation on screen, oldest first, for a screen report. */
+export function shownAnimationIds(): string[] {
+  return stack.map((e) => e.id)
+}
+
 /** The animation the kebab would hide, or null when none is on screen. */
 export function useTopAnimation(): ShownAnimation | null {
   return useSyncExternalStore(subscribe, top, top)

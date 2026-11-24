@@ -103,6 +103,7 @@ import { useControlLabel } from '../../lib/useControlLabel'
 import { SetCheer } from '../../components/SetCheer'
 import { useSessionFade } from '../../lib/useSessionFade'
 import { AD_HOC_SETS, adHocAdditions, defaultSets, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
+import { sendScreenReportSoon } from '../../services/screenReport'
 
 type Props = {
   session: WorkoutSession
@@ -1419,6 +1420,9 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       onClick: () => bringBack(rule),
     })),
     { label: 'pause workout', onClick: pauseWorkout },
+    // What this screen looks like on this phone, sent where `npm run
+    // save-errors` reads it (see services/screenReport). In both sessions.
+    { label: 'report screen', onClick: () => void sendScreenReportSoon('lift session') },
     {
       label: 'finish and log',
       // The last set's own button finishes a workout that's done; from here it can

@@ -51,6 +51,26 @@ async function get(route, params = {}) {
   return res.json()
 }
 
+/**
+ * A screen report (services/screenReport.ts): what a phone's screen looked like
+ * when its owner asked, sent down the same route as a failed save.
+ */
+function printScreenReport(r, p) {
+  const who = r.user && String(r.user).trim() ? `  user ${r.user}` : ''
+  const box = (b) => `${b.x},${b.y} ${b.w}x${b.h}`
+  console.log(`${r.at}  build ${r.build}  screen report: ${p.screen}${p.tab ? ` (tab ${p.tab})` : ''}${who}`)
+  console.log(`  ${p.userAgent}`)
+  const vv = p.visual ? `visual ${p.visual.w}x${p.visual.h} top ${p.visual.top} scale ${p.visual.scale}` : 'no visualViewport'
+  console.log(`  viewport ${p.inner.w}x${p.inner.h}  ${vv}  screen ${p.device.w}x${p.device.h} @${p.device.dpr}  ${p.display}  ${p.mode}${p.reducedMotion ? '  reduced motion' : ''}`)
+  if (p.animations?.length) console.log(`  animations: ${p.animations.join(', ')}`)
+  if (p.scroll) console.log(`  scroll ${p.scroll.top} of ${p.scroll.height - p.scroll.client}`)
+  for (const b of p.boxes ?? []) {
+    const out = b.box.w > 0 && (b.box.x < -0.5 || b.box.y < -0.5 || b.box.x + b.box.w > p.inner.w + 0.5 || b.box.y + b.box.h > p.inner.h + 0.5)
+    console.log(`    ${b.name.padEnd(22)} ${box(b.box)}${out ? '  << past the viewport' : ''}`)
+  }
+  if (p.text?.length) console.log(`  text: ${p.text.join(' | ').slice(0, 600)}`)
+}
+
 let probe
 try {
   probe = await get('settings')
@@ -75,6 +95,10 @@ if (asJson) {
 } else {
   for (const r of reports) {
     const p = r.payload && typeof r.payload === 'object' ? r.payload : null
+    if (r.route === 'screen_report' && p) {
+      printScreenReport(r, p)
+      continue
+    }
     const size = p && Array.isArray(p.rows) ? ` (${p.rows.length} rows)` : ''
     const who = r.user && String(r.user).trim() ? `  user ${r.user}` : ''
     console.log(`${r.at}  build ${r.build}  ${r.route}${size}  write ${r.writeId}  ${r.pending} queued${who}`)
