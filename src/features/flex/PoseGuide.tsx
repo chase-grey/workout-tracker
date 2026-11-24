@@ -4,9 +4,8 @@ import type { Handles, MeasureMode } from '../../lib/measure'
 type Dot = [x: number, y: number]
 
 /**
- * One pose as a stick figure on a 48×48 board, and where its dots go. The
- * side-on ones are drawn facing one way and mirrored to match the photo — see
- * `flipped`.
+ * One pose as a stick figure on a 48×48 board, and where its dots go. Drawn
+ * facing one way and mirrored to match the photo — see `flipped`.
  */
 type Figure = {
   body: ReactNode
@@ -19,86 +18,13 @@ type Figure = {
 
 const head = (x: number, y: number) => <circle cx={x} cy={y} r={3.5} />
 
-/** Standing on one leg, the other lifted out to the left of the drawing. */
-const LEG_LIFT: Figure = {
-  body: (
-    <>
-      {head(31.5, 7)}
-      <path d="M31 11 L30 25 L30 43 M30 25 L9 30 M31 15 L39 22" />
-    </>
-  ),
-  dots: [
-    [30, 25],
-    [30, 43],
-    [9, 30],
-  ],
-  lines: [
-    [0, 1],
-    [0, 2],
-  ],
-  flipped: (h) => !!h.ankleLift && !!h.hip && h.ankleLift.x > h.hip.x,
-}
-
-const FIGURES: Record<MeasureMode, Figure> = {
-  split: {
-    body: (
-      <>
-        {head(24, 7)}
-        <path d="M24 11 L24 27 M24 15 L15 24 M24 15 L33 24 M24 27 L5 41 M24 27 L43 41" />
-      </>
-    ),
-    dots: [
-      [24, 27],
-      [5, 41],
-      [43, 41],
-    ],
-    lines: [
-      [0, 1],
-      [0, 2],
-    ],
-  },
-
-  tailors: {
-    body: (
-      <>
-        {head(24, 7)}
-        <path d="M24 11 L24 30 M24 15 L14 27 M24 15 L34 27 M24 30 L8 35 L24 41 M24 30 L40 35 L24 41" />
-      </>
-    ),
-    dots: [
-      [24, 41],
-      [8, 35],
-      [40, 35],
-    ],
-    lines: [
-      [0, 1],
-      [0, 2],
-    ],
-  },
-
-  // Folded forward, facing the left of the drawing.
-  toe_touch: {
-    body: (
-      <>
-        {head(12.5, 33.5)}
-        <path d="M31 19 L16 29 M31 19 L31 43 L25 43 M16 29 L18 42" />
-      </>
-    ),
-    dots: [
-      [16, 29],
-      [31, 19],
-      [31, 43],
-    ],
-    lines: [
-      [1, 0],
-      [1, 2],
-    ],
-    flipped: (h) => !!h.shoulder && !!h.hip && h.shoulder.x > h.hip.x,
-  },
-
-  leg_lift_left: LEG_LIFT,
-  leg_lift_right: LEG_LIFT,
-
+/**
+ * Only the pelvic tilt has one. Its dots are placed by hand on two bones no
+ * pose model finds, and "back hip bone" doesn't say where that is. Every other
+ * pose's dots sit on joints their names already find, and a figure of the pose
+ * is no use once the photo of it is taken.
+ */
+const FIGURES: Partial<Record<MeasureMode, Figure>> = {
   // Standing side-on, facing the right of the drawing. The body is drawn with
   // its thickness, because the two dots sit on its back and its front, not on a
   // joint in the middle of it: the bone at the dimple above each buttock, and
@@ -126,7 +52,7 @@ const FIGURES: Record<MeasureMode, Figure> = {
  * Where a pose's dots belong, drawn: a stick figure in the pose with the dots
  * on it, facing the way the photo does. The dots on the photo carry their names;
  * this is the picture of the same thing, for a body part a name alone doesn't
- * find.
+ * find. Nothing for a pose without one.
  */
 export function PoseGuide({
   mode,
@@ -138,6 +64,7 @@ export function PoseGuide({
   className?: string
 }) {
   const fig = FIGURES[mode]
+  if (!fig) return null
   return (
     <svg viewBox="0 0 48 48" aria-hidden className={`text-neutral-400 ${className}`}>
       <g transform={fig.flipped?.(handles) ? 'translate(48 0) scale(-1 1)' : undefined}>

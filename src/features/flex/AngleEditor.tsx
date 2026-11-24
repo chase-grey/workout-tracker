@@ -36,7 +36,8 @@ const TAG_SHIFT: Record<LabelAnchor, string> = {
  * Nothing here scrolls: the photo is sized to whatever the header, the reading
  * and the save button leave, so the number being logged is on screen the whole
  * time a dot is being dragged. Each dot is grabbed by a tag that carries its
- * name, and the figure beside the reading shows the same dots on the pose.
+ * name; the pelvic tilt, whose dots sit on bones a name doesn't find, also gets
+ * a figure beside the reading showing where they go.
  *
  * `aspect` is the photo's width / height — handles are normalized per-axis, so
  * the angle can't be computed without it. `note` reports a detection that
