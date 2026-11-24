@@ -6,7 +6,7 @@ import { useData } from '../../store/DataContext'
 import { RestTimer } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
-import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
+import { clockText, closeSet, endRest, restAfter, resumeSetClock, skipSpan, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
 import { GetReady } from '../../components/GetReady'
 import { HoldTimer } from '../../components/HoldTimer'
 import { ChallengeHold } from '../../components/ChallengeHold'
@@ -66,6 +66,7 @@ import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { landingStep, setPosition, withSkipped } from '../../lib/skipped'
 import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
+import { closePhotoTime, openPhotoSec, openPhotoTime, photoSecAt, resumePhotoTime, sessionElapsedSec } from '../../lib/photoTime'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -412,6 +413,12 @@ export function StretchSession({
   // What each set has actually cost on the wall clock, its rest included — the
   // checklist's "took" beside each finished exercise. Saved with the snapshot.
   const setClock = useRef<SetClock>(resumeSetClock(saved?.setClock ?? null, startedAt ?? '', startedAt, Date.now()))
+  // Time on the photo screens, which the session's own clock leaves out: the
+  // camera is neither stretching nor rest, so it moves no mark on the progress
+  // bar and lands on no set and in no logged length (see lib/photoTime). The
+  // lift workout has no photo screens, so it keeps no such tally.
+  const [resumedPhotoTime] = useState(() => resumePhotoTime(saved?.photoTime, photos != null, Date.now()))
+  const photoTime = useRef(resumedPhotoTime)
 
   /** Move the rest currently on the clock into the session's total. */
   const bankRest = () => {
@@ -498,6 +505,9 @@ export function StretchSession({
       restLearning: restLearning.current,
       setClock: setClock.current,
       photoGates: [...seenGates],
+      // Opening a photo screen marks a set done and closing one adds its gate, so
+      // both write a snapshot with the tally as it then stands.
+      photoTime: photoTime.current,
       fast,
     })
   }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, heldSecs, rep, skipped, skippedSteps, rest, seenGates, fast])
@@ -606,11 +616,12 @@ export function StretchSession({
   // how much of the bar the projection says should be filled by now.
   const startedMs = startedAt ? Date.parse(startedAt) : NaN
   const expectedAt = (now: number) =>
-    Number.isFinite(startedMs) ? expectedProgress(wholeRows, (now - startedMs) / 1000) : null
+    Number.isFinite(startedMs) ? expectedProgress(wholeRows, sessionElapsedSec(startedMs, now, photoTime.current)) : null
   const checklistTiming = {
     clock: (
       <ChecklistClock
         startedAt={startedAt}
+        readPhotoSec={(now) => photoSecAt(photoTime.current, now)}
         readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
         projected={projectedSoFar(sumTiming(wholeRows), sumTiming(remainingRows))}
         left={sumTiming(remainingRows)}
@@ -660,7 +671,7 @@ export function StretchSession({
       holds: heldSets(steps, doneSet, heldSecsRef.current),
       duration: startedAt
         ? {
-            totalSec: (Date.now() - new Date(startedAt).getTime()) / 1000,
+            totalSec: sessionElapsedSec(new Date(startedAt).getTime(), Date.now(), photoTime.current),
             restSec: restAccumSec.current,
             projected: projectedSplit(doneSet),
           }
@@ -1001,6 +1012,7 @@ export function StretchSession({
     // starts once you're through with the camera.
     const gate = dueGate(gateAfterStep(steps, safeCurrent, routine), flexEntries, today, settings.photosOff)
     if (gate && !seenGates.has(gate.id)) {
+      photoTime.current = openPhotoTime(photoTime.current, Date.now())
       setPhotos({ gate, index: safeCurrent, then: 'advance' })
       return
     }
@@ -1013,6 +1025,12 @@ export function StretchSession({
   // the deliberate one, so no finish button follows it.
   const closePhotos = (_tookAny: boolean) => {
     if (!photos) return
+    // Before anything below starts a rest, closes the set or logs the routine:
+    // the camera's seconds come off the set clock's running span and out of the
+    // session's length.
+    const now = Date.now()
+    setClock.current = skipSpan(setClock.current, openPhotoSec(photoTime.current, now))
+    photoTime.current = closePhotoTime(photoTime.current, now)
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
     const { then, index } = photos
     setPhotos(null)

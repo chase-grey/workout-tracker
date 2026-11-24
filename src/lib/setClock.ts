@@ -52,6 +52,15 @@ export function endRest(clock: SetClock, now: number): SetClock {
   return clock.restingKey ? closeSet(clock, clock.restingKey, now) : clock
 }
 
+/**
+ * Take `sec` out of the span now running: time that belongs to no set at all —
+ * a photo screen (see lib/photoTime). The one exception to every second landing
+ * on a set, and the session clock it adds back up to leaves the same seconds out.
+ */
+export function skipSpan(clock: SetClock, sec: number): SetClock {
+  return sec > 0 ? { ...clock, markAt: clock.markAt + sec * 1000 } : clock
+}
+
 /** Seconds per exercise so far, counting a rest still running toward its set. */
 export function spentByExercise(clock: SetClock, now: number, exerciseOf: (key: string) => string | undefined): Map<string, number> {
   const spent = clock.restingKey ? closeSet(clock, clock.restingKey, now).spentSec : clock.spentSec

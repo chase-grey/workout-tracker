@@ -139,6 +139,11 @@ export type StretchState = {
   /** Ids of the photo screens already offered, so a reload doesn't re-ask. */
   photoGates?: string[]
   /**
+   * Time spent on photo screens so far (see lib/photoTime). Persisted for the
+   * reason `restSec` is: the session clock it comes out of spans a reload.
+   */
+  photoTime?: import('../lib/photoTime').PhotoTally
+  /**
    * Whether hands-free fast-forward was on (see components/FastForwardToggle).
    * Persisted so a reload mid-routine doesn't quietly start waiting for taps
    * again — it holds until it's switched off.
