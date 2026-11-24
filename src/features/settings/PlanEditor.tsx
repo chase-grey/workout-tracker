@@ -10,6 +10,7 @@ import {
 } from '../../config/plan'
 import { applyPlanEdits, type PlanEdit } from '../../lib/planTools'
 import { circuitRounds, circuitTitle, dayEntries, membersLine, moveEntry, roundsLabel } from '../../lib/circuitEntry'
+import { HowToButton } from '../../components/HowToButton'
 import { useDragSort, type Sortable } from '../../lib/useDragSort'
 import type { DayType } from '../../types'
 
@@ -160,6 +161,7 @@ function ExerciseRow({
             {exercise.sets}×{repRangeLabel(exercise)}
           </span>
         </button>
+        <HowToButton exerciseKey={exercise.key} name={exercise.name} dumbbells={!!exercise.dumbbellPair} />
         {sort && <DragHandle sort={sort} id={exercise.key} label={exercise.name} />}
         {/* One tap, no confirmation: nothing is on the plan until save, and
             discard puts back everything this session removed. */}

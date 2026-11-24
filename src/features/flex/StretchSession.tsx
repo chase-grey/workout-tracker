@@ -15,6 +15,8 @@ import { isChallenge } from '../../lib/challenge'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { ConfirmSheet } from '../../components/ConfirmSheet'
+import { TitleWithHowTo } from '../../components/HowToButton'
+import { HowToSheet } from '../../components/HowToSheet'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { startsNewExercise } from '../../lib/fastMode'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
@@ -203,7 +205,11 @@ function RoutineChecklist({
                 <div className="flex items-center gap-2">
                   <div className={`min-w-0 flex-1 py-2 ${isSkipped ? 'opacity-50' : ''}`}>
                     <span className="block text-[10px] tracking-wide text-neutral-500">{exercise.blockLabel}</span>
-                    <span className={`block font-semibold ${isSkipped ? 'line-through' : ''}`}>{exercise.name}</span>
+                    <span className="block font-semibold">
+                      <span className={isSkipped ? 'line-through' : ''}>
+                        <TitleWithHowTo title={exercise.name} exerciseKey={exercise.key} name={exercise.name} />
+                      </span>
+                    </span>
                     {!isSkipped && (timeLeft.get(exercise.key) ?? 0) > 0 && (
                       <span className="block text-xs text-neutral-500 tabular-nums">{formatDuration(timeLeft.get(exercise.key)!).replace(/^~/, '')}</span>
                     )}
@@ -375,6 +381,10 @@ export function StretchSession({
   const [showList, setShowList] = useState(false)
   // The question the menu is waiting on an answer to, as in ActiveSession.
   const [asking, setAsking] = useState<'finish' | 'exit' | null>(null)
+  // The how-to sheet for the stretch on screen (see config/howTo). Session state
+  // rather than the button's own, because a sheet over a stretch has to stop its
+  // clock like every other one (see `routineLive`).
+  const [howToFor, setHowToFor] = useState<{ key: string; name: string } | null>(null)
   // A one-off, longer get-into-position count that replaces the upcoming set's
   // own — set when a photo screen hands the routine straight to a stretch, and
   // when a side switch replaces the settle-in with a reposition.
@@ -527,6 +537,7 @@ export function StretchSession({
   // session-level guard in App can handle a later press.
   useBackGuard(showList, () => setShowList(false))
   useBackGuard(asking != null, () => setAsking(null))
+  useBackGuard(howToFor != null, () => setHowToFor(null))
 
   // Back into the rest the last tap cut short, with the seconds it had left (see
   // lib/leftRest). The same interval, not a new one: the slice before the tap was
@@ -574,7 +585,7 @@ export function StretchSession({
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
   const readyToFinish = N > 0 && steps.every((step) => done.has(step.stepKey)) && photos == null
-  const routineLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && asking == null
+  const routineLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && asking == null && howToFor == null
   const setLive = routineLive && !preparing
 
   // With nothing over the routine — the get-into-position count included, which
@@ -1166,7 +1177,14 @@ export function StretchSession({
             out a hair over the 44px controls beside it, so the title's first line
             sits on their centreline. */}
         <div className="min-w-0">
-          <h2 className="text-3xl font-bold leading-tight">{stepTitle(step)}</h2>
+          <h2 className="text-3xl font-bold leading-tight">
+            <TitleWithHowTo
+              title={stepTitle(step)}
+              exerciseKey={step.exKey}
+              name={step.exName}
+              onOpen={() => setHowToFor({ key: step.exKey, name: step.exName })}
+            />
+          </h2>
           {/* The move the position belongs to, which set of it, and for the core
               block the rep range — which leg and which of the calf stretch's three
               shapes are up in the title, where they can't be missed mid-stretch. */}
@@ -1362,6 +1380,10 @@ export function StretchSession({
         <span key={tapMark.at} aria-hidden className="hold-tap-mark" style={{ left: tapMark.x, top: tapMark.y }} />
       )}
       {paused && <PauseOverlay onResume={() => setPaused(false)} />}
+
+      {howToFor && (
+        <HowToSheet exerciseKey={howToFor.key} name={howToFor.name} onClose={() => setHowToFor(null)} />
+      )}
       {photos && <PhotoStep gate={photos.gate} onCapture={logMeasurement} onDone={closePhotos} />}
 
       {showList && (

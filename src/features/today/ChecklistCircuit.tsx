@@ -11,6 +11,7 @@ import { formatDuration } from '../../lib/estimate'
 import { clockText } from '../../lib/setClock'
 import { toWeight } from '../../lib/weightField'
 import { ControlWord } from '../../components/ControlWord'
+import { HowToButton } from '../../components/HowToButton'
 
 /**
  * The checklist's drag, as it applies to this row (see lib/useDragCombine): the
@@ -183,6 +184,12 @@ export function ChecklistCircuit({
               <MdDragIndicator aria-hidden />
             </button>
             <span className="min-w-0 flex-1 truncate text-sm text-neutral-300">{m.name}</span>
+            <HowToButton
+              exerciseKey={m.keys[0]}
+              name={m.name}
+              dumbbells={!!m.stations[0]?.dumbbellPair}
+              className="min-h-[40px]"
+            />
           </div>
         ))}
       </div>

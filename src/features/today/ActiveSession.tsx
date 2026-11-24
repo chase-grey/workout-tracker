@@ -93,6 +93,8 @@ import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { ConfirmSheet } from '../../components/ConfirmSheet'
+import { HowToButton, TitleWithHowTo } from '../../components/HowToButton'
+import { HowToSheet } from '../../components/HowToSheet'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
 import { FastForwardToggle } from '../../components/FastForwardToggle'
 import { ControlWord } from '../../components/ControlWord'
@@ -193,6 +195,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // The exercise whose history sheet is open: the one on screen, or on a round
   // screen whichever station's trend button was pressed.
   const [historyKey, setHistoryKey] = useState<string | null>(null)
+  // The how-to sheet for a movement on the set screen (see config/howTo). Session
+  // state rather than the button's own, because a sheet over a set has to count
+  // as one for `setScreenLive`, like the history sheet beside it.
+  const [howToKey, setHowToKey] = useState<string | null>(null)
   const [showCircuitRest, setShowCircuitRest] = useState(false)
   // The one-arm pairs split back into a card per side ("sides differ"), by the
   // key of the side that leads. Only the choice is held here: sides whose numbers
@@ -529,7 +535,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // left alone, nor under an open sheet: a sheet sits above the pause curtain, and
   // reading one isn't being away.
   useIdleTimeout(
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest && asking == null,
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && howToKey == null && !showCircuitRest && asking == null,
     IDLE_PAUSE_MS,
     () => {
       // Drop this set's active-time slice rather than carry it into the pause: it
@@ -546,6 +552,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   useBackGuard(showList, () => setShowList(false))
   useBackGuard(showAddExercise, () => setShowAddExercise(false))
   useBackGuard(historyKey != null, () => setHistoryKey(null))
+  useBackGuard(howToKey != null, () => setHowToKey(null))
   useBackGuard(showCircuitRest, () => setShowCircuitRest(false))
   useBackGuard(asking != null, () => setAsking(null))
 
@@ -645,7 +652,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   }
 
   const readActiveSec = useStepElapsed(step.stepKey, !opening && !set?.done &&
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest && asking == null)
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && howToKey == null && !showCircuitRest && asking == null)
   const [estimateNow, setEstimateNow] = useState(Date.now)
   useEffect(() => {
     if (!rest) return
@@ -1161,7 +1168,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // both the turbo wait and a self-ending hold need to be true before they can
   // close a set on their own.
   const setScreenLive =
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && !showCircuitRest && asking == null
+    rest == null && !paused && !showList && !showAddExercise && historyKey == null && howToKey == null && !showCircuitRest && asking == null
   // With nothing over the set, Android back steps the workout itself back: into
   // the rest the last tap cut short, picking up the seconds it had left. That one
   // step only — a rest that ran out, or that the flow has since moved past,
@@ -1420,7 +1427,19 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             .session-type) a tight line box comes out a hair over 44px, so its first
             line lands on their centreline instead of riding above it, and a name
             long enough to wrap still starts level with them. */}
-        <h2 className="min-w-0 text-3xl font-bold leading-tight">{roundMode ? planned.group : planned.name}</h2>
+        <h2 className="min-w-0 text-3xl font-bold leading-tight">
+          {/* A round screen has a how-to per station instead. */}
+          {roundMode ? (
+            planned.group
+          ) : (
+            <TitleWithHowTo
+              title={planned.name}
+              exerciseKey={planned.key}
+              name={planned.name}
+              onOpen={() => setHowToKey(planned.key)}
+            />
+          )}
+        </h2>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
           {/* Puts the set in the context of the whole history for the lift. A round
@@ -1463,6 +1482,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   )
 
   const historyEx = historyKey == null ? undefined : exercises.find((e) => e.key === historyKey)
+  const howToEx = howToKey == null ? undefined : exercises.find((e) => e.key === howToKey)
 
   const fadeRef = useSessionFade(
     rest ? 'rest' : `${step.stepKey}:${awaitingStart ? 'preview' : 'work'}`,
@@ -1624,8 +1644,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             return (
               <div key={s.stepKey} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 pb-4 pt-1" {...TAP_SHIELD}>
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="min-w-0 truncate font-semibold">
-                    {card.kind === 'pair' ? `${sidelessName(s.ex.name)} · both sides` : s.ex.name}
+                  <h3 className="flex min-w-0 items-center font-semibold">
+                    <span className="min-w-0 truncate">
+                      {card.kind === 'pair' ? `${sidelessName(s.ex.name)} · both sides` : s.ex.name}
+                    </span>
+                    <HowToButton inline exerciseKey={s.ex.key} name={s.ex.name} onOpen={() => setHowToKey(s.ex.key)} />
                   </h3>
                   <div className="flex shrink-0 items-center gap-1">
                     {card.kind === 'pair' && (
@@ -1736,6 +1759,15 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {cheer && <SetCheer key={cheer.id} grade={cheer.grade} onDone={() => setCheer(null)} />}
 
       {paused && <PauseOverlay onResume={() => setPaused(false)} />}
+
+      {howToEx && (
+        <HowToSheet
+          exerciseKey={howToEx.key}
+          name={howToEx.name}
+          dumbbells={!!howToEx.dumbbellPair}
+          onClose={() => setHowToKey(null)}
+        />
+      )}
 
       {historyEx && (
         <ExerciseHistorySheet
@@ -1968,6 +2000,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                             ` · took ${clockText(exerciseSpent!.get(e.key)!)} · est ${clockText(exerciseProjected?.get(e.key) ?? 0)}`}
                         </span>
                       </button>
+                      <HowToButton exerciseKey={e.key} name={e.name} dumbbells={!!e.dumbbellPair} />
                       {(isSkipped || skippable(e.key)) && (
                         <button
                           onClick={() => {
