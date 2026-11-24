@@ -4,7 +4,8 @@
  * last intended day's evening deadline. Calorie days can't be banked ahead or
  * caught up, and a day isn't settled until it ends, so their schedule is a
  * staircase that steps at midnight and counts finished days only, handing back
- * each spare day a miss has spent (see {@link calDaysPaceMark}).
+ * each spare day a miss has spent, though never the week's first day's step
+ * (see {@link calDaysPaceMark}).
  */
 
 import { weekStartOf } from './dates'
@@ -67,7 +68,8 @@ export function calDaysRequiredByNow(goal: number, now: Date = new Date()): numb
 
 /**
  * Where the calorie-day marker sits: one step for every finished day, less the
- * spare days already spent on a miss.
+ * spare days already spent on a miss, and never back under the first day's
+ * step.
  *
  * {@link calDaysRequiredByNow} alone is the floor, and with a spare day in the
  * goal it doesn't leave zero until the spares run out: six of seven kept the
@@ -76,13 +78,23 @@ export function calDaysRequiredByNow(goal: number, now: Date = new Date()): numb
  * while six days were still there to carry six. So the marker does both. It
  * climbs a day each midnight, a miss that a spare day covers pulls it back
  * level with what's banked, and once the spares are gone it holds at the floor.
- * It is therefore never ahead of the fill while the goal is in reach, and
- * "behind" still means exactly what {@link calDaysBehind} says.
+ *
+ * The first day of the week is the one exception. Once it has ended the marker
+ * stands on at least one, banked or not: a marker that waits at zero beside a
+ * missed Monday reads as a bar that hasn't started, and a spare day spent on
+ * day one is worth seeing. It is the only time the marker is ahead of the fill
+ * with the goal still in reach (see {@link calDaysBehind}), and the next day
+ * banked brings the two level again, the spare having covered the miss. A miss
+ * on any later day is covered without the marker ever showing it.
+ *
+ * That holds only for a goal that asks for most of the week. Three days of
+ * seven has four spare, and its first day is no more owed than any other.
  */
 export function calDaysPaceMark(done: number, goal: number, now: Date = new Date()): number {
   if (goal <= 0) return 0
   const finished = Math.min(goal, weekDaysCompleted(now))
-  return Math.max(calDaysRequiredByNow(goal, now), Math.min(finished, Math.max(0, done)))
+  const firstDay = goal * 2 > DAYS_IN_WEEK ? Math.min(finished, 1) : 0
+  return Math.max(calDaysRequiredByNow(goal, now), firstDay, Math.min(finished, Math.max(0, done)))
 }
 
 /** Behind on calorie days: fewer banked than the days left can make up. */

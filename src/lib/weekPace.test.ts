@@ -153,9 +153,9 @@ describe('days on calorie target is moving too soon', () => {
   })
 
   it('hands the marker back a spare day that a miss has spent', () => {
-    // Six of seven, Monday missed: level with the fill, not ahead of it.
-    expect(calDaysPaceMark(0, 6, at(MON + 1, 9))).toBe(0)
-    expect(calDaysPaceMark(1, 6, at(MON + 2, 9))).toBe(1)
+    // Six of seven, Thursday missed: level with the fill, not ahead of it.
+    expect(calDaysPaceMark(3, 6, at(MON + 4, 9))).toBe(3)
+    expect(calDaysPaceMark(4, 6, at(MON + 5, 9))).toBe(4)
     expect(calDaysPaceMark(5, 6, at(MON + 6, 9))).toBe(5)
     // The second miss has no spare to draw on, so the marker holds at the floor.
     expect(calDaysPaceMark(0, 6, at(MON + 2, 9))).toBe(1)
@@ -163,7 +163,25 @@ describe('days on calorie target is moving too soon', () => {
     expect(calDaysPaceMark(0, 7, at(MON + 1, 9))).toBe(1)
   })
 
-  it('never passes the fill while the goal is in reach, at any hour of any day', () => {
+  // "It's ok if it shows me as behind if i miss monday's calorie goal", so that
+  // the bar always moves on Tuesday. A miss later on is still covered unseen.
+  it('steps on Tuesday past a missed Monday, and is level again once a day is banked', () => {
+    for (const goal of [5, 6]) {
+      expect(calDaysPaceMark(0, goal, at(MON, 23))).toBe(0)
+      expect(calDaysPaceMark(0, goal, at(MON + 1, 0))).toBe(1)
+      expect(calDaysPaceMark(0, goal, at(MON + 1, 22))).toBe(1)
+      // Tuesday banked: the spare day has covered Monday.
+      expect(calDaysPaceMark(1, goal, at(MON + 2, 9))).toBe(1)
+      expect(calDaysPaceMark(5, goal, at(MON + 6, 9))).toBe(5)
+    }
+    // A goal with two spare days still shows only the first day's miss.
+    expect(calDaysPaceMark(0, 5, at(MON + 2, 9))).toBe(1)
+    // A goal under half the week doesn't owe its first day at all.
+    expect(calDaysPaceMark(0, 3, at(MON + 1, 9))).toBe(0)
+    expect(calDaysPaceMark(0, 4, at(MON + 1, 9))).toBe(1)
+  })
+
+  it('passes the fill only when behind or past a first day with nothing banked', () => {
     for (const goal of [1, 3, 5, 6, 7]) {
       for (let d = MON; d <= MON + 6; d++) {
         for (const h of [0, 9, 22, 23]) {
@@ -171,7 +189,9 @@ describe('days on calorie target is moving too soon', () => {
             const mark = calDaysPaceMark(done, goal, at(d, h))
             expect(Number.isInteger(mark)).toBe(true)
             expect(mark).toBeGreaterThanOrEqual(calDaysRequiredByNow(goal, at(d, h)))
-            expect(mark > done).toBe(calDaysBehind(done, goal, at(d, h)))
+            const firstDayUnbanked = done === 0 && d > MON && goal >= 4
+            expect(mark > done).toBe(calDaysBehind(done, goal, at(d, h)) || firstDayUnbanked)
+            if (mark > done && !calDaysBehind(done, goal, at(d, h))) expect(mark).toBe(1)
           }
         }
       }
