@@ -49,6 +49,31 @@ So: any change to how a session is paced, advanced, rested, or ended goes into
 **both** files, or the commit body says why it belongs to only one. When touching
 either file, check the other before you finish.
 
+## What a session's clock counts
+
+A session is measured against time in several places: the mark on the progress
+bar, the checklist's "so far" and each exercise's "took", the rest tally, and
+the length that gets logged. They all read one clock, and Chase has ruled on
+what it leaves out (2026-11-24):
+
+- **Paused time is off the clock**, in both sessions.
+- **Photo screens are off the clock** (the stretch routine's camera, handles
+  and save prompt).
+- Everything else counts: sets, rests, the get-into-position count, a sheet
+  left open, the minutes before the first set.
+
+The time off the clock is one tally per session (`lib/offClock`), saved with
+it, and a session that went away paused comes back paused. So:
+
+- **Never measure a session as `Date.now() - startedAt`.** Read
+  `sessionElapsedSec(start, now, offClock)`.
+- **A new screen that stops the session** steps off the clock when it opens
+  and back on when it closes, the way the pause and the photo screen do, and
+  takes its seconds out of the set clock (`setClock.skipSpan`) and out of a
+  rest running behind it.
+- **Whether a new kind of time counts is Chase's call.** Ask; don't decide it
+  in a commit message.
+
 ## Left and right wear the same animation
 
 A per-side round is two steps and one set, and its two sides show **the same

@@ -15,6 +15,7 @@ import { withMatSitups } from '../lib/stretchCore'
 import { withRenamedKeys } from '../lib/renamedKeys'
 import type { RestTally } from '../lib/rest'
 import type { SetClock } from '../lib/setClock'
+import type { OffClock } from '../lib/offClock'
 import { normalizeExerciseAverages, type ExerciseAverages, type SessionDuration } from '../lib/estimate'
 import { toFastMode, type FastMode } from '../lib/fastMode'
 import type { SkippedExercises } from '../lib/skipped'
@@ -63,6 +64,7 @@ const KEYS = {
   activeRestTally: 'wt.activeRestTally',
   activeExerciseTimes: 'wt.activeExerciseTimes',
   activeSetClock: 'wt.activeSetClock',
+  activeOffClock: 'wt.activeOffClock',
   activeFastForward: 'wt.activeFastForward',
   activeSkipped: 'wt.activeSkipped',
   stretch: 'wt.stretch',
@@ -85,6 +87,8 @@ export type ActiveExerciseTimes = {
   sessionId: string
   samples: Record<string, import('../lib/estimate').ExerciseTimeSample[]>
 }
+
+export type ActiveOffClock = OffClock & { sessionId: string }
 
 /** In-progress stretch session UI state (so it survives an app switch/reload). */
 export type StretchState = {
@@ -139,10 +143,10 @@ export type StretchState = {
   /** Ids of the photo screens already offered, so a reload doesn't re-ask. */
   photoGates?: string[]
   /**
-   * Time spent on photo screens so far (see lib/photoTime). Persisted for the
+   * Time paused or on photo screens so far (see lib/offClock). Persisted for the
    * reason `restSec` is: the session clock it comes out of spans a reload.
    */
-  photoTime?: import('../lib/photoTime').PhotoTally
+  offClock?: OffClock
   /**
    * Whether hands-free fast-forward was on (see components/FastForwardToggle).
    * Persisted so a reload mid-routine doesn't quietly start waiting for taps
@@ -548,6 +552,13 @@ export const storage = {
     value ? write(KEYS.activeExerciseTimes, value) : localStorage.removeItem(KEYS.activeExerciseTimes),
   saveRestTally: (t: RestTally | null) =>
     t ? write(KEYS.activeRestTally, t) : localStorage.removeItem(KEYS.activeRestTally),
+  /**
+   * Time the workout in progress has spent paused (see lib/offClock), with the
+   * session it belongs to so one left behind can't be charged to the next.
+   */
+  loadOffClock: (): ActiveOffClock | null => read<ActiveOffClock | null>(KEYS.activeOffClock, null),
+  saveOffClock: (c: ActiveOffClock | null) =>
+    c ? write(KEYS.activeOffClock, c) : localStorage.removeItem(KEYS.activeOffClock),
   /** What each set of the workout in progress actually took (see lib/setClock). */
   loadSetClock: (): SetClock | null => read<SetClock | null>(KEYS.activeSetClock, null),
   saveSetClock: (c: SetClock | null) =>

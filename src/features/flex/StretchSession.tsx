@@ -69,7 +69,7 @@ import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { landingStep, setPosition, withSkipped } from '../../lib/skipped'
 import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
-import { closePhotoTime, openPhotoSec, openPhotoTime, photoSecAt, resumePhotoTime, sessionElapsedSec } from '../../lib/photoTime'
+import { offSecAt, resumeOffClock, runningOffSec, runningOffSecSince, sessionElapsedSec, stepOff, stepOn } from '../../lib/offClock'
 
 /**
  * Seconds of rest the menu hands out where the routine prescribes none — the feet
@@ -389,7 +389,6 @@ export function StretchSession({
   // own — set when a photo screen hands the routine straight to a stretch, and
   // when a side switch replaces the settle-in with a reposition.
   const [readyOverrideSec, setReadyOverrideSec] = useState<number | null>(null)
-  const [paused, setPaused] = useState(false)
   // The rest the last tap cut short, held so Android back can step into it again
   // (see lib/leftRest), with the set its seconds were running up on the set clock.
   const [leftRest, setLeftRest] = useState<(LeftRest<RestState> & { clockKey: SetKeys | null }) | null>(null)
@@ -425,17 +424,23 @@ export function StretchSession({
   // What each set has actually cost on the wall clock, its rest included — the
   // checklist's "took" beside each finished exercise. Saved with the snapshot.
   const setClock = useRef<SetClock>(resumeSetClock(saved?.setClock ?? null, startedAt ?? '', startedAt, Date.now()))
-  // Time on the photo screens, which the session's own clock leaves out: the
-  // camera is neither stretching nor rest, so it moves no mark on the progress
-  // bar and lands on no set and in no logged length (see lib/photoTime). The
-  // lift workout has no photo screens, so it keeps no such tally.
-  const [resumedPhotoTime] = useState(() => resumePhotoTime(saved?.photoTime, photos != null, Date.now()))
-  const photoTime = useRef(resumedPhotoTime)
+  // Time under the pause curtain and on the photo screens, which the session's
+  // own clock leaves out: neither is stretching nor rest, so it moves no mark on
+  // the progress bar and lands on no set, in no rest and in no logged length (see
+  // lib/offClock). The workout keeps the same tally for its pauses.
+  const [resumedOffClock] = useState(() => resumeOffClock(saved?.offClock, photos != null, Date.now()))
+  const offClock = useRef(resumedOffClock)
+  // A routine that went away paused comes back paused, with the time it was gone
+  // still off the clock.
+  const [paused, setPaused] = useState(() => photos == null && resumedOffClock.since > 0)
 
   /** Move the rest currently on the clock into the session's total. */
   const bankRest = () => {
     if (restStartRef.current) {
-      const seconds = (Date.now() - restStartRef.current) / 1000
+      // Less whatever of a pause still up has run over it: hands-free can roll a
+      // rest out from under the curtain.
+      const now = Date.now()
+      const seconds = Math.max(0, (now - restStartRef.current) / 1000 - runningOffSecSince(offClock.current, restStartRef.current, now))
       restAccumSec.current += seconds
       restLearning.current.totalSec += seconds
       restLearning.current.prescribedSec += rest?.seconds ?? 0
@@ -520,12 +525,12 @@ export function StretchSession({
       restLearning: restLearning.current,
       setClock: setClock.current,
       photoGates: [...seenGates],
-      // Opening a photo screen marks a set done and closing one adds its gate, so
-      // both write a snapshot with the tally as it then stands.
-      photoTime: photoTime.current,
+      // Opening a photo screen marks a set done, closing one adds its gate, and a
+      // pause flips `paused`, so each writes a snapshot with the tally as it stands.
+      offClock: offClock.current,
       fast,
     })
-  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, heldSecs, rep, skipped, skippedSteps, rest, seenGates, fast])
+  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, heldSecs, rep, skipped, skippedSteps, rest, seenGates, fast, paused])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -633,13 +638,13 @@ export function StretchSession({
   // how much of the bar the projection says should be filled by now.
   const startedMs = startedAt ? Date.parse(startedAt) : NaN
   const expectedAt = (now: number) =>
-    Number.isFinite(startedMs) ? expectedProgress(wholeRows, sessionElapsedSec(startedMs, now, photoTime.current)) : null
+    Number.isFinite(startedMs) ? expectedProgress(wholeRows, sessionElapsedSec(startedMs, now, offClock.current)) : null
   const checklistTiming = {
     clock: (
       <ChecklistClock
         activeLabel="stretching"
         startedAt={startedAt}
-        readPhotoSec={(now) => photoSecAt(photoTime.current, now)}
+        readOffClockSec={(now) => offSecAt(offClock.current, now)}
         readRestSec={(now) => restAccumSec.current + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
         projected={projectedSoFar(sumTiming(wholeRows), sumTiming(remainingRows))}
         left={sumTiming(remainingRows)}
@@ -689,7 +694,7 @@ export function StretchSession({
       holds: heldSets(steps, doneSet, heldSecsRef.current),
       duration: startedAt
         ? {
-            totalSec: sessionElapsedSec(new Date(startedAt).getTime(), Date.now(), photoTime.current),
+            totalSec: sessionElapsedSec(new Date(startedAt).getTime(), Date.now(), offClock.current),
             restSec: restAccumSec.current,
             projected: projectedSplit(doneSet),
           }
@@ -1030,7 +1035,7 @@ export function StretchSession({
     // starts once you're through with the camera.
     const gate = dueGate(gateAfterStep(steps, safeCurrent, routine), flexEntries, today, settings.photosOff)
     if (gate && !seenGates.has(gate.id)) {
-      photoTime.current = openPhotoTime(photoTime.current, Date.now())
+      offClock.current = stepOff(offClock.current, Date.now())
       setPhotos({ gate, index: safeCurrent, then: 'advance' })
       return
     }
@@ -1041,14 +1046,33 @@ export function StretchSession({
   // the normal rest. Other photo exits preview the coming exercise first. Photos
   // that close out the routine log it outright — the save/skip press already was
   // the deliberate one, so no finish button follows it.
+  /**
+   * A pause or a photo screen ended: its seconds come off the set clock's running
+   * span, off a rest still on screen behind it, and out of the session's length.
+   */
+  const backOnTheClock = () => {
+    const now = Date.now()
+    setClock.current = skipSpan(setClock.current, runningOffSec(offClock.current, now), now)
+    if (restStartRef.current) {
+      restStartRef.current += runningOffSecSince(offClock.current, restStartRef.current, now) * 1000
+    }
+    offClock.current = stepOn(offClock.current, now)
+  }
+  const pauseRoutine = () => {
+    offClock.current = stepOff(offClock.current, Date.now())
+    setPaused(true)
+  }
+  const resumeRoutine = () => {
+    backOnTheClock()
+    setPaused(false)
+  }
+
   const closePhotos = (_tookAny: boolean) => {
     if (!photos) return
     // Before anything below starts a rest, closes the set or logs the routine:
     // the camera's seconds come off the set clock's running span and out of the
     // session's length.
-    const now = Date.now()
-    setClock.current = skipSpan(setClock.current, openPhotoSec(photoTime.current, now))
-    photoTime.current = closePhotoTime(photoTime.current, now)
+    backOnTheClock()
     setSeenGates((prev) => new Set(prev).add(photos.gate.id))
     const { then, index } = photos
     setPhotos(null)
@@ -1128,7 +1152,7 @@ export function StretchSession({
             : { label: 'take a rest', onClick: () => reopenRest(MANUAL_REST_SEC) },
         ]
       : []),
-    { label: 'pause routine', onClick: () => setPaused(true) },
+    { label: 'pause routine', onClick: pauseRoutine },
     {
       label: 'finish and log',
       // Asks first while sets are left, as the lift workout's menu does: the
@@ -1379,7 +1403,7 @@ export function StretchSession({
       {tapMark && setLive && !!holdSec && !openHold && (
         <span key={tapMark.at} aria-hidden className="hold-tap-mark" style={{ left: tapMark.x, top: tapMark.y }} />
       )}
-      {paused && <PauseOverlay onResume={() => setPaused(false)} />}
+      {paused && <PauseOverlay onResume={resumeRoutine} />}
 
       {howToFor && (
         <HowToSheet exerciseKey={howToFor.key} name={howToFor.name} onClose={() => setHowToFor(null)} />

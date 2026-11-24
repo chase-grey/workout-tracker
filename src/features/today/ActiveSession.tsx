@@ -87,9 +87,10 @@ import { HoldTimer } from '../../components/HoldTimer'
 import { createHoldVariantSelector } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
 import { ChecklistClock } from '../../components/ChecklistClock'
-import { clockText, closeSet, endRest, restAfter, resumeSetClock, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
+import { clockText, closeSet, endRest, restAfter, resumeSetClock, skipSpan, spentByExercise, type SetClock, type SetKeys } from '../../lib/setClock'
 import { remainingTiming, workoutTimingKey, sumTiming, timeLeftByExercise } from '../../lib/remainingTiming'
 import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
+import { offSecAt, resumeOffClock, runningOffSec, runningOffSecSince, sessionElapsedSec, stepOff, stepOn, type OffClock } from '../../lib/offClock'
 import { useStepElapsed } from '../../lib/useStepElapsed'
 import { PauseOverlay } from '../../components/PauseOverlay'
 import { ConfirmSheet } from '../../components/ConfirmSheet'
@@ -191,7 +192,18 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   const [newExercisePick, setNewExercisePick] = useState('')
   const [newExerciseName, setNewExerciseName] = useState('')
   const [newExerciseSets, setNewExerciseSets] = useState(String(AD_HOC_SETS))
-  const [paused, setPaused] = useState(false)
+  // Time under the pause curtain, which the workout's own clock leaves out: a
+  // pause is neither lifting nor rest, so it moves no mark on the progress bar
+  // and lands on no set, in no rest and in no logged length (see lib/offClock).
+  // Mirrored to storage like the rest tally, and a workout that went away paused
+  // comes back paused, with the time it was gone still off the clock. The
+  // stretch routine keeps the same tally, for its pauses and its photo screens.
+  const [resumedOffClock] = useState(() => {
+    const saved = storage.loadOffClock()
+    return resumeOffClock(saved?.sessionId === session.sessionId ? saved : null, false, Date.now())
+  })
+  const offClock = useRef<OffClock>(resumedOffClock)
+  const [paused, setPaused] = useState(resumedOffClock.since > 0)
   // The exercise whose history sheet is open: the one on screen, or on a round
   // screen whichever station's trend button was pressed.
   const [historyKey, setHistoryKey] = useState<string | null>(null)
@@ -542,7 +554,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       // already spans five minutes of nobody being here, and the exercise's
       // average has nothing to learn from a set that was walked away from.
       activeStartRef.current = 0
-      setPaused(true)
+      pauseWorkout()
     },
   )
 
@@ -693,7 +705,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   })
   const startedMs = session.startedAt ? Date.parse(session.startedAt) : NaN
   const expectedAt = (now: number) =>
-    Number.isFinite(startedMs) ? expectedProgress(pace, (now - startedMs) / 1000) : null
+    Number.isFinite(startedMs) ? expectedProgress(pace, sessionElapsedSec(startedMs, now, offClock.current)) : null
   const exerciseSpent = showList ? spentByExercise(setClock.current, Date.now(), exerciseOf) : null
 
   // Type into the set on screen. Counted as an edit as well as stored, so turbo's
@@ -788,13 +800,37 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     storage.saveSetClock(next)
   }
 
+  /** When the rest on screen began, moved on by whatever of a pause still up has run over it. */
+  const restStartLessPause = (now: number) =>
+    restStartRef.current
+      ? restStartRef.current + runningOffSecSince(offClock.current, restStartRef.current, now) * 1000
+      : 0
+
+  const commitOffClock = (next: OffClock) => {
+    offClock.current = next
+    storage.saveOffClock({ ...next, sessionId: session.sessionId })
+  }
+  const pauseWorkout = () => {
+    commitOffClock(stepOff(offClock.current, Date.now()))
+    setPaused(true)
+  }
+  // The pause's seconds come off the set clock's running span, off a rest still
+  // on screen behind the curtain, and out of the workout's length.
+  const resumeWorkout = () => {
+    const now = Date.now()
+    commitSetClock(skipSpan(setClock.current, runningOffSec(offClock.current, now), now))
+    restStartRef.current = restStartLessPause(now)
+    commitOffClock(stepOn(offClock.current, now))
+    setPaused(false)
+  }
+
   const finish = () => {
     const totalSec = session.startedAt
-      ? (Date.now() - new Date(session.startedAt).getTime()) / 1000
+      ? sessionElapsedSec(new Date(session.startedAt).getTime(), Date.now(), offClock.current)
       : 0
     // The rest screen's own menu can finish the workout, so bank whatever rest is
     // still on the clock before reading the total off the tally.
-    const rested = bankRest(tally.current, restStartRef.current, Date.now())
+    const rested = bankRest(tally.current, restStartLessPause(Date.now()), Date.now())
     commitTally(rested)
     restStartRef.current = 0
     const restSec = rested.takenSec
@@ -837,7 +873,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Accumulate the just-ended rest slice and put the set it leads into on the
   // clock.
   const closeRest = () => {
-    commitTally(bankRest(tally.current, restStartRef.current, Date.now()))
+    commitTally(bankRest(tally.current, restStartLessPause(Date.now()), Date.now()))
     commitSetClock(endRest(setClock.current, Date.now()))
     restStartRef.current = 0
     activeStartRef.current = Date.now()
@@ -1382,7 +1418,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       label: `bring ${rule.label} back`,
       onClick: () => bringBack(rule),
     })),
-    { label: 'pause workout', onClick: () => setPaused(true) },
+    { label: 'pause workout', onClick: pauseWorkout },
     {
       label: 'finish and log',
       // The last set's own button finishes a workout that's done; from here it can
@@ -1758,7 +1794,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           (z-60), which own the moment when one of them is up. */}
       {cheer && <SetCheer key={cheer.id} grade={cheer.grade} onDone={() => setCheer(null)} />}
 
-      {paused && <PauseOverlay onResume={() => setPaused(false)} />}
+      {paused && <PauseOverlay onResume={resumeWorkout} />}
 
       {howToEx && (
         <HowToSheet
@@ -1860,6 +1896,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
             <h3 className="mb-3 text-lg font-bold">workout checklist</h3>
             <ChecklistClock
               startedAt={session.startedAt}
+              readOffClockSec={(now) => offSecAt(offClock.current, now)}
               readRestSec={(now) => tally.current.takenSec + (restStartRef.current ? Math.max(0, (now - restStartRef.current) / 1000) : 0)}
               projected={projectedSoFar(sumTiming(wholeRows), sumTiming(remainingRows))}
               left={sumTiming(remainingRows)}

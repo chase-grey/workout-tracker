@@ -52,6 +52,7 @@ export function useActiveSession() {
       storage.saveRestTally(null)
       storage.saveActiveExerciseTimes(null)
       storage.saveSetClock(null)
+      storage.saveOffClock(null)
       // Hands-free was a choice about the workout that just ended, so a new one
       // opens waiting for taps again. Same for whatever it skipped: today's sore
       // knee isn't next week's.
@@ -116,6 +117,7 @@ export function useActiveSession() {
       storage.saveRestTally(null)
       storage.saveActiveExerciseTimes(null)
       storage.saveSetClock(null)
+      storage.saveOffClock(null)
       storage.saveFastMode('off')
       storage.saveSkipped(null)
       const { dayType, exercise } = solo
@@ -300,6 +302,7 @@ export function useActiveSession() {
     storage.saveRestTally(null)
     storage.saveActiveExerciseTimes(null)
     storage.saveSetClock(null)
+    storage.saveOffClock(null)
     storage.saveFastMode('off')
     storage.saveSkipped(null)
     setSession(null)

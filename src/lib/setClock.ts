@@ -54,11 +54,13 @@ export function endRest(clock: SetClock, now: number): SetClock {
 
 /**
  * Take `sec` out of the span now running: time that belongs to no set at all —
- * a photo screen (see lib/photoTime). The one exception to every second landing
- * on a set, and the session clock it adds back up to leaves the same seconds out.
+ * a pause, a photo screen (see lib/offClock). The one exception to every second
+ * landing on a set, and the session clock it adds back up to leaves the same
+ * seconds out. Never more than the span has run: a set closed partway through a
+ * pause has already been charged the part before it.
  */
-export function skipSpan(clock: SetClock, sec: number): SetClock {
-  return sec > 0 ? { ...clock, markAt: clock.markAt + sec * 1000 } : clock
+export function skipSpan(clock: SetClock, sec: number, now: number): SetClock {
+  return sec > 0 ? { ...clock, markAt: Math.min(Math.max(clock.markAt, now), clock.markAt + sec * 1000) } : clock
 }
 
 /** Seconds per exercise so far, counting a rest still running toward its set. */
