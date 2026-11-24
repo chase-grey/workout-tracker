@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES } from '../config/flexRoutines'
 import { buildSessionSteps } from './flexSteps'
-import { CORE_ENTRY_GET_READY_SEC, POST_PHOTO_GET_READY_SEC, settleInSec, settleInWaitsForTap } from './settleIn'
+import { CORE_ENTRY_GET_READY_SEC, POST_PHOTO_GET_READY_SEC, settleInSec, settleInTapStartsCount, settleInWaitsForTap } from './settleIn'
 
 describe('settleInSec', () => {
   it('gives tailor’s pose fifteen seconds and other stretches five, including repeat sets and side changes', () => {
@@ -41,5 +41,26 @@ describe('settleInWaitsForTap', () => {
   it('never waits in the side split', () => {
     const side = buildSessionSteps(FLEX_ROUTINES.side_split.blocks)
     side.forEach((step, index) => expect(settleInWaitsForTap(step, side[index - 1])).toBe(false))
+  })
+
+  it('waits at every new stretch of the pelvic tilt routine, and at none of its side switches or typed-in sets', () => {
+    const tilt = buildSessionSteps(FLEX_ROUTINES.pelvic_tilt.blocks)
+    const waiting = tilt.filter((step, index) => settleInWaitsForTap(step, tilt[index - 1], 'pelvic_tilt'))
+    expect(waiting.map((step) => step.exKey)).toEqual([
+      'standing_pelvic_tilt',
+      'rkc_plank',
+      'lunge_stretch',
+      'rectus_femoris_stretch',
+    ])
+    // The first exercise opens on the routine's preview, which is its own tap.
+    expect(settleInWaitsForTap(tilt[0], undefined, 'pelvic_tilt')).toBe(false)
+    // The tap says you're in position: the set starts on it, with no count after.
+    tilt.forEach((step, index) => expect(settleInTapStartsCount(step, tilt[index - 1])).toBe(false))
+  })
+
+  it('leaves the other routines their counts when told which routine it is', () => {
+    const waiting = steps.filter((step, index) => settleInWaitsForTap(step, steps[index - 1], 'head_to_toe'))
+    expect(waiting.map((step) => step.exKey)).toEqual(['sciatic_floss'])
+    expect(settleInTapStartsCount(waiting[0], steps[steps.indexOf(waiting[0]) - 1])).toBe(true)
   })
 })

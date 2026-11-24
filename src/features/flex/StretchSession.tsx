@@ -54,6 +54,7 @@ import {
   CORE_ENTRY_GET_READY_SEC,
   POST_PHOTO_GET_READY_SEC,
   settleInSec,
+  settleInTapStartsCount,
   settleInWaitsForTap,
 } from '../../lib/settleIn'
 import { nextTarget, targetLabel } from '../../lib/progression'
@@ -1317,11 +1318,11 @@ export function StretchSession({
           // does — the bar, the stretch coming and the session's controls all
           // stay put and stay tappable while you settle into position.
           header={topBar}
-          untilTap={settleInWaitsForTap(step, prevStep) || (fast && intoNewExercise)}
+          untilTap={settleInWaitsForTap(step, prevStep, routine) || (fast && intoNewExercise)}
           // The floss's "go" says the strap is in hand, not that you're lying in
           // position with it, so the count still runs after the tap. Hands-free
           // has no counts, and its tap goes straight in.
-          tapStartsCount={settleInWaitsForTap(step, prevStep) && !fast}
+          tapStartsCount={settleInTapStartsCount(step, prevStep) && !fast}
           onDone={() => {
             setPreparing(false)
             setReadyOverrideSec(null)
