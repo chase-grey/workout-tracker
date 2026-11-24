@@ -7,6 +7,8 @@
  * CONTROL_WORDS). A close ×, a back arrow, pause and play, a to-do circle that
  * fills with a check: those read on sight and stay bare. Tap-anywhere-to-advance
  * gets nothing either — it's not a control, and the flow teaches it in one set.
+ * The pause curtain is the exception: it has no flow to teach it and no button,
+ * so its tap-anywhere is said in words until it's been used.
  *
  * Uses are counted per control and synced with the rest of settings, so the
  * phone you learned on and the one you pick up next agree. Pure: no React, no
@@ -15,7 +17,7 @@
 
 /** A control that can wear a starter label. One id per meaning, not per button:
  *  the skip mark on an exercise and on a single set is one thing to learn. */
-export type ControlId = 'more' | 'auto' | 'history' | 'list' | 'skip' | 'showAll' | 'editTiles' | 'addTile'
+export type ControlId = 'more' | 'auto' | 'history' | 'list' | 'skip' | 'showAll' | 'editTiles' | 'addTile' | 'resume'
 
 export const CONTROL_IDS: readonly ControlId[] = [
   'more',
@@ -26,6 +28,7 @@ export const CONTROL_IDS: readonly ControlId[] = [
   'showAll',
   'editTiles',
   'addTile',
+  'resume',
 ]
 
 /** The word each control wears while it's labelled. Kept short: it sits inside a 44px button. */
@@ -38,6 +41,9 @@ export const CONTROL_WORDS: Record<ControlId, string> = {
   showAll: 'show all',
   editTiles: 'edit',
   addTile: 'add',
+  // Not a button's word but the pause curtain's one line: the whole screen is
+  // the control there, and nothing on it says so (see PauseOverlay).
+  resume: 'tap anywhere to resume',
 }
 
 export type LabelMode = 'auto' | 'always' | 'never'

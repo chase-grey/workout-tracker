@@ -1350,7 +1350,7 @@ export function StretchSession({
       {tapMark && setLive && !!holdSec && !openHold && (
         <span key={tapMark.at} aria-hidden className="hold-tap-mark" style={{ left: tapMark.x, top: tapMark.y }} />
       )}
-      {paused && <PauseOverlay label="routine paused" onResume={() => setPaused(false)} />}
+      {paused && <PauseOverlay onResume={() => setPaused(false)} />}
       {photos && <PhotoStep gate={photos.gate} onCapture={logMeasurement} onDone={closePhotos} />}
 
       {showList && (

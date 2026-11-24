@@ -1722,7 +1722,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           (z-60), which own the moment when one of them is up. */}
       {cheer && <SetCheer key={cheer.id} grade={cheer.grade} onDone={() => setCheer(null)} />}
 
-      {paused && <PauseOverlay label="workout paused" onResume={() => setPaused(false)} />}
+      {paused && <PauseOverlay onResume={() => setPaused(false)} />}
 
       {historyEx && (
         <ExerciseHistorySheet
