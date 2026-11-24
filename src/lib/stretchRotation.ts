@@ -58,6 +58,25 @@ export function completedRoutinesOf(e: FlexEntry): FlexRoutineKey[] {
 }
 
 /**
+ * A date for every stretch session on record: a day that finished two routines
+ * is in the list twice, so counting the list counts sessions rather than days.
+ * A day with a stretch entry and no finished routine on it (a bare measurement,
+ * a stretch only ticked off) still counts once, as any stretch day always has.
+ *
+ * Read per date rather than per entry, so entries not yet merged by date (see
+ * flex.dedupeFlexByDate) can't count one routine twice.
+ */
+export function stretchSessionDates(entries: FlexEntry[]): string[] {
+  const routinesOn = new Map<string, Set<FlexRoutineKey>>()
+  for (const e of entries) {
+    const on = routinesOn.get(e.date) ?? new Set<FlexRoutineKey>()
+    for (const r of completedRoutinesOf(e)) on.add(r)
+    routinesOn.set(e.date, on)
+  }
+  return [...routinesOn].flatMap(([date, routines]) => Array<string>(Math.max(1, routines.size)).fill(date))
+}
+
+/**
  * The routine up next — whichever one wasn't done last, and the side split with
  * nothing on record to turn over from.
  */

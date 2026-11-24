@@ -9,6 +9,7 @@ import {
   pillarMarks,
   schedulablePillars,
   shiftWeek,
+  stretchesDone,
   weekCalendar,
   type CalendarAction,
   type CalendarDay,
@@ -311,7 +312,13 @@ function SimpleStrip({
             </span>
             <span className="flex flex-col items-center gap-1">
               {pillars.map((p) => (
-                <PillarMark key={p} pillar={p} status={marks[p]} size={13} />
+                <PillarMark
+                  key={p}
+                  pillar={p}
+                  status={marks[p]}
+                  size={13}
+                  count={p === 'flexibility' ? stretchesDone(day) : undefined}
+                />
               ))}
             </span>
           </button>

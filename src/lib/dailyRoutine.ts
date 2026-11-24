@@ -24,8 +24,9 @@ export const isDailyRoutine = (routine: FlexRoutineKey): boolean => FLEX_ROUTINE
  * The stretch days the week starting `week` is owed by the daily routines among
  * `skills`: the most any of them asks for, and 0 where none does or the week is
  * from before it did. This is what the week's stretch goal is held to (see
- * weeklyStreak.weeklyGoalsFor) — any stretch day counts toward it, as it always
- * has, and six of them is what doing the routine six days comes to.
+ * weeklyStreak.weeklyGoalsFor) — any stretch session counts toward it, a second
+ * routine the same day included (stretchRotation.stretchSessionDates), and six
+ * of them is what doing the routine six days comes to.
  */
 export function dailyStretchDays(skills: FlexRoutineKey[], week: string): number {
   let days = 0

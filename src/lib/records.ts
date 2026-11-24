@@ -87,6 +87,16 @@ function datesByWeek(dates: string[]): Map<string, number> {
   return byWeek
 }
 
+/** Dates per Mon–Sun week, repeats counted: a date named twice is two. */
+function tallyByWeek(dates: string[]): Map<string, number> {
+  const byWeek = new Map<string, number>()
+  for (const d of dates) {
+    const wk = weekStartISO(d)
+    byWeek.set(wk, (byWeek.get(wk) ?? 0) + 1)
+  }
+  return byWeek
+}
+
 /** Total calories per Mon–Sun week. */
 function caloriesByWeek(entries: CalorieEntry[]): Map<string, number> {
   const byWeek = new Map<string, number>()
@@ -214,8 +224,8 @@ export function newRecords(
   }
 
   {
-    const b = periodValue(datesByWeek(before.flexDates), wk)
-    const a = periodValue(datesByWeek(after.flexDates), wk)
+    const b = periodValue(tallyByWeek(before.flexDates), wk)
+    const a = periodValue(tallyByWeek(after.flexDates), wk)
     if (crossedRecord(b, a)) out.push(weekSessionRecord('stretch sessions', a.current))
   }
 

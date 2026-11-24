@@ -82,6 +82,7 @@ import { cardioDates, mergeCardio, type CardioEntry } from '../lib/cardio'
 import { activeDietDirection, setActiveCardioPlan, setActiveProfile } from '../lib/profileStore'
 import { checkpointCelebration, newlyHitCheckpoints } from '../lib/cardioPlan'
 import { ownerFlavour } from '../lib/profile'
+import { stretchSessionDates } from '../lib/stretchRotation'
 
 export type WeekProgress = {
   workouts: number
@@ -718,7 +719,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // the PR / baseline moment, so those aren't duplicated here.
       let ambient: Celebration | null = null
       try {
-        const flexDates = storage.loadFlex().map((f) => f.date)
+        const flexDates = stretchSessionDates(storage.loadFlex())
         const cals = storage.loadCalories()
         const before = currentWeekCounts(prev, flexDates, cals)
         const after = currentWeekCounts(next, flexDates, cals)
@@ -847,8 +848,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
           const workoutsNow = storage.loadWorkouts()
           const cals = storage.loadCalories()
-          const beforeFlexDates = prevFlex.map((f) => f.date)
-          const afterFlexDates = nextFlex.map((f) => f.date)
+          const beforeFlexDates = stretchSessionDates(prevFlex)
+          const afterFlexDates = stretchSessionDates(nextFlex)
           const before = currentWeekCounts(workoutsNow, beforeFlexDates, cals)
           const after = currentWeekCounts(workoutsNow, afterFlexDates, cals)
           const beforeRec: RecordSnapshot = { workouts: workoutsNow, flexDates: beforeFlexDates, calorieEntries: cals }
@@ -931,7 +932,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           activeDietDirection() === 'gain' &&
           totalForDate(prevCals, entry.date) < dayGoal && totalForDate(nextCals, entry.date) >= dayGoal
         const workoutsNow = storage.loadWorkouts()
-        const flexDates = storage.loadFlex().map((f) => f.date)
+        const flexDates = stretchSessionDates(storage.loadFlex())
         const before = currentWeekCounts(workoutsNow, flexDates, prevCals)
         const after = currentWeekCounts(workoutsNow, flexDates, nextCals)
         const beforeRec: RecordSnapshot = { workouts: workoutsNow, flexDates, calorieEntries: prevCals }
@@ -960,7 +961,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await deliver(enqueue({ type: 'cardio', entry }))
       try {
         const workoutsNow = storage.loadWorkouts()
-        const flexDates = storage.loadFlex().map((f) => f.date)
+        const flexDates = stretchSessionDates(storage.loadFlex())
         const cals = storage.loadCalories()
         const now = new Date()
         // A session that meets a checkpoint of the cardio plan marks it hit.
@@ -1221,7 +1222,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // core-only sessions (the core block of a stretch) are excluded too, so neither
   // inflates the weekly workout goal.
   const workoutDates = useMemo(() => trainingDates(workouts), [workouts])
-  const flexDates = useMemo(() => flexEntries.map((f) => f.date), [flexEntries])
+  // A date once per stretch session: two routines in a day count as two.
+  const flexDates = useMemo(() => stretchSessionDates(flexEntries), [flexEntries])
   // `profile` is a dependency of each of these though none names it: the hit
   // rule and the goals are read through lib/profileStore.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1253,7 +1255,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const inWeek = (d: string) => weekStartISO(d) === wk
     return {
       workouts: workoutDates.filter(inWeek).length,
-      flex: new Set(flexDates.filter(inWeek)).size,
+      flex: flexDates.filter(inWeek).length,
       calDays: calHitDates.filter(inWeek).length,
       cardio: cardioDays.filter(inWeek).length,
     }

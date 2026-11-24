@@ -397,16 +397,16 @@ describe('weeklyStreakHistory', () => {
     expect(wk1.streakAfter).toBe(1)
   })
 
-  it('counts a day trained twice as one day', () => {
-    // Two workouts and two stretches crammed into Monday is one of each, so the
-    // week lands short rather than full.
+  it('counts a day lifted twice as one day, and two stretches in a day as two', () => {
+    // Two workouts crammed into Monday is one, so the week lands short rather
+    // than full. Two stretch routines the same day are two sessions.
     const [wk1] = weeklyStreakHistory({
       workoutDates: [WK1, WK1],
       flexDates: [WK1, WK1],
       calorieHitDates: daysInWeek(WK1, 6),
       today: TODAY,
     })
-    expect(wk1.counts).toEqual({ workouts: 1, flex: 1, calDays: 6, cardio: 0 })
+    expect(wk1.counts).toEqual({ workouts: 1, flex: 2, calDays: 6, cardio: 0 })
     expect(wk1.tier).toBe('short')
   })
 

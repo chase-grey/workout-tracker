@@ -43,6 +43,7 @@ import { SignInLanding, takeCredentialFromUrl } from './features/setup/SignInLan
 import { isSignedInAs } from './lib/signInLink'
 import { accountModeOf, needsAccount } from './lib/account'
 import { AccountGate } from './features/setup/AccountGate'
+import { stretchSessionDates } from './lib/stretchRotation'
 
 // A device in use before accounts existed never chose how to store its data.
 // Settle it as the owner's before anything renders, so it goes on syncing as it
@@ -196,7 +197,7 @@ function AppShell() {
     }
     const data = {
       workouts: storage.loadWorkouts(),
-      flexDates: storage.loadFlex().map((f) => f.date),
+      flexDates: stretchSessionDates(storage.loadFlex()),
       flexEntries: storage.loadFlex(),
       calorieEntries: storage.loadCalories(),
       bodyWeights: storage.loadBodyWeights(),

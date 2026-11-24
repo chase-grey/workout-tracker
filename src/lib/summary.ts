@@ -70,15 +70,14 @@ export function weeklySummary(
 ): WeeklySummary {
   const thisWeekStart = weekStartISO(toISODate(today))
 
-  // --- Activity count: distinct workout sessions + distinct stretch days this week. ---
+  // --- Activity count: distinct workout sessions + stretch sessions this week. ---
   const thisWeekSessions = new Set<string>()
   for (const r of workouts) {
     if (weekStartISO(r.date) === thisWeekStart) thisWeekSessions.add(r.session_id)
   }
-  for (const d of flexDates) {
-    if (weekStartISO(d) === thisWeekStart) thisWeekSessions.add(`flex:${d}`)
-  }
-  const workoutCount = thisWeekSessions.size
+  // `flexDates` names a date once per stretch session, so each one counts.
+  const stretchCount = flexDates.filter((d) => weekStartISO(d) === thisWeekStart).length
+  const workoutCount = thisWeekSessions.size + stretchCount
 
   // --- PRs: best est. 1RM this week vs best in any prior week, per exercise. ---
   // Prior weeks also supply the baseline test: a lift needs MIN_PR_HISTORY_DAYS

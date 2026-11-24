@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lastStretchRoutine, nextStretchRoutine, otherStretchRoutine } from './stretchRotation'
+import { lastStretchRoutine, nextStretchRoutine, otherStretchRoutine, stretchSessionDates } from './stretchRotation'
 import { dedupeFlexByDate, type FlexEntry } from './flex'
 import type { FlexRoutineKey } from '../config/flexRoutines'
 
@@ -92,5 +92,31 @@ describe('otherStretchRoutine', () => {
   it('trades one for the other', () => {
     expect(otherStretchRoutine('side_split')).toBe('head_to_toe')
     expect(otherStretchRoutine('head_to_toe')).toBe('side_split')
+  })
+})
+
+describe('stretchSessionDates', () => {
+  it('names a day once for each routine finished on it', () => {
+    const entries = dedupeFlexByDate([
+      session('2026-11-23', 'pelvic_tilt'),
+      session('2026-11-23', 'head_to_toe'),
+      session('2026-11-24', 'pelvic_tilt'),
+    ])
+    expect(stretchSessionDates(entries).sort()).toEqual(['2026-11-23', '2026-11-23', '2026-11-24'])
+  })
+
+  it('counts a routine once however many entries of the day record it', () => {
+    const entries = [session('2026-11-23', 'pelvic_tilt'), session('2026-11-23', 'pelvic_tilt')]
+    expect(stretchSessionDates(entries)).toEqual(['2026-11-23'])
+  })
+
+  it('counts a day with only a measurement or a tick once', () => {
+    expect(stretchSessionDates([measurement('2026-11-23')])).toEqual(['2026-11-23'])
+    expect(stretchSessionDates([entry('2026-11-23', { note: 'logged' })])).toEqual(['2026-11-23'])
+  })
+
+  it('does not count a measurement on top of the routine it was taken in', () => {
+    const entries = [session('2026-11-23', 'head_to_toe'), measurement('2026-11-23')]
+    expect(stretchSessionDates(entries)).toEqual(['2026-11-23'])
   })
 })

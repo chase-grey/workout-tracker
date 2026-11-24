@@ -46,7 +46,7 @@ describe('periodStats', () => {
         session('2026-06-05', 'pull'),
         { ...session('2026-06-09', 'push'), exercise: 'deadbug' }, // supplemental core-only session
       ],
-      flexDates: ['2026-06-03', '2026-06-10', '2026-06-10'], // dup collapses
+      flexDates: ['2026-06-03', '2026-06-10', '2026-06-10'], // two routines on the 10th are two
       calorieEntries: [cal('2026-06-02', 4200), cal('2026-06-03', 4500), cal('2026-06-04', 3000)],
       bodyWeights: [
         { date: '2026-06-01', weightLbs: 170 },
@@ -55,7 +55,7 @@ describe('periodStats', () => {
     })
     const s = periodStats(d, inMonth('2026-06'))
     expect(s.workouts).toBe(2) // the core-only session is excluded from the training count
-    expect(s.stretches).toBe(2)
+    expect(s.stretches).toBe(3)
     expect(s.calorieDays).toBe(2)
     expect(s.bestCalorieDay).toBe(4500)
     expect(s.weightChangeLbs).toBe(3)

@@ -23,6 +23,7 @@ import { StreakHistoryPanel } from './StreakHistoryPanel'
 import { Tick } from '../../components/Tick'
 import { hasPillar, ownerFlavour } from '../../lib/profile'
 import { Collapse } from '../../components/Collapse'
+import { stretchSessionDates } from '../../lib/stretchRotation'
 
 /**
  * One metric's row: the fill is what's done, and the pale line is where the
@@ -83,7 +84,7 @@ export function ThisWeek({ onSelectWeek }: { onSelectWeek: (week: string) => voi
   const weightHistoryId = useId()
   const [showAllWeightWeeks, setShowAllWeightWeeks] = useState(false)
 
-  const summary = weeklySummary(workouts, bodyWeights, new Date(), flexEntries.map((f) => f.date))
+  const summary = weeklySummary(workouts, bodyWeights, new Date(), stretchSessionDates(flexEntries))
   const weightChanges = weeklyWeightChanges(bodyWeights)
   const shownWeightChanges = showAllWeightWeeks ? weightChanges : weightChanges.slice(0, WEIGHT_WEEKS_SHOWN)
   // A record day of eating is only a win for someone eating to gain.

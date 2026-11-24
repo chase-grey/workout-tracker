@@ -139,8 +139,9 @@ export type WeekCounts = {
 
 /**
  * This-week counts, mirroring DataContext's derivation exactly: distinct dates
- * trained (supplemental core-only sessions excluded), distinct stretch dates,
- * calorie-goal days.
+ * trained (supplemental core-only sessions excluded), stretch sessions —
+ * `flexDates` names a date once per session (stretchRotation.stretchSessionDates),
+ * so two routines in a day are two — and calorie-goal days.
  */
 export function currentWeekCounts(
   workouts: WorkoutRow[],
@@ -154,7 +155,7 @@ export function currentWeekCounts(
 
   return {
     workouts: trainingDates(workouts).filter(inWeek).length,
-    flex: new Set(flexDates.filter(inWeek)).size,
+    flex: flexDates.filter(inWeek).length,
     calDays: calorieHitDates(calorieEntries).filter(inWeek).length,
     cardio: new Set(cardioDates.filter(inWeek)).size,
   }

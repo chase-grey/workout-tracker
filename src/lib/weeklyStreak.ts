@@ -174,8 +174,19 @@ function bucketByWeek(dates: string[]): Map<string, number> {
   return map
 }
 
+/** Every date counted, repeats and all: a date named twice is two. */
+function tallyByWeek(dates: string[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const d of dates) {
+    const wk = weekStartISO(d)
+    map.set(wk, (map.get(wk) ?? 0) + 1)
+  }
+  return map
+}
+
 export type StreakInput = {
   workoutDates: string[]
+  /** A date once per stretch session (see stretchRotation.stretchSessionDates). */
   flexDates: string[]
   calorieHitDates: string[]
   cardioDates?: string[]
@@ -194,7 +205,7 @@ export function weeklyStreakHistory(input: StreakInput): WeekResult[] {
   const today = input.today ?? new Date()
 
   const workoutByWeek = bucketByWeek(input.workoutDates)
-  const flexByWeek = bucketByWeek(input.flexDates)
+  const flexByWeek = tallyByWeek(input.flexDates)
   const calByWeek = bucketByWeek(input.calorieHitDates)
   const cardioByWeek = bucketByWeek(input.cardioDates ?? [])
 

@@ -52,6 +52,7 @@ import { EditableStack, type StackCard } from '../../components/EditableStack'
 import { WeightCard } from '../today/WeightCard'
 import { DailyHabits } from '../today/DailyHabits'
 import { weighsIn } from '../../lib/profile'
+import { stretchSessionDates } from '../../lib/stretchRotation'
 import {
   buildReview,
   monthKeyOf,
@@ -234,7 +235,7 @@ export function ProgressTab({
   const reviewData = useMemo(
     () => ({
       workouts,
-      flexDates: flexEntries.map((f) => f.date),
+      flexDates: stretchSessionDates(flexEntries),
       flexEntries,
       calorieEntries,
       bodyWeights,

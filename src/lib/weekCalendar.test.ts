@@ -7,6 +7,7 @@ import {
   hasSchedule,
   markTone,
   pillarMarks,
+  stretchesDone,
   scheduledWeekdays,
   shiftWeek,
   togglePin,
@@ -417,5 +418,17 @@ describe('hasSchedule', () => {
     expect(hasSchedule(undefined, { [MON]: { strength: [1] } }, WED)).toBe(true)
     // Another week's days are not this week's.
     expect(hasSchedule(undefined, { [MON]: { strength: [1] } }, shiftWeek(MON, 1))).toBe(false)
+  })
+})
+
+describe('stretchesDone', () => {
+  it('counts each routine finished on a day, and none still planned', () => {
+    const days = weekCalendar(input({
+      today: WED,
+      pillars: ['flexibility'],
+      pins: { flexibility: [2, 3] },
+      flexEntries: [stretch(MON, ['pelvic_tilt', 'head_to_toe']), stretch(WED, ['pelvic_tilt'])],
+    }))
+    expect(days.map(stretchesDone)).toEqual([2, 0, 1, 0, 0, 0, 0])
   })
 })

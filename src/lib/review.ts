@@ -141,7 +141,7 @@ function stretchingPrsInPeriod(entries: FlexEntry[], inPeriod: InPeriod): Review
 
 export function periodStats(data: ReviewData, inPeriod: InPeriod): PeriodStats {
   const training = trainingDayCount(data.workouts, inPeriod)
-  const stretches = new Set(data.flexDates.filter(inPeriod)).size
+  const stretches = data.flexDates.filter(inPeriod).length
   const calorieDays = calorieHitDates(data.calorieEntries).filter(inPeriod).length
 
   let totalCalories = 0

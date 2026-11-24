@@ -399,6 +399,14 @@ export function pillarMarks(day: CalendarDay, pillars: Pillar[]): Record<Pillar,
 }
 
 /**
+ * How many stretch sessions a day finished, for the count its mark wears: two
+ * routines in a day are two. A day with one, or none, has nothing to count.
+ */
+export function stretchesDone(day: CalendarDay): number {
+  return day.items.filter((i) => i.pillar === 'flexibility' && i.status === 'done').length
+}
+
+/**
  * How a mark is drawn for its status. The shape already says which pillar, so
  * the colour is left one job: lit once it happened, dim while it hasn't —
  * a session still planned, a calorie target not hit — and absent when the day
