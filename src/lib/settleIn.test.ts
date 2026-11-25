@@ -43,17 +43,21 @@ describe('settleInWaitsForTap', () => {
     side.forEach((step, index) => expect(settleInWaitsForTap(step, side[index - 1])).toBe(false))
   })
 
-  it('waits at every new stretch of the pelvic tilt routine, and at none of its side switches or typed-in sets', () => {
-    const tilt = buildSessionSteps(FLEX_ROUTINES.pelvic_tilt.blocks)
+  it('waits at every new exercise of the pelvic tilt routine, the typed-in one included, and at none of its side switches or later sets', () => {
+    // Built the way the session builds it: with no sit-up block on the end.
+    const tilt = buildSessionSteps(FLEX_ROUTINES.pelvic_tilt.blocks, { core: false })
     const waiting = tilt.filter((step, index) => settleInWaitsForTap(step, tilt[index - 1], 'pelvic_tilt'))
     expect(waiting.map((step) => step.exKey)).toEqual([
       'standing_pelvic_tilt',
+      'hip_thrust',
       'rkc_plank',
       'lunge_stretch',
       'rectus_femoris_stretch',
     ])
     // The first exercise opens on the routine's preview, which is its own tap.
     expect(settleInWaitsForTap(tilt[0], undefined, 'pelvic_tilt')).toBe(false)
+    // The thrust asks once, on the way in. Its later sets come off a rest.
+    expect(tilt.filter((step) => step.exKey === 'hip_thrust').length).toBeGreaterThan(1)
     // The tap says you're in position: the set starts on it, with no count after.
     tilt.forEach((step, index) => expect(settleInTapStartsCount(step, tilt[index - 1])).toBe(false))
   })

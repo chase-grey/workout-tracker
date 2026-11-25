@@ -185,6 +185,14 @@ const tapScreenJs = `(() => {
   return true
 })()`
 
+/** A tap on whatever is drawn over the session: the rest, the count, "ready?". */
+const tapOverlayJs = `(() => {
+  const el = document.querySelector('.fixed.inset-0.z-50')
+  if (!el) return false
+  el.click()
+  return true
+})()`
+
 const scrollMainJs = (top) => `(() => {
   const m = document.querySelector('main')
   if (!m) return 0
@@ -350,6 +358,8 @@ const APP_FLOWS = [
         `session/${routineId(r)}-get-ready`,
         `session/${routineId(r)}-set`,
       ]),
+      'session/pelvic-tilt-into-thrust',
+      'session/pelvic-tilt-thrust',
       'session/stretch-paused',
       'session/stretch-how-to',
     ],
@@ -405,6 +415,22 @@ const APP_FLOWS = [
         if (!(await untilSetIsUp(page))) note(`session: ${routine} never reached a hold or a figure`)
         await sleep(2500)
         await take(`session/${id}-set`)
+        if (routine === 'pelvic tilt') {
+          // Through both tilts to the typed-in set, which is asked for like any
+          // other new exercise of this routine (see lib/settleIn).
+          await page.eval(tapScreenJs)
+          await sleep(1200)
+          await page.eval(tapOverlayJs)
+          if (!(await untilSetIsUp(page))) note('session: the standing tilt never came up')
+          await page.eval(tapScreenJs)
+          // Longer than the five-second count this used to be, so a count that
+          // ran out on its own shows here as the card rather than "ready?".
+          await sleep(7000)
+          await take('session/pelvic-tilt-into-thrust')
+          await page.eval(tapOverlayJs)
+          await sleep(1200)
+          await take('session/pelvic-tilt-thrust')
+        }
         if (routine !== STRETCH_ROUTINES[0]) continue
         // The pause curtain first, then back off it for the ? beside the movement.
         const menu = await page.eval(pressJs('more options'))

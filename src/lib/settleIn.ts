@@ -22,17 +22,19 @@ export function settleInSec(step: SessionStep, _prev?: SessionStep): number {
  * stands down for one (see lib/fastMode's startsNewExercise).
  *
  * The pelvic tilt routine asks at every exercise: each of its moves is a
- * different position from the last. Its typed-in set is left out, since the
- * card already waits for the tap that logs it. An exercise's own side switches
- * and later sets keep their counts: you're already set up.
+ * different position from the last. That includes its typed-in set, the hip
+ * thrust. Its card waits for the tap that logs it, but a card that is simply
+ * there after a five-second count reads as the exercise having started without
+ * you. An exercise's own side switches keep their counts and its later sets
+ * their rests: you're already set up.
  *
  * Head to toe asks only on the way into the sciatic floss. Coming off the
  * rolling-feet holds means putting the ball away and finding the strap, and a
  * five-second count ran out and started the glides partway through that.
  */
 export function settleInWaitsForTap(step: SessionStep, prev?: SessionStep, routine?: FlexRoutineKey): boolean {
-  if (step.kind !== 'flex' || prev == null || prev.exKey === step.exKey) return false
-  return routine === 'pelvic_tilt' || step.exKey === 'sciatic_floss'
+  if (prev == null || prev.exKey === step.exKey) return false
+  return routine === 'pelvic_tilt' || (step.kind === 'flex' && step.exKey === 'sciatic_floss')
 }
 
 /**

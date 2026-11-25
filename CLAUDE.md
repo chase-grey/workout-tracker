@@ -49,6 +49,25 @@ So: any change to how a session is paced, advanced, rested, or ended goes into
 **both** files, or the commit body says why it belongs to only one. When touching
 either file, check the other before you finish.
 
+## A new exercise never starts without you
+
+Chase's ruling (2026-11-25, after the hip thrust came up on its own): the way
+into a new exercise either comes off a rest, the way a lift's does, or holds on
+`ready?` until a tap. A count that runs out and leaves the exercise on screen
+is not asking.
+
+- In the pelvic tilt routine every new exercise holds on `ready?`
+  (`lib/settleIn.settleInWaitsForTap`), the typed-in hip thrust included. A set
+  whose card waits for its own tap is not an exception: the card appearing is
+  the exercise starting.
+- Side switches keep their count and later sets their rest: you're already set
+  up.
+- Head to toe waits only at the sciatic floss, and the side split and skill
+  routines nowhere; they still count into each new exercise. Whether they wait
+  too is Chase's call, not yet made.
+- `settleIn.test.ts` lists the exercises that wait, and `npm run shots --
+  session pelvic` draws the way into the thrust.
+
 ## What a session's clock counts
 
 A session is measured against time in several places: the mark on the progress
