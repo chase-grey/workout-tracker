@@ -271,6 +271,9 @@ describe('every route that stores what someone typed', () => {
       const w = world()
       const made = w.post('register', { email: 'ann@example.com', password: typed + 'hunter22', name: typed + 'Ann' })
       expect(made.saved).toBe(1)
+      // An address that opens with one of these is not an address.
+      expect(w.post('register', { email: typed + 'bob@example.com', password: 'hunter22', name: 'Bob' }).error).toMatch(/email/)
+      expect(w.post('set_login', { email: typed + 'ann@example.com', password: 'hunter22' }, { user: made.token }).error).toMatch(/email/)
       expect(w.post('set_login', { email: 'ann2@example.com', password: typed + 'hunter22' }, { user: made.token })).toEqual({ saved: 1 })
       const { code } = w.post('invite', { secret: SECRET })
       const joined = w.post('join', { invite: code, name: typed + 'Cy', claim: typed })

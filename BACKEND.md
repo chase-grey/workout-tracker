@@ -192,7 +192,9 @@ for a key, which is how the app checks one that was pasted in.
 ### Email and password
 
 Accounts are open: anyone can `POST ?route=register` with an email, a password
-(8 characters or more) and a name, and gets a key back. `login` trades the same
+(8 characters or more) and a name, and gets a key back. An email is letters,
+digits and `. _ % + -` before the `@`, never opening with `+`, `-` or `.`, then a
+dotted host name; the app checks the same pattern (`src/lib/login.ts`). `login` trades the same
 email and password for the key. The password itself is never stored: `pass_hash`
 is SHA-256 run 1000 times over a per-account random `pass_salt` and the password
 (Apps Script has nothing stronger built in). After 10 wrong passwords for one

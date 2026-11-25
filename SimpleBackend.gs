@@ -172,7 +172,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 14
+const BACKEND_VERSION = 15
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -1375,8 +1375,15 @@ function normEmail(value) {
   return String(value || '').trim().toLowerCase()
 }
 
+// What an address is made of, after normEmail has lowercased it: letters,
+// digits and . _ % + - before the @, opening with a letter, digit or _, then a
+// dotted host name. So it can't open with = + - or @, and has no room for a
+// quote, an ampersand, a bracket or a space. Kept the same as emailOk in the
+// app's src/lib/login.ts; change both together.
+const EMAIL_PATTERN = /^[a-z0-9_][a-z0-9._%+-]*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
+
 function checkEmail(email) {
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Error("That email doesn't look right")
+  if (email.length > 254 || !EMAIL_PATTERN.test(email)) throw new Error("That email doesn't look right")
 }
 
 function checkPassword(password) {

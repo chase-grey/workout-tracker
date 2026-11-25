@@ -141,6 +141,20 @@ describe('register and login', () => {
     expect(register(w, 'a@b.co', 'short').error).toMatch(/at least 8/)
     expect(register(w, 'a@b.co', 'hunter22', ' ').error).toMatch(/name/)
   })
+
+  it('refuses an email that opens like a formula or carries what no address needs', () => {
+    const w = world()
+    for (const email of [
+      '=a@b.co', '+a@b.co', '-a@b.co', '@a@b.co', '=IMPORTRANGE("x","users!A:A")@b.co', '"a"@b.co', "o'a@b.co",
+      'a&b@b.co', 'a(b)@b.co', 'a b@b.co', 'a@b .co', 'a=b@b.co', 'a@b.co"', 'a@-b.co', 'a@b..co',
+    ]) {
+      expect(register(w, email).error, email).toMatch(/email/)
+      expect(w.post({ route: 'claim_owner' }, { secret: SECRET, email, password: 'hunter22' }).error, email).toMatch(/email/)
+    }
+    expect(w.book.tab('users')).toBeUndefined()
+    expect(register(w, 'Ann+Gym@Mail.Example.co.uk').saved).toBe(1)
+    expect(register(w, 'first.last_x-y%z@ex-ample.io').saved).toBe(1)
+  })
 })
 
 describe('the owner claiming an email', () => {
