@@ -92,6 +92,18 @@ describe('mergeSettings', () => {
     expect(merged.lockedGoals?.bench.lockedAt).toBe('2026-04-01')
   })
 
+  // A browser opened but never used carries a stamp newer than the account's and
+  // nothing else. Signed in as the owner it merges before it writes (see
+  // DataContext.signInAsOwner), and the merge has to keep what the account holds.
+  it("keeps the account's commitments when a newer, emptier device signs in", () => {
+    const local: Settings = { ...base, updatedAt: '2026-11-25T20:00:00Z' }
+    const remote: SyncedSettings = {
+      updatedAt: '2026-11-20T00:00:00Z',
+      lockedGoals: { squat: lock('squat', '2026-05-01') },
+    }
+    expect(mergeSettings(local, remote).lockedGoals?.squat.lockedAt).toBe('2026-05-01')
+  })
+
   it('merges commitments per goal, newest lock winning', () => {
     const local: Settings = {
       ...base,

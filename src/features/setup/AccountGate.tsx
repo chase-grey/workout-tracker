@@ -24,7 +24,7 @@ type Mode = 'new' | 'signin'
  * outbox — everything it ever logged — uploads into it.
  */
 export function AccountGate() {
-  const { settings, updateSettings, signInToAccount } = useData()
+  const { settings, updateSettings, signInToAccount, signInAsOwner } = useData()
   const legacy = settings.accountMode === 'legacy'
   const secret = settings.chatToken.trim()
   // Without the issue token an old phone can't prove it's the owner's, so all
@@ -54,7 +54,8 @@ export function AccountGate() {
     try {
       if (mode === 'signin') {
         const who = await api.login(email.trim(), password)
-        if (legacy && who.owner) adopt(who)
+        // The account exists, so it may hold more than this device does: read it before writing (see signInAsOwner).
+        if (legacy && who.owner) await signInAsOwner({ accountMode: 'hosted', accountToken: who.token, accountName: who.name })
         else await signInToAccount({ accountMode: 'hosted', accountToken: who.token, accountName: who.name })
       } else if (legacy) {
         adopt(await api.claimOwner(secret, email.trim(), password))

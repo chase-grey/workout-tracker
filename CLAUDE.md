@@ -273,6 +273,16 @@ No explanatory subtext, hint captions, or "how to use this" sentences under
 controls. A clear label is enough. In particular: do not caption a tappable
 screen with "tap anywhere to advance" — the flow teaches it in one set.
 
+## Signing in never writes first
+
+A device signing in to an account that already exists reads the account before
+it writes to it: `signInToAccount` for someone else's device, `signInAsOwner`
+for one of the owner's. Neither calls `updateSettings`, which stamps the
+device's copy as newest and pushes it whole. That push is how a browser that had
+only been opened replaced the account's commitments with none on 2026-11-25.
+`updateSettings` at sign-in is only for making an account (`claimOwner`,
+`register`), where there is nothing up there to lose.
+
 ## What my-brain reads
 
 my-brain's body slice is this app's weekly streak and committed goals.

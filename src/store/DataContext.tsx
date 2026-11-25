@@ -278,6 +278,11 @@ type DataContextValue = {
    * See the implementation for why this is not `updateSettings`.
    */
   signInToAccount: (fields: Partial<Settings>) => Promise<void>
+  /**
+   * Sign one of the owner's own devices in to the owner's account, which already
+   * exists: keep what is on the device, and read the account before writing to it.
+   */
+  signInAsOwner: (fields: Partial<Settings>) => Promise<void>
   updatePlan: (p: Plan) => void
   updateFlexPlan: (routine: FlexRoutineKey, blocks: FlexBlock[]) => void
   refresh: () => Promise<void>
@@ -1200,6 +1205,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [refresh],
   )
 
+  /**
+   * The owner signing in on a device that already holds something of theirs.
+   * Unlike `signInToAccount` the device keeps its settings, stamp and outbox,
+   * since they are the owner's. Unlike `updateSettings` nothing is pushed
+   * first: the account fields are device-local, and the refresh merges the
+   * account's copy in and pushes the union (see its settings step). Pushing
+   * first is how a browser that had only been opened, never used, replaced the
+   * account's commitments with none on 2026-11-25.
+   */
+  const signInAsOwner = useCallback(
+    async (fields: Partial<Settings>) => {
+      const next = { ...storage.loadSettings(), ...fields }
+      setSettings(next)
+      storage.saveSettings(next)
+      await refresh()
+    },
+    [refresh],
+  )
+
   const updatePlan = useCallback(
     (p: Plan) => {
       setPlan(p)
@@ -1307,6 +1331,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     importData,
     updateSettings,
     signInToAccount,
+    signInAsOwner,
     updatePlan,
     updateFlexPlan,
     refresh,
