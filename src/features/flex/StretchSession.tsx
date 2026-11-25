@@ -434,6 +434,9 @@ export function StretchSession({
   // A routine that went away paused comes back paused, with the time it was gone
   // still off the clock.
   const [paused, setPaused] = useState(() => photos == null && resumedOffClock.since > 0)
+  // On "ready?", waiting for the tap (see GetReady's untilTap). The wait is as
+  // long as finding the strap takes, so it is off the clock like a pause.
+  const [waitingReady, setWaitingReady] = useState(false)
 
   /** Move the rest currently on the clock into the session's total. */
   const bankRest = () => {
@@ -531,7 +534,7 @@ export function StretchSession({
       offClock: offClock.current,
       fast,
     })
-  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, heldSecs, rep, skipped, skippedSteps, rest, seenGates, fast, paused])
+  }, [safeCurrent, startSide, done, started, startedAt, routine, withCore, officeAbs, coreReps, coreWeights, heldSecs, rep, skipped, skippedSteps, rest, seenGates, fast, paused, waitingReady])
 
   // Leave the app — another app, or the screen going dark — and hands-free
   // switches off. Its rests and paced sets run on the wall clock, so they'd
@@ -1063,9 +1066,17 @@ export function StretchSession({
     offClock.current = stepOff(offClock.current, Date.now())
     setPaused(true)
   }
+  // A pause lifted over "ready?" leaves the clock standing: the wait is still on.
   const resumeRoutine = () => {
-    backOnTheClock()
+    if (!waitingReady) backOnTheClock()
     setPaused(false)
+  }
+  // The wait on "ready?" began or ended. Ended under the pause curtain, the clock
+  // stays stopped until the curtain lifts.
+  const holdForReady = (holding: boolean) => {
+    if (holding) offClock.current = stepOff(offClock.current, Date.now())
+    else if (!paused) backOnTheClock()
+    setWaitingReady(holding)
   }
 
   const closePhotos = (_tookAny: boolean) => {
@@ -1398,6 +1409,7 @@ export function StretchSession({
           // position with it, so the count still runs after the tap. Hands-free
           // has no counts, and its tap goes straight in.
           tapStartsCount={settleInTapStartsCount(step, prevStep) && !fast}
+          onHold={holdForReady}
           onDone={() => {
             setPreparing(false)
             setReadyOverrideSec(null)

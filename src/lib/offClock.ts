@@ -1,6 +1,7 @@
 /**
- * The time a session spends off its own clock: under the pause curtain, and on
- * a stretch routine's photo screens.
+ * The time a session spends off its own clock: under the pause curtain, on a
+ * stretch routine's photo screens, and on its "ready?" screen waiting for the
+ * tap that says the gear is in hand.
  *
  * A pause is you saying the session has stopped. A photo moment stops it just
  * as surely: lining the phone up, the shot, dragging the handles onto the
@@ -10,6 +11,10 @@
  * mark on the progress bar, the checklist's "so far", the time charged to each
  * set, the rest tally and the length that gets logged are all read with this
  * time taken out.
+ *
+ * The wait on "ready?" is the same kind of time. It lasts as long as putting the
+ * ball away and finding the strap lasts, and the count that follows the tap is
+ * where the session picks up again.
  *
  * Kept as banked seconds plus the start of the stretch now running, the way the
  * rest tally is (see lib/rest), and saved with the session for the same reason:

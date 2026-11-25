@@ -78,6 +78,9 @@ what it leaves out (2026-11-24):
 - **Paused time is off the clock**, in both sessions.
 - **Photo screens are off the clock** (the stretch routine's camera, handles
   and save prompt).
+- **The wait on "ready?" is off the clock** (2026-11-25): the stretch routine's
+  count that holds until you tap (`GetReady`'s `untilTap`). The count that runs
+  after the tap is back on it.
 - Everything else counts: sets, rests, the get-into-position count, a sheet
   left open, the minutes before the first set.
 

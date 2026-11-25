@@ -19,13 +19,16 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
  * `untilTap` holds the screen on "ready?" until you tap it, for a setup that takes
  * as long as it takes. By default that tap starts the set; with `tapStartsCount`
  * it starts the count instead, for a setup in two parts — gathering the gear,
- * then getting into the pose with it.
+ * then getting into the pose with it. `onHold` says when that wait begins and
+ * when it ends, however it ends, so the session can stand its clock still
+ * through it (see lib/offClock).
  */
 export function GetReady({
   seconds,
   header,
   untilTap = false,
   tapStartsCount = false,
+  onHold,
   onDone,
 }: {
   seconds: number
@@ -39,6 +42,12 @@ export function GetReady({
   untilTap?: boolean
   /** The tap that ends `untilTap` starts the `seconds` count rather than the set. */
   tapStartsCount?: boolean
+  /**
+   * True as the wait on "ready?" begins, false as it ends: the tap, or the screen
+   * being taken away. Required, because that wait is off the session's clock and
+   * only the session can stop it.
+   */
+  onHold: (holding: boolean) => void
   onDone: () => void
 }) {
   const endRef = useRef(Date.now() + seconds * 1000)
@@ -47,6 +56,14 @@ export function GetReady({
   const [remaining, setRemaining] = useState(seconds)
   // Still on "ready?", waiting for the tap.
   const [holding, setHolding] = useState(untilTap)
+  const holdRef = useRef(onHold)
+  holdRef.current = onHold
+
+  useEffect(() => {
+    if (!holding) return
+    holdRef.current(true)
+    return () => holdRef.current(false)
+  }, [holding])
 
   useEffect(() => {
     if (holding) return
