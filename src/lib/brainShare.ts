@@ -4,8 +4,8 @@
  * my-brain's life wheel has a body slice, and the honest reading of it is
  * already here: the weekly streak and the committed goals. Both apps are served
  * from the same site, so this app leaves a small summary in the storage they
- * share and my-brain reads it there. Nothing is sent anywhere and no account
- * key changes hands.
+ * share and my-brain reads it there, and posts the same summary to the backend
+ * for a my-brain on any other device (see store/useBrainShare).
  *
  * The summary carries results, never the rules behind them. The streak is
  * replayed in one place (see weeklyStreak) and a goal's pace judged in one
@@ -40,8 +40,15 @@ export type GoalStandings = {
   open: number
   /** Of those, the ones on or ahead of the line they committed to. */
   onPace: number
-  /** Committed goals already reached. */
+  /** Every goal already reached, committed to or not: the reached band on the Progress tab. */
   met: number
+  /** The goals behind those counts by name, reached first, then in the order the Progress tab lists them. */
+  list: SharedGoal[]
+}
+
+export type SharedGoal = {
+  title: string
+  state: 'met' | 'onPace' | 'behind'
 }
 
 export type BrainShare = {
@@ -60,21 +67,26 @@ export type BrainShare = {
 /** Where every committed goal stands, read exactly as the Progress tab reads it. */
 export function goalStandings(goals: GoalSpec[], stored: LockedProjections, today: Date = new Date()): GoalStandings {
   const locked = liveLocks(stored, goals, today)
-  const out: GoalStandings = { open: 0, onPace: 0, met: 0 }
+  const out: GoalStandings = { open: 0, onPace: 0, met: 0, list: [] }
+  const chased: SharedGoal[] = []
   for (const goal of goals) {
-    const lock = locked[goal.id]
-    if (!lock) continue
     if (isReached(goal)) {
       out.met += 1
+      out.list.push({ title: goal.title, state: 'met' })
       continue
     }
+    const lock = locked[goal.id]
+    if (!lock) continue
     const proj = projectGoal(goal, today)
     const last = goal.points[goal.points.length - 1]
     if (!last || !Number.isFinite(proj.current)) continue
     out.open += 1
     const pace = paceAgainstLock(lock, proj.current, last.date, proj.slopePerWeek, today, proj)
-    if (pace.status !== 'behind') out.onPace += 1
+    const onPace = pace.status !== 'behind'
+    if (onPace) out.onPace += 1
+    chased.push({ title: goal.title, state: onPace ? 'onPace' : 'behind' })
   }
+  out.list.push(...chased)
   return out
 }
 

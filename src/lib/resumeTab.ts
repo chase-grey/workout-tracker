@@ -22,9 +22,28 @@ export function stashResumeTab(tab: Tab): void {
 
 /** Read the stashed tab and clear it: it's good for the next load only. */
 export function takeResumeTab(): Tab | null {
+  const linked = takeLinkedTab()
   try {
     const tab = sessionStorage.getItem(KEY)
     sessionStorage.removeItem(KEY)
+    return linked ?? (TABS.includes(tab as Tab) ? (tab as Tab) : null)
+  } catch {
+    return linked
+  }
+}
+
+/**
+ * The tab a link asked for (`?tab=progress`): my-brain's body slice opens this
+ * app on the goals it is quoting. The parameter is taken off the address so a
+ * later reload doesn't land there again.
+ */
+function takeLinkedTab(): Tab | null {
+  try {
+    const url = new URL(window.location.href)
+    const tab = url.searchParams.get('tab')
+    if (tab == null) return null
+    url.searchParams.delete('tab')
+    window.history.replaceState(window.history.state, '', url)
     return TABS.includes(tab as Tab) ? (tab as Tab) : null
   } catch {
     return null

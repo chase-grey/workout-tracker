@@ -281,6 +281,8 @@ my-brain reads on any device with the account's key, and leaves the same summary
 under the `wt.share.body` storage key for a my-brain on the same device (both
 apps are served from `chase-grey.github.io`). my-brain's side is
 `src/domain/bodyTracker.ts` in that repo. The summary carries results, never
-rules: change how a week or a goal is judged here and my-brain follows. Renaming
+rules: change how a week or a goal is judged here and my-brain follows. It names
+every reached goal and every committed one, and my-brain links back to the
+Progress tab with `?tab=progress` (`lib/resumeTab.ts`). Renaming
 the key or the route, or reshaping `BrainShare` in `lib/brainShare.ts` breaks that slice, so
 change both repos together.
