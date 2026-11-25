@@ -97,6 +97,22 @@ every animation a set wears, in both sessions:
 `lib/roundVariant.test.ts` walks every shipped stretch routine and lift day and
 fails if a left step and its right step would ask under different keys.
 
+## An animation along the bottom follows the phone's own bottom
+
+Chase's ruling (2026-11-25): anything drawn along the bottom edge of the screen
+takes its shape from the phone it is on. Where the page reaches the glass (an
+installed iPhone app, an Android page drawn behind the gesture pill) it curves
+at that screen's corner radius. Where a navigation bar sits under the page, as
+on Chase's Pixel, the corners are square and the line runs along the top of the
+bar.
+
+`lib/screenBottom` decides which, and `useBottomEdge()` hands a component the
+`radius` and `lift` to draw with; the rest screen's perimeter is the one user
+so far. Never write a corner radius into a component. No browser reports the
+screen's radius, so iPhones come from a table by screen size and an Android
+phone drawn edge to edge gets a share of its width, which is a guess. A screen
+report says what a phone decided (`bottom:` in `npm run save-errors`).
+
 ## Changing something is a hold, never an edit button
 
 Outside Settings and the forms a sheet opens, nothing on a page wears an

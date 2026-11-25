@@ -25,6 +25,12 @@ export type ScreenFacts = {
   visual: { w: number; h: number; top: number; left: number; scale: number } | null
   /** The device's own screen, CSS px, and its pixel ratio. */
   device: { w: number; h: number; dpr: number }
+  /**
+   * The bottom of the screen as lib/screenBottom read it: the system's bottom
+   * inset, and the corner radius and lift the edge animations were given.
+   * Absent on reports from builds before it was read.
+   */
+  bottom?: { safe: number; radius: number; lift: number }
   /** standalone (installed) or browser. */
   display: string
   mode: string

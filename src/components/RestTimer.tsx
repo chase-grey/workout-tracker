@@ -19,6 +19,7 @@ import {
   type RestVariant,
 } from '../lib/restShapes'
 import { usePrefersReducedMotion } from '../lib/useReducedMotion'
+import { useBottomEdge } from '../lib/useBottomEdge'
 import { createRotation } from '../lib/variantRotation'
 import { isAnimationHidden } from '../lib/hiddenAnimations'
 import { useShownAnimation } from '../lib/useShownAnimation'
@@ -101,14 +102,6 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
  */
 const PERIMETER_WEIGHTS = { top: 0.25, side: 0.5, bottom: 0.25 } as const
 
-/**
- * Radius of the perimeter path's bottom corners, in CSS pixels — sized to the
- * phone's own screen curvature so the sand reads as tracing the edge of the
- * display rather than a rectangle drawn just inside it. The top corners stay
- * square: they sit up under the status bar where the curve isn't read anyway.
- */
-const SCREEN_CORNER_RADIUS = 44
-
 /** Half the perimeter stroke, so the 6px band sits fully on screen. */
 const PERIMETER_INSET = 3
 
@@ -124,6 +117,11 @@ const PERIMETER_INSET = 3
  * time weights above are converted into a distance along that real geometry, so
  * the drain still spends a quarter of the rest on the top edge and half of it on
  * the sides no matter how tall the viewport is.
+ *
+ * The bottom is this phone's own (lib/screenBottom): curved with the glass
+ * where the page reaches it, square along the top of a navigation bar where one
+ * sits underneath. The top corners stay square: they sit up under the status
+ * bar where the curve isn't read anyway.
  */
 function PerimeterFrame({ fraction }: { fraction: number }) {
   // Measured off the frame's own box, which is the whole overlay, rather than
@@ -144,11 +142,16 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
     return () => observer.disconnect()
   }, [])
 
-  const { w, h } = size
+  const edge = useBottomEdge()
+  const w = size.w
+  // The edge the line runs along: the bottom of the page, or the top of a bar.
+  const h = Math.max(0, size.h - edge.lift)
   const inset = PERIMETER_INSET
-  // Never let the curve eat more than the path has room for (a short/narrow
-  // viewport would otherwise produce an arc that overshoots the centre line).
-  const r = Math.max(0, Math.min(SCREEN_CORNER_RADIUS, w / 2 - inset, h - inset * 2))
+  // The stroke's centre runs `inset` inside the glass, so its curve is that
+  // much tighter than the glass's to stay parallel to it. And never let the
+  // curve eat more than the path has room for (a short/narrow viewport would
+  // otherwise produce an arc that overshoots the centre line).
+  const r = Math.max(0, Math.min(edge.radius - inset, w / 2 - inset, h - inset * 2))
 
   const weights = PERIMETER_WEIGHTS
   const topFill = clamp01(fraction / weights.top)
@@ -179,7 +182,7 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
 
   return (
     <div ref={host} className="pointer-events-none absolute inset-0 text-accent-bright" aria-hidden>
-      <svg className="absolute inset-0" width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+      <svg className="absolute inset-x-0 top-0" width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
         {([1, -1] as const).map((dir) => (
           <g key={dir} fill="none" stroke="currentColor" strokeWidth={6}>
             {/* The full loop, dim: the path the sand travels. */}
@@ -198,8 +201,8 @@ function PerimeterFrame({ fraction }: { fraction: number }) {
       {/* Grains running along whichever edge the sand is currently crossing. */}
       {fraction > 0 && fraction < 1 && (
         <div
-          className="rest-perimeter-glow absolute inset-0"
-          style={{ borderBottomLeftRadius: r, borderBottomRightRadius: r }}
+          className="rest-perimeter-glow absolute inset-x-0 top-0"
+          style={{ height: h, borderBottomLeftRadius: edge.radius, borderBottomRightRadius: edge.radius }}
         />
       )}
     </div>

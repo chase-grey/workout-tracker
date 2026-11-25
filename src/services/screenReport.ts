@@ -1,4 +1,6 @@
+import { bottomEdge } from '../lib/screenBottom'
 import { trimFacts, type Box, type ScreenFacts } from '../lib/screenReport'
+import { readBottomFacts } from '../lib/useBottomEdge'
 import type { SaveErrorReport } from '../lib/saveErrorReport'
 import { shownAnimationIds } from '../lib/useShownAnimation'
 import { APP_COMMIT } from '../lib/version'
@@ -35,6 +37,7 @@ export function gatherScreen(screen: string): ScreenFacts {
   const vv = window.visualViewport
   const main = document.querySelector('main')
   const boxes: ScreenFacts['boxes'] = []
+  const bottom = readBottomFacts()
   for (const sel of PARTS) {
     const found = [...document.querySelectorAll(sel)].slice(0, PER_PART)
     found.forEach((el, i) => boxes.push({ name: found.length > 1 ? `${sel} ${i + 1}` : sel, box: boxOf(el) }))
@@ -45,6 +48,7 @@ export function gatherScreen(screen: string): ScreenFacts {
     inner: { w: window.innerWidth, h: window.innerHeight },
     visual: vv ? { w: vv.width, h: vv.height, top: vv.offsetTop, left: vv.offsetLeft, scale: vv.scale } : null,
     device: { w: window.screen.width, h: window.screen.height, dpr: window.devicePixelRatio },
+    bottom: { safe: bottom.safeBottom, ...bottomEdge(bottom) },
     display: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
     mode: document.documentElement.dataset.mode ?? 'dark',
     reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,

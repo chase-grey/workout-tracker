@@ -62,6 +62,8 @@ function printScreenReport(r, p) {
   console.log(`  ${p.userAgent}`)
   const vv = p.visual ? `visual ${p.visual.w}x${p.visual.h} top ${p.visual.top} scale ${p.visual.scale}` : 'no visualViewport'
   console.log(`  viewport ${p.inner.w}x${p.inner.h}  ${vv}  screen ${p.device.w}x${p.device.h} @${p.device.dpr}  ${p.display}  ${p.mode}${p.reducedMotion ? '  reduced motion' : ''}`)
+  if (p.bottom)
+    console.log(`  bottom: inset ${p.bottom.safe}  ${p.bottom.radius ? `curved, radius ${p.bottom.radius}` : 'square'}${p.bottom.lift ? `, ${p.bottom.lift} above a bar` : ''}`)
   if (p.animations?.length) console.log(`  animations: ${p.animations.join(', ')}`)
   if (p.scroll) console.log(`  scroll ${p.scroll.top} of ${p.scroll.height - p.scroll.client}`)
   for (const b of p.boxes ?? []) {
