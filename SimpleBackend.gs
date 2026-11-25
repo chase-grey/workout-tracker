@@ -5,11 +5,15 @@
  * ("Execute as: Me", "Who has access: Anyone") and put the /exec URL into the
  * app's Settings (or VITE_API_URL at build time).
  *
- * Two rules hold across every write here, both learned from losing data:
+ * Three rules hold across every write here:
  *   - Mutating routes run under `withLock` (see it for the race they lose).
  *   - A write that stores nothing THROWS rather than returning {saved: 0}. Apps
  *     Script can't set a status code, so a cheerful zero is indistinguishable
  *     from a real save: the client marks the row synced and drops it forever.
+ *   - Cells are written only through `addRow`, `writeRows` and `writeCell`,
+ *     never `appendRow` / `setValue` / `setValues` directly. Sheets runs a
+ *     string that opens with = as a formula, and everyone's tabs and keys are in
+ *     this one book (see plainText).
  *
  * One spreadsheet hosts several people. The manifest scope is
  * `spreadsheets.currentonly`, so a second spreadsheet per person is out; instead
@@ -168,7 +172,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 13
+const BACKEND_VERSION = 14
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -420,7 +424,7 @@ function appendWorkoutRows(rows) {
     !!r.is_historical,
     r.variant || '',
   ])
-  if (values.length) sh.getRange(sh.getLastRow() + 1, 1, values.length, WORKOUT_HEADERS.length).setValues(values)
+  if (values.length) writeRows(sh, sh.getLastRow() + 1, 1, values)
   return { saved: rows.length }
 }
 
@@ -454,7 +458,7 @@ function updateWorkoutNotes(body) {
     if (!r[0] && !r[1]) continue
     const key = r[0] ? String(r[0]) : isoDate(r[1])
     if (key !== session || String(r[3]) !== exercise) continue
-    sh.getRange(i + 1, notesCol).setValue(notes)
+    writeCell(sh, i + 1, notesCol, notes)
     saved++
   }
   if (saved === 0) throw new Error('No rows for ' + exercise + ' in that session')
@@ -473,16 +477,14 @@ function appendBodyWeight(body) {
       .map(function (e) {
         return [e.date || isoDate(new Date()), Number(e.weightLbs)]
       })
-    if (values.length) {
-      sh.getRange(sh.getLastRow() + 1, 1, values.length, BW_HEADERS.length).setValues(values)
-    }
+    if (values.length) writeRows(sh, sh.getLastRow() + 1, 1, values)
     return { saved: values.length }
   }
 
   // Single form: { date, weightLbs }
   const weight = Number(body.weightLbs)
   if (!isFinite(weight) || weight <= 0) throw new Error('Invalid weight')
-  sh.appendRow([body.date || isoDate(new Date()), weight])
+  addRow(sh, [body.date || isoDate(new Date()), weight])
   return { saved: 1 }
 }
 
@@ -499,7 +501,7 @@ function flexSheet() {
   let sh = ss.getSheetByName(TAB_PREFIX + 'flexibility')
   if (!sh) {
     sh = ss.insertSheet(TAB_PREFIX + 'flexibility')
-    sh.getRange(1, 1, 1, FLEX_HEADERS.length).setValues([FLEX_HEADERS])
+    writeRows(sh, 1, 1, [FLEX_HEADERS])
     return sh
   }
   const header = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0]
@@ -517,7 +519,7 @@ function flexSheet() {
       migrated.push(row)
     }
     sh.clearContents()
-    sh.getRange(1, 1, migrated.length, FLEX_HEADERS.length).setValues(migrated)
+    writeRows(sh, 1, 1, migrated)
     return sh
   }
 
@@ -554,7 +556,7 @@ function flexSheet() {
   // A sheet from before the newest column: every existing column keeps its
   // index, so only the header row widens.
   if (header[FLEX_HEADERS.length - 1] !== FLEX_HEADERS[FLEX_HEADERS.length - 1]) {
-    sh.getRange(1, 1, 1, FLEX_HEADERS.length).setValues([FLEX_HEADERS])
+    writeRows(sh, 1, 1, [FLEX_HEADERS])
   }
 
   return sh
@@ -664,7 +666,7 @@ function appendFlex(body) {
         const keep = function (v, i) {
           return v == null ? cur[i] : Number(v)
         }
-        sh.getRange(existingRow, 1, 1, FLEX_HEADERS.length).setValues([
+        writeRows(sh, existingRow, 1, [
           [
             e.date,
             keep(e.splitDeg, 1),
@@ -689,7 +691,7 @@ function appendFlex(body) {
           ],
         ])
       } else {
-        sh.appendRow([
+        addRow(sh, [
           e.date,
           numOrBlank(e.splitDeg),
           numOrBlank(e.coldSplitDeg),
@@ -814,7 +816,7 @@ function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount, help
     }
   }
   if (firstRow === -1) {
-    sh.appendRow([date, calories, label, loggedAt, lastAmount, helpings].concat(macros.map(function (g) { return g === null ? '' : g })))
+    addRow(sh, [date, calories, label, loggedAt, lastAmount, helpings].concat(macros.map(function (g) { return g === null ? '' : g })))
     return
   }
   // A backfill sends no log time; keep the time and the helping already stored
@@ -825,7 +827,7 @@ function upsertCalorieDate(sh, date, calories, label, loggedAt, lastAmount, help
   const amount = loggedAt ? lastAmount : storedLastAmount
   const list = loggedAt ? helpings : storedHelpings
   const grams = macros.map(function (g, m) { return g === null ? storedMacros[m] : g })
-  sh.getRange(firstRow, 1, 1, CALORIE_HEADERS.length).setValues([[date, calories, label, at, amount, list].concat(grams)])
+  writeRows(sh, firstRow, 1, [[date, calories, label, at, amount, list].concat(grams)])
   // Delete leftover legacy rows bottom-up so earlier indices stay valid.
   for (let k = extraRows.length - 1; k >= 0; k--) {
     sh.deleteRow(extraRows[k])
@@ -890,10 +892,10 @@ function appendMeasurements(body) {
       e.absVisibility !== undefined ? e.absVisibility : previous[5] || '',
     ]
     if (existingRow) {
-      sh.getRange(existingRow, 1, 1, MEASUREMENT_HEADERS.length).setValues([values])
+      writeRows(sh, existingRow, 1, [values])
       rows[existingRow - 1] = values
     } else {
-      sh.appendRow(values)
+      addRow(sh, values)
       rowByDate[e.date] = sh.getLastRow()
       rows[rowByDate[e.date] - 1] = values
     }
@@ -942,7 +944,7 @@ function appendDurations(body) {
       ]
     })
   if (values.length) {
-    sh.getRange(sh.getLastRow() + 1, 1, values.length, DURATION_HEADERS.length).setValues(values)
+    writeRows(sh, sh.getLastRow() + 1, 1, values)
   } else if (list.length) {
     // Every submitted row failed the filter. Returning {saved: 0} would read as
     // a successful save, so the client would drop the session and never retry —
@@ -1006,9 +1008,9 @@ function foldExerciseTimes(body) {
     const newN = n + Number(addCount)
     const newAvg = (avg * n + Number(addSumSec)) / newN
     if (existingRow) {
-      sh.getRange(existingRow, 1, 1, EXERCISE_TIME_HEADERS.length).setValues([[key, newAvg, newN]])
+      writeRows(sh, existingRow, 1, [[key, newAvg, newN]])
     } else {
-      sh.appendRow([key, newAvg, newN])
+      addRow(sh, [key, newAvg, newN])
       rowByKey[key] = sh.getLastRow()
     }
     return true
@@ -1065,11 +1067,11 @@ function savePlan(plan) {
   const rows = sh.getDataRange().getValues()
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === 'plan') {
-      sh.getRange(i + 1, 2).setValue(value)
+      writeCell(sh, i + 1, 2, value)
       return { saved: 1 }
     }
   }
-  sh.appendRow(['plan', value])
+  addRow(sh, ['plan', value])
   return { saved: 1 }
 }
 
@@ -1127,11 +1129,11 @@ function saveSettings(settings) {
       if (stored && String(stored.updatedAt || '') > String(settings.updatedAt || '')) {
         return { saved: 0, stale: true }
       }
-      sh.getRange(i + 1, 2).setValue(value)
+      writeCell(sh, i + 1, 2, value)
       return { saved: 1 }
     }
   }
-  sh.appendRow(['settings', value])
+  addRow(sh, ['settings', value])
   return { saved: 1 }
 }
 
@@ -1166,11 +1168,11 @@ function saveShare(share) {
   const rows = sh.getDataRange().getValues()
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === 'share') {
-      sh.getRange(i + 1, 2).setValue(value)
+      writeCell(sh, i + 1, 2, value)
       return { saved: 1 }
     }
   }
-  sh.appendRow(['share', value])
+  addRow(sh, ['share', value])
   return { saved: 1 }
 }
 
@@ -1199,7 +1201,7 @@ function appendSaveError(report) {
   const sh = ownerSheet('save_errors', SAVE_ERROR_HEADERS)
   let payload = report.payload === undefined ? '' : JSON.stringify(report.payload)
   if (payload.length > SAVE_ERROR_PAYLOAD_MAX) payload = payload.slice(0, SAVE_ERROR_PAYLOAD_MAX)
-  sh.appendRow([
+  addRow(sh, [
     new Date().toISOString(),
     String(report.build || ''),
     String(report.route || ''),
@@ -1295,11 +1297,46 @@ const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 const ID_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
 
 // Text a person typed, made safe to put in a cell. Sheets reads a value that
-// opens with = + - or @ as a formula, and these tabs are the owner's own book:
-// a name or a message must never be able to run there.
+// opens with = + - or @ as a formula, and every account's tabs are in the one
+// book, beside the users tab and its keys: a note that ran as a formula could
+// read any of them and hand the answer back on the next fetch.
+//
+// A leading apostrophe is how Sheets is told "this is text". It is not part of
+// the value: the cell holds, and getValues returns, the string without it. So
+// what was typed comes back exactly, a note that opens with a minus included.
+// A string that already opens with an apostrophe gets one too, or Sheets would
+// eat the one that was typed. White space ahead of the sign doesn't excuse it.
 function plainText(value) {
   const s = String(value == null ? '' : value)
-  return /^[=+\-@]/.test(s) ? "'" + s : s
+  return /^'|^[\s\u0000-\u001f]*[=+\-@]/.test(s) ? "'" + s : s
+}
+
+// One cell's value as it may be written: numbers, booleans and dates as they
+// are, and anything else as text that cannot run (see plainText).
+function cellValue(value) {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (Object.prototype.toString.call(value) === '[object Date]') return value
+  return plainText(value)
+}
+
+function cellRow(values) {
+  return values.map(cellValue)
+}
+
+// The only three places this file writes to the book. Every write goes through
+// one of them, so no route can put a string in a cell that Sheets would run;
+// scripts/formulaBackend.test.mjs fails on a write made any other way.
+function writeRows(sh, row, col, values) {
+  sh.getRange(row, col, values.length, values[0].length).setValues(values.map(cellRow))
+}
+
+function writeCell(sh, row, col, value) {
+  sh.getRange(row, col).setValue(cellValue(value))
+}
+
+function addRow(sh, values) {
+  sh.appendRow(cellRow(values))
 }
 
 function randomFrom(alphabet, length) {
@@ -1414,7 +1451,7 @@ function registerAccount(body) {
   const token = newToken()
   const cells = loginCells(email, password)
   const now = new Date().toISOString()
-  users.appendRow([token, newUserId(rows), name, now, cells[0], cells[1], cells[2], '', now])
+  addRow(users, [token, newUserId(rows), name, now, cells[0], cells[1], cells[2], '', now])
   return { saved: 1, token: token, name: name, owner: false }
 }
 
@@ -1459,13 +1496,13 @@ function claimOwner(body) {
   if (taken > 0 && taken !== owner) throw new Error('An account with that email already exists')
   const cells = loginCells(email, password)
   if (owner > 0) {
-    users.getRange(owner + 1, U_EMAIL + 1, 1, 3).setValues([cells])
+    writeRows(users, owner + 1, U_EMAIL + 1, [cells])
     return { saved: 1, token: String(rows[owner][U_TOKEN]), name: String(rows[owner][U_NAME]), owner: true }
   }
   const token = newToken()
   const name = cleanName(body.name)
   const now = new Date().toISOString()
-  users.appendRow([token, '', name, now, cells[0], cells[1], cells[2], 'yes', now])
+  addRow(users, [token, '', name, now, cells[0], cells[1], cells[2], 'yes', now])
   return { saved: 1, token: token, name: name, owner: true }
 }
 
@@ -1481,7 +1518,7 @@ function touchSeen(at, row) {
     const key = 'seen_' + String(row[U_TOKEN]).slice(0, 16)
     if (cache.get(key)) return
     cache.put(key, '1', SEEN_EVERY_SECONDS)
-    ownerSheet('users', USER_HEADERS).getRange(at + 1, U_SEEN + 1).setValue(new Date().toISOString())
+    writeCell(ownerSheet('users', USER_HEADERS), at + 1, U_SEEN + 1, new Date().toISOString())
   } catch (err) {
     /* last_seen stays as it was */
   }
@@ -1520,7 +1557,7 @@ function setLogin(token, body) {
   if (at < 0) throw new Error('Sign in required')
   const taken = emailRowAt(rows, email)
   if (taken > 0 && taken !== at) throw new Error('An account with that email already exists')
-  users.getRange(at + 1, U_EMAIL + 1, 1, 3).setValues([loginCells(email, password)])
+  writeRows(users, at + 1, U_EMAIL + 1, [loginCells(email, password)])
   return { saved: 1 }
 }
 
@@ -1534,7 +1571,7 @@ function mintInvite(body) {
   // be stored as one and never match what was typed back.
   let code = randomFrom(INVITE_ALPHABET, 8)
   while (taken[code] || /^\d+(E\d+)?$/.test(code)) code = randomFrom(INVITE_ALPHABET, 8)
-  sh.appendRow([code, new Date().toISOString(), '', ''])
+  addRow(sh, [code, new Date().toISOString(), '', ''])
   return { saved: 1, code: code }
 }
 
@@ -1581,8 +1618,8 @@ function joinAccount(body) {
   while (taken[id] || /^\d/.test(id)) id = randomFrom(ID_ALPHABET, 6)
   const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '')
   const now = new Date().toISOString()
-  users.appendRow([token, id, name, now])
-  invites.getRange(at + 1, 3, 1, 4).setValues([[now, name, claim, id]])
+  addRow(users, [token, id, name, now])
+  writeRows(invites, at + 1, 3, [[now, name, claim, id]])
   return { saved: 1, token: token, name: name }
 }
 
@@ -1630,9 +1667,9 @@ function saveCardio(body) {
   if (!String(body.kind || '').trim()) throw new Error('A cardio kind is required')
   const minutes = optionalPositive(body.minutes)
   const distance = optionalPositive(body.distanceMi)
-  const row = [id, body.date, plainText(body.kind || ''), minutes, distance]
-  if (at === -1) sh.appendRow(row)
-  else sh.getRange(at, 1, 1, CARDIO_HEADERS.length).setValues([row])
+  const row = [id, body.date, String(body.kind || ''), minutes, distance]
+  if (at === -1) addRow(sh, row)
+  else writeRows(sh, at, 1, [row])
   return { saved: 1 }
 }
 
@@ -1649,11 +1686,11 @@ function appendFeedback(body) {
   const message = String((body && body.message) || '').trim()
   if (!message) throw new Error('A message is required')
   if (message.length > 4000) throw new Error('That message is too long')
-  ownerSheet('feedback', FEEDBACK_HEADERS).appendRow([
+  addRow(ownerSheet('feedback', FEEDBACK_HEADERS), [
     new Date().toISOString(),
     ACCOUNT ? ACCOUNT.name : '',
-    plainText((body && body.build) || ''),
-    plainText(message),
+    String((body && body.build) || ''),
+    message,
   ])
   return { saved: 1 }
 }
@@ -1924,7 +1961,7 @@ function sheet(name, headers, owner) {
       if (!sh) throw err
       return sh
     }
-    sh.getRange(1, 1, 1, headers.length).setValues([headers])
+    writeRows(sh, 1, 1, [headers])
     return sh
   }
   // A tab created before a column was added is missing that header cell, and the
@@ -1934,7 +1971,7 @@ function sheet(name, headers, owner) {
   const width = sh.getLastColumn()
   if (width < headers.length) {
     const missing = headers.slice(width)
-    sh.getRange(1, width + 1, 1, missing.length).setValues([missing])
+    writeRows(sh, 1, width + 1, [missing])
   }
   return sh
 }

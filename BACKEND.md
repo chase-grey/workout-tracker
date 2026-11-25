@@ -46,6 +46,14 @@ Apps Script web app (`SimpleBackend.gs`). No service account, no server to host.
   and skips a preflight Apps Script can't answer. The body is JSON.
 - Apps Script `/exec` responses are readable cross-origin (from GitHub Pages)
   for these simple requests — no custom CORS headers are set server-side.
+- Nothing anyone types can run as a formula. Sheets treats a string that opens
+  with `=` (and, typed by hand, `+`, `-` or `@`) as one, and every account's
+  tabs sit in the same book as the `users` tab and its keys. So the script
+  writes cells only through `addRow`, `writeRows` and `writeCell`, which mark
+  such a string as text with a leading apostrophe. Sheets does not keep the
+  apostrophe as part of the value, so the app reads back exactly what was
+  typed. A new write path uses those three; `scripts/formulaBackend.test.mjs`
+  fails on a raw `appendRow`, `setValue` or `setValues`.
 - ⚠️ For a routine update, never `clasp deploy` (create-deployment): it makes a
   new web app at a new URL. `npm run deploy:backend` uses `clasp redeploy`
   against the existing deployment, and verifies the live version afterwards.
