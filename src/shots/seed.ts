@@ -190,7 +190,7 @@ export function seededData(today: Date = new Date()): ShotData {
  * it, so the app opens signed in with nowhere to sync to. The backend address
  * points at a closed local port: nothing the shots do can reach the real one.
  */
-export function writeData(data: ShotData, mode: 'dark' | 'light') {
+export function writeData(data: ShotData, mode: 'dark' | 'light', accent?: string | null) {
   localStorage.clear()
   const put = (key: string, value: unknown) => localStorage.setItem(key, JSON.stringify(value))
   put('wt.settings', {
@@ -204,7 +204,8 @@ export function writeData(data: ShotData, mode: 'dark' | 'light') {
     setupComplete: true,
     tourDone: true,
   })
-  put('wt:theme', { mode })
+  // A swatch by name, or any colour as #rrggbb.
+  put('wt:theme', accent?.startsWith('#') ? { mode, accent: 'custom', custom: accent } : accent ? { mode, accent } : { mode })
   put('wt.cache.workouts', data.workouts)
   put('wt.cache.bodyweight', data.bodyweight)
   put('wt.cache.measurements', data.measurements)

@@ -180,8 +180,8 @@ worth trusting belongs in `src/lib` with a test beside it rather than inline in 
 
 A change to a rhythm figure, a hold or rest shape, a chart, or anything on
 Today is not done until it has been looked at. Run `npm run shots -- <family>`
-(`rhythm`, `hold`, `rest`, `today`, `progress`, `session`; more words narrow it,
-e.g. `-- rhythm anvil`) and open `.scratch/shots/index.html` or the
+(`rhythm`, `hold`, `rest`, `today`, `progress`, `session`, `settings`; more words narrow it,
+e.g. `-- rhythm anvil`; `--accent rose` or `--accent "#ff6600"` wears another colour) and open `.scratch/shots/index.html` or the
 `sheet-*.png` beside it before reporting the change. It draws every figure and
 shape at the moments that matter (a push, the rest, the white arriving, the
 closing rep) in headless Edge and Firefox at 390x844, and opens the real app on

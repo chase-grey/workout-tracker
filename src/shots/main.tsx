@@ -270,7 +270,7 @@ declare global {
       list: () => Pick<Shot, 'id' | 'family' | 'variant' | 'group' | 'phase'>[]
       show: (id: string) => Promise<boolean>
       /** Seed the app's storage: a snapshot if one is handed over, else the made-up history. */
-      seed: (data: ShotData | null, mode: 'dark' | 'light') => 'snapshot' | 'seeded'
+      seed: (data: ShotData | null, mode: 'dark' | 'light', accent?: string | null) => 'snapshot' | 'seeded'
     }
   }
 }
@@ -278,8 +278,8 @@ declare global {
 window.__shots = {
   list: () => shots.map(({ id, family, variant, group, phase }) => ({ id, family, variant, group, phase })),
   show,
-  seed: (data, mode) => {
-    writeData(data ?? seededData(), mode)
+  seed: (data, mode, accent) => {
+    writeData(data ?? seededData(), mode, accent)
     return data ? 'snapshot' : 'seeded'
   },
 }

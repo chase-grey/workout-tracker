@@ -3,11 +3,12 @@
  * Look at the app before reporting on it.
  *
  *   npm run shots                       # everything, in Chromium and Firefox
- *   npm run shots -- rhythm             # one family: rhythm, hold, rest, today, progress, session
+ *   npm run shots -- rhythm             # one family: rhythm, hold, rest, today, progress, session, settings
  *   npm run shots -- rhythm anvil       # narrower: every word must match a part of family/variant/phase
  *   npm run shots -- progress --browser firefox     # chromium | firefox | all (the default)
  *   npm run shots -- --refresh-data     # pull the owner's history first (needs the owner key; see below)
  *   npm run shots -- today --light      # on the light ground
+ *   npm run shots -- rest --accent "#ff6600"   # in a swatch (rose) or a colour of your own
  *
  * Renders the app's visual surfaces at a phone's 390x844 and writes one PNG per
  * shot plus a contact sheet to .scratch/shots/: index.html, and pictures of it,
@@ -46,7 +47,7 @@ const SHEET_WIDTH = 3000
 const THUMB_WIDTH = 156
 /** Taller than this and a browser won't hand back one screenshot of the page. */
 const SHEET_MAX_HEIGHT = 9000
-const APP_FAMILIES = ['today', 'progress', 'session']
+const APP_FAMILIES = ['today', 'progress', 'session', 'settings']
 const FAMILIES = ['rhythm', 'hold', 'rest', ...APP_FAMILIES]
 
 /* ------------------------------------------------------------------ args */
@@ -63,7 +64,9 @@ if (!['chromium', 'firefox', 'all'].includes(browserArg)) {
   process.exit(1)
 }
 const mode = flag('--light') ? 'light' : 'dark'
-const words = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--browser').map((w) => w.toLowerCase())
+/** A swatch's name or `#rrggbb`; unset wears the default. */
+const accent = option('--accent') ?? null
+const words = args.filter((a, i) => !a.startsWith('--') && !['--browser', '--accent'].includes(args[i - 1])).map((w) => w.toLowerCase())
 // A family's name picks the family (several pick each of them); any other word
 // has to match the variant or the phase.
 const wanted = (id) => {
@@ -263,6 +266,35 @@ const APP_FLOWS = [
     },
   },
   {
+    family: 'settings',
+    ids: ['settings/theme', 'settings/custom-colour'],
+    async run({ page, take, note }) {
+      if (!(await page.eval(pressJs('settings', false)))) return note('settings: no tab button')
+      const toSwatches = `(() => {
+        const b = document.querySelector('button[aria-label="custom"]')
+        if (!b) return false
+        b.scrollIntoView({ block: 'center' })
+        return true
+      })()`
+      // The tab is loaded on first use, and the look of the app is on its
+      // second page; give both a while to arrive.
+      let there = false
+      for (let i = 0; i < 20 && !there; i++) {
+        await sleep(400)
+        await page.eval(pressJs('app'))
+        there = await page.eval(toSwatches)
+      }
+      if (!there) return note('settings: no custom swatch')
+      await sleep(300)
+      await take('settings/theme')
+      await page.eval(pressJs('custom'))
+      await sleep(400)
+      await page.eval(toSwatches)
+      await sleep(300)
+      await take('settings/custom-colour')
+    },
+  },
+  {
     family: 'progress',
     ids: [
       'progress/muscle-vs-fat',
@@ -398,7 +430,7 @@ async function shootWith(kind, base, outDir, snapshot) {
 
     // The figures and shapes, on the shots page.
     await page.goto(`${base}/shots.html`)
-    const source = await page.eval(`window.__shots.seed(${JSON.stringify(snapshot)}, ${JSON.stringify(mode)})`)
+    const source = await page.eval(`window.__shots.seed(${JSON.stringify(snapshot)}, ${JSON.stringify(mode)}, ${JSON.stringify(accent)})`)
     await page.goto(`${base}/shots.html`)
     const size = await page.eval(`({ w: innerWidth, h: innerHeight })`)
     if (size.w !== WIDTH || size.h !== HEIGHT) notes.push(`viewport is ${size.w}x${size.h}, not ${WIDTH}x${HEIGHT}`)
@@ -413,7 +445,7 @@ async function shootWith(kind, base, outDir, snapshot) {
     const flows = APP_FLOWS.filter((f) => f.ids.some(wanted))
     const open = async () => {
       await page.goto(`${base}/shots.html`)
-      await page.eval(`window.__shots.seed(${JSON.stringify(snapshot)}, ${JSON.stringify(mode)})`)
+      await page.eval(`window.__shots.seed(${JSON.stringify(snapshot)}, ${JSON.stringify(mode)}, ${JSON.stringify(accent)})`)
       await page.goto(`${base}/`)
       // A press made from script has no real pointer behind it, so there is
       // nothing for the app's setPointerCapture to capture. Let it pass.
@@ -504,7 +536,7 @@ function sheetHtml(runs, outDir, source) {
   a { display: flex; flex-direction: column; gap: 2px; color: #aaa; text-decoration: none; font-size: 11px; }
   img { display: block; border: 1px solid #3a3a3a; }
 </style>
-<header>${esc(new Date().toLocaleString())} · ${WIDTH}x${HEIGHT} · ${esc(mode)} · seen in ${esc(seen)} · history: ${esc(source)} · the phone was not observed</header>
+<header>${esc(new Date().toLocaleString())} · ${WIDTH}x${HEIGHT} · ${esc(mode)}${accent ? ` · accent ${esc(accent)}` : ''} · seen in ${esc(seen)} · history: ${esc(source)} · the phone was not observed</header>
 ${sections.join('\n')}
 </html>
 `
