@@ -10,7 +10,7 @@
  *
  * A page here is: go to a URL, evaluate an expression, take a screenshot.
  */
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
@@ -118,11 +118,28 @@ function removeProfile(dir) {
   }
 }
 
+/** The browsers this process has started and not yet seen exit. */
+const running = new Set()
+
+function start(kind, exe, args, options) {
+  const child = spawn(exe, args, options)
+  child.shotsKind = kind
+  running.add(child)
+  child.once('exit', () => running.delete(child))
+  return child
+}
+
+/** End a browser and the processes it started; on Windows the first is only a launcher. */
+function endTree(child) {
+  if (process.platform === 'win32' && child.pid) execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {})
+  else child.kill()
+}
+
 /** Wait for a browser to exit by itself, and end it if it hasn't. */
 async function gone(child) {
   const exited = new Promise((resolve) => child.once('exit', resolve))
   if (child.exitCode == null) await Promise.race([exited, sleep(5000)])
-  if (child.exitCode == null) child.kill()
+  if (child.exitCode == null) endTree(child)
   await sleep(300)
 }
 
@@ -132,7 +149,8 @@ const asJson = (expression) => `(async () => JSON.stringify((await (${expression
 async function launchChromium(exe, profileDir) {
   cleanProfile(profileDir)
   const port = await freePort()
-  const child = spawn(
+  const child = start(
+    'chromium',
     exe,
     [
       '--headless=new',
@@ -237,7 +255,8 @@ async function launchFirefox(exe, profileDir) {
       .join('\n'),
   )
   const port = await freePort()
-  const child = spawn(
+  const child = start(
+    'firefox',
     exe,
     ['--headless', '--no-remote', '--profile', profileDir, '--remote-debugging-port', String(port), 'about:blank'],
     { stdio: 'ignore' },
@@ -251,6 +270,8 @@ async function launchFirefox(exe, profileDir) {
         if (e.level === 'error') errors.push(e.text ?? '')
       }),
     'Firefox',
+    // The first start after Firefox has updated itself takes the better part of a minute.
+    360,
   )
   const call = async (method, params) => {
     const msg = await send(method, params)
@@ -306,9 +327,16 @@ async function launchFirefox(exe, profileDir) {
   }
 }
 
-/** Start a browser, or throw saying why it couldn't be. */
+/** Start a browser, or throw saying why it couldn't be, leaving none behind. */
 export async function launch(kind, profileDir) {
   const exe = findBrowser(kind)
   if (!exe) throw new Error(`no ${kind} found on this machine`)
-  return kind === 'firefox' ? launchFirefox(exe, profileDir) : launchChromium(exe, profileDir)
+  try {
+    return await (kind === 'firefox' ? launchFirefox(exe, profileDir) : launchChromium(exe, profileDir))
+  } catch (e) {
+    // A browser that started but never answered is still running, headless
+    // and invisible, holding its profile and its port.
+    for (const child of running) if (child.shotsKind === kind) endTree(child)
+    throw e
+  }
 }
