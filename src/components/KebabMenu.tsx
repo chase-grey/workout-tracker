@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MdMoreVert } from 'react-icons/md'
 import { withHidden } from '../lib/hiddenAnimations'
 import { useTopAnimation } from '../lib/useShownAnimation'
 import { useData } from '../store/DataContext'
+import { useBackGuard } from '../lib/useBackGuard'
 import { useControlLabel } from '../lib/useControlLabel'
 import { ControlWord } from './ControlWord'
 
@@ -16,6 +17,27 @@ export function KebabMenu({ items: own }: { items: MenuItem[] }) {
   // session, without either one having to wire it in (see lib/useShownAnimation).
   const shown = useTopAnimation()
   const label = useControlLabel('more')
+
+  // An open menu is something over the screen, so Android back closes it and
+  // does nothing else, as it does for a sheet. Left to the session's own guard
+  // the press set the whole session aside with the menu still open inside it,
+  // and coming back to the session brought the menu up with it.
+  useBackGuard(open, () => setOpen(false))
+
+  // Nor does it outlive the screen it was opened on. A session draws its header
+  // three times over (the set, the rest, the count), each with a menu of its
+  // own, and stays mounted while it is set aside; a menu left open on a set
+  // that then ended itself sat under the rest and was up again when the rest
+  // closed. So after every render an open menu checks that its button is still
+  // the thing on screen where it stands, and closes if it is hidden or covered.
+  const root = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = root.current
+    if (!open || !el) return
+    const r = el.getBoundingClientRect()
+    const top = r.width > 0 ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null
+    if (!top || !el.contains(top)) setOpen(false)
+  })
   const items: MenuItem[] = shown
     ? [
         {
@@ -33,7 +55,7 @@ export function KebabMenu({ items: own }: { items: MenuItem[] }) {
     : own
 
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <button
         onClick={() => {
           if (!open) label.used()

@@ -30,6 +30,11 @@ the stretch routine (`src/features/flex/StretchSession.tsx`) — obey one rule:
   handler on a single "nothing between you and the set" flag (`setScreenLive` /
   `setLive`), and anything that floats over a tappable screen — the kebab's
   dismiss backdrop, the header's own controls — stops its own clicks.
+- **A menu closes with the screen it was opened on.** The kebab's menu answers
+  Android back by closing, like a sheet, and closes when its screen is covered
+  or set aside (`components/KebabMenu`). Each session draws its header on the
+  set, the rest and the count, and stays mounted while minimized, so anything
+  else in that header that holds open state needs the same two things.
 
 A button pressed straight out of a weight/reps field must use
 `lib/usePressAction`: the press blurs the input, the keyboard closes, the page
