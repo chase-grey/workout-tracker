@@ -185,6 +185,15 @@ const tapScreenJs = `(() => {
   return true
 })()`
 
+/** Press the first visible button whose label holds this. */
+const pressContainingJs = (part) => `(() => {
+  const b = [...document.querySelectorAll('button')].find((b) =>
+    (b.getAttribute('aria-label') ?? b.textContent ?? '').includes(${JSON.stringify(part)}) && b.getClientRects().length > 0)
+  if (!b) return false
+  b.click()
+  return true
+})()`
+
 /** A tap on whatever is drawn over the session: the rest, the count, "ready?". */
 const tapOverlayJs = `(() => {
   const el = document.querySelector('.fixed.inset-0.z-50')
@@ -381,6 +390,9 @@ const APP_FLOWS = [
       ]),
       'session/pelvic-tilt-into-thrust',
       'session/pelvic-tilt-thrust',
+      'session/pelvic-tilt-thrust-history',
+      'session/pelvic-tilt-plank',
+      'session/pelvic-tilt-plank-history',
       'session/stretch-paused',
       'session/stretch-how-to',
     ],
@@ -468,6 +480,30 @@ const APP_FLOWS = [
           await page.eval(tapOverlayJs)
           await sleep(1200)
           await take('session/pelvic-tilt-thrust')
+          // The sets this routine logs, each with its past attempts open (see
+          // flexSteps.loggedExerciseOf): the thrust it is on, then the plank.
+          const history = async (name, id) => {
+            if (await page.eval(pressJs(`recent sessions for ${name}`))) {
+              await sleep(900)
+              await take(`session/pelvic-tilt-${id}-history`)
+              await page.eval(`document.querySelector('.fixed.inset-0.z-60')?.click()`)
+              await sleep(600)
+            } else note(`session: no history button on the ${name}`)
+          }
+          await history('hip thrust', 'thrust')
+          if (await page.eval(pressContainingJs('View checklist'))) {
+            await sleep(700)
+            await page.eval(pressJs('skip hip thrust'))
+            await sleep(400)
+            await page.eval(`document.querySelector('.fixed.inset-0.z-60')?.click()`)
+            await sleep(900)
+            for (let i = 0; i < 3 && (await page.eval(`!!document.querySelector('.fixed.inset-0.z-50')`)); i++) {
+              await page.eval(tapOverlayJs)
+              await sleep(1500)
+            }
+            await take('session/pelvic-tilt-plank')
+            await history('RKC plank', 'plank')
+          } else note('session: no checklist on the stretch')
         }
         if (routine !== STRETCH_ROUTINES[0]) continue
         // The pause curtain first, then back off it for the ? beside the movement.

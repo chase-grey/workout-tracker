@@ -1,4 +1,4 @@
-import { buildFlexSteps, buildSessionSteps, carriedWeight, heldSets, loadedExerciseOf, loadedTarget, stepWorkSec } from '../lib/flexSteps'
+import { buildCoreSteps, buildFlexSteps, buildSessionSteps, carriedWeight, heldSets, loadedExerciseOf, loadedTarget, loggedExerciseOf, stepWorkSec } from '../lib/flexSteps'
 import { toISODate } from '../lib/dates'
 import type { WorkoutRow } from '../types'
 import { settleInSec } from '../lib/settleIn'
@@ -155,6 +155,27 @@ describe('a loaded exercise in a routine', () => {
     expect(heldSets(steps, new Set([a]), { [a]: 34, [b]: 29 })[0].sets).toHaveLength(1)
     expect(heldSets(steps, new Set([a, b]), { [a]: 0 })).toEqual([])
     expect(steps.filter((s) => s.kind === 'flex' && s.openHold && s.exKey !== 'rkc_plank')).toEqual([])
+  })
+
+  it('offers past attempts on every set that is logged, in every routine', () => {
+    const everySession = [
+      ...FLEX_ROUTINE_KEYS.map((k) => buildSessionSteps(FLEX_ROUTINES[k].blocks, { core: true })),
+      buildCoreSteps(),
+    ]
+    for (const session of everySession) {
+      for (const s of session) {
+        // What finishing writes as workout rows: typed-in sets and open holds.
+        const logs = s.kind === 'core' || !!s.openHold
+        expect(loggedExerciseOf(s)?.key, s.stepKey).toBe(logs ? s.exKey : undefined)
+      }
+      // Whatever heldSets would file has a history to open.
+      const all = new Set(session.map((s) => s.stepKey))
+      const secs = Object.fromEntries(session.map((s) => [s.stepKey, 30]))
+      const withHistory = new Set(session.map((s) => loggedExerciseOf(s)?.key))
+      for (const h of heldSets(session, all, secs)) expect(withHistory.has(h.exercise), h.exercise).toBe(true)
+    }
+    expect(steps.map((s) => loggedExerciseOf(s)).filter((l) => l).map((l) => `${l!.key}:${l!.unit}`))
+      .toEqual(['hip_thrust:rep', 'hip_thrust:rep', 'hip_thrust:rep', 'rkc_plank:sec', 'rkc_plank:sec'])
   })
 
   it('is left out of the stretch-only steps', () => {

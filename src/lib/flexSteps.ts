@@ -158,6 +158,22 @@ export function heldSets(
 export type SessionStep = FlexSetStep | CoreSetStep
 
 /**
+ * The movement whose history this step adds to, or null for a step that logs no
+ * sets of its own (a paced stretch, a prescribed hold). Anything a session
+ * writes as workout rows has past attempts to read the next one against, so the
+ * set screen offers them — the same trend button every lift wears (see
+ * ActiveSession's topBar). Typed-in sets count reps; an open hold logs the
+ * seconds its clock read, unloaded (see {@link heldSets}).
+ */
+export function loggedExerciseOf(
+  step: SessionStep,
+): { key: string; name: string; unit: 'rep' | 'sec' } | null {
+  if (step.kind === 'core') return { key: step.exKey, name: step.exName, unit: 'rep' }
+  if (step.openHold) return { key: step.exKey, name: step.exName, unit: 'sec' }
+  return null
+}
+
+/**
  * Identity of one stretch round, shared by its left and right steps. The two
  * sides still keep distinct `stepKey`s for completion tracking.
  */

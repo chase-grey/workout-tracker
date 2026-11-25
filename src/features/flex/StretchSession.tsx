@@ -1,7 +1,7 @@
 import { finishEarlyPrompt, loadWord } from '../../lib/sessionWords'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSessionFade } from '../../lib/useSessionFade'
-import { MdBlock, MdBolt, MdCheckCircle, MdRadioButtonUnchecked, MdTrackChanges } from 'react-icons/md'
+import { MdBlock, MdBolt, MdCheckCircle, MdRadioButtonUnchecked, MdShowChart, MdTrackChanges } from 'react-icons/md'
 import { useData } from '../../store/DataContext'
 import { RestTimer, createHoldVariantSelector } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
@@ -17,6 +17,7 @@ import { PauseOverlay } from '../../components/PauseOverlay'
 import { ConfirmSheet } from '../../components/ConfirmSheet'
 import { TitleWithHowTo } from '../../components/HowToButton'
 import { HowToSheet } from '../../components/HowToSheet'
+import { ExerciseHistorySheet } from '../../components/ExerciseHistorySheet'
 import { RhythmGuide } from '../../components/RhythmGuide'
 import { startsNewExercise } from '../../lib/fastMode'
 import { KebabMenu, type MenuItem } from '../../components/KebabMenu'
@@ -31,6 +32,7 @@ import {
   heldSets,
   loadedExerciseOf,
   loadedTarget,
+  loggedExerciseOf,
   flexRoundKey,
   skipsFinalRepRest,
   stepWorkSec,
@@ -388,6 +390,10 @@ export function StretchSession({
   // rather than the button's own, because a sheet over a stretch has to stop its
   // clock like every other one (see `routineLive`).
   const [howToFor, setHowToFor] = useState<{ key: string; name: string } | null>(null)
+  // The recent-sessions sheet for the move on screen, for one whose sets are
+  // logged (see flexSteps.loggedExerciseOf). A sheet like the how-to's.
+  const [historyFor, setHistoryFor] = useState<ReturnType<typeof loggedExerciseOf>>(null)
+  const historyLabel = useControlLabel('history')
   // A one-off, longer get-into-position count that replaces the upcoming set's
   // own — set when a photo screen hands the routine straight to a stretch, and
   // when a side switch replaces the settle-in with a reposition.
@@ -546,6 +552,7 @@ export function StretchSession({
   useBackGuard(showList, () => setShowList(false))
   useBackGuard(asking != null, () => setAsking(null))
   useBackGuard(howToFor != null, () => setHowToFor(null))
+  useBackGuard(historyFor != null, () => setHistoryFor(null))
 
   // Back into the rest the last tap cut short, with the seconds it had left (see
   // lib/leftRest). The same interval, not a new one: the slice before the tap was
@@ -593,7 +600,7 @@ export function StretchSession({
   // screen you're reading is counting time you weren't in the pose. The workout's
   // timed holds run on the same rule (see ActiveSession's setScreenLive).
   const readyToFinish = N > 0 && steps.every((step) => done.has(step.stepKey)) && photos == null
-  const routineLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && asking == null && howToFor == null
+  const routineLive = !readyToFinish && started && rest == null && photos == null && !paused && !showList && asking == null && howToFor == null && historyFor == null
   const setLive = routineLive && !preparing
 
   // With nothing over the routine — the get-into-position count included, which
@@ -1205,6 +1212,7 @@ export function StretchSession({
   // Which set it names is right on all three: the flow advances *before* resting
   // (see advanceFrom), so through a rest and the count that follows it `step` is
   // already the set they lead into.
+  const logged = loggedExerciseOf(step)
   const topBar = (
     <div className="flex flex-col gap-3">
       {/* How much of the whole routine is still ahead of you. */}
@@ -1240,6 +1248,21 @@ export function StretchSession({
           {/* No turbo here: every stretch set already advances itself, and
               there's no learned per-set timing to run the core block's rep entry
               on. */}
+          {/* A move whose sets are logged has past attempts to read this one
+              against, as every lift does (see flexSteps.loggedExerciseOf). */}
+          {logged && (
+            <button
+              onClick={() => {
+                historyLabel.used()
+                setHistoryFor(logged)
+              }}
+              aria-label={`recent sessions for ${logged.name}`}
+              className="flex min-h-[44px] w-11 flex-col items-center justify-center rounded-xl text-neutral-400 active:bg-surface-2"
+            >
+              <MdShowChart className="text-2xl" aria-hidden />
+              <ControlWord show={historyLabel.show} word={historyLabel.word} />
+            </button>
+          )}
           <FastForwardToggle mode={fast ? 'on' : 'off'} onPress={() => setFast(!fast)} />
           <KebabMenu items={menuItems} />
         </div>
@@ -1445,6 +1468,23 @@ export function StretchSession({
 
       {howToFor && (
         <HowToSheet exerciseKey={howToFor.key} name={howToFor.name} onClose={() => setHowToFor(null)} />
+      )}
+      {historyFor && (
+        <ExerciseHistorySheet
+          exerciseKey={historyFor.key}
+          name={historyFor.name}
+          // What the set on screen is asking for: the typed-in sets' next
+          // target, or the time an open hold is out to beat.
+          target={
+            historyFor.unit === 'sec'
+              ? { weightLbs: null, reps: holdTarget.targetSec }
+              : coreTarget
+          }
+          // An open hold is logged unloaded, in seconds (see flexSteps.heldSets).
+          repsOnly={historyFor.unit === 'sec'}
+          unit={historyFor.unit}
+          onClose={() => setHistoryFor(null)}
+        />
       )}
       {photos && <PhotoStep gate={photos.gate} onCapture={logMeasurement} onDone={closePhotos} />}
 

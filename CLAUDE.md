@@ -81,6 +81,17 @@ is not asking.
 - `settleIn.test.ts` lists the exercises that wait, and `npm run shots --
   session pelvic` draws the way into the thrust.
 
+## A set that is logged shows its past attempts
+
+Any set a session writes as workout rows wears the trend button
+(`MdShowChart`, opening `ExerciseHistorySheet`) beside the title, in both
+sessions (2026-11-25). In the lift session that is every set, one per station
+on a round screen. In the stretch session it is whatever
+`flexSteps.loggedExerciseOf(step)` names: the typed-in sets (the hip thrust,
+the sit-ups) and an open hold (the RKC plank), and never a paced stretch, which
+logs nothing. A new kind of step that logs sets joins `loggedExerciseOf`;
+`flexRoutines.test.ts` walks every shipped routine and fails if one is missed.
+
 ## What a session's clock counts
 
 A session is measured against time in several places: the mark on the progress
