@@ -274,6 +274,25 @@ block, the issue tooling. So:
   that hasn't joined or signed in sends nothing at all; never add a fetch that
   bypasses `api.isConfigured()`.
 
+## The owner hears of every new account
+
+Chase's ruling (2026-11-25): anyone can make an account and it works right
+away, and he is told in the app so he can decline it.
+
+- Each new account is a notice under `new accounts` at the top of Settings'
+  `owner` page (`features/settings/SignupsSection`), with `keep` and
+  `decline`. While one waits the settings tab and the `owner` page wear the
+  dot, and Settings opens on that page. Nobody but the owner is asked or shown
+  anything (`lib/signups.shownSignups`).
+- `decline` deletes the account and what it logged, so it takes the second
+  tap every removal here does (`tap again to …`).
+- A notice left alone goes by itself after 30 days and the account stays. The
+  backend makes at most 5 accounts in any 24 hours. Both numbers are constants
+  in `SimpleBackend.gs`; BACKEND.md "New accounts" has the rest.
+- A new way of making an account leaves a notice too (`noteSignup`).
+- `scripts/signupsBackend.test.mjs` and `lib/signups.test.ts` hold these, and
+  `npm run shots -- settings accounts` draws them.
+
 ## Testing
 
 `npm test` is pure logic (`src/lib/*.test.ts`) — there are no component or flow

@@ -219,6 +219,16 @@ export const api = {
   /** Everyone with an account, with when they last used the app. Owner only. */
   people: () => get<Person[]>('people'),
   /**
+   * The accounts made that the owner has not kept or declined (lib/signups).
+   * Owner only, and a backend from before the route answers `Unknown route`;
+   * either way this throws and the caller shows nothing.
+   */
+  signups: () => get<unknown>('signups'),
+  /** Keep a new account: its notice goes. */
+  keepSignup: (id: string) => post<{ saved: number }>('signup_keep', { id }),
+  /** Decline a new account: the account, its key and its data go. */
+  declineSignup: (id: string) => post<{ saved: number }>('signup_decline', { id }),
+  /**
    * Whether `secret` is the owner's issue token. Asks an owner-only route,
    * which sends no account key and so works on a device not yet signed in.
    */

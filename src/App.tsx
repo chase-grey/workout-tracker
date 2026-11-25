@@ -26,6 +26,8 @@ import { useActiveSession } from './features/today/useActiveSession'
 import { StretchSession } from './features/flex/StretchSession'
 import { storage } from './services/storage'
 import { useTrackedIssues } from './store/useTrackedIssues'
+import { useSignups } from './store/useSignups'
+import { ownerFlavour } from './lib/profile'
 import { issuesAwaitingAnswer } from './services/issues'
 import { useBackGuard } from './lib/useBackGuard'
 import { noteScreen } from './services/screenWatch'
@@ -149,6 +151,9 @@ function AppShell() {
   // A newer build is ready: the dot stays until you restart onto it, the way an
   // app store badge does — it's a thing to do, not a thing to have seen.
   const { ready: updateReady } = useAppUpdate()
+  // An account somebody made that the owner hasn't kept or declined: the dot
+  // stays until each is answered, or its notice runs out on its own.
+  const signups = useSignups(ownerFlavour(settings.profile))
   // The app updates itself only when a reload would not be noticed. A workout,
   // a stretch or a recap on screen is never that moment, even set aside.
   const midSession = sessionActive || review != null || finishSummary != null || stretchSummary != null
@@ -411,7 +416,9 @@ function AppShell() {
             onChange={setTab}
             showChat={showChat}
             alerts={
-              awaiting.length > 0 || (saveError && !saveErrorSeen) || updateReady ? ['settings'] : []
+              awaiting.length > 0 || (saveError && !saveErrorSeen) || updateReady || signups.length > 0
+                ? ['settings']
+                : []
             }
           />
         )}

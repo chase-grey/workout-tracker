@@ -120,6 +120,9 @@ the backend separately using the deployment instructions above.
 | POST | `?route=bodyweight` | `{ date, weightLbs }` | `{ saved }` |
 | GET | `?route=account` | `user` | `{ name, owner, email }` (see Accounts) |
 | GET | `?route=people` | `user` (the owner's) | `[{ name, email, createdAt, lastSeen, owner }]` |
+| GET | `?route=signups` | `user` (the owner's) | `[{ id, name, email, createdAt }]` (see New accounts) |
+| POST | `?route=signup_keep` | `{ id }` + `user` (the owner's) | `{ saved }` |
+| POST | `?route=signup_decline` | `{ id }` + `user` (the owner's) | `{ saved }` |
 | POST | `?route=register` | `{ email, password, name }` | `{ saved, token, name, owner }` |
 | POST | `?route=login` | `{ email, password }` | `{ saved, token, name, owner }` |
 | POST | `?route=claim_owner` | `{ secret, email, password }` | `{ saved, token, name, owner }` |
@@ -157,9 +160,9 @@ per-user prefix. A user whose id is `ab12cd` has `uab12cd_workouts`,
 `uab12cd_body_weight`, `uab12cd_cardio` and so on. The owner's tabs keep their
 bare names, so nothing the owner already logged moved.
 
-Four tabs belong to the book rather than to anyone in it and are never prefixed:
+Five tabs belong to the book rather than to anyone in it and are never prefixed:
 `users` (`token, id, name, created_at, email, pass_salt, pass_hash, owner, last_seen`), `invites` (`code, created_at, used_at,
-used_by, claim, user_id`), `save_errors` and `feedback`. Failed-save reports from every account
+used_by, claim, user_id`), `signups` (`user_id, created_at, state`; see New accounts), `save_errors` and `feedback`. Failed-save reports from every account
 land in `save_errors` with the account's name in a last `user` column, and
 `save_errors` can only be read by the owner. `feedback` (`at, user, build,
 message`) is where the app's feedback box writes.
@@ -222,6 +225,40 @@ no keys or hashes in it.
 Each user takes about a dozen tabs of their own, and one spreadsheet can only
 hold so many, so the tab limit of the book is the ceiling on how many people it
 can host.
+
+### New accounts
+
+Sign-up is open and an account works the moment it is made. The owner is told
+of each one in the app and can turn it away (Chase, 2026-11-25).
+
+- Every account made, by `register` or by `join`, adds a row to `signups`. A
+  row with a blank `state` is a notice. `GET ?route=signups` lists them for the
+  owner, newest first, at most `SIGNUP_NOTICES_MAX` (30) in one read.
+- `signup_keep` marks the row `kept`: the notice goes and the account is
+  untouched.
+- `signup_decline` removes the account: its `users` row first, so its key and
+  its email and password stop working at once, then the invite it spent, every
+  tab carrying its prefix, and its Google Calendar link (the token is revoked;
+  the calendar in the person's own Google account is left). The row is marked
+  `declined`. Each step can be repeated and an account already gone is answered
+  `saved: 1`, so a decline cut short is finished by asking again.
+- Only an account whose notice is still waiting can be declined. One that was
+  kept, or made before notices existed, answers `That account is not waiting on
+  you`. The owner's own account has no id and a row marked `owner` is refused.
+- All three routes are the owner's alone (`Owner only`), by the same check as
+  `people`.
+- At most `SIGNUPS_PER_DAY` (5) accounts are made in any 24 hours, counted
+  from the `signups` rows. Past that `register` answers `Too many new accounts
+  today. Try again tomorrow`. A declined account still counts, so turning
+  accounts away makes no room for more. `join` is counted but never refused:
+  only the owner can mint the code it spends. A `register` for an email that
+  already has an account is refused as before, ahead of the count, so the app
+  still signs that person in.
+- A notice nobody answers stops being listed after `SIGNUP_NOTICE_DAYS` (30)
+  and the account stays. Rows that old are deleted from the tab when the next
+  account is made, so the tab holds a month of sign-ups and no more.
+- An older backend answers `Unknown route` to all three. The app reads that as
+  no notices and says nothing (`src/lib/signups.ts`).
 
 ### Notes
 

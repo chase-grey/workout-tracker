@@ -371,6 +371,65 @@ const APP_FLOWS = [
     },
   },
   {
+    // The owner's notices of new accounts: the dot on the way in, one waiting,
+    // three waiting, and a decline asking for its second tap. The accounts are
+    // made up, and put where the app keeps its last read of them; the backend
+    // the shots point at is a closed port, so that read is what stands.
+    family: 'settings',
+    ids: [
+      'settings/new-accounts-nav-dot',
+      'settings/new-accounts-1',
+      'settings/new-accounts-3',
+      'settings/new-accounts-decline',
+      'settings/new-accounts-page-dot',
+    ],
+    async run({ page, take, note, base }) {
+      const ago = (days) => new Date(Date.now() - days * 86_400_000).toISOString()
+      const made = [
+        { id: 'kq7m2x', name: 'Dana Whitlow', email: 'dana.whitlow@example.com', createdAt: ago(0) },
+        { id: 'p3hv9c', name: 'Marcus Oyelaran-Fitzgerald', email: 'marcus.oyelaran.fitzgerald@example.com', createdAt: ago(1) },
+        { id: 'w8n4tb', name: 'Priya', email: '', createdAt: ago(6) },
+      ]
+      const waiting = async (n) => {
+        await page.eval(`(localStorage.setItem('wt.cache.signups', ${JSON.stringify(JSON.stringify(made.slice(0, n)))}), true)`)
+        await page.goto(`${base}/`)
+        await sleep(2500)
+      }
+      const toNotices = async () => {
+        if (!(await page.eval(pressJs('settings', false)))) return false
+        for (let i = 0; i < 20; i++) {
+          await sleep(400)
+          const there = await page.eval(`(() => {
+            const l = [...document.querySelectorAll('label')].find((l) => l.textContent.trim() === 'new accounts')
+            if (!l) return false
+            l.scrollIntoView({ block: 'start' })
+            return true
+          })()`)
+          if (there) return true
+        }
+        return false
+      }
+      await waiting(1)
+      await take('settings/new-accounts-nav-dot')
+      if (!(await toNotices())) return note('settings: no "new accounts" in Settings')
+      await sleep(300)
+      await take('settings/new-accounts-1')
+      await waiting(3)
+      if (!(await toNotices())) return note('settings: no "new accounts" with three waiting')
+      await sleep(300)
+      await take('settings/new-accounts-3')
+      if (await page.eval(pressJs('decline'))) {
+        await sleep(300)
+        await take('settings/new-accounts-decline')
+      } else note('settings: no "decline" on a new account')
+      if (await page.eval(pressJs('plan'))) {
+        await sleep(400)
+        await page.eval(scrollMainJs(0))
+        await take('settings/new-accounts-page-dot')
+      }
+    },
+  },
+  {
     family: 'progress',
     ids: [
       'progress/muscle-vs-fat',
@@ -655,6 +714,7 @@ async function shootWith(kind, base, outDir, snapshot) {
       await open()
       await flow.run({
         page,
+        base,
         reload: open,
         note: (text) => notes.push(text),
         take: async (id) => {

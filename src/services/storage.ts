@@ -40,6 +40,7 @@ const KEYS = {
   cacheCardio: 'wt.cache.cardio',
   joinClaim: 'wt.joinClaim',
   cacheIssues: 'wt.cache.issues',
+  cacheSignups: 'wt.cache.signups',
   // v2 dropped the pooled rest average (seconds) for a prescribed-rest ratio.
   // A fresh key rather than a migration: the v1 number is a duration, and there
   // is no way to recover what it was a fraction of, so it has to be re-learned.
@@ -455,6 +456,9 @@ export const storage = {
   // empty tracker apart from a cold cache it should show a spinner for.
   loadIssues: (): TrackedIssue[] | null => read<TrackedIssue[] | null>(KEYS.cacheIssues, null),
   saveIssues: (issues: TrackedIssue[]) => write(KEYS.cacheIssues, issues),
+  /** The owner's notices of new accounts as last read (lib/signups checks the shape). */
+  loadSignups: (): unknown => read<unknown>(KEYS.cacheSignups, null),
+  saveSignups: (signups: unknown[]) => write(KEYS.cacheSignups, signups),
 
   loadExerciseAverages: (): ExerciseAverages =>
     normalizeExerciseAverages(read<unknown>(KEYS.cacheExerciseAverages, null)),

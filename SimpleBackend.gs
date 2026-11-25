@@ -47,6 +47,8 @@
  *                 account's report of a write it couldn't deliver; see
  *                 appendSaveError)
  *   feedback:     at, user, build, message  (what a hosted user typed into the app)
+ *   signups:      user_id, created_at, state  (each account made, and whether the
+ *                 owner kept or declined it; see "new accounts")
  *
  * Routes:
  *   GET  ?route=version          -> { version: BACKEND_VERSION } (see the constant; no account)
@@ -54,6 +56,9 @@
  *   POST ?route=join          body: { invite, name, claim } -> { saved: 1, token, name }
  *                 (spends an invite code and mints an account; no account needed)
  *   POST ?route=invite        body: { secret } -> { saved: 1, code }  (owner only, by secret)
+ *   GET  ?route=signups          -> [{ id, name, email, createdAt }]: accounts made that the owner has not kept or declined (owner only)
+ *   POST ?route=signup_keep   body: { id } -> { saved: 1 }  (owner only)
+ *   POST ?route=signup_decline body: { id } -> { saved: 1 }  (owner only; removes the account and its tabs)
  *   GET  ?route=workouts[&since=YYYY-MM-DD]
  *   GET  ?route=bodyweight[&since=YYYY-MM-DD]
  *   GET  ?route=measurements[&since=YYYY-MM-DD]
@@ -166,13 +171,16 @@ const U_OWNER = 7
 const U_SEEN = 8
 const INVITE_HEADERS = ['code', 'created_at', 'used_at', 'used_by', 'claim', 'user_id']
 const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
+// One row per account made: whose, when, and what the owner did about it
+// (blank until then, 'kept' or 'declined'). See "new accounts" below.
+const SIGNUP_HEADERS = ['user_id', 'created_at', 'state']
 
 // What this file answers at ?route=version. `npm run backend:stamp` bumps it on
 // every change to this file and records the matching fingerprint for the app,
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 17
+const BACKEND_VERSION = 18
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -209,6 +217,8 @@ function doGet(e) {
         return json({ name: ACCOUNT.name, owner: ACCOUNT.owner, email: ACCOUNT.email || '' })
       case 'people':
         return json(listPeople())
+      case 'signups':
+        return json(listSignups())
       case 'cardio':
         return json(getCardio(e.parameter.since))
       case 'workouts':
@@ -286,6 +296,10 @@ function doPost(e) {
         return json(withLock(function () { return joinAccount(body) }))
       case 'invite':
         return json(withLock(function () { return mintInvite(body) }))
+      case 'signup_keep':
+        return json(withLock(function () { return keepSignup(body) }))
+      case 'signup_decline':
+        return json(withLock(function () { return declineSignup(body) }))
       case 'cardio':
         return json(withLock(function () { return saveCardio(body) }))
       case 'feedback':
@@ -1457,10 +1471,13 @@ function registerAccount(body) {
   const users = ownerSheet('users', USER_HEADERS)
   const rows = users.getDataRange().getValues()
   if (emailRowAt(rows, email) > 0) throw new Error(ACCOUNT_NOT_MADE)
+  checkSignupRoom()
   const token = newToken()
   const cells = loginCells(email, password)
   const now = new Date().toISOString()
-  addRow(users, [token, newUserId(rows), name, now, cells[0], cells[1], cells[2], '', now])
+  const id = newUserId(rows)
+  addRow(users, [token, id, name, now, cells[0], cells[1], cells[2], '', now])
+  noteSignup(id, now)
   return { saved: 1, token: token, name: name, owner: false }
 }
 
@@ -1629,7 +1646,162 @@ function joinAccount(body) {
   const now = new Date().toISOString()
   addRow(users, [token, id, name, now])
   writeRows(invites, at + 1, 3, [[now, name, claim, id]])
+  // The owner hears of this one too: a code can be passed on. It is counted in
+  // the day's sign-ups but never refused for them, since only the owner can
+  // mint the code it spends.
+  noteSignup(id, now)
   return { saved: 1, token: token, name: name }
+}
+
+/* ----------------------------------------------------------- new accounts */
+
+// Sign-up is open and an account works the moment it is made. So the owner is
+// told of each one, in the app, and can turn it away: `signups` holds a row
+// per account made, and the ones with no answer yet are the notices.
+//
+// The same rows are the count behind the limit on sign-ups, which is why a
+// declined account's row stays (with nothing of the person in it, only the id
+// their tabs had) until it is a month old: turning accounts away must not make
+// room for a script to make more.
+
+// New accounts the whole backend will make in any 24 hours.
+const SIGNUPS_PER_DAY = 5
+// A notice the owner never answers leaves on its own after this long. The
+// account stays. Rows this old are dropped from the tab as new ones arrive.
+const SIGNUP_NOTICE_DAYS = 30
+// The most notices one read returns, newest first.
+const SIGNUP_NOTICES_MAX = 30
+const DAY_MS = 24 * 60 * 60 * 1000
+const SIGNUPS_FULL = 'Too many new accounts today. Try again tomorrow'
+// What newUserId makes, and so the only thing a tab prefix is ever built from.
+const SIGNUP_ID = /^[a-z][a-z0-9]{5}$/
+
+function signupTime(row) {
+  const t = new Date(cellIso(row[1])).getTime()
+  return isNaN(t) ? 0 : t
+}
+
+/** Refuse a sign-up once the last 24 hours have had their share. */
+function checkSignupRoom() {
+  const since = Date.now() - DAY_MS
+  const made = ownerSheet('signups', SIGNUP_HEADERS).getDataRange().getValues().slice(1)
+    .filter(function (r) { return signupTime(r) > since }).length
+  if (made >= SIGNUPS_PER_DAY) throw new Error(SIGNUPS_FULL)
+}
+
+/** Leave the owner a notice of the account just made, and let the old ones go. */
+function noteSignup(id, now) {
+  const sh = ownerSheet('signups', SIGNUP_HEADERS)
+  addRow(sh, [id, now, ''])
+  // Rows are added in order of time, so the ones too old to matter are at the top.
+  const rows = sh.getDataRange().getValues()
+  const cutoff = Date.now() - SIGNUP_NOTICE_DAYS * DAY_MS
+  let old = 0
+  while (old + 2 < rows.length && signupTime(rows[old + 1]) < cutoff) old++
+  if (old > 0) sh.deleteRows(2, old)
+}
+
+/** The accounts made that the owner has neither kept nor declined, newest first. */
+function listSignups() {
+  if (!ACCOUNT || !ACCOUNT.owner) throw new Error('Owner only')
+  const users = {}
+  userRows().slice(1).forEach(function (r) {
+    if (r[U_TOKEN] && !isOwnerRow(r)) users[String(r[U_ID])] = r
+  })
+  const rows = ownerSheet('signups', SIGNUP_HEADERS).getDataRange().getValues()
+  const cutoff = Date.now() - SIGNUP_NOTICE_DAYS * DAY_MS
+  const out = []
+  for (let i = rows.length - 1; i >= 1 && out.length < SIGNUP_NOTICES_MAX; i--) {
+    const user = users[String(rows[i][0])]
+    if (!user || String(rows[i][2] || '') || signupTime(rows[i]) < cutoff) continue
+    out.push({
+      id: String(rows[i][0]),
+      name: String(user[U_NAME] || ''),
+      email: String(user[U_EMAIL] || ''),
+      createdAt: cellIso(rows[i][1]),
+    })
+  }
+  return out
+}
+
+/** The signups row for `id` that is still waiting on the owner, or -1. */
+function waitingSignupAt(rows, id) {
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][0]) === id && !String(rows[i][2] || '')) return i
+  }
+  return -1
+}
+
+/** The owner keeping an account: its notice goes and nothing else changes. */
+function keepSignup(body) {
+  if (!ACCOUNT || !ACCOUNT.owner) throw new Error('Owner only')
+  const id = String((body && body.id) || '').trim()
+  if (!SIGNUP_ID.test(id)) throw new Error('No account given')
+  const sh = ownerSheet('signups', SIGNUP_HEADERS)
+  const at = waitingSignupAt(sh.getDataRange().getValues(), id)
+  if (at > 0) writeCell(sh, at + 1, 3, 'kept')
+  return { saved: 1 }
+}
+
+/**
+ * The owner turning an account away. Its users row goes first, so its key
+ * stops working at once; then the invite it spent, its tabs and its calendar
+ * link. Each step is safe to repeat, and an account that is already gone is
+ * answered as done, so a decline cut short is finished by asking again.
+ *
+ * Only an account whose notice is still waiting can be declined. One the owner
+ * kept, or one from before notices, is not reachable from here, and the
+ * owner's own never is: it has no id, and a row marked as the owner's is
+ * refused whatever it holds.
+ */
+function declineSignup(body) {
+  if (!ACCOUNT || !ACCOUNT.owner) throw new Error('Owner only')
+  const id = String((body && body.id) || '').trim()
+  if (!SIGNUP_ID.test(id)) throw new Error('No account given')
+  const users = ownerSheet('users', USER_HEADERS)
+  const rows = users.getDataRange().getValues()
+  const signups = ownerSheet('signups', SIGNUP_HEADERS)
+  const waiting = waitingSignupAt(signups.getDataRange().getValues(), id)
+  let at = -1
+  for (let i = 1; i < rows.length; i++) if (String(rows[i][U_ID]) === id) at = i
+  if (at > 0) {
+    if (isOwnerRow(rows[at])) throw new Error("The owner's account can't be declined")
+    if (waiting < 0) throw new Error('That account is not waiting on you')
+    users.deleteRow(at + 1)
+  }
+  const invites = ownerSheet('invites', INVITE_HEADERS)
+  const inviteRows = invites.getDataRange().getValues()
+  for (let i = inviteRows.length - 1; i >= 1; i--) {
+    if (String(inviteRows[i][5] || '') === id) invites.deleteRow(i + 1)
+  }
+  const prefix = 'u' + id + '_'
+  ss.getSheets().forEach(function (sh) {
+    if (sh.getName().indexOf(prefix) === 0) ss.deleteSheet(sh)
+  })
+  dropCalendarLink('gcal_' + id)
+  if (waiting > 0) writeCell(signups, waiting + 1, 3, 'declined')
+  return { saved: 1 }
+}
+
+/**
+ * Forget a declined account's Google link and hand back the access it gave.
+ * The calendar itself is in the person's own Google account and is left there.
+ */
+function dropCalendarLink(key) {
+  // Bookkeeping after the account is gone: it must never fail the decline.
+  try {
+    const link = gcalLoad(key)
+    if (!link) return
+    if (link.refresh) {
+      UrlFetchApp.fetch('https://oauth2.googleapis.com/revoke?' + gcalQuery({ token: link.refresh }), {
+        method: 'post',
+        muteHttpExceptions: true,
+      })
+    }
+    gcalDrop(key)
+  } catch (err) {
+    /* Google unreachable, or no properties to read */
+  }
 }
 
 /* ------------------------------------------------------------------ cardio */

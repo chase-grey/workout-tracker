@@ -23,6 +23,8 @@ import { DataExportSection } from './DataExportSection'
 import { PasteCoachSection, RestartAccount, UpdateGoals } from './SetupSection'
 import { FeedbackSection } from './FeedbackSection'
 import { PeopleSection } from './PeopleSection'
+import { SignupsSection } from './SignupsSection'
+import { useSignups } from '../../store/useSignups'
 import { ownerFlavour } from '../../lib/profile'
 import { PlanEditor } from './PlanEditor'
 import { GuideSection } from './GuideSection'
@@ -234,12 +236,18 @@ export function SettingsTab({
   const [chatTokenDraft, setChatTokenDraft] = useState(settings.chatToken)
   const [chatTokenSaved, setChatTokenSaved] = useState(false)
   const update = useAppUpdate()
+  const owner = ownerFlavour(settings.profile)
+  // New accounts waiting to be kept or declined; none on anyone's device but the owner's.
+  const signups = useSignups(owner)
   // Closed issues fold away by default — they're history, and the live ones are
   // what you came here for. Opening them lasts only as long as the visit.
   const [showClosed, setShowClosed] = useState(false)
   // A build waiting to be restarted onto outranks wherever you left off: the
   // visit opens on the page its button is on, without rewriting the saved one.
-  const [page, setPage] = useState<SettingsPage>(() => (update.ready ? 'app' : lastPage()))
+  // A new account waiting on the owner does the same for its page.
+  const [page, setPage] = useState<SettingsPage>(() =>
+    update.ready ? 'app' : signups.length > 0 ? 'owner' : lastPage(),
+  )
   const choosePage = (p: SettingsPage) => {
     setPage(p)
     try {
@@ -250,7 +258,6 @@ export function SettingsTab({
   }
   const [screenReport, setScreenReport] = useState<'idle' | 'pending' | 'sent' | 'failed'>('idle')
 
-  const owner = ownerFlavour(settings.profile)
   const { active, closed } = partitionIssues(issues ?? [])
 
   const saveKey = () => {
@@ -354,6 +361,10 @@ export function SettingsTab({
             {p}
             {/* The waiting build's dot, on the page its restart button is on. */}
             {p === 'app' && update.ready && shown !== 'app' && (
+              <span aria-hidden className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent" />
+            )}
+            {/* And a new account's, on the page it is kept or declined on. */}
+            {p === 'owner' && signups.length > 0 && shown !== 'owner' && (
               <span aria-hidden className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent" />
             )}
           </button>
@@ -561,7 +572,9 @@ export function SettingsTab({
 
       {shown === 'owner' && (
         <>
-          <PeopleSection />
+          <SignupsSection signups={signups} />
+          {/* Read again when a notice is answered: a declined account is gone from the list. */}
+          <PeopleSection key={signups.length} />
 
           {settings.chatToken.trim() && (
             <section className="flex flex-col gap-2">
