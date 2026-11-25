@@ -13,6 +13,7 @@ import { DEFAULT_API_URL } from '../config/backend'
 import { liveBackendVersion } from '../lib/backendVersion'
 import { accountKey, mayReachBackend } from '../lib/account'
 import type { CardioEntry } from '../lib/cardio'
+import type { BrainShare } from '../lib/brainShare'
 
 /**
  * Thin client for the Google Apps Script web app that proxies the Sheet.
@@ -141,6 +142,8 @@ export const api = {
   fetchPlan: () => get<Plan | null>('plan'),
   postPlan: (plan: Plan) => post<{ saved: number }>('plan', { plan }),
   fetchSettings: () => get<SyncedSettings | null>('settings'),
+  /** The summary my-brain reads, sent whole (see lib/brainShare). */
+  postShare: (share: BrainShare) => post<{ saved: number }>('share', { share }),
   postSettings: (settings: SyncedSettings) =>
     post<{ saved: number; stale?: boolean }>('settings', { settings }),
   fetchCalories: (since?: string) => get<CalorieEntry[]>('calories', since ? { since } : {}),

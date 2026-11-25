@@ -124,6 +124,8 @@ the backend separately using the deployment instructions above.
 | GET | `?route=save_errors&limit=N` | — | failed-save reports (owner only) |
 | GET | `?route=settings` | — | settings blob, or `null` |
 | POST | `?route=settings` | `{ settings: {…} }` | `{ saved, stale? }` |
+| GET | `?route=share` | — | the summary my-brain reads, or `null` |
+| POST | `?route=share` | `{ share: {…} }` | `{ saved }` |
 | GET | `?route=issues&secret=…` | — | `TrackedIssue[]` |
 | POST | `?route=report_issue` | `{ secret, title, body, area, context }` | `{ number, url }` |
 | GET | `?route=issue_thread&secret=…&number=N` | — | `{ number, title, state, labels, comments }` |

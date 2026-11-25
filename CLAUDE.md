@@ -275,10 +275,12 @@ screen with "tap anywhere to advance" — the flow teaches it in one set.
 
 ## What my-brain reads
 
-my-brain's body slice is this app's weekly streak and committed goals. Both apps
-are served from `chase-grey.github.io`, so `store/useBrainShare.ts` leaves a
-summary under the `wt.share.body` storage key and my-brain reads it there
-(`src/domain/bodyTracker.ts` in that repo). The summary carries results, never
+my-brain's body slice is this app's weekly streak and committed goals.
+`store/useBrainShare.ts` posts a summary to the backend's `share` route, which
+my-brain reads on any device with the account's key, and leaves the same summary
+under the `wt.share.body` storage key for a my-brain on the same device (both
+apps are served from `chase-grey.github.io`). my-brain's side is
+`src/domain/bodyTracker.ts` in that repo. The summary carries results, never
 rules: change how a week or a goal is judged here and my-brain follows. Renaming
-the key or reshaping `BrainShare` in `lib/brainShare.ts` breaks that slice, so
+the key or the route, or reshaping `BrainShare` in `lib/brainShare.ts` breaks that slice, so
 change both repos together.

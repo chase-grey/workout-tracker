@@ -56,6 +56,8 @@
  *   GET  ?route=durations[&since=YYYY-MM-DD]
  *   GET  ?route=exercise_times   -> { active: { key: {avgSec,n} }, restRatio: {ratio,n} }
  *   GET  ?route=settings         -> the account's settings blob, or null (see getSettings)
+ *   GET  ?route=share            -> the summary my-brain reads, or null (see getShare)
+ *   POST ?route=share         body: { share: {…} }  (whole; the latest replaces the last)
  *   GET  ?route=cardio[&since=YYYY-MM-DD] -> [{ id, date, kind, minutes?, distanceMi? }]
  *   POST ?route=cardio        body: { id, date, kind, minutes?, distanceMi? } (upsert by id)
  *                 or { id, deleted: true } (removes it; fine if already gone)
@@ -166,7 +168,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 12
+const BACKEND_VERSION = 13
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -223,6 +225,8 @@ function doGet(e) {
         return json(getPlan())
       case 'settings':
         return json(getSettings())
+      case 'share':
+        return json(getShare())
       case 'save_errors':
         return json(getSaveErrors(e.parameter.limit))
       case 'issues':
@@ -304,6 +308,8 @@ function doPost(e) {
         return json(withLock(function () { return savePlan(body.plan) }))
       case 'settings':
         return json(withLock(function () { return saveSettings(body.settings) }))
+      case 'share':
+        return json(withLock(function () { return saveShare(body.share) }))
       // The calendar routes take no lock: they change nothing in the sheet, and
       // they wait on Google, which would hold every other write up behind them.
       case 'gcal_status':
@@ -1126,6 +1132,45 @@ function saveSettings(settings) {
     }
   }
   sh.appendRow(['settings', value])
+  return { saved: 1 }
+}
+
+/* -------------------------------------------------------------------- share */
+
+/**
+ * The summary of the streak and goal pace that my-brain's body slice reads
+ * (see the client's lib/brainShare). The app works it out and posts it whole;
+ * this end keeps the latest under a `config` key and hands it back. my-brain
+ * asks with the same account key the app uses, so it reads one person's and
+ * nobody else's.
+ */
+function getShare() {
+  const sh = sheet('config', CONFIG_HEADERS)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'share') {
+      try {
+        return JSON.parse(rows[i][1])
+      } catch (e) {
+        return null
+      }
+    }
+  }
+  return null // nothing posted yet
+}
+
+function saveShare(share) {
+  if (!share || typeof share !== 'object') throw new Error('No share provided')
+  const sh = sheet('config', CONFIG_HEADERS)
+  const value = JSON.stringify(share)
+  const rows = sh.getDataRange().getValues()
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'share') {
+      sh.getRange(i + 1, 2).setValue(value)
+      return { saved: 1 }
+    }
+  }
+  sh.appendRow(['share', value])
   return { saved: 1 }
 }
 
