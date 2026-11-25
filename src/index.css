@@ -159,6 +159,14 @@ html {
   font-size: 15px;
 }
 
+/* The page never stretches or drags past its ends, so the bottom nav stays put
+   when a list is pulled (~/.claude/patterns/android-nav-bar.md). `contain` still
+   let Android stretch the whole screen, nav included. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
 /* The app shell fills the screen the keyboard leaves behind, so the chat input
    rides up with it instead of hiding underneath. Chrome/Android does this
    natively via `100dvh` + interactive-widget=resizes-content (index.html) — the
@@ -387,8 +395,8 @@ body {
   background-color: var(--color-bg);
   color: var(--body-text, #fafafa);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  /* Prevent pull-to-refresh / rubber-banding getting in the way mid-log. */
-  overscroll-behavior-y: contain;
+  /* No pull-to-refresh mid-log (the html rule below holds the page still). */
+  overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
 
