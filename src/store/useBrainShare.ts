@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from 'react'
-import { BRAIN_SHARE_KEY, buildBrainShare, goalStandings } from '../lib/brainShare'
+import { BRAIN_SHARE_KEY, buildBrainShare, goalStandings, sharedThisWeek } from '../lib/brainShare'
+import { toISODate, weekStartISO } from '../lib/dates'
+import { currentWeeklyGoals } from '../lib/weeklyStreak'
 import { goalsFor } from '../lib/profileGoals'
 import { api, isConfigured } from '../services/api'
 import { useData } from './DataContext'
@@ -13,7 +15,7 @@ const POSTED_KEY = 'wt.share.posted'
  * the backend for one anywhere else.
  */
 export function useBrainShare(): void {
-  const { streakHistory, workouts, bodyWeights, measurements, flexEntries, settings } = useData()
+  const { streakHistory, weekProgress, workouts, bodyWeights, measurements, flexEntries, settings } = useData()
   const heightIn = settings.heightIn ?? 0
 
   const standings = useMemo(
@@ -28,7 +30,9 @@ export function useBrainShare(): void {
   useEffect(() => {
     let share: string | null = null
     try {
-      const built = buildBrainShare(streakHistory, standings)
+      const now = new Date()
+      const week = sharedThisWeek(weekStartISO(toISODate(now)), weekProgress, currentWeeklyGoals(now))
+      const built = buildBrainShare(streakHistory, standings, now, week)
       share = built ? JSON.stringify(built) : null
       if (share) localStorage.setItem(BRAIN_SHARE_KEY, share)
       else localStorage.removeItem(BRAIN_SHARE_KEY)
@@ -49,5 +53,5 @@ export function useBrainShare(): void {
       },
       () => {},
     )
-  }, [streakHistory, standings])
+  }, [streakHistory, standings, weekProgress])
 }

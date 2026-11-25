@@ -18,7 +18,7 @@
 import { toISODate } from './dates'
 import { paceAgainstLock, type LockedProjections } from './goalLock'
 import { isReached, liveLocks, projectGoal, type GoalSpec } from './goals'
-import type { WeekResult } from './weeklyStreak'
+import type { WeekCounts, WeekResult, WeeklyGoalConfig } from './weeklyStreak'
 
 /** Where the summary is left. my-brain reads this key by name. */
 export const BRAIN_SHARE_KEY = 'wt.share.body'
@@ -62,6 +62,26 @@ export type BrainShare = {
   /** Oldest first. */
   weeks: SharedWeek[]
   goals: GoalStandings
+  /** The week being lived against its weekly goals, as the Today tab counts it. */
+  thisWeek?: SharedThisWeek
+}
+
+export type SharedThisWeek = {
+  /** First day of the week, ISO. */
+  week: string
+  /** One row per weekly goal that is being judged, in the order the Today tab shows them. */
+  rows: { kind: 'workouts' | 'stretches' | 'calorieDays' | 'cardio'; done: number; goal: number }[]
+}
+
+/** The week in progress, one row per goal the week is held to. */
+export function sharedThisWeek(week: string, counts: WeekCounts, goals: WeeklyGoalConfig): SharedThisWeek {
+  const all = [
+    { kind: 'workouts' as const, done: counts.workouts, goal: goals.workouts },
+    { kind: 'stretches' as const, done: counts.flex, goal: goals.flex },
+    { kind: 'calorieDays' as const, done: counts.calDays, goal: goals.calDays },
+    { kind: 'cardio' as const, done: counts.cardio ?? 0, goal: goals.cardio ?? 0 },
+  ]
+  return { week, rows: all.filter((row) => row.goal > 0) }
 }
 
 /** Where every committed goal stands, read exactly as the Progress tab reads it. */
@@ -91,7 +111,12 @@ export function goalStandings(goals: GoalSpec[], stored: LockedProjections, toda
 }
 
 /** The summary for a streak history, or null when nothing has been logged yet. */
-export function buildBrainShare(history: WeekResult[], goals: GoalStandings, today: Date = new Date()): BrainShare | null {
+export function buildBrainShare(
+  history: WeekResult[],
+  goals: GoalStandings,
+  today: Date = new Date(),
+  thisWeek?: SharedThisWeek,
+): BrainShare | null {
   const last = history[history.length - 1]
   if (!last) return null
   return {
@@ -106,5 +131,6 @@ export function buildBrainShare(history: WeekResult[], goals: GoalStandings, tod
       ...(w.inProgress ? { inProgress: true as const } : {}),
     })),
     goals,
+    ...(thisWeek ? { thisWeek } : {}),
   }
 }

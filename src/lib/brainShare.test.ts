@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildBrainShare, goalStandings } from './brainShare'
+import { buildBrainShare, goalStandings, sharedThisWeek } from './brainShare'
 import { buildGoals, GOAL_IDS } from './goals'
 import type { LockedProjection } from './goalLock'
 import type { WeekResult } from './weeklyStreak'
@@ -50,6 +50,21 @@ describe('buildBrainShare', () => {
     expect(share.weeksTracked).toBe(40)
     expect(share.weeks).toHaveLength(26)
     expect(share.weeks[25].week).toBe('w39')
+  })
+})
+
+describe('sharedThisWeek', () => {
+  it('reports the week against the goals it is held to and leaves out a goal that is not judged', () => {
+    const week = sharedThisWeek('2026-11-23', { workouts: 1, flex: 2, calDays: 3, cardio: 0 }, { workouts: 2, flex: 2, calDays: 6 })
+    expect(week).toEqual({
+      week: '2026-11-23',
+      rows: [
+        { kind: 'workouts', done: 1, goal: 2 },
+        { kind: 'stretches', done: 2, goal: 2 },
+        { kind: 'calorieDays', done: 3, goal: 6 },
+      ],
+    })
+    expect(buildBrainShare([], { open: 0, onPace: 0, met: 0, list: [] }, new Date(), week)).toBeNull()
   })
 })
 
