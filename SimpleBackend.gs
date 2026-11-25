@@ -172,7 +172,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 15
+const BACKEND_VERSION = 16
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -1434,10 +1434,18 @@ function cleanName(value) {
   return String(value || '').trim().replace(/^[=+\-@\s]+/, '').slice(0, 40)
 }
 
+// What register says when the email is taken. The app looks for these words
+// (ACCOUNT_NOT_MADE in src/lib/login.ts) to try signing in instead.
+const ACCOUNT_NOT_MADE = 'Could not create that account'
+
 /**
- * Make an account from an email and a password; anyone may. Asking again with
- * the same email and password is answered with the account it already made, so
- * a reply lost on the way back doesn't strand the phone that asked.
+ * Make an account from an email and a password; anyone may. An email that is
+ * already an account's is refused, whatever the password: this route never
+ * looks at a stored password and never hands out an existing key, or it would
+ * be a way to guess passwords with no limit on the tries. Only login trades a
+ * password for a key, and it counts the wrong ones. A phone whose reply was
+ * lost on the way back gets its account by signing in, which the app does on
+ * its own when it is refused here.
  */
 function registerAccount(body) {
   const email = normEmail(body && body.email)
@@ -1448,13 +1456,7 @@ function registerAccount(body) {
   if (!name) throw new Error('A name is required')
   const users = ownerSheet('users', USER_HEADERS)
   const rows = users.getDataRange().getValues()
-  const at = emailRowAt(rows, email)
-  if (at > 0) {
-    if (passwordMatches(rows[at], password)) {
-      return { saved: 1, token: String(rows[at][U_TOKEN]), name: String(rows[at][U_NAME]), owner: isOwnerRow(rows[at]) }
-    }
-    throw new Error('An account with that email already exists')
-  }
+  if (emailRowAt(rows, email) > 0) throw new Error(ACCOUNT_NOT_MADE)
   const token = newToken()
   const cells = loginCells(email, password)
   const now = new Date().toISOString()

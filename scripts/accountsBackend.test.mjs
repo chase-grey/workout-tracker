@@ -127,12 +127,32 @@ describe('register and login', () => {
     expect(login(w, 'ann@example.com', 'hunter22').error).toMatch(/Too many tries/)
   })
 
-  it('answers a repeated sign-up with the same account, but not a different password', () => {
+  it('refuses a taken email the same way whatever the password, and never hands out its key', () => {
     const w = world()
     const first = register(w, 'ann@example.com')
-    expect(register(w, 'ann@example.com').token).toBe(first.token)
-    expect(register(w, 'ann@example.com', 'other-pass').error).toMatch(/already exists/)
+    const right = register(w, 'ann@example.com')
+    const wrong = register(w, 'Ann@Example.com', 'other-pass')
+    expect(right).toEqual({ error: 'Could not create that account' })
+    expect(wrong).toEqual(right)
+    expect(JSON.stringify([right, wrong])).not.toContain(first.token)
     expect(w.book.tab('users')).toHaveLength(2)
+    // The account is still reached by signing in.
+    expect(login(w, 'ann@example.com', 'hunter22').token).toBe(first.token)
+  })
+
+  it('gives no way round the limit on wrong passwords', () => {
+    const w = world()
+    const first = register(w, 'ann@example.com')
+    for (let i = 0; i < 10; i++) login(w, 'ann@example.com', 'nope-nope')
+    // Locked out of login: sign-up with the right password must not be a side door.
+    expect(register(w, 'ann@example.com', 'hunter22')).toEqual({ error: 'Could not create that account' })
+    expect(login(w, 'ann@example.com', 'hunter22').error).toMatch(/Too many tries/)
+    // Nor does any number of sign-up tries count against, or reset, that limit.
+    const fresh = world()
+    register(fresh, 'bob@example.com')
+    for (let i = 0; i < 50; i++) register(fresh, 'bob@example.com', 'guess-' + i + '-long')
+    expect(fresh.cache.size).toBe(0)
+    expect(first.token).toBeTruthy()
   })
 
   it('checks email, password and name', () => {

@@ -199,8 +199,12 @@ email and password for the key. The password itself is never stored: `pass_hash`
 is SHA-256 run 1000 times over a per-account random `pass_salt` and the password
 (Apps Script has nothing stronger built in). After 10 wrong passwords for one
 email inside 15 minutes, `login` stops checking that email until the window
-passes (`CacheService`). A repeated `register` with the same email and password
-is answered with the account it made, so a lost reply doesn't strand the phone.
+passes (`CacheService`). `register` with an email that is already an account's
+is refused with `Could not create that account`, whatever the password: it
+never checks a stored password and never returns an existing key, so it is no
+way round that limit. The app answers that refusal by trying `login` with the
+same email and password (`registerOrSignIn` in `src/lib/login.ts`), which is
+how a phone whose reply was lost still ends up signed in.
 
 The owner's account predates all this and has no row. `claim_owner` makes one,
 proven by `CHAT_SHARED_SECRET`: the row is marked `owner = yes`, its key reaches

@@ -12,6 +12,7 @@ import { storage } from './storage'
 import { DEFAULT_API_URL } from '../config/backend'
 import { liveBackendVersion } from '../lib/backendVersion'
 import { accountKey, mayReachBackend } from '../lib/account'
+import { registerOrSignIn } from '../lib/login'
 import type { CardioEntry } from '../lib/cardio'
 import type { BrainShare } from '../lib/brainShare'
 
@@ -194,9 +195,16 @@ export const api = {
     }),
   /** Who the backend says `key` is. Throws `Unknown account` for a key it doesn't hold. */
   account: (key: string) => get<{ name: string; owner: boolean; email?: string }>('account', { user: key }),
-  /** Make an account from an email and a password. Like `join`, needs no key yet. */
+  /**
+   * Make an account from an email and a password. Like `join`, needs no key yet.
+   * An email that already has an account is signed in to instead, when the
+   * password is that account's (see registerOrSignIn).
+   */
   register: (email: string, password: string, name: string) =>
-    post<SignedIn>('register', { email, password, name }),
+    registerOrSignIn(
+      () => post<SignedIn>('register', { email, password, name }),
+      () => post<SignedIn>('login', { email, password }),
+    ),
   /** Trade an email and password for the account's key. */
   login: (email: string, password: string) => post<SignedIn>('login', { email, password }),
   /**
