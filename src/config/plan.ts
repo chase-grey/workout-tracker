@@ -416,7 +416,15 @@ export const STRETCH_CORE: PlannedExercise = {
  * and none when there isn't. Not a movement any training day prescribes — its
  * sets are logged the way the core block's are, as supplemental workout rows, so
  * it has a history to prefill from and a name to chart under.
+ *
+ * The routine's own thrust is done at home, where the heaviest thing to put
+ * across the hips is {@link ROUTINE_THRUST_MAX_LBS}. That ceiling belongs to the
+ * routine and not to the movement, so it's carried on the routine's `load` (see
+ * flexPlan.FlexExercise) rather than here as a `weightCapLbs`: a built plan's
+ * barbell hip thrust shares this key and has a whole rack behind it.
  */
+export const ROUTINE_THRUST_MAX_LBS = 35
+
 export const HIP_THRUST: PlannedExercise = {
   key: 'hip_thrust',
   name: 'hip thrust',

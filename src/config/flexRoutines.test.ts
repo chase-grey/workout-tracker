@@ -1,4 +1,6 @@
-import { buildFlexSteps, buildSessionSteps, carriedWeight, heldSets, loadedExerciseOf, stepWorkSec } from '../lib/flexSteps'
+import { buildFlexSteps, buildSessionSteps, carriedWeight, heldSets, loadedExerciseOf, loadedTarget, stepWorkSec } from '../lib/flexSteps'
+import { toISODate } from '../lib/dates'
+import type { WorkoutRow } from '../types'
 import { settleInSec } from '../lib/settleIn'
 import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES, FLEX_ROUTINE_KEYS, flexRoutineOf } from './flexRoutines'
@@ -99,6 +101,47 @@ describe('a loaded exercise in a routine', () => {
   it('names the exercise the session logs its sets under', () => {
     expect(loadedExerciseOf(steps)).toMatchObject({ key: 'hip_thrust', repMin: 10, repMax: 20 })
     expect(loadedExerciseOf(buildSessionSteps(FLEX_ROUTINES.head_to_toe.blocks, { core: false }))).toBeNull()
+  })
+
+  describe('the thrust never asks for more than the 35 lbs there is', () => {
+    const yesterday = toISODate(new Date(Date.now() - 86_400_000))
+    /** Three sets of the thrust at one weight and rep count, logged yesterday. */
+    const thrusts = (weight: number | null, reps: number): WorkoutRow[] =>
+      [1, 2, 3].map((n) => ({
+        session_id: 's1',
+        date: yesterday,
+        day_type: 'push',
+        exercise: 'hip_thrust',
+        set_number: n,
+        weight_lbs: weight,
+        reps,
+        notes: '',
+        is_historical: false,
+      }))
+    const loaded = loadedExerciseOf(steps)!
+
+    it('carries the cap from the routine to the session', () => {
+      expect(loaded.weightCapLbs).toBe(35)
+    })
+
+    it('lands the last step on 35 rather than past it', () => {
+      expect(loadedTarget(thrusts(30, 20), loaded).weightLbs).toBe(35)
+      expect(loadedTarget(thrusts(25, 20), loaded).weightLbs).toBe(35)
+    })
+
+    it('adds a rep at 35, and keeps adding them past the top of the range', () => {
+      expect(loadedTarget(thrusts(35, 14), loaded)).toEqual({ weightLbs: 35, reps: 15 })
+      expect(loadedTarget(thrusts(35, 20), loaded)).toEqual({ weightLbs: 35, reps: 21 })
+      expect(loadedTarget(thrusts(35, 31), loaded)).toEqual({ weightLbs: 35, reps: 32 })
+    })
+
+    it('brings a heavier set in the history back down to 35', () => {
+      expect(loadedTarget(thrusts(45, 12), loaded).weightLbs).toBe(35)
+    })
+
+    it('leaves a set done without a plate without one', () => {
+      expect(loadedTarget(thrusts(null, 12), loaded).weightLbs).toBeNull()
+    })
   })
 
   it('runs the plank as an open hold, and logs what each one ran to', () => {

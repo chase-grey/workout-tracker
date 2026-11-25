@@ -55,8 +55,12 @@ export type FlexExercise = {
    * than paced, with a weight that can be left empty, and each is logged as a
    * workout row under `key` (see flexSteps.CoreSetStep). The hip thrust — done
    * with a plate when there is one and without when there isn't.
+   *
+   * `weightCapLbs` is the heaviest load there is to do it with. The target is
+   * never asked above it, and once a set is there the reps climb instead, past
+   * the top of the range (see PlannedExercise.weightCapLbs).
    */
-  load?: { repMin: number; repMax: number; increment: number }
+  load?: { repMin: number; repMax: number; increment: number; weightCapLbs?: number }
 }
 
 export type FlexBlock = {

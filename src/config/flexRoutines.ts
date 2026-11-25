@@ -1,5 +1,5 @@
 import { DEFAULT_FLEX_ROUTINE, type FlexBlock } from './flexPlan'
-import { HIP_THRUST, RKC_PLANK } from './plan'
+import { HIP_THRUST, RKC_PLANK, ROUTINE_THRUST_MAX_LBS } from './plan'
 import type { PhotoKind } from '../lib/photoSteps'
 
 /**
@@ -406,7 +406,8 @@ const SHOULDER_BLOCKS: FlexBlock[] = [
  * the first one starts from.
  *
  * The thrust is the one set that's typed in rather than paced (`load`): ten or
- * more reps, with whatever weight is to hand or none.
+ * more reps, with whatever weight is to hand or none. What's to hand stops at
+ * 35 lbs, so that is as heavy as it's ever asked for; from there it's more reps.
  */
 const PELVIC_TILT_BLOCKS: FlexBlock[] = [
   {
@@ -443,7 +444,7 @@ const PELVIC_TILT_BLOCKS: FlexBlock[] = [
         reps: HIP_THRUST.repMin,
         tempo: '',
         restSec: HIP_THRUST.restSec,
-        load: { repMin: HIP_THRUST.repMin, repMax: HIP_THRUST.repMax, increment: HIP_THRUST.increment ?? 5 },
+        load: { repMin: HIP_THRUST.repMin, repMax: HIP_THRUST.repMax, increment: HIP_THRUST.increment ?? 5, weightCapLbs: ROUTINE_THRUST_MAX_LBS },
       },
     ],
   },

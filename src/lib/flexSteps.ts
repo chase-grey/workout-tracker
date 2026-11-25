@@ -1,5 +1,7 @@
 import type { FlexBlock, FlexExercise } from '../config/flexPlan'
 import { STRETCH_CORE } from '../config/plan'
+import type { WorkoutRow } from '../types'
+import { nextTarget, type Target } from './progression'
 import { parseTempo, workPhaseCount } from './tempo'
 
 /** Which leg a per-side step is for. */
@@ -56,6 +58,8 @@ export type CoreSetStep = {
   repMax: number
   /** The step the next target climbs by; the progression's default when absent. */
   increment?: number
+  /** Heaviest load there is to do it with — see FlexExercise.load. */
+  weightCapLbs?: number
   restSec: number
   round: number // 0-based set number
   maxSets: number
@@ -68,9 +72,42 @@ export type CoreSetStep = {
  */
 export function loadedExerciseOf(
   steps: SessionStep[],
-): { key: string; repMin: number; repMax: number; increment?: number } | null {
+): LoadedExercise | null {
   const s = steps.find((x): x is CoreSetStep => x.kind === 'core')
-  return s ? { key: s.exKey, repMin: s.repMin, repMax: s.repMax, increment: s.increment } : null
+  return s
+    ? { key: s.exKey, repMin: s.repMin, repMax: s.repMax, increment: s.increment, weightCapLbs: s.weightCapLbs }
+    : null
+}
+
+/** The exercise a session's typed-in sets belong to — see {@link loadedExerciseOf}. */
+export type LoadedExercise = {
+  key: string
+  repMin: number
+  repMax: number
+  increment?: number
+  weightCapLbs?: number
+}
+
+/**
+ * What a session's typed-in sets are asked for next, read from that movement's
+ * own history (see progression.nextTarget).
+ *
+ * A cap is a promise about the weight on screen, not only about the next step:
+ * the progression stops stepping at it, and a history that somehow sits above it
+ * (a mistyped set, a heavier plate borrowed once) is brought back down to it
+ * rather than repeated, with the reps left to climb.
+ */
+export function loadedTarget(workouts: WorkoutRow[], loaded: LoadedExercise): Target {
+  const target = nextTarget(workouts, loaded.key, {
+    repMin: loaded.repMin,
+    repMax: loaded.repMax,
+    increment: loaded.increment,
+    weightCapLbs: loaded.weightCapLbs,
+  })
+  const cap = loaded.weightCapLbs
+  return cap != null && target.weightLbs != null && target.weightLbs > cap
+    ? { ...target, weightLbs: cap }
+    : target
 }
 
 /**
@@ -194,6 +231,7 @@ export function buildRoutineSteps(plan: FlexBlock[], startSide: Side = 'left'): 
             repMin: ex.load.repMin,
             repMax: ex.load.repMax,
             increment: ex.load.increment,
+            weightCapLbs: ex.load.weightCapLbs,
             restSec: ex.restSec,
             round: r,
             maxSets: ex.maxSets,

@@ -30,6 +30,7 @@ import {
   carriedWeight,
   heldSets,
   loadedExerciseOf,
+  loadedTarget,
   flexRoundKey,
   skipsFinalRepRest,
   stepWorkSec,
@@ -60,7 +61,7 @@ import {
   settleInTapStartsCount,
   settleInWaitsForTap,
 } from '../../lib/settleIn'
-import { nextTarget, targetLabel } from '../../lib/progression'
+import { targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
 import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
@@ -487,10 +488,7 @@ export function StretchSession({
       },
     [allSteps],
   )
-  const coreTarget = useMemo(
-    () => nextTarget(workouts, loaded.key, { repMin: loaded.repMin, repMax: loaded.repMax, increment: loaded.increment }),
-    [workouts, loaded],
-  )
+  const coreTarget = useMemo(() => loadedTarget(workouts, loaded), [workouts, loaded])
   // Whether that target asks for more than was done last time (see lib/challenge).
   const coreChallenge = useMemo(
     () => isChallenge(workouts, loaded.key, coreTarget, loaded.repMin),
