@@ -318,9 +318,25 @@ const APP_FLOWS = [
   },
   {
     family: 'settings',
-    ids: ['settings/theme', 'settings/custom-colour'],
+    ids: ['settings/side-switch', 'settings/theme', 'settings/custom-colour'],
     async run({ page, take, note }) {
       if (!(await page.eval(pressJs('settings', false)))) return note('settings: no tab button')
+      // The seconds each stretch gives to change sides, on the first page.
+      const toSwitches = `(() => {
+        const l = [...document.querySelectorAll('label')].find((l) => l.textContent.trim() === 'seconds to switch sides')
+        if (!l) return false
+        l.scrollIntoView({ block: 'start' })
+        return true
+      })()`
+      let switches = false
+      for (let i = 0; i < 20 && !switches; i++) {
+        await sleep(400)
+        switches = await page.eval(toSwitches)
+      }
+      if (switches) {
+        await sleep(300)
+        await take('settings/side-switch')
+      } else note('settings: no side switch seconds')
       const toSwatches = `(() => {
         const b = document.querySelector('button[aria-label="custom"]')
         if (!b) return false

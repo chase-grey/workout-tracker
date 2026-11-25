@@ -20,7 +20,7 @@
 
 import type { WorkoutSplit } from './estimate'
 import { SEC_PER_REP, stepWorkSec, type SessionStep } from './flexSteps'
-import { GET_READY_SEC, settleInSec } from './settleIn'
+import { settleInSec } from './settleIn'
 
 /**
  * The settle-in the flow actually serves before `step`. Ordinarily the step's own
@@ -29,7 +29,7 @@ import { GET_READY_SEC, settleInSec } from './settleIn'
  * side switch straight to the get-ready count.
  */
 function settleBefore(step: SessionStep, prev?: SessionStep): number {
-  if (prev?.kind === 'flex' && prev.sideSwitchSec) return GET_READY_SEC
+  if (prev?.kind === 'flex' && prev.sideSwitchSec) return prev.sideSwitchSec
   return settleInSec(step, prev)
 }
 

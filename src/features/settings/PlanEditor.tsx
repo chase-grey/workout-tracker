@@ -72,7 +72,7 @@ function TextField({
  * whose value isn't yet a complete number, which is exactly the "2." the decimal
  * fields have to pass through. inputMode still brings up the numeric keypad.
  */
-function NumberField({
+export function NumberField({
   label,
   value,
   onChange,

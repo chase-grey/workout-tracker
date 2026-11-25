@@ -90,6 +90,12 @@ describe('remaining checklist timing', () => {
     expect(priceStretchFlow([first, second], () => 10, true)[1].setupSec).toBe(5)
   })
 
+  it('prices a side switch at the exercise’s own count', () => {
+    const [first, second] = buildFlexSteps(FLEX_ROUTINES.pelvic_tilt.blocks).filter((s) => s.exKey === 'rectus_femoris_stretch')
+    expect(priceStretchFlow([first, second], () => 10)[1].setupSec).toBe(10)
+    expect(priceStretchFlow([first, second], () => 10, true)[1].setupSec).toBe(10)
+  })
+
   it('clamps overtime and expired rest without subtracting future work', () => {
     const steps = buildFlexSteps(DEFAULT_FLEX_ROUTINE).slice(-2)
     const priced = priceStretchFlow(steps, () => 10)

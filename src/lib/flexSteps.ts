@@ -10,6 +10,29 @@ export type Side = 'left' | 'right'
 /** Default seconds to reposition between the two sides of a round. */
 export const SIDE_SWITCH_SEC = 5
 
+/** The shortest and longest a side switch can be set to. Zero would read as no switch at all. */
+export const SIDE_SWITCH_MIN_SEC = 1
+export const SIDE_SWITCH_MAX_SEC = 120
+
+/**
+ * Whether the two sides of this exercise are joined by a switch count: it runs
+ * one side at a time and no real rest sits between the two.
+ */
+export const switchesSides = (ex: FlexExercise): boolean =>
+  !!ex.perSide && (!!ex.restAfterSides || ex.restSec <= 0)
+
+/** Seconds this exercise gives to change sides. */
+export const sideSwitchSecOf = (ex: FlexExercise): number => ex.sideSwitchSec ?? SIDE_SWITCH_SEC
+
+/** The routine with one exercise's side switch set, held to whole seconds in range. */
+export function withSideSwitchSec(plan: FlexBlock[], exKey: string, sec: number): FlexBlock[] {
+  const sideSwitchSec = Math.min(SIDE_SWITCH_MAX_SEC, Math.max(SIDE_SWITCH_MIN_SEC, Math.round(sec)))
+  return plan.map((block) => ({
+    ...block,
+    exercises: block.exercises.map((ex) => (ex.key === exKey ? { ...ex, sideSwitchSec } : ex)),
+  }))
+}
+
 /** One set of one stretch — the unit the guided stretch flow steps through. */
 export type FlexSetStep = {
   kind: 'flex'
@@ -275,14 +298,14 @@ export function buildRoutineSteps(plan: FlexBlock[], startSide: Side = 'left'): 
       // With `restAfterSides` the round's rest belongs to the second side, so the
       // first side prescribes none — which is also what earns it a side switch.
       const firstRest = ex.restAfterSides ? 0 : ex.restSec
-      const switchSec = ex.sideSwitchSec ?? SIDE_SWITCH_SEC
+      const switchSec = sideSwitchSecOf(ex)
       return ([startSide, startSide === 'left' ? 'right' : 'left'] as Side[]).map((side, index): FlexSetStep => ({
         ...base,
         side,
         restSec: index === 0 ? firstRest : ex.restSec,
         // The side the round starts on is the one a switch follows — and only
         // when no real rest already sits between the two.
-        ...(index === 0 && firstRest === 0 ? { sideSwitchSec: switchSec } : {}),
+        ...(index === 0 && switchesSides(ex) ? { sideSwitchSec: switchSec } : {}),
         // The side is part of the identity: the two halves of a round track
         // their done-ness separately.
         stepKey: `${bi}:${ex.key}:${r}:${side}`,

@@ -81,6 +81,16 @@ is not asking.
 - `settleIn.test.ts` lists the exercises that wait, and `npm run shots --
   session pelvic` draws the way into the thrust.
 
+## A side switch counts what its exercise says
+
+The count between the two sides of a stretch is the exercise's own
+`sideSwitchSec` (five when it has none), never a flat number in the session
+(2026-11-25: the routines said ten and the session served five). The estimates
+read the same field (`lib/stretchSplit`, `lib/remainingTiming`). Anyone can
+change it per exercise in Settings, under stretching, `seconds to switch sides`
+(`settings/SideSwitchSetting`); it is kept with the routine on that device, and
+restoring a routine's default puts the shipped seconds back.
+
 ## A set that is logged shows its past attempts
 
 Any set a session writes as workout rows wears the trend button

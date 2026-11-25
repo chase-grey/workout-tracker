@@ -31,6 +31,7 @@ import { LABEL_MODES, labelModeFor } from '../../lib/controlLabels'
 import { discardPendingUses } from '../../lib/useControlLabel'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import { stretchRoutinesFor } from '../../lib/flexSkills'
+import { SideSwitchSetting } from './SideSwitchSetting'
 import { MODE_PREFS } from '../../lib/theme'
 import { AccentPicker } from '../../components/AccentPicker'
 import { setTheme, useThemePref } from '../../lib/themeStore'
@@ -390,6 +391,7 @@ export function SettingsTab({
 
           {stretchRoutinesFor(settings.profile).length > 0 && (
           <Group title="stretching">
+            <SideSwitchSetting routines={stretchRoutinesFor(settings.profile)} />
             <section className="flex flex-col gap-2">
               <label className="text-sm font-medium text-neutral-300">stretch routines</label>
               {stretchRoutinesFor(settings.profile).map((r) => (

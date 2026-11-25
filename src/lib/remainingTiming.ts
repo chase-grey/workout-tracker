@@ -37,7 +37,8 @@ export function priceStretchFlow(flow: SessionStep[], coreRepsFor: (round: numbe
       fixedRestSec: step.kind === 'flex' ? rest : undefined,
       // Hands-free skips a standalone count, but not a side switch's (see
       // StretchSession.advanceFrom).
-      setupSec: fast && previousRest <= 0 && !(prev?.kind === 'flex' && prev.sideSwitchSec) ? 0 : settleInSec(step, prev),
+      setupSec: prev?.kind === 'flex' && prev.sideSwitchSec ? prev.sideSwitchSec
+        : fast && previousRest <= 0 ? 0 : settleInSec(step, prev),
       prescribedRestSec: rest,
     }
   })

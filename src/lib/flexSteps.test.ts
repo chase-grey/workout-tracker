@@ -6,9 +6,12 @@ import {
   buildSessionSteps,
   flexRoundKey,
   stepWorkSec,
+  switchesSides,
+  withSideSwitchSec,
 } from './flexSteps'
 import type { FlexBlock } from '../config/flexPlan'
 import { STRETCH_CORE } from '../config/plan'
+import { FLEX_ROUTINES } from '../config/flexRoutines'
 
 const ex = (key: string, maxSets: number): FlexBlock['exercises'][number] => ({
   key,
@@ -181,6 +184,27 @@ describe('buildFlexSteps — per-side stretches', () => {
     it('is there for a stretch that never rests', () => {
       const steps = buildFlexSteps([{ label: 'B', exercises: [perSide({ restSec: 0 })] }])
       expect(steps.map((s) => s.sideSwitchSec)).toEqual([5, undefined, 5, undefined, 5, undefined])
+    })
+
+    it('can be set per exercise, in whole seconds, and never to nothing', () => {
+      const plan = [{ label: 'B', exercises: [perSide({ restSec: 0 }), { ...perSide({ restSec: 0 }), key: 'other' }] }]
+      const [mine, other] = withSideSwitchSec(plan, perSide({}).key, 9.6)[0].exercises
+      expect(mine.sideSwitchSec).toBe(10)
+      expect(other.sideSwitchSec).toBeUndefined()
+      expect(withSideSwitchSec(plan, mine.key, 0)[0].exercises[0].sideSwitchSec).toBe(1)
+      expect(withSideSwitchSec(plan, mine.key, 999)[0].exercises[0].sideSwitchSec).toBe(120)
+      expect(buildFlexSteps(withSideSwitchSec(plan, mine.key, 20))[0].sideSwitchSec).toBe(20)
+    })
+
+    // The session counts what the routine says, not a flat five: these were
+    // written as ten and served as five until 2026-11-25.
+    it('gives the pelvic tilt routine’s stretches ten seconds to change sides', () => {
+      const steps = buildFlexSteps(FLEX_ROUTINES.pelvic_tilt.blocks)
+      for (const key of ['lunge_stretch', 'rectus_femoris_stretch']) {
+        const first = steps.find((s) => s.exKey === key)!
+        expect(first.sideSwitchSec).toBe(10)
+        expect(switchesSides(FLEX_ROUTINES.pelvic_tilt.blocks.flatMap((b) => b.exercises).find((e) => e.key === key)!)).toBe(true)
+      }
     })
 
     // A real rest between the sides is time enough to switch legs in.

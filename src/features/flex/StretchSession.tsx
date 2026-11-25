@@ -56,7 +56,6 @@ import { storage, type RestState } from '../../services/storage'
 import { toISODate } from '../../lib/dates'
 import { STRETCH_CORE } from '../../config/plan'
 import {
-  GET_READY_SEC,
   CORE_ENTRY_GET_READY_SEC,
   POST_PHOTO_GET_READY_SEC,
   settleInSec,
@@ -1008,7 +1007,9 @@ export function StretchSession({
     // front of it to have got you into position.
     if (finished.kind === 'flex' && finished.sideSwitchSec) {
       endSetClock()
-      setReadyOverrideSec(GET_READY_SEC)
+      // The exercise's own count: some changes of side are a kneel and a re-set,
+      // and the seconds are a setting (see settings/SideSwitchSetting).
+      setReadyOverrideSec(finished.sideSwitchSec)
       setPreparing(true)
       return
     }
