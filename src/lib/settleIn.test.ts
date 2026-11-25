@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FLEX_ROUTINES } from '../config/flexRoutines'
 import { buildSessionSteps } from './flexSteps'
-import { CORE_ENTRY_GET_READY_SEC, POST_PHOTO_GET_READY_SEC, settleInSec, settleInTapStartsCount, settleInWaitsForTap } from './settleIn'
+import { CORE_ENTRY_GET_READY_SEC, POST_PHOTO_GET_READY_SEC, holdsOnReady, settleInSec, settleInTapStartsCount, settleInWaitsForTap } from './settleIn'
 
 describe('settleInSec', () => {
   it('gives tailor’s pose fifteen seconds and other stretches five, including repeat sets and side changes', () => {
@@ -58,13 +58,47 @@ describe('settleInWaitsForTap', () => {
     expect(settleInWaitsForTap(tilt[0], undefined, 'pelvic_tilt')).toBe(false)
     // The thrust asks once, on the way in. Its later sets come off a rest.
     expect(tilt.filter((step) => step.exKey === 'hip_thrust').length).toBeGreaterThan(1)
-    // The tap says you're in position: the set starts on it, with no count after.
-    tilt.forEach((step, index) => expect(settleInTapStartsCount(step, tilt[index - 1])).toBe(false))
+    // The tap off "ready?" starts the count for everything that runs on a clock,
+    // and puts the card up for the one set that is typed in.
+    expect(waiting.filter((step) => !settleInTapStartsCount(step)).map((step) => step.exKey)).toEqual(['hip_thrust'])
   })
 
   it('leaves the other routines their counts when told which routine it is', () => {
     const waiting = steps.filter((step, index) => settleInWaitsForTap(step, steps[index - 1], 'head_to_toe'))
     expect(waiting.map((step) => step.exKey)).toEqual(['sciatic_floss'])
-    expect(settleInTapStartsCount(waiting[0], steps[steps.indexOf(waiting[0]) - 1])).toBe(true)
+    expect(settleInTapStartsCount(waiting[0])).toBe(true)
+  })
+})
+
+describe('holdsOnReady', () => {
+  const tilt = buildSessionSteps(FLEX_ROUTINES.pelvic_tilt.blocks, { core: false })
+  const crossings = tilt
+    .map((step, index) => ({ step, prev: tilt[index - 1] }))
+    .filter(({ step, prev }) => prev != null && prev.exKey !== step.exKey)
+
+  it('never asks after a tap that got you there: a rest tapped away, the preview, a checklist row', () => {
+    for (const routine of Object.values(FLEX_ROUTINES)) {
+      const steps = buildSessionSteps(routine.blocks)
+      steps.forEach((step, index) => {
+        for (const handsFreeNewExercise of [false, true]) {
+          expect(holdsOnReady(step, steps[index - 1], routine.key, { tappedIn: true, handsFreeNewExercise })).toBe(false)
+        }
+      })
+    }
+    // The plank and the lunge stretch each come off a rest, which waits for a tap.
+    for (const key of ['rkc_plank', 'lunge_stretch']) {
+      const at = crossings.find(({ step }) => step.exKey === key)!
+      expect(at.prev!.restSec).toBeGreaterThan(5)
+      expect(holdsOnReady(at.step, at.prev, 'pelvic_tilt', { tappedIn: true, handsFreeNewExercise: false })).toBe(false)
+    }
+  })
+
+  it('still asks where nothing was tapped: a set that ended on its own clock, a rest hands-free rolled out', () => {
+    for (const { step, prev } of crossings) {
+      expect(holdsOnReady(step, prev, 'pelvic_tilt', { tappedIn: false, handsFreeNewExercise: false })).toBe(true)
+    }
+    const side = buildSessionSteps(FLEX_ROUTINES.side_split.blocks)
+    expect(holdsOnReady(side[1], side[0], 'side_split', { tappedIn: false, handsFreeNewExercise: false })).toBe(false)
+    expect(holdsOnReady(side[1], side[0], 'side_split', { tappedIn: false, handsFreeNewExercise: true })).toBe(true)
   })
 })

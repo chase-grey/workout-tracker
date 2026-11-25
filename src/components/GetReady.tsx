@@ -5,7 +5,7 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
  * Brief full-screen "get into position" countdown shown after rest, before the
  * set it leads into — time to settle in, or to walk back to the bar, before the
  * work starts. Used by the stretch routine ahead of a stretch's rhythm, and by
- * the workout when a hands-free rest ends itself.
+ * the workout between the tap that brings a hold up and the hold's clock.
  * Wall-clock based (tracks a target end time) so it stays accurate if the app is
  * backgrounded. Tap anywhere to start immediately.
  *
@@ -17,9 +17,10 @@ import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
  * move is named up there, so this doesn't name it again.
  *
  * `untilTap` holds the screen on "ready?" until you tap it, for a setup that takes
- * as long as it takes. By default that tap starts the set; with `tapStartsCount`
- * it starts the count instead, for a setup in two parts — gathering the gear,
- * then getting into the pose with it. `onHold` says when that wait begins and
+ * as long as it takes. It is not asked of someone who just tapped to get here
+ * (see lib/settleIn's holdsOnReady). By default that tap starts the set; with
+ * `tapStartsCount` it starts the count instead, as it does for every set that
+ * runs on a clock: the hand that tapped still has to get into the pose. `onHold` says when that wait begins and
  * when it ends, however it ends, so the session can stand its clock still
  * through it (see lib/offClock).
  */

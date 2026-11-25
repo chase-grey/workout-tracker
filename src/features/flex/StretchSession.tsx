@@ -59,8 +59,8 @@ import {
   CORE_ENTRY_GET_READY_SEC,
   POST_PHOTO_GET_READY_SEC,
   settleInSec,
+  holdsOnReady,
   settleInTapStartsCount,
-  settleInWaitsForTap,
 } from '../../lib/settleIn'
 import { targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
@@ -444,6 +444,12 @@ export function StretchSession({
   // On "ready?", waiting for the tap (see GetReady's untilTap). The wait is as
   // long as finding the strap takes, so it is off the clock like a pause.
   const [waitingReady, setWaitingReady] = useState(false)
+  // The count coming up was reached by a tap: a rest tapped away, the preview
+  // tapped through, a checklist row. That tap is the answer "ready?" would ask
+  // for, so the count runs from it instead of asking again (see
+  // lib/settleIn's holdsOnReady). Anything that reaches a count without one, a
+  // set ending on its clock or a rest rolled out hands-free, clears it.
+  const [tappedIn, setTappedIn] = useState(false)
 
   /** Move the rest currently on the clock into the session's total. */
   const bankRest = () => {
@@ -899,6 +905,7 @@ export function StretchSession({
       if (rest) bankRest()
       setRest(null)
       setReadyOverrideSec(null)
+      setTappedIn(false)
       setPreparing(!!landing && (!fast || !exerciseStarted(landing, done)) && settleInSec(landing) > 0)
     }
   }
@@ -935,11 +942,13 @@ export function StretchSession({
     if (jump) {
       const ready = landing ? settleInSec(landing, step) : 0
       setReadyOverrideSec(ready > 0 ? ready : null)
+      setTappedIn(true)
       setPreparing(ready > 0)
       setShowList(false)
       return
     }
     setReadyOverrideSec(null)
+    setTappedIn(false)
     setPreparing(!!landing && (!fast || !exerciseStarted(landing, done)) && settleInSec(landing) > 0)
   }
 
@@ -990,6 +999,9 @@ export function StretchSession({
     }
     const fresh = startsNewExercise(finished.exKey, steps[next].exKey, exerciseStarted(steps[next], doneSet))
     goToStep(next)
+    // The tap that ends a set says the set is over, not that you're in position
+    // for the next one. Only the tap off the rest that follows says that.
+    setTappedIn(false)
 
     // Crossing from the mobility routine into the core block skips the rest — the
     // last stretch leaves you rested, so go straight to a get-into-position count
@@ -1286,6 +1298,7 @@ export function StretchSession({
             event.stopPropagation()
             setStarted(true)
             setReadyOverrideSec(Math.max(POST_PHOTO_GET_READY_SEC, getReadySec))
+            setTappedIn(true)
             setPreparing(true)
           }}
           className="keep-dark fixed inset-0 z-80 flex h-full w-full flex-col items-center justify-center gap-2 bg-black px-6 text-center focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-accent"
@@ -1432,10 +1445,13 @@ export function StretchSession({
           header={topBar}
           fastMode={fast ? 'on' : 'off'}
           // A tap that cuts the rest short leaves it where back can find it (see
-          // lib/leftRest); a rest that ran out leaves nothing.
-          onClose={() => {
+          // lib/leftRest); a rest that ran out leaves nothing. The same
+          // tap is the "ready" the count after it would otherwise ask for; a
+          // rest that rolled itself out hands-free was not asked anything.
+          onClose={(expired) => {
             const left = leaveRest(rest, Date.now())
             setLeftRest(left && { ...left, clockKey: setClock.current.restingKey })
+            setTappedIn(!expired)
             closeRest()
           }}
         />
@@ -1450,15 +1466,17 @@ export function StretchSession({
           // does — the bar, the stretch coming and the session's controls all
           // stay put and stay tappable while you settle into position.
           header={topBar}
-          untilTap={settleInWaitsForTap(step, prevStep, routine) || (fast && intoNewExercise)}
-          // The floss's "ready?" says the strap is in hand, not that you're lying in
-          // position with it, so the count still runs after the tap. Hands-free
-          // has no counts, and its tap goes straight in.
-          tapStartsCount={settleInTapStartsCount(step, prevStep) && !fast}
+          // Asked only of someone who hasn't just tapped to get here.
+          untilTap={holdsOnReady(step, prevStep, routine, { tappedIn, handsFreeNewExercise: fast && intoNewExercise })}
+          // The tap off "ready?" is made with a hand that still has to get back
+          // into the pose, so for a set on a clock it starts the count, and the
+          // count starts the set. A typed-in set's tap puts its card up.
+          tapStartsCount={settleInTapStartsCount(step)}
           onHold={holdForReady}
           onDone={() => {
             setPreparing(false)
             setReadyOverrideSec(null)
+            setTappedIn(false)
           }}
         />
       )}
@@ -1519,6 +1537,7 @@ export function StretchSession({
               setRest(null)
             }
             setReadyOverrideSec(ready > 0 ? ready : null)
+            setTappedIn(true)
             setPreparing(ready > 0)
             setShowList(false)
           }}

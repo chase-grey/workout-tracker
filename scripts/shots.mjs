@@ -202,6 +202,15 @@ const tapOverlayJs = `(() => {
   return true
 })()`
 
+/** What is drawn over the session and what it leads into: "ready?", a count, nothing. */
+const overlayJs = `(() => {
+  const el = document.querySelector('.fixed.inset-0.z-50')
+  const big = el?.querySelector('.text-6xl, .text-8xl')?.textContent?.trim() ?? ''
+  const header = document.querySelector('.session-type header')
+  const named = ((header?.querySelector('h2')?.textContent ?? '') + ' ' + (header?.querySelector('p')?.textContent ?? '')).trim()
+  return named + '|' + (el ? (big || 'rest') : '')
+})()`
+
 /** A tap whose target is the first element matching the selector, itself. */
 const tapOnJs = (selector) => `(() => {
   const el = document.querySelector(${JSON.stringify(selector)})
@@ -407,8 +416,12 @@ const APP_FLOWS = [
       'session/pelvic-tilt-into-thrust',
       'session/pelvic-tilt-thrust',
       'session/pelvic-tilt-thrust-history',
+      'session/pelvic-tilt-ready-tapped',
+      'session/pelvic-tilt-into-plank',
       'session/pelvic-tilt-plank',
       'session/pelvic-tilt-plank-history',
+      'session/pelvic-tilt-into-lunge',
+      'session/lift-hold-count',
       'session/stretch-paused',
       'session/stretch-how-to',
     ],
@@ -461,6 +474,32 @@ const APP_FLOWS = [
           } else note('session: no "pause workout" in the lift menu')
         } else note('session: no kebab on the lift')
       }
+      // A hold in the lift workout, reached by a tap on its checklist row: the
+      // count stands between the tap and the hold's clock.
+      let counted = false
+      for (const day of LIFT_DAYS) {
+        await reload()
+        if (!(await page.eval(pressJs(day)))) continue
+        await sleep(1200)
+        if (!(await page.eval(pressContainingJs('View checklist')))) continue
+        await sleep(900)
+        // The short day leaves the holds out; the full one has them.
+        if (await page.eval(pressJs('do the full workout'))) await sleep(900)
+        // The row itself, not its "move adductors" grip.
+        if (!(await page.eval(`(() => {
+          const b = [...document.querySelectorAll('button:not([aria-label])')].find((b) => (b.textContent ?? '').includes('adductors') && b.getClientRects().length > 0)
+          if (!b) return false
+          b.click()
+          return true
+        })()`))) continue
+        await sleep(700)
+        const over = (await page.eval(overlayJs)).split('|')[1]
+        if (!/^[1-5]$/.test(over)) note(`session: no count before the lift hold (${over || 'nothing'})`)
+        await take('session/lift-hold-count')
+        counted = true
+        break
+      }
+      if (!counted) note('session: no lift day with a hold to jump to')
       // Each stretch routine, from a clean start: nothing is logged.
       for (const routine of STRETCH_ROUTINES) {
         await reload()
@@ -487,6 +526,10 @@ const APP_FLOWS = [
           await page.eval(tapScreenJs)
           await sleep(1200)
           await page.eval(tapOverlayJs)
+          // The tap off "ready?" starts the count for a set on a clock, not the set.
+          await sleep(700)
+          if (!/\|[1-5]$/.test(await page.eval(overlayJs))) note('session: the tap off "ready?" did not start a count before the standing tilt')
+          await take('session/pelvic-tilt-ready-tapped')
           if (!(await untilSetIsUp(page))) note('session: the standing tilt never came up')
           await page.eval(tapScreenJs)
           // Longer than the five-second count this used to be, so a count that
@@ -507,19 +550,39 @@ const APP_FLOWS = [
             } else note(`session: no history button on the ${name}`)
           }
           await history('hip thrust', 'thrust')
-          if (await page.eval(pressContainingJs('View checklist'))) {
+          // On through the thrust and the plank. Each rest is tapped away, and
+          // that tap is the answer: what follows it is the count, never "ready?"
+          // (see lib/settleIn's holdsOnReady).
+          const seen = new Set()
+          for (let i = 0; i < 12; i++) {
+            const before = await page.eval(overlayJs)
+            if (before.includes('lunge')) break
+            // Finish the set on screen, then tap its rest away.
+            await page.eval(tapScreenJs)
+            await sleep(1500)
+            if (!(await page.eval(overlayJs)).endsWith('|rest')) note(`session: no rest after "${before}"`)
+            await page.eval(tapOverlayJs)
             await sleep(700)
-            await page.eval(pressJs('skip hip thrust'))
-            await sleep(400)
-            await page.eval(`document.querySelector('.fixed.inset-0.z-60')?.click()`)
-            await sleep(900)
-            for (let i = 0; i < 3 && (await page.eval(`!!document.querySelector('.fixed.inset-0.z-50')`)); i++) {
-              await page.eval(tapOverlayJs)
-              await sleep(1500)
+            const after = await page.eval(overlayJs)
+            const [title, over] = after.split('|')
+            if (over === 'ready?') note(`session: "ready?" asked after a rest was tapped away, into ${title}`)
+            // A typed-in set's later rounds come straight off the rest, to the card.
+            else if (!/^[1-5]$/.test(over) && !title.includes('thrust')) note(`session: no count after a rest was tapped away, into ${title} (${over || 'nothing'})`)
+            const name = title.toLowerCase().includes('plank') ? 'plank' : title.toLowerCase().includes('lunge') ? 'lunge' : null
+            if (name && !seen.has(name)) {
+              seen.add(name)
+              await take(`session/pelvic-tilt-into-${name}`)
+              if (name === 'lunge') break
             }
-            await take('session/pelvic-tilt-plank')
-            await history('RKC plank', 'plank')
-          } else note('session: no checklist on the stretch')
+            await sleep(6000)
+            if ((await page.eval(overlayJs)).split('|')[1]) note(`session: the count into ${title} never ended`)
+            if (name === 'plank' && !seen.has('plank-up')) {
+              seen.add('plank-up')
+              await take('session/pelvic-tilt-plank')
+              await history('RKC plank', 'plank')
+            }
+          }
+          if (!seen.has('lunge')) note('session: never reached the lunge stretch')
         }
         if (routine !== STRETCH_ROUTINES[0]) continue
         // The pause curtain first, then back off it for the ? beside the movement.

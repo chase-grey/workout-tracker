@@ -78,8 +78,25 @@ is not asking.
 - Head to toe waits only at the sciatic floss, and the side split and skill
   routines nowhere; they still count into each new exercise. Whether they wait
   too is Chase's call, not yet made.
-- `settleIn.test.ts` lists the exercises that wait, and `npm run shots --
-  session pelvic` draws the way into the thrust.
+- **`ready?` is never asked after a tap that got you there** (Chase,
+  2026-11-25, at the RKC plank and the lunge stretch). A rest waits for a tap,
+  so the tap that ends it is the answer; so is the tap through a preview and
+  the tap on a checklist row. What follows any of them is the count. `ready?`
+  is left for the crossings nothing was tapped at: a set that ended on its own
+  clock, and a rest hands-free rolled out (`lib/settleIn.holdsOnReady`). The
+  tap that ends a set is not such a tap: it says the set is over, not that
+  you're in position for the next.
+- **A set on a clock never starts on a tap** (same day). The hand that tapped
+  has to get back under you, so a tap that leads into a hold, an open hold or
+  a paced set starts the five-second count, and the count starts the set
+  (`settleInTapStartsCount`; hands-free too). In the lift workout the same
+  count stands between a tap and a hold's clock: a rest tapped away, the
+  opening hold's start, a checklist row (`countingIn` in `ActiveSession`). A
+  typed-in set has no clock, and its tap puts the card up.
+- `settleIn.test.ts` lists the exercises that wait and holds both rules, and
+  `npm run shots -- session pelvic` walks the routine from the tilts to the
+  lunge stretch and notes any `ready?` after a tapped rest, or a tap with no
+  count after it. `-- session lift-hold` draws the lift's count.
 
 ## A side switch counts what its exercise says
 

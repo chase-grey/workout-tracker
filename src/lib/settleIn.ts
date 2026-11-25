@@ -38,12 +38,37 @@ export function settleInWaitsForTap(step: SessionStep, prev?: SessionStep, routi
 }
 
 /**
+ * Whether the count on screen holds on "ready?", given how you got to it.
+ *
+ * "ready?" asks for a tap, so it is only asked of someone who hasn't just given
+ * one. A rest tapped away, the preview tapped through and a checklist row tapped
+ * are each already the answer (`tappedIn`), and the count runs from that tap. A
+ * rest that hands-free rolled out by itself, and a set that ended on its own
+ * clock, were not: those are where the wait still stands, for the exercises
+ * that wait (see {@link settleInWaitsForTap}) and for any new exercise
+ * hands-free (`handsFreeNewExercise`).
+ */
+export function holdsOnReady(
+  step: SessionStep,
+  prev: SessionStep | undefined,
+  routine: FlexRoutineKey | undefined,
+  how: { tappedIn: boolean; handsFreeNewExercise: boolean },
+): boolean {
+  if (how.tappedIn) return false
+  return how.handsFreeNewExercise || settleInWaitsForTap(step, prev, routine)
+}
+
+/**
  * Whether the tap that ends that wait starts the count rather than the set.
  *
- * Only the floss: its tap says the strap is in hand, not that you're lying in
- * position with it (see components/GetReady's tapStartsCount). Everywhere else
- * the tap says you're in position, and the set starts on it.
+ * Any set that runs on a clock: a hold, an open hold, a paced set. The tap is
+ * made with a hand that then has to get back under you, and a clock that starts
+ * on the tap is running before you are in the pose. So the tap starts the
+ * get-into-position count and the count starts the set, hands-free or not (see
+ * components/GetReady's tapStartsCount).
+ *
+ * A typed-in set has no clock to get ahead of you: its tap puts the card up.
  */
-export function settleInTapStartsCount(step: SessionStep, prev?: SessionStep): boolean {
-  return step.kind === 'flex' && step.exKey === 'sciatic_floss' && prev != null && prev.exKey !== step.exKey
+export function settleInTapStartsCount(step: SessionStep): boolean {
+  return step.kind === 'flex'
 }

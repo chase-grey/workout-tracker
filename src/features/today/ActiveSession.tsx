@@ -83,6 +83,8 @@ import { useWakeLock } from '../../lib/useWakeLock'
 import { storage, type ActiveRest } from '../../services/storage'
 import { useActiveSession } from './useActiveSession'
 import { RestTimer } from '../../components/RestTimer'
+import { GetReady } from '../../components/GetReady'
+import { GET_READY_SEC } from '../../lib/settleIn'
 import { HoldTimer } from '../../components/HoldTimer'
 import { createHoldVariantSelector } from '../../components/RestTimer'
 import { SessionProgress } from '../../components/SessionProgress'
@@ -229,6 +231,10 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   })
   // A first set that's a hold waits on a tap to begin (see `awaitingStart`).
   const [started, setStarted] = useState(false)
+  // The set a tap just led into: a rest tapped away, the opening hold's start, a
+  // checklist row. If it is a hold, a get-into-position count stands between that
+  // tap and its clock (see `countingIn`).
+  const [tappedInto, setTappedInto] = useState<string | null>(null)
   // Whether a timed hold's clock is running (see HoldTimer). While it is, the
   // clock is what says when the set is over, so turbo's own wait stands down.
   const [holdRunning, setHoldRunning] = useState(false)
@@ -659,13 +665,21 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // as a tap that didn't take — and its first tap logs it, like every other set's.
   const awaitingStart = opening && !!planned.timed
 
+  // A hold's clock never starts on the tap that brought it up. The hand that
+  // tapped still has to get back under you, so the tap starts the same
+  // five-second count the stretch routine leads a hold in with, and the count
+  // starts the clock. A rest hands-free rolled out by itself was not tapped, and
+  // its own countdown was the warning: that hold starts as the rest ends.
+  const countingIn = tappedInto === step.stepKey && !!planned.timed && !set?.done && rest == null
+
   const start = () => {
     activeStartRef.current = Date.now()
+    setTappedInto(step.stepKey)
     setStarted(true)
   }
 
   const readActiveSec = useStepElapsed(step.stepKey, !opening && !set?.done &&
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && howToKey == null && !showCircuitRest && asking == null)
+    rest == null && !countingIn && !paused && !showList && !showAddExercise && historyKey == null && howToKey == null && !showCircuitRest && asking == null)
   const [estimateNow, setEstimateNow] = useState(Date.now)
   useEffect(() => {
     if (!rest) return
@@ -761,6 +775,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // first; the time on the set being left is charged to nothing.
   const jumpToStep = (idx: number) => {
     if (idx >= 0) setCurrent(idx)
+    setTappedInto(idx >= 0 ? steps[idx]?.stepKey ?? null : null)
     activeStartRef.current = Date.now()
     if (rest) closeRest()
     setShowList(false)
@@ -1205,7 +1220,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // both the turbo wait and a self-ending hold need to be true before they can
   // close a set on their own.
   const setScreenLive =
-    rest == null && !paused && !showList && !showAddExercise && historyKey == null && howToKey == null && !showCircuitRest && asking == null
+    rest == null && !countingIn && !paused && !showList && !showAddExercise && historyKey == null && howToKey == null && !showCircuitRest && asking == null
   // With nothing over the set, Android back steps the workout itself back: into
   // the rest the last tap cut short, picking up the seconds it had left. That one
   // step only — a rest that ran out, or that the flow has since moved past,
@@ -1807,10 +1822,25 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           }
           // A tap that cuts the rest short leaves it where back can find it (see
           // lib/leftRest); a rest that ran out leaves nothing.
-          onClose={() => {
+          onClose={(expired) => {
             const left = leaveRest(rest, Date.now())
             setLeftRest(left && { ...left, clockKey: setClock.current.restingKey })
+            // A tap into a hold gets the count before its clock (see `countingIn`).
+            setTappedInto(expired ? null : step.stepKey)
             closeRest()
+          }}
+        />
+      )}
+      {/* Between the tap that brought a hold up and its clock: time to get the
+          hand back under you. The stretch routine's count, under the same header. */}
+      {countingIn && (
+        <GetReady
+          seconds={GET_READY_SEC}
+          header={topBar}
+          onHold={() => {}}
+          onDone={() => {
+            activeStartRef.current = Date.now()
+            setTappedInto(null)
           }}
         />
       )}
