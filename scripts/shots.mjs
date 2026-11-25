@@ -9,6 +9,7 @@
  *   npm run shots -- --refresh-data     # pull the owner's history first (needs the owner key; see below)
  *   npm run shots -- today --light      # on the light ground
  *   npm run shots -- rest --accent "#ff6600"   # in a swatch (rose) or a colour of your own
+ *   npm run shots -- today progress --size 3438x1300   # in a desktop window instead of on a phone
  *
  * Renders the app's visual surfaces at a phone's 390x844 and writes one PNG per
  * shot plus a contact sheet to .scratch/shots/: index.html, and pictures of it,
@@ -40,9 +41,22 @@ import { findBrowser, launch } from './shots-browsers.mjs'
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-const WIDTH = 390
-const HEIGHT = 844
-const SCALE = 2
+/* A phone unless --size says otherwise. Past the shell's own 700px line the
+   window is a desktop's: one pixel to the pixel, and a mouse rather than a thumb. */
+const sizeArg = (() => {
+  const i = process.argv.indexOf('--size')
+  if (i < 0) return null
+  const m = /^(\d+)x(\d+)$/.exec(process.argv[i + 1] ?? '')
+  if (!m) {
+    console.error('--size takes WIDTHxHEIGHT, e.g. 3438x1300')
+    process.exit(1)
+  }
+  return { w: Number(m[1]), h: Number(m[2]) }
+})()
+const WIDTH = sizeArg?.w ?? 390
+const HEIGHT = sizeArg?.h ?? 844
+const PHONE = WIDTH <= 700
+const SCALE = PHONE ? 2 : 1
 const SHEET_WIDTH = 3000
 const THUMB_WIDTH = 156
 /** Taller than this and a browser won't hand back one screenshot of the page. */
@@ -66,7 +80,7 @@ if (!['chromium', 'firefox', 'all'].includes(browserArg)) {
 const mode = flag('--light') ? 'light' : 'dark'
 /** A swatch's name or `#rrggbb`; unset wears the default. */
 const accent = option('--accent') ?? null
-const words = args.filter((a, i) => !a.startsWith('--') && !['--browser', '--accent'].includes(args[i - 1])).map((w) => w.toLowerCase())
+const words = args.filter((a, i) => !a.startsWith('--') && !['--browser', '--accent', '--size'].includes(args[i - 1])).map((w) => w.toLowerCase())
 // A family's name picks the family (several pick each of them); any other word
 // has to match the variant or the phase.
 const wanted = (id) => {
@@ -164,7 +178,7 @@ const pressJs = (label, exact = true) => `(() => {
 /** A tap on the blank screen, which is what advances a session. */
 const tapScreenJs = `(() => {
   const el = document.querySelector('.session-type') ?? document.body
-  const o = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 195, clientY: 700 }
+  const o = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: ${Math.round(WIDTH / 2)}, clientY: ${HEIGHT - 144} }
   el.dispatchEvent(new PointerEvent('pointerdown', o))
   el.dispatchEvent(new PointerEvent('pointerup', o))
   el.dispatchEvent(new MouseEvent('click', o))
@@ -419,7 +433,7 @@ async function shootWith(kind, base, outDir, snapshot) {
   const taken = []
   const notes = []
   try {
-    await page.viewport(WIDTH, HEIGHT, SCALE)
+    await page.viewport(WIDTH, HEIGHT, SCALE, PHONE)
 
     const save = async (id, meta) => {
       const file = path.join(outDir, kind, `${id}.png`)

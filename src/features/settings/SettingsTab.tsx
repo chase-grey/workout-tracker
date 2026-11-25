@@ -337,7 +337,7 @@ export function SettingsTab({
   )
 
   return (
-    <div className="flex flex-col gap-6 pb-4">
+    <div className="is-deck flex flex-col gap-6 pb-4">
       <h2 className="text-xl font-bold">settings</h2>
       <div role="tablist" className="flex gap-1 rounded-xl bg-surface p-1">
         {pages.map((p) => (
@@ -361,6 +361,8 @@ export function SettingsTab({
       <BackendBanner />
       <SaveStatus />
 
+      {/* `deck`: each group is a card in a desktop window's columns (lib/fitColumns). */}
+      <div className="deck flex flex-col gap-6">
       {shown === 'plan' && (
         <>
           <Group title="tracking & goals">
@@ -626,6 +628,7 @@ export function SettingsTab({
           <PoseCheck />
         </>
       )}
+      </div>
     </div>
   )
 }

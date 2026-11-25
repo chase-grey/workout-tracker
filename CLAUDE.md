@@ -136,6 +136,38 @@ Outside Settings and the forms a sheet opens, nothing on a page wears an
   `editTiles`) the stack shows a labelled edit button that retires with use.
   That is the only one.
 
+## A desktop window
+
+Past 700px wide the app is in a desktop window, and it uses it (2026-11-25).
+The ruling is the one Chase made for my-brain the same day (its AGENTS.md,
+"monitors"), and the arithmetic is that app's, ported: `src/lib/fitColumns.ts`,
+with the rules held by `fitColumns.test.ts`. The phone is untouched: none of
+this applies at 700px and under.
+
+- **The nav is a rail up the left side**, the same `BottomNav` restyled
+  (`.has-rail` in index.css), not a second component.
+- **A page of cards stands in columns**, sized from the window in both
+  directions: with height to spare the cards are fewer columns and drawn
+  larger, up to 1.35 times; columns are added, and the cards shrunk back, only
+  when they would run past the bottom. No card is narrower than 24rem, a
+  phone's width. Today, Progress and Settings are such pages.
+- **A new page of cards joins by its markup**, never with a column count or a
+  width cap of its own: `is-deck` on the tab's root, `deck` on the box whose
+  children are the cards (`EditableStack` wears it already), and `deck-split`
+  on a card whose blocks can stand apart, as the goals do.
+- **A screen that is one thing to read** (the coach) keeps a 44rem measure in
+  the middle.
+- **A session keeps the phone's column.** The shell drops `has-rail` while one
+  is on screen, because rest, the count and the pause are drawn over that same
+  box (`lib/shell`). Making a session bigger in a window is Chase's call.
+- **A sheet is a dialog in the middle of the window.** Every sheet is written
+  `fixed inset-0 flex items-end`, and the stylesheet goes by that; write a new
+  one the same way and it follows. A screen that takes the whole window
+  (`fixed inset-0 flex flex-col bg-bg`) keeps its contents to the same 44rem.
+- **Look at it in a window**: `npm run shots -- today progress --size 3438x1300`
+  draws the same shots at that size (Chase's monitor), with a mouse instead of
+  a thumb.
+
 ## Other people use this now
 
 The app has more than one user. Each has a **profile** (`src/lib/profile.ts`,

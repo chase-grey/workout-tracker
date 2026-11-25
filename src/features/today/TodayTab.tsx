@@ -342,7 +342,7 @@ export function TodayTab({ onStart, onStartStretch, onStartAbs }: Props) {
     // No bottom padding of its own: `main` already pads below the scroll area, and
     // stacking a second 1rem on top of it pushed the home page just past the
     // viewport — enough to make it scroll by a hair with nothing to scroll to.
-    <div className="flex flex-col gap-2">
+    <div className="is-deck flex flex-col gap-2">
       <BackendBanner />
       {flash && (
         <div className="flex min-h-[44px] items-center justify-center gap-3 rounded-xl bg-accent-2/20 px-2 text-sm text-accent-2">

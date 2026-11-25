@@ -31,6 +31,7 @@ import { useBackGuard } from './lib/useBackGuard'
 import { noteScreen } from './services/screenWatch'
 import { takeResumeTab } from './lib/resumeTab'
 import { useKeyboardOpen } from './lib/useKeyboardOpen'
+import { useFitColumns } from './lib/fitColumns'
 import { keyboardCoversPage } from './lib/viewport'
 import { useScreenMove } from './lib/useScreenMove'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from './lib/shell'
@@ -268,8 +269,8 @@ function AppShell() {
 
   // Workouts and stretches take over the whole screen (no tabs / bottom nav)
   // unless they've been set aside.
-  const immersive =
-    (sessionActive && !minimized) || finishSummary != null || stretchSummary != null
+  const inSession = sessionActive && !minimized
+  const immersive = inSession || finishSummary != null || stretchSummary != null
 
   // The screen arrives from the side of the bar its tab sits on, a session comes
   // up over the tabs, and the tabs settle back when it leaves (see lib/motion).
@@ -301,6 +302,12 @@ function AppShell() {
   // is literally what happens: nothing rides up, the keys cover the nav where it
   // stands, and taking it away would only drop the composer a row before it rose.
   const typingToCoach = tab === 'coach' && keyboardOpen && !keyboardCoversPage()
+
+  // In a desktop window the tabs get the whole of it, with the nav stood up the
+  // left side as a rail and the cards in columns (CLAUDE.md, "A desktop
+  // window"). A session keeps the phone's column: it is one thing at a time,
+  // and rest and the count are drawn over that same box (lib/shell).
+  useFitColumns(mainRef, `${tab} ${inSession}`)
 
   const dismissFinish = () => {
     const ambient = finishSummary?.ambient ?? null
@@ -351,7 +358,7 @@ function AppShell() {
 
   return (
     <div
-      className={`app-shell flex flex-col ${SHELL_WIDTH} ${tab === 'coach' ? 'follows-keyboard' : ''}`}
+      className={`app-shell flex flex-col ${SHELL_WIDTH} ${inSession ? '' : 'has-rail'} ${tab === 'coach' ? 'follows-keyboard' : ''}`}
     >
       {/* min-h-0: a flex item's automatic minimum is its own content, which would
           let a tall tab push the nav off the bottom of the shell rather than

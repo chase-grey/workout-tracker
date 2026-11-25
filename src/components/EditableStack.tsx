@@ -84,7 +84,9 @@ export function EditableStack({ cards, layout, onLayout, gap }: Props) {
   const sort = useDragSort(shown, (from, to) => onLayout(withCardMoved(layout, shown, from, to)))
 
   return (
-    <div ref={root} className={`flex flex-col ${gap}`} {...hold}>
+    // `deck`: in a desktop window the cards stand in columns (lib/fitColumns).
+    // Not while the page is being arranged, which is a list one card wide.
+    <div ref={root} className={`flex flex-col ${gap} ${edit ? '' : 'deck'}`} {...hold}>
       {!edit &&
         shown.map((id) => (
           <div key={id} data-card={id} className={`flex flex-col ${gap}`}>

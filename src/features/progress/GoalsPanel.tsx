@@ -1666,7 +1666,8 @@ export function GoalsPanel({
   const quiet = 'flex min-h-[48px] items-center gap-2 rounded-2xl bg-surface px-4 text-left text-sm active:opacity-70'
 
   return (
-    <div className="flex flex-col gap-3">
+    // `deck-split`: each goal is a card of its own in a desktop window's columns.
+    <div className="deck-split flex flex-col gap-3">
       <h3 className="text-sm font-semibold tracking-wider text-neutral-500">goals</h3>
       {collapsed && reachedShown > 0 && (
         <button

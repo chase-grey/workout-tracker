@@ -45,6 +45,10 @@ export function BottomNav({
       style={{
         gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))`,
         paddingBottom: 'env(safe-area-inset-bottom)',
+        // Which way the pill travels is the stylesheet's to say: along the bar
+        // on a phone, down the rail in a desktop window (.nav-pill, index.css).
+        ['--tabs' as string]: tabs.length,
+        ['--at' as string]: at,
       }}
     >
       {/* A soft pill of the accent under the tab you're on, which slides to the
@@ -54,7 +58,6 @@ export function BottomNav({
         <span
           aria-hidden
           className="nav-pill pointer-events-none absolute left-0 top-0 -z-10 flex h-[44px] items-center justify-center"
-          style={{ width: `${100 / tabs.length}%`, transform: `translateX(${at * 100}%)` }}
         >
           <span className="h-8 w-14 rounded-full bg-accent/15" />
         </span>
@@ -63,6 +66,7 @@ export function BottomNav({
         <button
           key={t.id}
           data-tab={t.id}
+          title={t.label}
           onClick={() => onChange(t.id)}
           aria-label={alerts.includes(t.id) ? `${t.label}, needs attention` : t.label}
           aria-current={active === t.id ? 'page' : undefined}

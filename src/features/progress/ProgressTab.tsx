@@ -458,7 +458,7 @@ export function ProgressTab({
   ]
 
   return (
-    <div className="flex flex-col gap-4 pb-4">
+    <div className="is-deck flex flex-col gap-4 pb-4">
       <h2 className="text-xl font-bold">progress</h2>
 
       {(showMonthReview || showYearReview) && (

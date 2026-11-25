@@ -1343,6 +1343,8 @@ input[type='number'] {
 
 /* The tab bar's pill slides to the tab you picked, a touch past it and back. */
 .nav-pill {
+  width: calc(100% / var(--tabs, 3));
+  transform: translateX(calc(var(--at, 0) * 100%));
   transition: transform 240ms cubic-bezier(0.3, 1.35, 0.5, 1);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1501,5 +1503,148 @@ button:active .nav-icon {
   }
   button:active .nav-icon {
     transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------------
+   A desktop window (CLAUDE.md has the ruling). Everything here starts where
+   the shell's phone layout stops, at the same 700px line, so a phone is
+   untouched by it.
+
+   The tabs get the whole window: the nav stands up the left side as a rail,
+   and a page of cards is laid out in columns sized and scaled to the window
+   by lib/fitColumns, which writes --deck-cols, --deck-width and --deck-zoom
+   on the page. A session is not one of the tabs: it keeps the phone's column
+   (the shell drops `has-rail` for it), since rest and the count are drawn
+   over that same box.
+   ------------------------------------------------------------------------ */
+@media (min-width: 701px) {
+  .app-shell.has-rail {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    max-width: none;
+  }
+  .has-rail > main {
+    grid-column: 2;
+    grid-row: 1;
+    padding-inline: 1.5rem;
+    /* Its room is counted before the columns are, so a scrollbar arriving
+       can't change the count and send it away again. */
+    scrollbar-gutter: stable both-edges;
+  }
+  /* The foot is not a box here: the banners sit under the page, and the nav
+     leaves it for the side. */
+  .has-rail > .shell-foot {
+    display: contents;
+  }
+  .has-rail > .shell-foot > * {
+    grid-column: 2;
+  }
+  .has-rail > .shell-foot > nav {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    width: 4.5rem;
+    padding: 0.75rem 0;
+    border-top: 0;
+    border-right: 1px solid var(--color-border);
+  }
+  .has-rail nav > button {
+    min-height: 3.25rem;
+  }
+  .has-rail .nav-pill {
+    top: 0.75rem;
+    width: 100%;
+    height: 3.25rem;
+    transform: translateY(calc(var(--at, 0) * (3.25rem + 0.25rem)));
+  }
+
+  /* A screen that is one thing to read keeps a readable measure. */
+  .has-rail > main > * {
+    width: 100%;
+    max-width: 44rem;
+    margin-inline: auto;
+  }
+  /* A page of cards. One card wide until fitColumns has measured it, and
+     while it is folded up to be arranged. */
+  .has-rail > main > .is-deck {
+    max-width: var(--deck-width, 34rem);
+    zoom: var(--deck-zoom, 1);
+  }
+  /* What sits above the cards (the title, a banner, Settings' pages) keeps a
+     card's width rather than running the length of the columns. */
+  .has-rail .is-deck > :not(.deck) {
+    max-width: 34rem;
+  }
+  .has-rail .deck {
+    display: block;
+    columns: var(--deck-cols, 1);
+    column-gap: 1rem;
+  }
+  .has-rail .deck > *,
+  .has-rail .deck-split > * {
+    break-inside: avoid;
+    margin-bottom: 1rem;
+  }
+  /* A card made of blocks that stand apart (the goals) hands them to the
+     columns one by one. */
+  .has-rail .deck > [data-card]:has(> .deck-split),
+  .has-rail .deck-split {
+    display: contents;
+  }
+  /* Its heading stays over its first block. `break-after: avoid` isn't honoured
+     everywhere, so the heading is an unbreakable box reaching a little way
+     into what follows: with less room than that left, both go to the next
+     column. */
+  .has-rail .deck-split > h3 {
+    padding-bottom: 5rem;
+    margin-bottom: -5rem;
+    pointer-events: none;
+  }
+  .has-rail .deck-split > h3 + * {
+    margin-top: 0.75rem;
+  }
+
+  /* A sheet rises from the bottom edge of a phone. In a window it is a
+     dialog: in the middle, a card wide. Every sheet is written the same way
+     (`fixed inset-0 flex items-end`), which is what this goes by; a toast is
+     not a sheet. */
+  .fixed.inset-0.flex.items-end:not(.pointer-events-none) {
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  .fixed.inset-0.flex.items-end:not(.pointer-events-none) > * {
+    max-width: 32rem;
+    max-height: 100%;
+    overflow-y: auto;
+    border-radius: 1.5rem;
+  }
+  /* A screen that takes the whole window (the plan editor, the camera steps)
+     keeps its contents to a readable measure in the middle of it. */
+  .fixed.inset-0.flex.flex-col.bg-bg > * {
+    width: 100%;
+    max-width: 44rem;
+    margin-inline: auto;
+  }
+}
+
+/* A mouse gets the hand over anything it can press. */
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled),
+  [role='button'],
+  [role='tab'],
+  summary,
+  select {
+    cursor: pointer;
+  }
+  .has-rail nav > button:hover {
+    color: var(--color-neutral-300);
+  }
+  .has-rail nav > button[aria-current='page']:hover {
+    color: var(--color-accent);
   }
 }
