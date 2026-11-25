@@ -295,6 +295,11 @@ could be seen.
   property, and ignores anything in that calendar without the mark.
 - Disconnecting deletes that calendar from the person's account, revokes the
   token and deletes the property.
+- The page Google sends someone back to has one link, back to the app.
+  `gcal_connect` takes a `returnUrl` for it, and uses it only when it is the
+  app's own: the published site (`https://chase-grey.github.io/workout-tracker/`
+  and anything under it) or a copy on `localhost`. Anything else links to the
+  published site.
 - `gcal_apply` only saves the new `base` when every Google call landed. A base
   that claimed an event Google never took would read, next sync, as that event
   deleted by hand, and take the day off in the app.

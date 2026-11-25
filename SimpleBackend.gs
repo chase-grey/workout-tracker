@@ -172,7 +172,7 @@ const FEEDBACK_HEADERS = ['at', 'user', 'build', 'message']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 16
+const BACKEND_VERSION = 17
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -2070,6 +2070,21 @@ function gcalStatus() {
   return { saved: 1, available: !!cfg, connected: !!(cfg && gcalLoad(gcalKey())) }
 }
 
+// Where the app lives. The page Google sends someone back to links here and
+// nowhere else: the link is on a page served from Google's own script domain,
+// so one that could point anywhere would lend that page to a phishing site.
+const APP_URL = 'https://chase-grey.github.io/workout-tracker/'
+// A copy of the app under development, on the machine it is being built on.
+const APP_DEV_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?(\/[^\s"'<>\\]*)?$/
+
+/** The address to send someone back to: the one asked for when it is the app's own, the published app otherwise. */
+function appReturnUrl(value) {
+  const url = typeof value === 'string' ? value : ''
+  if (/[\s"'<>\\]/.test(url) || /(^|\/)\.\.(\/|$|[?#])/.test(url)) return APP_URL
+  if (url.indexOf(APP_URL) === 0 || APP_DEV_URL.test(url)) return url
+  return APP_URL
+}
+
 /**
  * The Google consent page to send this account to. The `state` it carries back
  * is a one-time ticket naming the account, good for ten minutes: the callback
@@ -2078,11 +2093,10 @@ function gcalStatus() {
 function gcalConnect(body) {
   const cfg = gcalConfig()
   if (!cfg) throw new Error('Calendar sync is not set up')
-  const back = String((body && body.returnUrl) || '')
   const state = Utilities.getUuid().replace(/-/g, '')
   CacheService.getScriptCache().put(
     'gcal_state_' + state,
-    JSON.stringify({ key: gcalKey(), back: /^https:\/\/[^\s"'<>]+$|^http:\/\/localhost[:\/][^\s"'<>]*$/.test(back) ? back : '' }),
+    JSON.stringify({ key: gcalKey(), back: appReturnUrl(body && body.returnUrl) }),
     600,
   )
   return {

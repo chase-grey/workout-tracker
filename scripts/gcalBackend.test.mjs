@@ -74,7 +74,7 @@ it('hands out a consent link, and keeps the refresh token Google sends the perso
     props: { ...CLIENT },
     google: (req) => (req.url.includes('/token') ? { body: { refresh_token: 'r9', access_token: 'at' } } : null),
   })
-  const { url } = b.post('gcal_connect', { returnUrl: 'https://app.test/' })
+  const { url } = b.post('gcal_connect', { returnUrl: 'https://chase-grey.github.io/workout-tracker/' })
   const q = new URL(url).searchParams
   expect(q.get('scope')).toBe('https://www.googleapis.com/auth/calendar.app.created')
   expect(q.get('redirect_uri')).toBe('https://script.test/exec')
@@ -82,7 +82,7 @@ it('hands out a consent link, and keeps the refresh token Google sends the perso
 
   const page = b.doGet({ parameter: { state: q.get('state'), code: 'c0de' } })
   expect(page.html).toContain('connected')
-  expect(page.html).toContain('href="https://app.test/"')
+  expect(page.html).toContain('href="https://chase-grey.github.io/workout-tracker/"')
   expect(JSON.parse(b.props.gcal_u1)).toEqual({ refresh: 'r9', calendarId: '', base: [] })
   expect(b.calls[0].payload).toMatchObject({ code: 'c0de', client_secret: 'shh', grant_type: 'authorization_code' })
 
@@ -90,13 +90,73 @@ it('hands out a consent link, and keeps the refresh token Google sends the perso
   expect(b.doGet({ parameter: { state: q.get('state'), code: 'again' } }).html).toContain('expired')
 })
 
-it('refuses a callback it did not hand out, and a return address that is not a plain https one', () => {
+it('refuses a callback it did not hand out', () => {
   const b = backend({ props: { ...CLIENT }, google: () => null })
   expect(b.doGet({ parameter: { state: 'made-up', code: 'x' } }).html).toContain('expired')
   expect(b.props.gcal_u1).toBeUndefined()
-  const { url } = b.post('gcal_connect', { returnUrl: 'javascript:alert(1)' })
+})
+
+const APP = 'https://chase-grey.github.io/workout-tracker/'
+/** The link the page Google sends someone back to carries, for a given returnUrl. */
+function backLink(returnUrl) {
+  const b = backend({ props: { ...CLIENT }, google: () => null })
+  const { url } = b.post('gcal_connect', returnUrl === undefined ? {} : { returnUrl })
   const page = b.doGet({ parameter: { state: new URL(url).searchParams.get('state') } })
-  expect(page.html).not.toContain('href=')
+  const links = page.html.match(/href="[^"]*"/g) || []
+  expect(links).toHaveLength(1)
+  return links[0].slice(6, -1).replace(/&amp;/g, '&')
+}
+
+it('sends someone back to the app itself, published or under development', () => {
+  for (const own of [
+    APP,
+    APP + '?tab=progress',
+    APP + 'index.html#settings',
+    'http://localhost:5173/',
+    'http://localhost:5173/workout-tracker/',
+    'http://localhost',
+    'https://localhost:4173/workout-tracker/?x=1&y=2',
+    'http://127.0.0.1:5173/',
+  ]) {
+    expect(backLink(own), own).toBe(own)
+  }
+})
+
+it('sends someone back to the published app when asked for anywhere else', () => {
+  for (const other of [
+    undefined,
+    '',
+    'https://evil.example/',
+    'https://app.test/',
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'http://chase-grey.github.io/workout-tracker/',
+    'https://chase-grey.github.io/',
+    'https://chase-grey.github.io/workout-tracker',
+    'https://chase-grey.github.io/workout-tracker-2/',
+    'https://chase-grey.github.io/workout-tracker/../other/',
+    'https://chase-grey.github.io/workout-tracker/a/..',
+    'https://chase-grey.github.io.evil.example/workout-tracker/',
+    'https://evil.example/https://chase-grey.github.io/workout-tracker/',
+    'https://chase-grey.github.io@evil.example/workout-tracker/',
+    ' https://chase-grey.github.io/workout-tracker/',
+    'https://chase-grey.github.io/workout-tracker/"onclick="x',
+    "https://chase-grey.github.io/workout-tracker/'x",
+    'https://chase-grey.github.io/workout-tracker/<x>',
+    'https://chase-grey.github.io/workout-tracker/\\x',
+    'http://localhost.evil.example/',
+    'http://localhost@evil.example/',
+    'http://localhost:5173@evil.example/',
+    'http://localhost:evil.example/',
+    'http://evil.example/localhost/',
+    'http://192.168.1.20:5173/',
+    'ftp://localhost/',
+    '//localhost/',
+    ['http://localhost/'],
+    { toString: () => 'http://localhost/' },
+  ]) {
+    expect(backLink(other), JSON.stringify(other)).toBe(APP)
+  }
 })
 
 it('reads back only the events that carry its mark, with the set last agreed', () => {
