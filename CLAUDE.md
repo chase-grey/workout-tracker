@@ -187,6 +187,17 @@ full body, and a turn kept per day led it left, left, right, right
 - `pushSide.test.ts` runs the real push, pull, full-body week; a new sided
   movement or a new day that carries one is covered by it.
 
+## A shape is empty when its screen closes
+
+A rest or hold shape is handed `shapeFraction(remainingMs, totalMs)`
+(`lib/shapeLead`), never the time left divided by the total. The shapes smooth
+the clock's 250ms ticks with a 260ms transition, so one fed the bare fraction
+runs a tick behind and the screen closes on it unfinished: the curvy sand
+timer left a heap in its top bulb (2026-11-25). A countdown that closes itself
+does so on the milliseconds reaching zero, not on the rounded seconds its
+label shows, which get there half a second early. Only a shape redrawn every
+frame with no transition (the comets) takes the clock as it is.
+
 ## An animation along the bottom follows the phone's own bottom
 
 Chase's ruling (2026-11-25): anything drawn along the bottom edge of the screen

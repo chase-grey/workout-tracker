@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { CountdownShape, type HoldVariant } from './RestTimer'
+import { shapeFraction } from '../lib/shapeLead'
 
 /** The prescribed seconds as a clock reads them. */
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
-const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
 /**
  * The clock for a timed hold — a plank rather than a set of reps (see
@@ -122,27 +122,32 @@ export function HoldTimer({
   // How much of the prescribed hold is left, for the shape that draws it: taken
   // from the millisecond value so its level moves every tick rather than once a
   // second. It bottoms out at zero and stays there through overtime, which the
-  // accessible clock continues to report.
-  const fraction = targetSec > 0 ? clamp01(remainingMs / (targetSec * 1000)) : 0
+  // accessible clock continues to report. Aimed ahead of the clock (see
+  // lib/shapeLead), so the shape has finished draining when the hold is up.
+  const fraction = shapeFraction(remainingMs, targetSec * 1000)
+  // The prescribed time is up. Read off the milliseconds, not the rounded seconds
+  // the label shows: those reach zero half a second early, and a hold that closed
+  // on them closed with that half second of the shape still to drain.
+  const up = remainingMs <= 0
 
   useEffect(() => {
-    if (buzzed.current || remaining > 0) return
+    if (buzzed.current || !up) return
     buzzed.current = true
     navigator.vibrate?.(400)
-  }, [remaining])
+  }, [up])
 
   // The prescribed time running out is the whole of what a self-closing hold waits
   // on. It can only run out while the clock is running, so a hold that stood down
   // at the buzzer closes when the set comes back rather than behind whatever screen
   // was over it.
   useEffect(() => {
-    if (remaining > 0 || !onTargetEnd || ended.current) return
+    if (!up || !onTargetEnd || ended.current) return
     ended.current = true
     onTargetEnd(heldSec())
     // `heldSec` is rebuilt every render; the latch above is what keeps this to one
     // firing, since the hold it reads is over the moment it runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remaining, onTargetEnd])
+  }, [up, onTargetEnd])
 
   return (
     <div className="hold-timer flex flex-col items-center gap-3">

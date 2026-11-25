@@ -22,6 +22,7 @@ import { usePrefersReducedMotion } from '../lib/useReducedMotion'
 import { useBottomEdge } from '../lib/useBottomEdge'
 import { createRotation } from '../lib/variantRotation'
 import { isAnimationHidden } from '../lib/hiddenAnimations'
+import { shapeFraction } from '../lib/shapeLead'
 import { useShownAnimation } from '../lib/useShownAnimation'
 import { createRoundVariantSelector } from '../lib/roundVariant'
 import { SHELL_PAD_TOP, SHELL_PAD_X, SHELL_WIDTH } from '../lib/shell'
@@ -1223,7 +1224,15 @@ export function RestTimer({
   // candle's height — so the animation itself reads as the timer. Taken from the
   // millisecond value so the level advances every tick and the drain transition
   // has a small, continuous step to smooth rather than a full second's jump.
-  const remainingFraction = seconds > 0 ? clamp01(remainingMs / (seconds * 1000)) : 0
+  //
+  // Aimed ahead of the clock (see lib/shapeLead), so the drain transition lands
+  // on the reading instead of trailing it and the shape is empty when rest is
+  // up. The comets are redrawn every frame with no transition, so they take the
+  // clock as it is.
+  const remainingFraction =
+    variant === 'comet' || variant === 'comet-dissolve'
+      ? seconds > 0 ? clamp01(remainingMs / (seconds * 1000)) : 0
+      : shapeFraction(remainingMs, seconds * 1000)
   const full = isFullBleed(variant)
   const fills = isFill(variant)
 
