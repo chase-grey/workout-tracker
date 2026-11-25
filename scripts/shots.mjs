@@ -175,9 +175,9 @@ const pressJs = (label, exact = true) => `(() => {
   return true
 })()`
 
-/** A tap on the blank screen, which is what advances a session. */
+/** A tap in the session's tap zone, which is what advances it. */
 const tapScreenJs = `(() => {
-  const el = document.querySelector('.session-type') ?? document.body
+  const el = document.querySelector('[data-tap-zone]') ?? document.body
   const o = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: ${Math.round(WIDTH / 2)}, clientY: ${HEIGHT - 144} }
   el.dispatchEvent(new PointerEvent('pointerdown', o))
   el.dispatchEvent(new PointerEvent('pointerup', o))
@@ -192,6 +192,26 @@ const tapOverlayJs = `(() => {
   el.click()
   return true
 })()`
+
+/** A tap whose target is the first element matching the selector, itself. */
+const tapOnJs = (selector) => `(() => {
+  const el = document.querySelector(${JSON.stringify(selector)})
+  if (!el) return false
+  const r = el.getBoundingClientRect()
+  const o = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: r.left + 4, clientY: r.top + 4 }
+  el.dispatchEvent(new PointerEvent('pointerdown', o))
+  el.dispatchEvent(new PointerEvent('pointerup', o))
+  el.dispatchEvent(new MouseEvent('click', o))
+  return true
+})()`
+
+/** The header's "set 1/4" line and whether rest is up: what a set advancing changes. */
+const setLineJs = `(() => {
+  const line = document.querySelector('.session-type p')?.textContent ?? ''
+  return line + '|' + !!document.querySelector('[data-tap-zone]')?.offsetParent + '|' + document.querySelectorAll('.session-type input').length
+})()`
+
+const hasButtonJs = (label) => `[...document.querySelectorAll('.session-type button')].some((b) => b.textContent.trim() === ${JSON.stringify(label)} && b.getClientRects().length > 0)`
 
 const scrollMainJs = (top) => `(() => {
   const m = document.querySelector('main')
@@ -349,6 +369,7 @@ const APP_FLOWS = [
     family: 'session',
     ids: [
       'session/lift-set',
+      'session/lift-done',
       'session/lift-rest',
       'session/lift-how-to',
       'session/lift-menu',
@@ -372,6 +393,23 @@ const APP_FLOWS = [
       else {
         await sleep(1500)
         await take('session/lift-set')
+        // Only the blank space under the cards advances: the header, the card
+        // and the space beside it are a reach for something else.
+        const before = await page.eval(setLineJs)
+        for (const where of ['.session-type h2', '.session-type header', '.session-type p', '.session-type .bg-surface', '.session-type'])
+          if (!(await page.eval(tapOnJs(where)))) note(`session: nothing matched ${where} to tap`)
+        await sleep(800)
+        if ((await page.eval(setLineJs)) !== before) note('session: a tap outside the tap zone advanced the set')
+        // With no blank space left, as under a keyboard or a full round, a button stands in.
+        if (PHONE) {
+          await page.viewport(WIDTH, 440, SCALE, PHONE)
+          await sleep(600)
+          if (!(await page.eval(hasButtonJs('done')))) note('session: no done button when the cards fill the screen')
+          await take('session/lift-done')
+          await page.viewport(WIDTH, HEIGHT, SCALE, PHONE)
+          await sleep(600)
+          if (await page.eval(hasButtonJs('done'))) note('session: the done button stayed once there was blank space again')
+        }
         await page.eval(tapScreenJs)
         await sleep(1500)
         await take('session/lift-rest')

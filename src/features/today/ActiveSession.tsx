@@ -73,7 +73,7 @@ import {
 import { toISODate } from '../../lib/dates'
 import { toWeight } from '../../lib/weightField'
 import { usePressAction } from '../../lib/usePressAction'
-import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
+import { TAP_ZONE, useScreenTap, useTapZone } from '../../lib/useScreenTap'
 import { useEnterNext } from '../../lib/useEnterNext'
 import { useIdleTimeout } from '../../lib/useIdleTimeout'
 import { useOnHidden } from '../../lib/useOnHidden'
@@ -1256,13 +1256,14 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     setHoldRunning(false)
   }, [step.stepKey])
 
-  // Tapping the screen ends the set — the same target the stretch routine gives a
-  // set, and for the same reason: a button is a small thing to hit for hands that
-  // have just come off a bar, and the whole page is the one target you can't miss.
-  // Controls (the trend button, the kebab, the weight and reps fields) keep their
-  // own job, an overlay that owns the screen swallows the tap rather than logging a
-  // set behind it, and the last set of all still waits on its explicit finish
-  // button — ending the workout is not something to trigger with a stray tap.
+  // Tapping the blank space under the cards ends the set — the same target the
+  // stretch routine gives a set, and for the same reason: a button is a small
+  // thing to hit for hands that have just come off a bar. The header and the
+  // cards, and the gaps around them, are outside it: a tap up there is a reach
+  // for a field or a control, not a set finished. An overlay that owns the screen
+  // swallows the tap rather than logging a set behind it, and the last set of all
+  // still waits on its explicit finish button — ending the workout is not
+  // something to trigger with a stray tap.
   //
   // A hold that opens the workout is the exception: there the first tap starts its
   // clock instead (see `awaitingStart`), so the plank isn't timed from the moment
@@ -1276,6 +1277,11 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     completeSetAndAdvance()
   }
   const screenTap = useScreenTap(tapAdvance, !atLast && setScreenLive)
+  // A round whose cards fill the screen leaves no blank space to tap, and gets a
+  // `done` button in its place (see useTapZone). Pressed straight out of a field,
+  // like the finish button, so it takes the same press handling.
+  const tapZone = useTapZone()
+  const donePress = usePressAction(tapAdvance)
 
   // Enter in the card's last field is the same tap, from the keyboard: the number
   // just typed is the set, and the thumb is already on the key. In an earlier
@@ -1529,18 +1535,19 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   )
 
   return (
-    // min-h-full: the tap target is this element, so it has to reach the bottom of
-    // the screen rather than stop where the set card does (the stretch routine's
-    // root fills the screen the same way). session-type: every piece of text in
+    // min-h-full: the tap zone at the bottom of this element is whatever height
+    // the cards leave, so it has to reach the bottom of the screen rather than
+    // stop where the set card does (the stretch routine's root fills the screen
+    // the same way). session-type: every piece of text in
     // here, the rest and pause screens over it included, is read from across the
     // gym floor, so the whole tree takes the larger type scale (see index.css).
-    <div ref={fadeRef} className="session-type flex min-h-full flex-col gap-3 pb-6" {...screenTap}>
+    <div ref={fadeRef} className="session-type flex min-h-full flex-col gap-3 pb-6">
       {topBar}
 
-      {/* The card is where a tap reaches for a field, so it doesn't advance the
-          set (TAP_SHIELD); the blank screen around it does. */}
+      {/* The card is where a tap reaches for a field, so neither it nor the
+          space around it advances the set; the blank space under it does. */}
       {!roundMode && set && (
-        <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
+        <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
           {/* What to go for on this set. */}
           {challenging && hint ? (
             <p className="flex items-center justify-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">
@@ -1644,7 +1651,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
               const logged = logFor(s.ex.key)?.sets[s.setIndex]
               if (!logged) return null
               return (
-                <div key={s.stepKey} className="flex items-center justify-between gap-2 rounded-2xl bg-surface px-4 py-1 text-neutral-400" {...TAP_SHIELD}>
+                <div key={s.stepKey} className="flex items-center justify-between gap-2 rounded-2xl bg-surface px-4 py-1 text-neutral-400">
                   <h3 className="min-w-0 truncate font-semibold">{s.ex.name}</h3>
                   <div className="flex shrink-0 items-center gap-1">
                     <span className="text-sm tabular-nums">
@@ -1682,7 +1689,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
                   ? (patch: Partial<SetLog>) => editSet(patch, s, true)
                   : undefined
             return (
-              <div key={s.stepKey} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 pb-4 pt-1" {...TAP_SHIELD}>
+              <div key={s.stepKey} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 pb-4 pt-1">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="flex min-w-0 items-center font-semibold">
                     <span className="min-w-0 truncate">
@@ -1749,7 +1756,8 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
         </div>
       )}
 
-      {/* Every other set advances on a tap anywhere (see onScreenTap); ending the
+      {/* Every other set advances on a tap in the blank space below (see
+          tapAdvance); ending the
           whole workout is worth an explicit button. It fires on pointerup rather
           than on click, because it's pressed straight out of the reps field and the
           keyboard closing under the finger would otherwise swallow the tap (see
@@ -1762,6 +1770,19 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
           finish workout
         </button>
       )}
+
+      {/* No blank space left under the cards to tap: the same action, as a button. */}
+      {!atLast && tapZone.cramped && (
+        <button
+          {...donePress}
+          className="mt-1 flex min-h-[56px] shrink-0 items-center justify-center gap-1 rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
+        >
+          {awaitingStart ? 'start' : 'done'}
+        </button>
+      )}
+
+      {/* The tap zone: whatever the cards leave of the screen. */}
+      <div ref={tapZone.ref} className="min-h-0 flex-1" {...TAP_ZONE} {...screenTap} />
 
       {rest != null && (
         <RestTimer

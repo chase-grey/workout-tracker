@@ -64,7 +64,8 @@ import {
 import { targetLabel } from '../../lib/progression'
 import { toWeight } from '../../lib/weightField'
 import { createRhythmVariantSelector } from '../../lib/rhythmVariant'
-import { TAP_SHIELD, useScreenTap } from '../../lib/useScreenTap'
+import { TAP_ZONE, useScreenTap, useTapZone } from '../../lib/useScreenTap'
+import { usePressAction } from '../../lib/usePressAction'
 import { useEnterNext } from '../../lib/useEnterNext'
 import { HOLD_SECOND_TAP_MS, isSecondTap } from '../../lib/holdTap'
 import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
@@ -738,6 +739,13 @@ export function StretchSession({
     }
     completeSetAndAdvance()
   }, N > 0 && setLive)
+  // The core set's card with no blank space left under it gets a `done` button
+  // in its place, as the lift session's cards do (see useTapZone). Pressed
+  // straight out of a field, so it takes the press handling the lift's does.
+  const tapZone = useTapZone()
+  const donePress = usePressAction(() => {
+    if (N > 0 && setLive) completeSetAndAdvance()
+  })
 
   // Enter in the core card's last field is the same tap, from the keyboard; in
   // the weight field it moves on to the reps (see useEnterNext). Only the core
@@ -1243,7 +1251,7 @@ export function StretchSession({
     // session-type: every piece of text in here — the hold's title, the rep count,
     // the rest and settle-in screens over it — is read from the far end of a mat,
     // so the whole tree takes the larger type scale (see index.css).
-    <div ref={fadeRef} className="session-type stretch-session flex min-h-full flex-col gap-3" {...screenTap}>
+    <div ref={fadeRef} className="session-type stretch-session flex min-h-full flex-col gap-3">
       {topBar}
 
       {!started && photos == null && (
@@ -1266,7 +1274,10 @@ export function StretchSession({
       )}
 
       {step.kind === 'flex' ? (
-        openHold ? (
+        // A hold or a paced set has nothing to edit, so the guide and the space
+        // under it are the tap zone. The header above is not.
+        <div className="flex flex-1 flex-col" {...TAP_ZONE} {...screenTap}>
+        {openHold ? (
           // Nothing prescribed: the clock counts up against the time to beat and
           // waits on the tap that ends it.
           <ChallengeHold
@@ -1321,12 +1332,13 @@ export function StretchSession({
             // the screen, since there's nothing left to time by it.
             endsOnTarget
           />
-        )
+        )}
+        </div>
       ) : (
-        // The core set's card is where a tap reaches for a field, so it doesn't
-        // end the set (TAP_SHIELD); the blank screen around it does. A hold or a
-        // paced set has nothing to edit, so its whole screen stays the target.
-        <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4" {...TAP_SHIELD}>
+        // The core set's card is where a tap reaches for a field, so neither it
+        // nor the space around it ends the set; the blank space under it does.
+        <>
+        <div ref={fieldsRef} onKeyDown={fieldsEnter} className="flex flex-col gap-4 rounded-2xl bg-surface p-4">
           {/* What to go for, said the way the lift session says it: a target that
               is a step up from last time is a challenge, and wears the bolt. */}
           {coreChallenge ? (
@@ -1372,6 +1384,18 @@ export function StretchSession({
             </label>
           </div>
         </div>
+        {/* No blank space left under the card to tap: the same action, as a button. */}
+        {tapZone.cramped && (
+          <button
+            {...donePress}
+            className="mt-1 flex min-h-[56px] shrink-0 items-center justify-center rounded-2xl bg-accent text-lg font-bold text-on-accent active:opacity-80"
+          >
+            done
+          </button>
+        )}
+        {/* The tap zone: whatever the card leaves of the screen. */}
+        <div ref={tapZone.ref} className="min-h-0 flex-1" {...TAP_ZONE} {...screenTap} />
+        </>
       )}
 
       {rest != null && (

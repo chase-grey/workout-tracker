@@ -4,17 +4,25 @@ A mobile-first PWA used in a gym, one-handed, with a barbell or a stretch mat in
 the way. See [README.md](./README.md) for stack and deploy, [BACKEND.md](./BACKEND.md)
 for the Apps Script backend.
 
-## Advancing a session is a tap anywhere
+## Advancing a session is a tap on the blank space
 
 Both guided flows — the lift workout (`src/features/today/ActiveSession.tsx`) and
 the stretch routine (`src/features/flex/StretchSession.tsx`) — obey one rule:
 
-- **Advancing is a tap anywhere on the screen, never a button.** Your hands are
-  busy and a button is a small target. Both sessions put the handler on the root
-  element (`useScreenTap`) and ignore taps that land on `button, input, label, a`
-  or inside a card spread with `TAP_SHIELD` — the set card with the weight and
-  reps fields, where a tap is a reach for a field, not a set finished. The blank
-  screen around the card is the target.
+- **Advancing is a tap on the blank space under the set, not a button.** Your
+  hands are busy and a button is a small target. Chase's ruling (2026-11-25):
+  the header (the name, the set and reps line) and the cards, with the gaps
+  around and between them, never advance — a tap up there is a reach for a
+  field or a control, not a set finished. Both sessions put the handler
+  (`useScreenTap`) on a tap zone, the element that fills whatever the cards
+  leave of the screen, never on the root. A stretch hold or paced set has
+  nothing to edit, so its guide is the zone, from under the header down.
+- **Cards that fill the screen get a `done` button.** When the zone is left
+  with less than a target's worth of height (`useTapZone`, `tapZoneCramped`), a
+  full round of a circuit or a card above the keyboard, the session shows
+  `done` under the cards, doing what the tap does. It goes when the space
+  comes back. `npm run shots -- session lift` taps the header and the card and
+  fails the run's notes if the set moves, and draws the button.
 - **A set that runs on a clock ends itself.** A prescribed hold or a paced set
   rolls into its own rest on target (`HoldTimer.onTargetEnd`,
   `RhythmGuide.onTargetHit`); a stretch hold additionally takes a double tap
@@ -47,7 +55,7 @@ same flow — each has its own `topBar`, `menuItems`, `atLast`,
 `completeSetAndAdvance`, and its own rest / get-ready / pause / checklist wiring.
 Nothing but leaf components is shared, so **a change to session flow that lands
 in one and not the other compiles clean and ships a divergence.** That is exactly
-how the tap-anywhere rule spent three weeks applying to stretches only
+how the tap-to-advance rule spent three weeks applying to stretches only
 (`b1c58a3`, 2026-08-05).
 
 So: any change to how a session is paced, advanced, rested, or ended goes into
