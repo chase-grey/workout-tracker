@@ -170,6 +170,23 @@ every animation a set wears, in both sessions:
 `lib/roundVariant.test.ts` walks every shipped stretch routine and lift day and
 fails if a left step and its right step would ask under different keys.
 
+## Which side goes first follows the movement
+
+A one-side-at-a-time movement leads with whichever side did not lead it the
+last time it was trained, **whatever day or routine that was**. The turn
+belongs to the movement, never to the day: the lateral raise is on push and on
+full body, and a turn kept per day led it left, left, right, right
+(Chase, 2026-11-25).
+
+- Lifts: `lib/pushSide.nextStartSides` reads each pair off the last session
+  that logged it and the session pins the answer per exercise key
+  (`WorkoutSession.startSides`). Two pairs on one day each keep their own turn.
+- Stretches keep one turn per routine (`lib/stretchSide`), which is the same
+  rule only while no per-side stretch is in two routines. Putting one in a
+  second routine means giving it its own turn first.
+- `pushSide.test.ts` runs the real push, pull, full-body week; a new sided
+  movement or a new day that carries one is covered by it.
+
 ## An animation along the bottom follows the phone's own bottom
 
 Chase's ruling (2026-11-25): anything drawn along the bottom edge of the screen

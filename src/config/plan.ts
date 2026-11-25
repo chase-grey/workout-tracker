@@ -1726,12 +1726,14 @@ export function shortExercises(
  * between them, so the arms land on opposite halves of every round. A pair is
  * therefore a sided entry plus the next one facing the other way, and the scan
  * resumes past that second half — so two unrelated sided movements in one day
- * still can't reorder each other. `side` of null leaves the list exactly as the
- * plan declares it.
+ * still can't reorder each other. `side` is one side for every pair, or a side
+ * per exercise key so each pair takes its own turn (either half's key answers for
+ * the pair, and a pair with no answer stays as declared). Null leaves the list
+ * exactly as the plan declares it.
  */
 export function sideOrderedExercises(
   exercises: PlannedExercise[],
-  side: Side | null | undefined,
+  side: Side | Partial<Record<string, Side>> | null | undefined,
 ): PlannedExercise[] {
   if (side == null) return exercises
   const out = [...exercises]
@@ -1741,7 +1743,8 @@ export function sideOrderedExercises(
     const j = out.findIndex((e, k) => k > i && e.side && e.side !== a.side)
     if (j < 0) continue
     // Trade the pair's two positions, leaving whatever sits between them put.
-    if (a.side !== side) [out[i], out[j]] = [out[j], out[i]]
+    const lead = typeof side === 'string' ? side : side[a.key] ?? side[out[j].key]
+    if (lead && a.side !== lead) [out[i], out[j]] = [out[j], out[i]]
     // Past the pair either way — its second half isn't the start of another one.
     i = j
   }

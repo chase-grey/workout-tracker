@@ -11,7 +11,7 @@ import { mirrorSidedEdit } from '../../lib/sidePair'
 import { carryLoggedSet, type CarriedSet } from '../../lib/carryForward'
 import type { SessionLength, VariantKey } from '../../config/plan'
 import { nextVariant, progressionVariant } from '../../lib/pushVariant'
-import { nextStartSide } from '../../lib/pushSide'
+import { nextStartSides } from '../../lib/pushSide'
 import { expandToFull as expandSession } from '../../lib/sessionLength'
 import { soloExercise } from '../../lib/soloSession'
 import { restoreGroup, type RestRule } from '../../lib/groupRest'
@@ -63,14 +63,15 @@ export function useActiveSession() {
       // its progression read from every other session.
       const hasVariants = plan[dayType].exercises.some((e) => e.byVariant)
       const chosen = hasVariants ? variant ?? nextVariant(workouts, dayType) ?? undefined : undefined
-      // Whichever arm didn't lead last time leads today's one-arm-at-a-time work.
-      const startSide = nextStartSide(workouts, dayType)
+      // Whichever arm didn't lead a movement the last time it was trained, on any
+      // day, leads it today.
+      const startSides = nextStartSides(workouts)
       const date = toISODate(new Date())
       // A group trained yesterday (or already today) sits this one out — the abs'
       // time goes to the rest of the day (see lib/absRest, lib/groupRest). The
       // kebab can bring each one back.
       const resting = restingFlags(workouts, plan, date)
-      const planned = performedExercises(plan[dayType], { variant: chosen, length, startSide, ...resting })
+      const planned = performedExercises(plan[dayType], { variant: chosen, length, startSides, ...resting })
       // Read as a batch rather than one lift at a time, so the exercises that
       // share a load (the tricep pair) prefill with one weight between them.
       const targets = nextTargets(workouts, planned, {
@@ -86,7 +87,7 @@ export function useActiveSession() {
         isHistorical: false,
         startedAt: new Date().toISOString(),
         variant: chosen,
-        startSide,
+        startSides,
         length,
         ...resting,
         exercises: planned.map((e) => {

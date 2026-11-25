@@ -30,7 +30,7 @@ import { restsGroup, withoutGroup, type RestFlag, type RestRule } from './groupR
 /** Every group a session can rest, in the order the kebab offers them back. */
 export const REST_RULES: readonly RestRule[] = [ABS_REST, NECK_REST]
 
-export type PerformedShape = Pick<WorkoutSession, 'variant' | 'length' | 'startSide' | RestFlag>
+export type PerformedShape = Pick<WorkoutSession, 'variant' | 'length' | 'startSide' | 'startSides' | RestFlag>
 
 /** Which groups a session started on `today` rests, as the flags it pins. */
 export function restingFlags(rows: WorkoutRow[], plan: Plan, today: string): Pick<WorkoutSession, RestFlag> {
@@ -51,5 +51,6 @@ export function performedExercises(day: DayPlan, s: PerformedShape): PlannedExer
     sized = withoutGroup(rule.isMember, sized, full, rule.fill)
     full = full.filter((e) => !rule.isMember(e))
   }
-  return sideOrderedExercises(sized, s.startSide)
+  // A session started before each pair kept its own turn pinned one side for all.
+  return sideOrderedExercises(sized, s.startSides ?? s.startSide)
 }

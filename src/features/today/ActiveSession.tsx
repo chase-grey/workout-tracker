@@ -313,7 +313,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
     const have = new Set(own.map((e) => e.key))
     return [...own, ...(session.adHocExercises ?? []).filter((e) => !have.has(e.key))]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [day, session.solo, session.variant, session.length, session.startSide, session.restAbs, session.restNeck, session.adHocExercises])
+  }, [day, session.solo, session.variant, session.length, session.startSide, session.startSides, session.restAbs, session.restNeck, session.adHocExercises])
   // And as the checklist has been dragged into shape since: reordered, and with
   // the circuits made or unmade there (see lib/arrangement). Everything below
   // reads this list, so a circuit made by hand is rotated, rested and listed by

@@ -42,14 +42,16 @@ export type WorkoutSession = {
    */
   variant?: 'A' | 'B'
   /**
-   * Which side leads this session's one-limb-at-a-time exercises — it flips every
-   * session so neither arm is always the tired one (see lib/pushSide). Pinned at
-   * start for the same reason as `variant`: a resumed session keeps the order it
-   * began with. Not stored per row, and it doesn't need to be: the two sides are
-   * separate exercise keys and the rows are written in performed order, so the
-   * first sided row of a session is what the next session flips off (see
-   * pushSide.lastStartSide).
+   * Which side leads each of this session's one-limb-at-a-time exercises, by
+   * exercise key — a pair flips every time it is trained, on whatever day, so
+   * neither arm is always the tired one (see lib/pushSide). Pinned at start for
+   * the same reason as `variant`: a resumed session keeps the order it began
+   * with. Not stored per row, and it doesn't need to be: the two sides are
+   * separate exercise keys and the rows are written in performed order, so a
+   * pair's first row in a session is what its next session flips off.
    */
+  startSides?: Record<string, Side>
+  /** One side for every pair: what a session started before `startSides` pinned. */
   startSide?: Side
   /**
    * Whether this session is running the day's SHORT form or the FULL one (see
