@@ -24,6 +24,25 @@ export const switchesSides = (ex: FlexExercise): boolean =>
 /** Seconds this exercise gives to change sides. */
 export const sideSwitchSecOf = (ex: FlexExercise): number => ex.sideSwitchSec ?? SIDE_SWITCH_SEC
 
+/**
+ * The stretches that shipped with ten seconds to change sides nobody asked for
+ * (2026-11-25, for a few hours). A routine saved on a device is a copy of the
+ * shipped one, so taking the ten out of the defaults doesn't reach it.
+ */
+const MISTAKEN_TEN = new Set(['sciatic_floss', 'lunge_stretch', 'couch_stretch', 'half_split', 'front_split_hold'])
+
+/** A saved routine with those tens put back to the default. Any other number is someone's own. */
+export function withoutMistakenSideSwitches(plan: FlexBlock[]): FlexBlock[] {
+  return plan.map((block) => ({
+    ...block,
+    exercises: block.exercises.map((ex) => {
+      if (!MISTAKEN_TEN.has(ex.key) || ex.sideSwitchSec !== 10) return ex
+      const { sideSwitchSec: _dropped, ...rest } = ex
+      return rest
+    }),
+  }))
+}
+
 /** The routine with one exercise's side switch set, held to whole seconds in range. */
 export function withSideSwitchSec(plan: FlexBlock[], exKey: string, sec: number): FlexBlock[] {
   const sideSwitchSec = Math.min(SIDE_SWITCH_MAX_SEC, Math.max(SIDE_SWITCH_MIN_SEC, Math.round(sec)))

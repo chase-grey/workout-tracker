@@ -108,6 +108,13 @@ change it per exercise in Settings, under stretching, `seconds to switch sides`
 (`settings/SideSwitchSetting`); it is kept with the routine on that device, and
 restoring a routine's default puts the shipped seconds back.
 
+**Every stretch ships with five**, and a longer one is written into a routine
+only when Chase asks for it by name. He asked for ten on the rectus femoris
+stretch; making the session honour the field gave ten to the floss, the lunge
+stretch and the front split's three as well, which he had not asked for
+(same day). `flexRoutines.test.ts` lists the stretches that ship with more
+than five and fails on a new one.
+
 ## A set that is logged shows its past attempts
 
 Any set a session writes as workout rows wears the trend button

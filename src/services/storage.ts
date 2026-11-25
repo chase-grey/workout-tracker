@@ -12,6 +12,7 @@ import type { ProviderId } from '../lib/aiProvider'
 import type { TrackedIssue } from './issues'
 import { normalizeQueue, type QueuedWrite } from '../lib/outbox'
 import { withMatSitups } from '../lib/stretchCore'
+import { withoutMistakenSideSwitches } from '../lib/flexSteps'
 import { withRenamedKeys } from '../lib/renamedKeys'
 import type { RestTally } from '../lib/rest'
 import type { SetClock } from '../lib/setClock'
@@ -59,6 +60,10 @@ const KEYS = {
   // deliberately never deleted — a rollback shouldn't lose an edited routine.
   flexPlan: 'wt.flexplan',
   flexPlans: 'wt.flexplans',
+  // Set once the saved routines have had the mistaken ten-second side switches
+  // taken out (see flexSteps.withoutMistakenSideSwitches), so a ten someone sets
+  // for themselves afterwards is left alone.
+  sideSwitchRepaired: 'wt.flexplans.sideSwitchRepaired',
   activeStep: 'wt.activeStep',
   activeStepKey: 'wt.activeStepKey',
   activeRest: 'wt.activeRest',
@@ -510,6 +515,20 @@ export const storage = {
    */
   loadFlexPlans: (): Record<FlexRoutineKey, FlexBlock[]> => {
     const stored = read<Partial<Record<FlexRoutineKey, FlexBlock[]>>>(KEYS.flexPlans, {})
+    if (!read<boolean>(KEYS.sideSwitchRepaired, false)) {
+      let changed = false
+      for (const key of FLEX_ROUTINE_KEYS) {
+        const blocks = stored[key]
+        if (!Array.isArray(blocks)) continue
+        const repaired = withoutMistakenSideSwitches(blocks)
+        if (JSON.stringify(repaired) !== JSON.stringify(blocks)) {
+          stored[key] = repaired
+          changed = true
+        }
+      }
+      if (changed) write(KEYS.flexPlans, stored)
+      write(KEYS.sideSwitchRepaired, true)
+    }
     const legacy = read<FlexBlock[]>(KEYS.flexPlan, DEFAULT_FLEX_ROUTINE)
     const out = {} as Record<FlexRoutineKey, FlexBlock[]>
     for (const key of FLEX_ROUTINE_KEYS) {

@@ -8,6 +8,7 @@ import {
   stepWorkSec,
   switchesSides,
   withSideSwitchSec,
+  withoutMistakenSideSwitches,
 } from './flexSteps'
 import type { FlexBlock } from '../config/flexPlan'
 import { STRETCH_CORE } from '../config/plan'
@@ -196,15 +197,29 @@ describe('buildFlexSteps — per-side stretches', () => {
       expect(buildFlexSteps(withSideSwitchSec(plan, mine.key, 20))[0].sideSwitchSec).toBe(20)
     })
 
-    // The session counts what the routine says, not a flat five: these were
-    // written as ten and served as five until 2026-11-25.
-    it('gives the pelvic tilt routine’s stretches ten seconds to change sides', () => {
+    // The session counts what the routine says, not a flat five: the rectus
+    // femoris stretch asks for ten, the lunge stretch beside it for nothing.
+    it('gives the rectus femoris stretch ten seconds to change sides, and the lunge stretch five', () => {
       const steps = buildFlexSteps(FLEX_ROUTINES.pelvic_tilt.blocks)
-      for (const key of ['lunge_stretch', 'rectus_femoris_stretch']) {
+      for (const [key, sec] of [['lunge_stretch', 5], ['rectus_femoris_stretch', 10]] as const) {
         const first = steps.find((s) => s.exKey === key)!
-        expect(first.sideSwitchSec).toBe(10)
+        expect(first.sideSwitchSec).toBe(sec)
         expect(switchesSides(FLEX_ROUTINES.pelvic_tilt.blocks.flatMap((b) => b.exercises).find((e) => e.key === key)!)).toBe(true)
       }
+    })
+
+    // A routine kept on a device is a copy, so the tens that shipped by mistake
+    // have to be taken out of the copy too.
+    it('takes the mistaken ten seconds out of a saved routine, and leaves any other number', () => {
+      const saved = [{ label: 'B', exercises: [
+        perSide({ key: 'sciatic_floss', sideSwitchSec: 10 }),
+        perSide({ key: 'lunge_stretch', sideSwitchSec: 20 }),
+        perSide({ key: 'rectus_femoris_stretch', sideSwitchSec: 10 }),
+      ] }]
+      const [floss, lunge, rectus] = withoutMistakenSideSwitches(saved)[0].exercises
+      expect(floss.sideSwitchSec).toBeUndefined()
+      expect(lunge.sideSwitchSec).toBe(20)
+      expect(rectus.sideSwitchSec).toBe(10)
     })
 
     // A real rest between the sides is time enough to switch legs in.

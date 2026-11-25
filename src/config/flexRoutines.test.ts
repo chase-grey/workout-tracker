@@ -269,11 +269,20 @@ describe('the head-to-toe routine', () => {
     ])
   })
 
-  it('gives the nerve floss ten seconds to change legs, the rest the default', () => {
-    expect(byKey('sciatic_floss').sideSwitchSec).toBe(10)
-    for (const key of ['rolling_feet', 'calf_stretch', 'pike_block_crush', 'pike_lift']) {
+  it('leaves every stretch on the default five seconds to change legs', () => {
+    for (const key of ['rolling_feet', 'sciatic_floss', 'calf_stretch', 'pike_block_crush', 'pike_lift']) {
       expect(byKey(key).sideSwitchSec).toBeUndefined()
     }
+  })
+
+  // Chase asked for ten on the rectus femoris stretch alone (2026-11-25), and
+  // honouring the routines' own numbers gave it to five others he hadn't.
+  it('ships a longer side switch on the rectus femoris stretch and nowhere else', () => {
+    const longer = FLEX_ROUTINE_KEYS.flatMap((routine) =>
+      FLEX_ROUTINES[routine].blocks.flatMap((b) => b.exercises)
+        .filter((e) => e.sideSwitchSec != null)
+        .map((e) => [e.key, e.sideSwitchSec]))
+    expect(longer).toEqual([['rectus_femoris_stretch', 10]])
   })
 
   it('gives the floss two sets, the block crush one, and the pike lift three', () => {

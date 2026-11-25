@@ -124,6 +124,19 @@ describe('loadFlexPlans', () => {
     expect(plans.side_split).toEqual(CUSTOM)
   })
 
+  // The floss, the lunge stretch and the front split's three shipped with ten
+  // seconds to change sides for a few hours on 2026-11-25; a saved routine
+  // carries its own copy of that number.
+  it('takes the mistaken ten-second side switch out of a saved routine, once', () => {
+    const floss = { ...CUSTOM[0].exercises[0], key: 'sciatic_floss', perSide: true, sideSwitchSec: 10 }
+    const saved = [{ label: 'nerve floss', exercises: [floss] }]
+    storage.saveFlexPlans({ ...defaultFlexPlans(), head_to_toe: saved })
+    expect(storage.loadFlexPlans().head_to_toe[0].exercises[0].sideSwitchSec).toBeUndefined()
+    // A ten set after that is someone's own.
+    storage.saveFlexPlans({ ...defaultFlexPlans(), head_to_toe: saved })
+    expect(storage.loadFlexPlans().head_to_toe[0].exercises[0].sideSwitchSec).toBe(10)
+  })
+
   it('round-trips a saved map', () => {
     storage.saveFlexPlans({ ...defaultFlexPlans(), side_split: CUSTOM, head_to_toe: CUSTOM })
     expect(storage.loadFlexPlans()).toEqual({ ...defaultFlexPlans(), side_split: CUSTOM, head_to_toe: CUSTOM })

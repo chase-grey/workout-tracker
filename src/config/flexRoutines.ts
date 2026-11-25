@@ -115,10 +115,6 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
         // from, and the rest was costing more than the set did.
         restSec: 30,
         restAfterSides: true,
-        // Changing legs on the floss is getting out of the strap and back into it
-        // on the other side, which the default five seconds doesn't cover. The
-        // same ten seconds the settle-in gives it after a rest (see lib/settleIn).
-        sideSwitchSec: 10,
       },
     ],
   },
@@ -176,8 +172,7 @@ const HEAD_TO_TOE_BLOCKS: FlexBlock[] = [
 
 /**
  * Front split: open the hip flexor of the back leg, lengthen the hamstring of the
- * front one, then put the two together. Every set is one side at a time, and a
- * leg change is a kneel and re-set, so it gets the ten seconds the floss does.
+ * front one, then put the two together. Every set is one side at a time.
  */
 const FRONT_SPLIT_BLOCKS: FlexBlock[] = [
   {
@@ -194,7 +189,6 @@ const FRONT_SPLIT_BLOCKS: FlexBlock[] = [
         perSide: true,
         restSec: 30,
         restAfterSides: true,
-        sideSwitchSec: 10,
       },
     ],
   },
@@ -211,7 +205,6 @@ const FRONT_SPLIT_BLOCKS: FlexBlock[] = [
         perSide: true,
         restSec: 45,
         restAfterSides: true,
-        sideSwitchSec: 10,
       },
     ],
   },
@@ -229,7 +222,6 @@ const FRONT_SPLIT_BLOCKS: FlexBlock[] = [
         perSide: true,
         restSec: 45,
         restAfterSides: true,
-        sideSwitchSec: 10,
       },
     ],
   },
@@ -477,8 +469,6 @@ const PELVIC_TILT_BLOCKS: FlexBlock[] = [
         holdSec: 30,
         perSide: true,
         restSec: 0,
-        // A kneel and a re-set, like the front split's leg changes.
-        sideSwitchSec: 10,
       },
       {
         key: 'rectus_femoris_stretch',
@@ -493,6 +483,9 @@ const PELVIC_TILT_BLOCKS: FlexBlock[] = [
         holdSec: 60,
         perSide: true,
         restSec: 0,
+        // The one stretch that ships with more than the default five seconds to
+        // change sides (Chase, 2026-11-25): getting the other foot up behind you
+        // takes ten. Every other stretch keeps five unless its owner sets it.
         sideSwitchSec: 10,
       },
     ],
