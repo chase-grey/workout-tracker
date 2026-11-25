@@ -1,7 +1,6 @@
-import { useMemo, type CSSProperties } from 'react'
-import { growRoots, rootStrokes } from '../lib/roots'
+import { type CSSProperties } from 'react'
 
-type NatureVariant = 'tree' | 'mushroom' | 'roots' | 'flower' | 'dandelion'
+type NatureVariant = 'tree' | 'mushroom' | 'flower' | 'dandelion'
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 const stage = (progress: number, start: number, end = 1) => clamp((progress - start) / (end - start))
 const smooth: CSSProperties = { transition: 'transform 260ms linear, opacity 260ms linear, stroke-dashoffset 260ms linear' }
@@ -9,8 +8,6 @@ const smooth: CSSProperties = { transition: 'transform 260ms linear, opacity 260
 /** Growth and seed flight follow elapsed rest, including after a background resume. */
 export function NatureRest({ variant, fraction }: { variant: NatureVariant; fraction: number }) {
   const p = 1 - clamp(fraction)
-  // A fresh system each rest; grown once, then only revealed and thickened.
-  const roots = useMemo(() => (variant === 'roots' ? growRoots() : []), [variant])
   const growingPath = (d: string, progress: number, width: number) => (
     <path d={d} fill="none" stroke="currentColor" strokeWidth={width} strokeLinecap="round"
       pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - progress}
@@ -26,9 +23,9 @@ export function NatureRest({ variant, fraction }: { variant: NatureVariant; frac
   )
 
   return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio={variant === 'roots' ? 'none' : 'xMidYMid meet'}
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"
       className="rest-nature pointer-events-none absolute inset-0 h-full w-full overflow-hidden text-accent-bright" aria-hidden>
-      {variant !== 'roots' && variant !== 'dandelion' && (
+      {variant !== 'dandelion' && (
         <ellipse cx="50" cy="91" rx="29" ry="2" fill="currentColor" opacity="0.12" />
       )}
       {variant === 'tree' && <>
@@ -59,14 +56,6 @@ export function NatureRest({ variant, fraction }: { variant: NatureVariant; frac
             ))}
           </g>
         </g>
-      </>}
-      {variant === 'roots' && <>
-        {rootStrokes(roots, p).map(stroke => (
-          <path key={stroke.key} d={stroke.d} fill="none" stroke="currentColor" strokeWidth={stroke.width}
-            strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-            style={{ transition: 'stroke-width 260ms linear' }} />
-        ))}
-        <ellipse cx="50" cy="3" rx="3.5" ry="2" fill="currentColor" />
       </>}
       {variant === 'flower' && <>
         {growingPath('M50 90 Q40 69 50 34', stage(p, 0, 0.65), 1.8)}

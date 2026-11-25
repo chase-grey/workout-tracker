@@ -1329,7 +1329,6 @@ export function ExtraRestShape({
   switch (variant) {
     case 'tree':
     case 'mushroom':
-    case 'roots':
     case 'flower':
     case 'dandelion':
       return <NatureRest variant={variant} fraction={fraction} />
