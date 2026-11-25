@@ -187,15 +187,17 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
 
   return (
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
-      <div className="flex items-center justify-between px-3 pt-1 text-xs">
-        <span className="flex gap-3">
+      {/* As on the whole body chart: a figure never breaks inside itself. One
+          too wide for the row moves down whole, and the ratio keeps right. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pt-1 text-xs">
+        <span className="flex flex-wrap gap-x-3 gap-y-1">
           {/* Each figure is the switch for its own dashes; a dashed underline
               while they're on echoes the lines it put on the chart. */}
           <button
             type="button"
             aria-pressed={bands.muscle}
             onClick={() => toggle('muscle')}
-            className="border-b border-dashed"
+            className="whitespace-nowrap border-b border-dashed"
             style={{ color: colors.muscle.edge, borderColor: bands.muscle ? 'currentColor' : 'transparent' }}
           >
             muscle {fmtGainError(last.muscleGain, last.muscleError)}
@@ -204,13 +206,13 @@ export function MassSplitChart({ trend, empty }: { trend: MassTrend | null; empt
             type="button"
             aria-pressed={bands.fat}
             onClick={() => toggle('fat')}
-            className="border-b border-dashed"
+            className="whitespace-nowrap border-b border-dashed"
             style={{ color: colors.fat.edge, borderColor: bands.fat ? 'currentColor' : 'transparent' }}
           >
             fat {fmtGainError(last.fatGain, last.fatError)}
           </button>
         </span>
-        {ratio && <span className="font-semibold text-neutral-400">{ratio}</span>}
+        {ratio && <span className="ml-auto whitespace-nowrap font-semibold text-neutral-400">{ratio}</span>}
       </div>
       <ResponsiveContainer width="100%" height={240}>
         <ComposedChart

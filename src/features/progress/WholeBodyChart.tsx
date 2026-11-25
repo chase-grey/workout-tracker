@@ -180,7 +180,7 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
       type="button"
       aria-pressed={shown}
       onClick={toggle}
-      className={`border-b border-dashed ${className ?? ''}`}
+      className={`whitespace-nowrap border-b border-dashed ${className ?? ''}`}
       style={{ color, borderColor: shown ? 'currentColor' : 'transparent' }}
     >
       {label}
@@ -189,13 +189,17 @@ export function WholeBodyChart({ body, empty }: { body: WholeBody | null; empty?
 
   return (
     <div className="rounded-2xl bg-surface p-2" {...readout.card}>
-      <div className="flex items-center justify-between px-3 pt-1 text-xs">
-        <span className="flex gap-3">
+      {/* Four figures with their give-or-takes are wider than a phone at this
+          size, so none of them breaks inside itself: a figure that doesn't fit
+          moves down whole, and the weight keeps to the right edge wherever it
+          lands. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pt-1 text-xs">
+        <span className="flex flex-wrap gap-x-3 gap-y-1">
           {figure(colors.muscle.edge, `muscle ${fmtPctError(last.musclePct, last.musclePctError)}`)}
           {figure(colors.fat.edge, `fat ${fmtPctError(last.fatPct, last.fatPctError)}`)}
           {figure(colors.frame.edge, `rest ${fmtPctError(last.restPct, last.restPctError)}`)}
         </span>
-        {figure(WEIGHT_COLOR, fmtUnitError(last.weight, last.weightError, unit), 'font-semibold')}
+        {figure(WEIGHT_COLOR, fmtUnitError(last.weight, last.weightError, unit), 'ml-auto font-semibold')}
       </div>
       <div className="mx-3 mt-2 flex gap-1 rounded-lg bg-surface-2 p-0.5">
         {MEASURES.map((m) => (
