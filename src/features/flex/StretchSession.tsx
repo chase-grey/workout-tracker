@@ -73,6 +73,7 @@ import { nextUnfinishedStep, remainingFlow } from '../../lib/setFlow'
 import { landingStep, setPosition, withSkipped } from '../../lib/skipped'
 import { expectedProgress, projectedSoFar } from '../../lib/sessionPace'
 import { offSecAt, resumeOffClock, runningOffSec, runningOffSecSince, sessionElapsedSec, stepOff, stepOn } from '../../lib/offClock'
+import { unbroken } from '../../lib/unbroken'
 import { sendScreenReportSoon } from '../../services/screenReport'
 
 /**
@@ -99,7 +100,7 @@ type PendingPhotos = { gate: PhotoGate; index: number | null; then: 'start' | 'a
  */
 function stepPosition(s: SessionStep): string {
   if (s.kind !== 'flex') return ''
-  return [s.side && `${s.side} leg`, s.setLabel].filter(Boolean).join(' · ')
+  return [s.side && unbroken(`${s.side} leg`), s.setLabel].filter(Boolean).join(' · ')
 }
 
 /**
@@ -110,10 +111,10 @@ function stepPosition(s: SessionStep): string {
  * Without it, the set as the routine wrote it — what a skipped row reads.
  */
 function setOfLabel(s: SessionStep, inPlay?: readonly SessionStep[]): string {
-  if (!inPlay) return `set ${s.round + 1} of ${s.maxSets}`
+  if (!inPlay) return unbroken(`set ${s.round + 1} of ${s.maxSets}`)
   const rounds = [...new Set(inPlay.filter((o) => o.exKey === s.exKey).map((o) => o.round))].sort((a, b) => a - b)
   const at = setPosition(rounds, s.round)
-  return `set ${at.number} of ${at.of}`
+  return unbroken(`set ${at.number} of ${at.of}`)
 }
 
 /**
@@ -1242,20 +1243,14 @@ export function StretchSession({
         {/* A tight line box on the session's type size (see .session-type) comes
             out a hair over the 44px controls beside it, so the title's first line
             sits on their centreline. */}
-        <div className="min-w-0">
-          <h2 className="text-3xl font-bold leading-tight">
-            <TitleWithHowTo
-              title={stepTitle(step)}
-              exerciseKey={step.exKey}
-              name={step.exName}
-              onOpen={() => setHowToFor({ key: step.exKey, name: step.exName })}
-            />
-          </h2>
-          {/* The move the position belongs to, which set of it, and for the core
-              block the rep range — which leg and which of the calf stretch's three
-              shapes are up in the title, where they can't be missed mid-stretch. */}
-          <p className="mt-1 text-lg font-medium text-neutral-400">{stepDetail(step, steps)}</p>
-        </div>
+        <h2 className="min-w-0 text-3xl font-bold leading-tight">
+          <TitleWithHowTo
+            title={stepTitle(step)}
+            exerciseKey={step.exKey}
+            name={step.exName}
+            onOpen={() => setHowToFor({ key: step.exKey, name: step.exName })}
+          />
+        </h2>
         {/* A tap on the rest screen ends rest, so these keep theirs to themselves. */}
         <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
           {/* No turbo here: every stretch set already advances itself, and
@@ -1280,6 +1275,13 @@ export function StretchSession({
           <KebabMenu items={menuItems} />
         </div>
       </header>
+
+      {/* The move the position belongs to and which set of it — which leg and
+          which of the calf stretch's three shapes are up in the title, where they
+          can't be missed mid-stretch. Under the header rather than beside its
+          controls, as the lift workout's is, so it has the whole width of the
+          screen before it wraps. */}
+      <p className="-mt-2 text-lg font-medium text-neutral-400">{stepDetail(step, steps)}</p>
     </div>
   )
 

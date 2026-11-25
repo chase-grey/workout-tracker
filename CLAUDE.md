@@ -432,6 +432,19 @@ No explanatory subtext, hint captions, or "how to use this" sentences under
 controls. A clear label is enough. In particular: do not caption a tappable
 screen with "tap anywhere to advance" — the flow teaches it in one set.
 
+## A line of facts wraps between facts, and only when it must
+
+Chase, 2026-11-25, at "set" on one line and "2 of 2" on the next: text does
+not wrap while there is room on the screen for it.
+
+- **A session's set line sits under the header, never beside its controls.**
+  Both sessions draw it as the header's next sibling, the whole width of the
+  screen. Inside the header it has only the column left of the buttons, and
+  wraps with the rest of the row empty.
+- **Each fact on a " · " line is kept whole** with `lib/unbroken` ("set 2 of
+  2", "rest 1.5 min", "left leg"), so a line that does have to wrap breaks at
+  a dot.
+
 ## Signing in never writes first
 
 A device signing in to an account that already exists reads the account before

@@ -105,6 +105,7 @@ import { useControlLabel } from '../../lib/useControlLabel'
 import { SetCheer } from '../../components/SetCheer'
 import { useSessionFade } from '../../lib/useSessionFade'
 import { AD_HOC_SETS, adHocAdditions, defaultSets, exerciseOptions, matchTypedName } from '../../lib/adHocExercise'
+import { unbroken } from '../../lib/unbroken'
 import { sendScreenReportSoon } from '../../services/screenReport'
 
 type Props = {
@@ -1469,7 +1470,7 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
   // Which set it names is right either way: the flow advances *before* resting, so
   // through a rest `step` is already the set the rest leads into.
   // The last set of all is followed by no rest, so it lists none.
-  const restListed = rests.listedSec == null ? '' : ` · rest ${restLabel(rests.listedSec)}`
+  const restListed = rests.listedSec == null ? '' : ` · ${unbroken(`rest ${restLabel(rests.listedSec)}`)}`
   const topBar = (
     <div className="flex flex-col gap-3">
       {/* How much of the whole workout is still ahead of you. */}
@@ -1526,16 +1527,16 @@ export function ActiveSession({ session, controls, onFinish }: Props) {
       {/* The muscle group is left off a single lift: the name already says it. */}
       {roundMode ? (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
-          round <span className="tabular-nums">{position.number}/{position.of}</span>
+          round{' '}<span className="tabular-nums">{position.number}/{position.of}</span>
           {restListed}
         </p>
       ) : (
         <p className="-mt-2 text-lg font-medium text-neutral-400">
-          set <span className="tabular-nums">{position.number}/{position.of}</span>
+          set{' '}<span className="tabular-nums">{position.number}/{position.of}</span>
           {/* The plan's range is said only when there's no target for the set: the
               card under this states the one number to go for, and a range beside
               it read as a second, different ask. */}
-          {!target && ` · ${repRangeLabel(planned)} ${planned.timed ? 'sec' : 'reps'}`}
+          {!target && ` · ${unbroken(`${repRangeLabel(planned)} ${planned.timed ? 'sec' : 'reps'}`)}`}
           {restListed}
         </p>
       )}

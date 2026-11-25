@@ -207,7 +207,8 @@ const overlayJs = `(() => {
   const el = document.querySelector('.fixed.inset-0.z-50')
   const big = el?.querySelector('.text-6xl, .text-8xl')?.textContent?.trim() ?? ''
   const header = document.querySelector('.session-type header')
-  const named = ((header?.querySelector('h2')?.textContent ?? '') + ' ' + (header?.querySelector('p')?.textContent ?? '')).trim()
+  const detail = document.querySelector('.stretch-session header + p')
+  const named = ((header?.querySelector('h2')?.textContent ?? '') + ' ' + (detail?.textContent ?? '')).replace(/\u00a0/g, ' ').trim()
   return named + '|' + (el ? (big || 'rest') : '')
 })()`
 
