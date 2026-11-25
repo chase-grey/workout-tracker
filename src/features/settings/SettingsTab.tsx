@@ -31,8 +31,9 @@ import { LABEL_MODES, labelModeFor } from '../../lib/controlLabels'
 import { discardPendingUses } from '../../lib/useControlLabel'
 import { FLEX_ROUTINES, type FlexRoutineKey } from '../../config/flexRoutines'
 import { stretchRoutinesFor } from '../../lib/flexSkills'
-import { ACCENTS, MODE_PREFS, palette } from '../../lib/theme'
-import { setTheme, useTheme, useThemePref } from '../../lib/themeStore'
+import { MODE_PREFS } from '../../lib/theme'
+import { AccentPicker } from '../../components/AccentPicker'
+import { setTheme, useThemePref } from '../../lib/themeStore'
 import { PROVIDERS, modelFor, providerOf, trimBaseUrl } from '../../lib/aiProvider'
 import { sendScreenReportSoon } from '../../services/screenReport'
 
@@ -55,29 +56,14 @@ const ISSUE_BADGE: Record<IssueProgress, string> = {
 }
 
 /**
- * Accent swatches, then the ground. Each swatch is painted in its own accent's
- * CTA shade, so the row shows what the app will look like rather than naming it.
+ * The accent (components/AccentPicker), then the ground.
  */
 function ThemePicker() {
-  const { theme } = useTheme()
   const pref = useThemePref()
   return (
     <section className="flex flex-col gap-2">
       <label className="text-sm font-medium text-neutral-300">theme</label>
-      <div className="flex flex-wrap gap-3">
-        {ACCENTS.map((a) => (
-          <button
-            key={a}
-            onClick={() => setTheme({ ...pref, accent: a })}
-            aria-label={a}
-            aria-pressed={theme.accent === a}
-            className={`h-11 w-11 rounded-full ring-offset-2 ring-offset-bg ${
-              theme.accent === a ? 'ring-2 ring-neutral-100' : ''
-            }`}
-            style={{ background: palette({ ...theme, accent: a }).scale[600] }}
-          />
-        ))}
-      </div>
+      <AccentPicker />
       <div className="flex gap-1 rounded-xl bg-surface p-1">
         {MODE_PREFS.map((m) => (
           <button

@@ -47,6 +47,7 @@ function apply(p: Palette) {
   const root = document.documentElement
   for (const s of SHADES) root.style.setProperty(`--accent-${s}`, p.scale[s])
   root.style.setProperty('--on-accent', p.onAccent)
+  root.style.setProperty('--on-accent-deep', p.onAccentDeep)
   root.dataset.mode = p.theme.mode
   root.style.colorScheme = p.theme.mode
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', p.ground.bg)

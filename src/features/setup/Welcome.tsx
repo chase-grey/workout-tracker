@@ -26,7 +26,8 @@ import type { Plan } from '../../config/plan'
 import { CompanionSheet } from '../companion/CompanionFlow'
 import { CardioGoalForm } from '../today/CardioGoalForm'
 import { PROVIDERS, providerOf, type ProviderId } from '../../lib/aiProvider'
-import { ACCENTS, MODES, palette } from '../../lib/theme'
+import { MODES } from '../../lib/theme'
+import { AccentPicker } from '../../components/AccentPicker'
 import { setTheme, useTheme } from '../../lib/themeStore'
 import { usePressAction } from '../../lib/usePressAction'
 import { useFieldInView } from '../../lib/useFieldInView'
@@ -252,24 +253,7 @@ function ThemeStep() {
   const { theme } = useTheme()
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-3">
-        {ACCENTS.map((a) => (
-          <PressButton
-            key={a}
-            onPress={() => setTheme({ ...theme, accent: a })}
-            label={a}
-            pressed={theme.accent === a}
-            className={`h-11 w-11 rounded-full ring-offset-2 ring-offset-bg ${
-              theme.accent === a ? 'ring-2 ring-neutral-100' : ''
-            }`}
-          >
-            <span
-              className="block h-full w-full rounded-full"
-              style={{ background: palette({ ...theme, accent: a }).scale[600] }}
-            />
-          </PressButton>
-        ))}
-      </div>
+      <AccentPicker />
       <div className="flex gap-1 rounded-xl bg-surface p-1">
         {MODES.map((m) => (
           <PressButton

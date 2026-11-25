@@ -37,7 +37,8 @@
    now sits dark on white. It runs a step darker than a straight mirror, and the
    accent roles go two shades deeper, because the shades that glow on black wash
    out on paper — green-500 on white is barely there. A solid accent fill that
-   deep wants white text over it, whatever the accent. Black and white themselves
+   deep wants white text over it on every swatch; a colour of your own can still
+   be pale that far down, so the store says which (--on-accent-deep). Black and white themselves
    stay put — they're the scrims and the full-screen takeovers below. */
 :root[data-mode='light'] {
   --color-bg: #f5f5f5;
@@ -60,7 +61,7 @@
   --color-accent-2: var(--accent-700);
   --color-accent-bright: var(--accent-600);
   --color-accent-dark: var(--accent-800);
-  --color-on-accent: #ffffff;
+  --color-on-accent: var(--on-accent-deep, #ffffff);
   --body-text: #0a0a0a;
 }
 
@@ -98,6 +99,56 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* The colour mixer's sliders (components/AccentPicker): a thumb-tall row whose
+   track is painted with what the slider would give, handed in as --track. */
+.colour-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  touch-action: pan-y;
+}
+.colour-slider::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.colour-slider::-moz-range-track {
+  height: 14px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.colour-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 2px solid rgb(0 0 0 / 0.4);
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+.colour-slider::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgb(0 0 0 / 0.4);
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+.colour-slider:focus-visible {
+  outline: none;
+}
+.colour-slider:focus-visible::-webkit-slider-thumb {
+  border-color: var(--color-accent);
+}
+.colour-slider:focus-visible::-moz-range-thumb {
+  border-color: var(--color-accent);
 }
 
 /* Everything sizes off the root — Tailwind's type scale and its rem spacing
