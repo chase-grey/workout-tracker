@@ -206,6 +206,43 @@ describe('the owner claiming an email', () => {
   })
 })
 
+describe('the issue routes', () => {
+  // Past the owner check the next thing asked for is the GitHub token, which
+  // this world has none of: that error is the check having let the request by.
+  const PAST = /GITHUB_ISSUE_TOKEN/
+  const report = (w, secret) => w.post({ route: 'report_issue' }, { secret, title: 'a bug' }).error
+
+  it("take the owner's account key as well as the secret", () => {
+    const w = world()
+    const owner = w.post({ route: 'claim_owner' }, { secret: SECRET, email: 'me@example.com', password: 'hunter22' })
+    for (const proof of [SECRET, owner.token]) {
+      expect(report(w, proof)).toMatch(PAST)
+      expect(w.get({ route: 'issues', secret: proof }).error).toMatch(PAST)
+      expect(w.get({ route: 'issue_thread', secret: proof, number: '1' }).error).toMatch(PAST)
+      expect(w.post({ route: 'answer_issue' }, { secret: proof, number: 1, answer: 'yes' }).error).toMatch(PAST)
+    }
+  })
+
+  it("refuse anyone else's key, a wrong secret and none at all", () => {
+    const w = world()
+    w.post({ route: 'claim_owner' }, { secret: SECRET, email: 'me@example.com', password: 'hunter22' })
+    const ann = register(w, 'ann@example.com')
+    for (const proof of [ann.token, 'x', '', undefined]) {
+      expect(report(w, proof)).toBe('Bad chat secret')
+      expect(w.get({ route: 'issues', secret: proof }).error).toBe('Bad chat secret')
+      expect(w.get({ route: 'issue_thread', secret: proof, number: '1' }).error).toBe('Bad chat secret')
+      expect(w.post({ route: 'answer_issue' }, { secret: proof, number: 1, answer: 'yes' }).error).toBe('Bad chat secret')
+    }
+  })
+
+  it('leave claim_owner and invite to the secret alone', () => {
+    const w = world()
+    const owner = w.post({ route: 'claim_owner' }, { secret: SECRET, email: 'me@example.com', password: 'hunter22' })
+    expect(w.post({ route: 'claim_owner' }, { secret: owner.token, email: 'me@example.com', password: 'new-pass-1' }).error).toBe('Bad chat secret')
+    expect(w.post({ route: 'invite' }, { secret: owner.token }).error).toBe('Bad chat secret')
+  })
+})
+
 describe('set_login', () => {
   it('gives an invite-made account an email and password', () => {
     const w = world()

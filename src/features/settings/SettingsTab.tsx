@@ -26,6 +26,7 @@ import { PeopleSection } from './PeopleSection'
 import { SignupsSection } from './SignupsSection'
 import { useSignups } from '../../store/useSignups'
 import { ownerFlavour } from '../../lib/profile'
+import { issueToken } from '../../lib/issueToken'
 import { PlanEditor } from './PlanEditor'
 import { GuideSection } from './GuideSection'
 import { APP_COMMIT, APP_BUILD_TIME, checkForUpdate, showUpdateToast, useAppUpdate } from '../../lib/version'
@@ -576,7 +577,7 @@ export function SettingsTab({
           {/* Read again when a notice is answered: a declined account is gone from the list. */}
           <PeopleSection key={signups.length} />
 
-          {settings.chatToken.trim() && (
+          {issueToken(settings) && (
             <section className="flex flex-col gap-2">
               <label className="text-sm font-medium text-neutral-300">reported issues</label>
               {/* A failed refresh still shows the cached list, but it says so: an issue

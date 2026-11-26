@@ -180,7 +180,7 @@ const SIGNUP_HEADERS = ['user_id', 'created_at', 'state']
 // which ships the number it needs (src/config/backendVersion.ts) and shows a
 // banner when the deployed backend answers a lower one. A backend too old to
 // have the route counts as version 0. See BACKEND.md "Versioning".
-const BACKEND_VERSION = 18
+const BACKEND_VERSION = 19
 // Sentinel "exercise" key whose row stores the pooled average rest per interval,
 // in seconds. Retired: pooling full rests, circuit station changes and capped
 // transitions into one duration underestimates every long rest. Still written so
@@ -1900,6 +1900,30 @@ function chatSecret() {
   return expected
 }
 
+/**
+ * Whether `secret` is the owner's, for the issue routes.
+ *
+ * Two things prove it. The CHAT_SHARED_SECRET above, which is what the owner's
+ * phones carried before accounts. And the owner's own account key: a device
+ * that signed in by email, or off another device's sign-in link, was never
+ * handed the secret, and it is the owner's all the same. That key already
+ * reads and writes everything the owner has logged, so it opens nothing here
+ * that it couldn't reach. Without it the coach on such a device could not file
+ * an issue at all (2026-11-25).
+ *
+ * Anyone else's key is refused, like a wrong secret. claim_owner and invite
+ * still take the secret alone: it is the way back in when the key is lost.
+ */
+function provesOwner(secret) {
+  const s = String(secret || '').trim()
+  if (s) {
+    const rows = userRows()
+    const at = ownerRowAt(rows)
+    if (at > 0 && String(rows[at][U_TOKEN] || '') === s) return true
+  }
+  return s === chatSecret()
+}
+
 /* --------------------------------------------------------- issue reporting */
 
 const ISSUE_REPO = 'chase-grey/workout-tracker'
@@ -1991,7 +2015,7 @@ function requireAppIssue(number) {
  * throwing here would have the app retry and file it twice.
  */
 function createIssue(body) {
-  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
+  if (!body || !provesOwner(body.secret)) throw new Error('Bad chat secret')
   const title = String(body.title || '').trim()
   if (!title) throw new Error('Issue title is required')
 
@@ -2025,7 +2049,7 @@ function createIssue(body) {
  * question while the issue is sitting under `needs-input`.
  */
 function getIssueThread(secret, number) {
-  if (secret !== chatSecret()) throw new Error('Bad chat secret')
+  if (!provesOwner(secret)) throw new Error('Bad chat secret')
   const issue = requireAppIssue(number)
   const raw = githubApi('get', '/issues/' + issue.number + '/comments?per_page=100')
   const comments = []
@@ -2057,7 +2081,7 @@ function getIssueThread(secret, number) {
  * The label swap is the handoff — without it the answer just sits there.
  */
 function answerIssue(body) {
-  if (!body || body.secret !== chatSecret()) throw new Error('Bad chat secret')
+  if (!body || !provesOwner(body.secret)) throw new Error('Bad chat secret')
   const answer = String(body.answer || '').trim()
   if (!answer) throw new Error('An answer is required')
   const issue = requireAppIssue(body.number)
@@ -2090,7 +2114,7 @@ function answerIssue(body) {
  * is dropped. `area` is lifted back out of the `area:<x>` label createIssue set.
  */
 function listIssues(secret) {
-  if (secret !== chatSecret()) throw new Error('Bad chat secret')
+  if (!provesOwner(secret)) throw new Error('Bad chat secret')
   const data = githubApi(
     'get',
     '/issues?labels=from-app&state=all&per_page=100&sort=created&direction=desc',

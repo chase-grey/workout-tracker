@@ -28,6 +28,7 @@ import { storage } from './services/storage'
 import { useTrackedIssues } from './store/useTrackedIssues'
 import { useSignups } from './store/useSignups'
 import { ownerFlavour } from './lib/profile'
+import { issueToken } from './lib/issueToken'
 import { issuesAwaitingAnswer } from './services/issues'
 import { useBackGuard } from './lib/useBackGuard'
 import { noteScreen } from './services/screenWatch'
@@ -136,7 +137,7 @@ function AppShell() {
   // Filed issues, polled app-wide rather than only while Settings is open: the
   // point of the dot is to tell you a question is waiting when you weren't
   // looking for one. Settings reads the same shared list.
-  const { issues, failed: issuesFailed } = useTrackedIssues(settings.chatToken.trim().length > 0)
+  const { issues, failed: issuesFailed } = useTrackedIssues(issueToken(settings).length > 0)
   const awaiting = issuesAwaitingAnswer(issues)
   // Opening Settings acknowledges a save failure: its card says the rest, so the
   // dot stops nagging while saves keep failing. A save that goes through clears

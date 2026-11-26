@@ -10,12 +10,14 @@
  */
 import { api } from './api'
 import { storage } from './storage'
+import { issueToken } from '../lib/issueToken'
 
 /**
- * The token this device proves itself to the backend with, entered once in
- * Settings. The /exec URL is baked into this public bundle, so without it anyone
- * holding the bundle could file issues on the repo — or read the ones already
- * filed.
+ * The token this device proves itself to the backend with: the one entered in
+ * Settings, or the owner's own account key on a device that signed in and was
+ * never given it (see lib/issueToken). The /exec URL is baked into this public
+ * bundle, so without it anyone holding the bundle could file issues on the
+ * repo — or read the ones already filed.
  *
  * Persisted under `chatToken`, which is what it was called while the same token
  * also reached the chat coach across a public tunnel. That path is gone, but the
@@ -23,7 +25,7 @@ import { storage } from './storage'
  * would quietly empty every phone's issue list until the token was typed again.
  */
 function backendToken(): string {
-  return storage.loadSettings().chatToken.trim()
+  return issueToken(storage.loadSettings())
 }
 
 export type IssueArea = 'plan' | 'chat' | 'timer' | 'history' | 'other'

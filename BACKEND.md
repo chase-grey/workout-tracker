@@ -293,6 +293,12 @@ could file issues on the repo, or read the ones already filed. Missing, they thr
 failing open. The name is historical: the same token once brokered the chat coach's public address
 for the phone, which it no longer does (see "Chat on your phone" in the [README](./README.md)).
 
+The owner's own account key passes as that `secret` too (`provesOwner`). A device that signed in
+by email, or off another device's sign-in link, is the owner's and was never handed the script
+property; before the key counted, the coach there could not file at all. No one else's key
+passes. `claim_owner` and `invite` still take the property alone, since it is the way back in
+when the key is lost.
+
 Past that they are a thin proxy onto the GitHub API, so a bug filed from the coach chat lands
 even when the laptop running the auto-fixer is asleep. They need a `GITHUB_ISSUE_TOKEN` script
 property — a fine-grained PAT scoped to this one repo with Issues: Read/Write — and the same

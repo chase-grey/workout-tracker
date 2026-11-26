@@ -394,6 +394,24 @@ Then rule out a stale build: "I don't see X" on the phone usually means the
 Pages deploy didn't land (`gh run list`), or a later commit from another
 session reverted it (`git log -- <file>`).
 
+## When the coach couldn't file an issue
+
+Run `npm run save-errors`. A filing that fails is reported there as
+`report_issue` (`send_feedback` for anyone but the owner), with the error and
+the report that was being filed, so neither has to be read off the phone
+(`services/saveErrors.reportFilingFailure`). Then file one from here the way
+the phone does, a POST to `report_issue`, before touching any token: on
+2026-11-25 the GitHub token and the backend were both fine.
+
+**Anything the owner can do, a device signed in as the owner can do.** The
+issue routes take the owner's account key as well as the issue token
+(`provesOwner` in `SimpleBackend.gs`, `lib/issueToken` in the app). The token
+typed into Settings exists only on the phones that predate accounts; a device
+that signed in by email or off a sign-in link never had it, and the coach
+there answered every report with "add your issue token". A new owner-only
+feature is gated on `issueToken(settings)` or the account's `owner`, never on
+`settings.chatToken` alone.
+
 ## When the phone shows a blank screen
 
 Same first move: `npm run save-errors -- --json`. The phone reports what it
