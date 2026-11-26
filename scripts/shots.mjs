@@ -436,7 +436,7 @@ const APP_FLOWS = [
       'progress/muscle-vs-fat',
       'progress/body-fat-%',
       'progress/whole-body',
-      ...Array.from({ length: 10 }, (_, i) => `progress/page-${i + 1}`),
+      ...Array.from({ length: 14 }, (_, i) => `progress/page-${i + 1}`),
     ],
     async run({ page, take, note }) {
       if (!(await page.eval(pressJs('progress')))) return note('progress: no tab button')
@@ -451,7 +451,7 @@ const APP_FLOWS = [
       }
       // The whole tab, a screen at a time, so every other chart is seen too.
       const step = HEIGHT - 160
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 14; i++) {
         const height = await page.eval(scrollMainJs(i * step))
         if (i > 0 && i * step > height - HEIGHT / 2) break
         await sleep(1200)
