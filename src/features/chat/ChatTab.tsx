@@ -6,6 +6,7 @@ import { loadCoachSwitches, saveCoachSwitches } from '../../lib/coachSwitches'
 import { coachFeedbackMessage } from '../../lib/coachFeedback'
 import { APP_COMMIT } from '../../lib/version'
 import { api } from '../../services/api'
+import { reportFilingFailure } from '../../services/saveErrors'
 import type { RawMessage, Tool } from '../../services/openai'
 import { coachTurn } from '../../services/coach'
 import { modelChoices, modelFor } from '../../lib/aiProvider'
@@ -785,14 +786,24 @@ export function ChatTab({
                 .join('\n')
               // Decided by who is asking, not by which tool the model named:
               // only the owner's reports go to GitHub.
-              if (owner) {
-                const issue = await reportIssue(parsed, chatTail)
-                newTurns.push({ role: 'system', content: `filed #${issue.number} — ${parsed.title}` })
-                resultMsg = JSON.stringify({ filed: true, number: issue.number, url: issue.url })
-              } else {
-                await api.postFeedback(coachFeedbackMessage(parsed, chatTail), APP_COMMIT)
-                newTurns.push({ role: 'system', content: `sent feedback — ${parsed.title}` })
-                resultMsg = JSON.stringify({ sent: true })
+              try {
+                if (owner) {
+                  const issue = await reportIssue(parsed, chatTail)
+                  newTurns.push({ role: 'system', content: `filed #${issue.number} — ${parsed.title}` })
+                  resultMsg = JSON.stringify({ filed: true, number: issue.number, url: issue.url })
+                } else {
+                  await api.postFeedback(coachFeedbackMessage(parsed, chatTail), APP_COMMIT)
+                  newTurns.push({ role: 'system', content: `sent feedback — ${parsed.title}` })
+                  resultMsg = JSON.stringify({ sent: true })
+                }
+              } catch (e) {
+                // The coach tells the user; this tells the laptop, with the report itself.
+                void reportFilingFailure(
+                  owner ? 'report_issue' : 'send_feedback',
+                  e instanceof Error ? e.message : String(e),
+                  parsed,
+                )
+                throw e
               }
             } else {
               resultMsg = JSON.stringify({ error: `unknown tool ${call.name}` })

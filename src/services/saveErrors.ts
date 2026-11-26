@@ -86,6 +86,35 @@ export function reportCrash(error: unknown, componentStack?: string | null): Pro
  * A failure the phone can't show anyone, onto the save_errors tab. Throttled
  * like a stuck write: once per distinct error per window.
  */
+/**
+ * The coach tried to file a report and couldn't. The chat is the only other
+ * place the error and the report are written down, and it is on the phone, so
+ * both go to save_errors: `npm run save-errors` says why it failed and what
+ * was being filed (2026-11-25, when neither could be read from here).
+ *
+ * Not throttled like the reports below: a filing is asked for once, and the
+ * next one that fails the same way is a different report worth keeping.
+ */
+export async function reportFilingFailure(
+  route: 'report_issue' | 'send_feedback',
+  message: string,
+  filing: { title: string; body?: string; area?: string },
+): Promise<void> {
+  try {
+    if (!api.isConfigured()) return
+    await api.reportSaveError({
+      build: APP_COMMIT,
+      route,
+      writeId: route,
+      message,
+      pending: 0,
+      payload: filing,
+    })
+  } catch {
+    /* nothing reachable: the chat still says what went wrong */
+  }
+}
+
 export async function reportDeviceFailure(route: string, message: string, payload: unknown): Promise<void> {
   try {
     if (!api.isConfigured()) return

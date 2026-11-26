@@ -105,6 +105,10 @@ if (asJson) {
     const who = r.user && String(r.user).trim() ? `  user ${r.user}` : ''
     console.log(`${r.at}  build ${r.build}  ${r.route}${size}  write ${r.writeId}  ${r.pending} queued${who}`)
     console.log(`  ${r.message}`)
+    // A report the coach couldn't file: what it was, so it isn't lost with the chat.
+    if ((r.route === 'report_issue' || r.route === 'send_feedback') && p && p.title) {
+      console.log(`  was filing: ${p.title}${p.body ? ` — ${String(p.body).slice(0, 400)}` : ''}`)
+    }
   }
   console.log('\nPayloads: npm run save-errors -- --json')
 }
