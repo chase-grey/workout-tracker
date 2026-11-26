@@ -426,6 +426,13 @@ Until the quiet moment comes, Settings wears its dot and the button reads
 `update ready · restart`. The same pattern runs in my-brain and my-mail and is
 written down in `~/.claude/patterns/app-update.md`; change the rule there too.
 
+**A reload onto an update lands on the newest build, never the one that was
+found** (Chase, 2026-11-25: several updates came one restart at a time). The
+page is served by whichever worker owns it, and checks stop once a build is
+ready, so both the quiet reload and the button ask once more and let anything
+newer take over first (`settleOnNewest`). Do not call `location.reload()` for
+an update without it.
+
 ## UI copy
 
 No explanatory subtext, hint captions, or "how to use this" sentences under

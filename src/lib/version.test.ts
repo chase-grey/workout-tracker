@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { afterReloadToast, IDLE_MS, isQuietMoment, pullNewWorker, type Moment } from './version'
+import {
+  afterReloadToast,
+  IDLE_MS,
+  isQuietMoment,
+  pullNewWorker,
+  settleOnNewest,
+  type Moment,
+} from './version'
 
 /** A fake container whose registration can be told to swap in a new worker. */
 function fakeContainer(reg: { installing?: unknown; waiting?: unknown }) {
@@ -72,6 +79,47 @@ describe('pullNewWorker', () => {
     const { sw, registration } = fakeContainer({})
     registration.update.mockRejectedValueOnce(new Error('offline'))
     await expect(pullNewWorker(sw, 0)).resolves.toBe('failed')
+  })
+})
+
+describe('settleOnNewest', () => {
+  it('asks again and waits for a newer build before the reload', async () => {
+    // A build is already in hand; a later deploy is found by asking once more.
+    const { sw, registration, takeOver } = fakeContainer({ installing: {} })
+    let done = false
+    const settle = settleOnNewest(sw).then(() => (done = true))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(registration.update).toHaveBeenCalledOnce()
+    expect(done).toBe(false)
+
+    takeOver()
+    await settle
+    expect(done).toBe(true)
+  })
+
+  it('does not hold the reload when nothing newer is out, or offline', async () => {
+    const current = fakeContainer({})
+    await settleOnNewest(current.sw, 0)
+    const offline = fakeContainer({})
+    offline.registration.update.mockRejectedValueOnce(new Error('offline'))
+    await settleOnNewest(offline.sw, 0)
+  })
+
+  it('gives up on a check that never answers', async () => {
+    vi.useFakeTimers()
+    try {
+      const { sw, registration } = fakeContainer({})
+      registration.update.mockReturnValueOnce(new Promise(() => {}))
+      let done = false
+      void settleOnNewest(sw, 10_000).then(() => (done = true))
+      await vi.advanceTimersByTimeAsync(9_999)
+      expect(done).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(done).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

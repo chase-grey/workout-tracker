@@ -80,6 +80,27 @@ export async function pullNewWorker(
   return 'swapped'
 }
 
+/**
+ * Before any reload onto an update, ask once more and let anything newer take
+ * over first.
+ *
+ * A build found an hour ago is not the newest by the time the reload comes:
+ * the page is served by whichever worker owns it, so reloading onto the found
+ * one landed a build behind, and the launch check then turned up the next.
+ * Several deploys arrived one restart at a time. Asking here lands them all in
+ * one. The wait is bounded as a whole, since on a bad connection `update()`
+ * itself can hang, and the reload must still happen.
+ */
+export async function settleOnNewest(
+  sw: ServiceWorkerContainerLike,
+  timeoutMs = CONTROLLER_SWAP_TIMEOUT_MS,
+): Promise<void> {
+  await Promise.race([
+    pullNewWorker(sw, timeoutMs).catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ])
+}
+
 // --- the update store: is a newer build ready, and what to tell you ----------
 
 type UpdateState = {
@@ -220,17 +241,21 @@ function announceReload() {
 }
 
 /**
- * The Settings button. With a newer build already waiting it just restarts onto
- * it. Otherwise it asks the server: a newer build is pulled in and the page
- * reloads onto it; nothing newer, or no answer, stays put and says so — a reload
- * that changes nothing is only a flash and a lost scroll position.
+ * The Settings button. With a newer build already waiting it restarts onto the
+ * newest there is (see settleOnNewest). Otherwise it asks the server: a newer
+ * build is pulled in and the page reloads onto it; nothing newer, or no answer,
+ * stays put and says so — a reload that changes nothing is only a flash and a
+ * lost scroll position.
  */
 export async function checkForUpdate(): Promise<void> {
-  if (state.ready || !('serviceWorker' in navigator)) return reloadForUpdate()
+  if (!('serviceWorker' in navigator)) return reloadForUpdate()
+  const sw = navigator.serviceWorker as unknown as ServiceWorkerContainerLike
   set({ checking: true })
-  const outcome = await pullNewWorker(
-    navigator.serviceWorker as unknown as ServiceWorkerContainerLike,
-  ).catch((): PullOutcome => 'failed')
+  if (state.ready) {
+    await settleOnNewest(sw)
+    return reloadForUpdate()
+  }
+  const outcome = await pullNewWorker(sw).catch((): PullOutcome => 'failed')
   if (outcome === 'swapped') return reloadForUpdate()
   set({ checking: false })
   showUpdateToast(
@@ -259,15 +284,23 @@ export function watchForUpdates() {
   let lastTouch = Date.now()
   // After the reload the new worker already owns the page, so `ready` is not
   // set again for the same build and this cannot loop.
-  const reloadIfQuiet = () => {
-    if (!state.ready) return
-    const quiet = isQuietMoment({
+  const quietNow = () =>
+    state.ready &&
+    isQuietMoment({
       hidden: document.visibilityState === 'hidden',
       held: holds.size > 0 || midEdit(),
       touchedSinceShown: touched,
       idleMs: Date.now() - lastTouch,
     })
-    if (quiet) reloadQuietly()
+  // Checks stop once a build is ready, so the one in hand may be builds old.
+  // Catch up first, then look again: the wait is long enough to be touched in.
+  let settling = false
+  const reloadIfQuiet = async () => {
+    if (settling || !quietNow()) return
+    settling = true
+    await settleOnNewest(sw as unknown as ServiceWorkerContainerLike)
+    settling = false
+    if (quietNow()) reloadQuietly()
   }
   const onTouch = () => {
     touched = true
@@ -279,7 +312,7 @@ export function watchForUpdates() {
   sw.addEventListener('controllerchange', () => {
     if (!wasControlled) return
     set({ ready: true })
-    reloadIfQuiet()
+    void reloadIfQuiet()
   })
   const check = () => {
     if (state.ready) return
@@ -290,9 +323,9 @@ export function watchForUpdates() {
       touched = false
       check()
     }
-    reloadIfQuiet()
+    void reloadIfQuiet()
   })
   setInterval(check, BACKGROUND_CHECK_MS)
   // The idle clock: a build that arrived mid-use goes in once the app is left alone.
-  setInterval(reloadIfQuiet, 60_000)
+  setInterval(() => void reloadIfQuiet(), 60_000)
 }
