@@ -3,6 +3,9 @@ import { holdUpdates } from '../../lib/version'
 import { useData } from '../../store/DataContext'
 import { buildSystemPrompt, reportToggleLabel, type CoachSkills } from '../../lib/chatPrompt'
 import { loadCoachSwitches, saveCoachSwitches } from '../../lib/coachSwitches'
+import { keepChat } from '../../lib/coachChats'
+import { v4 as uuid } from 'uuid'
+import { PastChats } from './PastChats'
 import { coachFeedbackMessage } from '../../lib/coachFeedback'
 import { APP_COMMIT } from '../../lib/version'
 import { api } from '../../services/api'
@@ -40,7 +43,7 @@ import {
   FLEX_ROUTINE_KEYS,
   type FlexRoutineKey,
 } from '../../config/flexRoutines'
-import { MdBuild, MdClose, MdHelpOutline, MdArrowForward } from 'react-icons/md'
+import { MdBuild, MdClose, MdHelpOutline, MdArrowForward, MdHistory } from 'react-icons/md'
 import { Markdown } from './Markdown'
 import { expectKeyboard, overlayKeyboard } from '../../lib/viewport'
 import { useKeyboardOpen } from '../../lib/useKeyboardOpen'
@@ -86,12 +89,17 @@ type Turn = {
 // device that has never set them they all start off: most days nothing about
 // the plan changes and nothing needs writing up, the two plan tools are by far
 // the largest schemas we send, and a report tool that is always there gets
-// used when nobody asked for a report. The thread itself is not kept.
+// used when nobody asked for a report.
+//
+// The thread is not brought back after a reload, but it is not lost either:
+// every thread is saved as it grows as one past chat (lib/coachChats), under
+// the id held here from its first turn until the thread is let go.
 const kept = loadCoachSwitches()
-const session: { keepContext: boolean; skills: CoachSkills; turns: Turn[] } = {
+const session: { keepContext: boolean; skills: CoachSkills; turns: Turn[]; chatId: string | null } = {
   keepContext: kept.keepContext,
   skills: { planEdits: kept.planEdits, issues: kept.issues },
   turns: [],
+  chatId: null,
 }
 const keepSwitches = () => saveCoachSwitches({ ...session.skills, keepContext: session.keepContext })
 
@@ -460,13 +468,25 @@ export function ChatTab({
   // Only a kept thread comes back: with the toggle off, what's on screen has to
   // match what the coach was given, which is nothing yet.
   const [turns, setTurnsState] = useState<Turn[]>(() => {
-    if (!session.keepContext) session.turns = []
+    if (!session.keepContext) {
+      session.turns = []
+      session.chatId = null
+    }
     return session.turns
   })
+  // Every change to the thread is kept as it happens, so what was asked is
+  // still there if the answer never comes or the app is closed on it.
   const setTurns = (next: Turn[]) => {
     session.turns = next
+    if (next.length > 0) {
+      session.chatId ??= uuid()
+      keepChat(session.chatId, next)
+    }
     setTurnsState(next)
   }
+  const [showPast, setShowPast] = useState(false)
+  // A reload would close the chat being read back.
+  useEffect(() => (showPast ? holdUpdates() : undefined), [showPast])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   // A reload would cut off an answer that is still arriving.
@@ -630,6 +650,8 @@ export function ChatTab({
     // Without "keep context" the thread starts over on every send, so what's on
     // screen is exactly what the coach was given.
     const priorTurns = keepContext ? turns : []
+    // A thread that starts over is a new past chat, not more of the last one.
+    if (priorTurns.length === 0) session.chatId = null
     const base: Turn[] = [...priorTurns, { role: 'user', content: text }]
     setTurns(base)
     setInput('')
@@ -845,8 +867,9 @@ export function ChatTab({
     <div className="-mb-4 flex min-h-[calc(100%+1rem)] flex-col">
       {/* Equal columns rather than a right-aligned row: the three switches are
           the same kind of thing, so they split the width evenly and each one
-          sits where it always sits. */}
-      <div className="grid grid-cols-3 gap-2 pb-2">
+          sits where it always sits. Past chats is not a switch, so it sits at
+          the end of the row at a button's own width. */}
+      <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 pb-2">
         <Toggle on={skills.planEdits} onClick={() => toggleSkill('planEdits')}>
           edit plan
         </Toggle>
@@ -856,7 +879,17 @@ export function ChatTab({
         <Toggle on={skills.issues} onClick={() => toggleSkill('issues')}>
           {reportToggleLabel(owner)}
         </Toggle>
+        <button
+          type="button"
+          onClick={() => setShowPast(true)}
+          onMouseDown={(e) => e.preventDefault()}
+          aria-label="past chats"
+          className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-neutral-300 active:opacity-80"
+        >
+          <MdHistory className="text-xl" aria-hidden />
+        </button>
       </div>
+      {showPast && <PastChats onClose={() => setShowPast(false)} />}
       {models.length > 1 && (
         <select
           aria-label="model"

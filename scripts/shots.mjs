@@ -61,7 +61,7 @@ const SHEET_WIDTH = 3000
 const THUMB_WIDTH = 156
 /** Taller than this and a browser won't hand back one screenshot of the page. */
 const SHEET_MAX_HEIGHT = 9000
-const APP_FAMILIES = ['today', 'progress', 'session', 'settings']
+const APP_FAMILIES = ['today', 'progress', 'session', 'settings', 'coach']
 const FAMILIES = ['rhythm', 'hold', 'rest', ...APP_FAMILIES]
 
 /* ------------------------------------------------------------------ args */
@@ -428,6 +428,105 @@ const APP_FLOWS = [
         await page.eval(scrollMainJs(0))
         await take('settings/new-accounts-page-dot')
       }
+    },
+  },
+  {
+    // The coach's past chats: the button at the end of the switches, the list
+    // with nothing in it, the list after a year of asking, one chat read back
+    // (a report that failed among its turns) and its removal asking twice.
+    // The chats are made up and put where the app keeps them; the coach is
+    // switched on with a key for a service at a closed port: the one question
+    // asked goes nowhere, and has to be in the list all the same.
+    family: 'coach',
+    ids: ['coach/switches', 'coach/past-chats-none', 'coach/past-chats-after-asking', 'coach/past-chats', 'coach/past-chat', 'coach/past-chat-remove'],
+    async run({ page, take, note, base }) {
+      const ago = (hours) => new Date(Date.now() - hours * 3_600_000).toISOString()
+      const asked = [
+        'report this as a test issue to see if this works',
+        'why has my bench stalled at 185 for three weeks?',
+        'is two days of rest enough before pull day after a heavy deadlift session, or should I move it',
+        'how much protein should I be eating',
+        'swap the cable fly for something I can do at home',
+      ]
+      const chats = Array.from({ length: 50 }, (_, i) => {
+        const at = ago(i === 0 ? 1 : i * 30)
+        const text = asked[i % asked.length]
+        const turns =
+          i === 0
+            ? [
+                { role: 'user', content: text },
+                { role: 'assistant', content: "The test failed. The issue wasn't filed, so there's no issue number or link.\n\nThe error was **POST report_issue failed: Bad chat secret**. That's a configuration problem on the app's side, and nothing you did caused it." },
+                { role: 'user', content: 'try again' },
+                { role: 'system', content: 'filed #53 — Test issue from the coach' },
+                { role: 'assistant', content: 'Filed as **#53**.' },
+                { role: 'system', content: 'the coach wants to change your plan', proposal: { changes: ['bench press: 3 sets of 6–8 → 4 sets of 5'], status: 'pending' } },
+                { role: 'assistant', content: 'something went wrong.', error: true },
+              ]
+            : [
+                { role: 'user', content: text },
+                { role: 'assistant', content: 'A few things usually explain it:\n\n- sleep and food first\n- then volume\n\nGive it two more weeks before changing the plan.' },
+              ]
+        return { id: 'chat-' + i, startedAt: at, updatedAt: at, turns }
+      })
+      const open = async (kept) => {
+        await page.eval(`(() => {
+          const s = JSON.parse(localStorage.getItem('wt.settings'))
+          localStorage.setItem('wt.settings', JSON.stringify({ ...s, coachEnabled: true, openAiKey: 'shots', aiProvider: 'custom', aiBaseUrl: 'http://127.0.0.1:9/v1', openAiModel: 'none' }))
+          localStorage.setItem('wt:coachChats', ${JSON.stringify(JSON.stringify(kept))})
+          return true
+        })()`)
+        await page.goto(`${base}/`)
+        await sleep(2500)
+        if (!(await page.eval(pressJs('coach', false)))) return false
+        for (let i = 0; i < 20; i++) {
+          await sleep(400)
+          if (await page.eval(`!!document.querySelector('button[aria-label="past chats"]')`)) return true
+        }
+        return false
+      }
+      if (!(await open([]))) return note('coach: no "past chats" button on the coach')
+      await take('coach/switches')
+      const wraps = await page.eval(`[...document.querySelectorAll('button[aria-pressed]')].some((b) => b.getClientRects().length > 0 && b.offsetHeight > 50)`)
+      if (wraps) note('coach: a switch wraps onto a second line beside the past chats button')
+      await page.eval(pressJs('past chats'))
+      await sleep(400)
+      await take('coach/past-chats-none')
+      // Ask something. The answer cannot come, and the question is kept anyway.
+      await page.eval(pressJs('close'))
+      await sleep(300)
+      if (await page.eval(pressJs('how is my strength', false))) {
+        await sleep(2500)
+        await page.eval(pressJs('past chats'))
+        await sleep(400)
+        const kept = await page.eval(`[...document.querySelectorAll('[role="dialog"] .divide-y > button')].map((b) => b.textContent)`)
+        if (kept.length !== 1 || !/how is my strength/.test(kept[0])) note(`coach: a question whose answer failed was not kept (list: ${JSON.stringify(kept)})`)
+        await take('coach/past-chats-after-asking')
+      } else note('coach: no starter question to ask')
+      if (!(await open(chats))) return note('coach: no "past chats" button with chats kept')
+      await page.eval(pressJs('past chats'))
+      await sleep(400)
+      const rows = await page.eval(`document.querySelectorAll('[role="dialog"] .divide-y > button').length`)
+      if (rows !== 50) note(`coach: the list shows ${rows} chats of the 50 kept`)
+      await take('coach/past-chats')
+      const opened = await page.eval(`(() => {
+        const b = document.querySelector('[role="dialog"] .divide-y > button')
+        if (!b) return false
+        b.click()
+        return true
+      })()`)
+      if (!opened) return note('coach: no chat to open in the list')
+      await sleep(400)
+      await take('coach/past-chat')
+      if (await page.eval(pressJs('remove'))) {
+        await sleep(300)
+        await page.eval(`(document.querySelector('[role="dialog"] .overflow-y-auto').scrollTop = 100000, true)`)
+        await sleep(200)
+        await take('coach/past-chat-remove')
+        await page.eval(pressJs('tap again to remove'))
+        await sleep(300)
+        const left = await page.eval(`document.querySelectorAll('[role="dialog"] .divide-y > button').length`)
+        if (left !== 49) note(`coach: removing a chat left ${left} in the list, not 49`)
+      } else note('coach: no "remove" on a past chat')
     },
   },
   {

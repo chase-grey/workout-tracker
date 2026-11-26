@@ -529,4 +529,20 @@ device (`lib/coachSwitches.ts`): each stays as it was set until it is tapped
 again, through a reload onto an update, a closed app and a filed report. All
 three start off on a device that has never set them. Nothing but its own tap
 changes a switch, and a new switch on the coach is kept the same way. The
-thread itself is not kept. `coachSwitches.test.ts` holds this.
+thread itself is not brought back. `coachSwitches.test.ts` holds this.
+
+## The coach's past chats
+
+Chase, 2026-11-25, after a report the coach failed to file was gone with its
+thread: every thread is kept on the device as one past chat, saved as it
+grows (`lib/coachChats`, `setTurns` in `ChatTab`), and read back from the
+history button at the end of the coach's switches (`features/chat/PastChats`).
+With keep context off a chat is one question and its answer; with it on, the
+thread until it is let go.
+
+- A past chat is for reading: nothing in it can be approved or sent again.
+- They stay on the device that had them, never synced.
+- They leave on their own: the newest 50 are kept, the oldest go first past
+  400,000 characters, and any one can be removed with the second tap every
+  removal here takes. `coachChats.test.ts` holds this at 1,200 chats.
+- `npm run shots -- coach` draws the button, the list and a chat read back.
