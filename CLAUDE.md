@@ -499,3 +499,12 @@ every reached goal and every committed one, and my-brain links back to the
 Progress tab with `?tab=progress` (`lib/resumeTab.ts`). Renaming
 the key or the route, or reshaping `BrainShare` in `lib/brainShare.ts` breaks that slice, so
 change both repos together.
+
+## The coach's switches stay as they were left
+
+Chase, 2026-11-25. Edit plan, keep context and report issues are kept on the
+device (`lib/coachSwitches.ts`): each stays as it was set until it is tapped
+again, through a reload onto an update, a closed app and a filed report. All
+three start off on a device that has never set them. Nothing but its own tap
+changes a switch, and a new switch on the coach is kept the same way. The
+thread itself is not kept. `coachSwitches.test.ts` holds this.

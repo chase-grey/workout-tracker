@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { holdUpdates } from '../../lib/version'
 import { useData } from '../../store/DataContext'
 import { buildSystemPrompt, reportToggleLabel, type CoachSkills } from '../../lib/chatPrompt'
+import { loadCoachSwitches, saveCoachSwitches } from '../../lib/coachSwitches'
 import { coachFeedbackMessage } from '../../lib/coachFeedback'
 import { APP_COMMIT } from '../../lib/version'
 import { api } from '../../services/api'
@@ -79,15 +80,19 @@ type Turn = {
 // toggles and the thread outlive the component — otherwise "keep context" would
 // forget itself the moment you looked at anything else.
 //
-// Plan editing and reporting both start off: most days nothing about the plan
-// changes and nothing needs writing up, the two plan tools are by far the
-// largest schemas we send, and a report tool that is always there gets used
-// when nobody asked for a report.
+// The three switches are kept on the device (lib/coachSwitches): each stays as
+// it was left until it is tapped again, through a reload or a closed app. On a
+// device that has never set them they all start off: most days nothing about
+// the plan changes and nothing needs writing up, the two plan tools are by far
+// the largest schemas we send, and a report tool that is always there gets
+// used when nobody asked for a report. The thread itself is not kept.
+const kept = loadCoachSwitches()
 const session: { keepContext: boolean; skills: CoachSkills; turns: Turn[] } = {
-  keepContext: false,
-  skills: { planEdits: false, issues: false },
+  keepContext: kept.keepContext,
+  skills: { planEdits: kept.planEdits, issues: kept.issues },
   turns: [],
 }
+const keepSwitches = () => saveCoachSwitches({ ...session.skills, keepContext: session.keepContext })
 
 const UPDATE_PLAN_TOOL: Tool = {
   type: 'function',
@@ -469,11 +474,12 @@ export function ChatTab({
   const [pending, setPending] = useState('')
   // Off by default: each message starts a fresh conversation, so an answer is
   // never coloured by whatever was asked before it. Once it's on it stays on
-  // for the rest of the session, tab switches and workouts included.
+  // until it is tapped off, tab switches, workouts and reloads included.
   const [keepContext, setKeepContext] = useState(session.keepContext)
   const toggleKeepContext = () => {
     session.keepContext = !keepContext
     setKeepContext(!keepContext)
+    keepSwitches()
   }
   // Which tool sets this conversation gets. Same deal as the toggle above: the
   // choice is the session's, not this mount's.
@@ -481,6 +487,7 @@ export function ChatTab({
   const toggleSkill = (name: keyof CoachSkills) => {
     session.skills = { ...session.skills, [name]: !session.skills[name] }
     setSkillsState(session.skills)
+    keepSwitches()
   }
   // The model is a setting rather than the session's: it is what the key gets
   // billed for, so the pick should still be there tomorrow.
