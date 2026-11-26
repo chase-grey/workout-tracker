@@ -25,7 +25,7 @@ import { type Point } from '../../lib/progress'
 import {
   addDays,
   clampToRange,
-  commitRange,
+  commitWindow,
   lockProjection,
   lockProjectionByDate,
   projectedSeries,
@@ -110,9 +110,11 @@ export function CommitChart({
    * and the mark the handle is measured away from. Defaults to the projection's
    * own ETA — a goal changing a date it already committed to passes the estimate
    * its held pace implies instead, which is the answer that has actually moved
-   * since it committed (see paceAgainstLock).
+   * since it committed (see paceAgainstLock). null is a goal with no estimate at
+   * all, committed anyway: the window is the open one and no mark is drawn (see
+   * goalLock.commitWindow).
    */
-  estimate?: string
+  estimate?: string | null
   /** Overridable clock, for tests. */
   now?: Date
   /** The lift the goal is named for, so readings off another are marked apart (see liftMarks). */
@@ -126,8 +128,8 @@ export function CommitChart({
   // curve mid-drag, which is exactly the thing that has to stay still.
   const [today] = useState(() => now ?? new Date())
 
-  const eta = estimate ?? proj.etaDate!
-  const range = useMemo(() => commitRange(proj, eta, today), [proj, eta, today])
+  const eta = estimate === undefined ? proj.etaDate : estimate
+  const range = useMemo(() => commitWindow(proj, eta, today).range, [proj, eta, today])
 
   // The machine's answer, frozen once: it must not move while the handle does,
   // or there'd be nothing steady to bargain against.
@@ -227,9 +229,9 @@ export function CommitChart({
   const rising = proj.target > proj.current
   const tagSide = rising ? 'below' : 'above'
   const chosenMs = parseISODate(date).getTime()
-  const projectedMs = parseISODate(eta).getTime()
   // Two dots on one line: hide the machine's when the choice is sitting on it.
-  const showReferenceDot = Math.abs(daysBetween(eta, date)) > 3
+  // A goal with no estimate has no machine's date to show.
+  const showReferenceDot = eta != null && Math.abs(daysBetween(eta, date)) > 3
 
   return (
     <div
@@ -277,7 +279,7 @@ export function CommitChart({
           {/* The machine's date, left behind as the handle moves away from it. */}
           {showReferenceDot && (
             <ReferenceDot
-              x={projectedMs}
+              x={parseISODate(eta).getTime()}
               y={referenceEnd}
               r={3.5}
               fill={LINE_GOAL}

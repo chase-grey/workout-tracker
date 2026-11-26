@@ -3,8 +3,10 @@ import { project } from './predictions'
 import {
   addDays,
   adoptModel,
+  canCommit,
   clampToRange,
   commitRange,
+  commitWindow,
   currentPaceSeries,
   dateWithinHorizon,
   expectedAt,
@@ -212,6 +214,48 @@ describe('commitRange', () => {
     expect(soonest).toBe('2026-01-08')
     expect(latest > soonest).toBe(true)
     expect(latest).toBe('2026-02-14')
+  })
+})
+
+describe('commitWindow', () => {
+  it('opens around an estimate past the horizon, on the estimate', () => {
+    // A year out: nothing the row would light up for, and still a date to sign.
+    const { range, start } = commitWindow(UNCAPPED, '2027-01-01', TODAY)
+    expect(dateWithinHorizon('2027-01-01', TODAY)).toBe(false)
+    expect(start).toBe('2027-01-01')
+    expect(range).toEqual(commitRange(UNCAPPED, '2027-01-01', TODAY))
+    expect(range.soonest).toBe('2026-01-08')
+  })
+
+  it('opens on the horizon, two years wide, for a goal with no estimate', () => {
+    const flat = project([{ date: '2025-12-01', value: 100 }, { date: '2025-12-20', value: 100 }], 200, TODAY)
+    expect(flat.etaDate).toBeNull()
+    const { range, start } = commitWindow(flat, null, TODAY)
+    expect(range).toEqual({ soonest: '2026-01-08', latest: '2028-01-01' })
+    expect(start).toBe('2026-07-01')
+  })
+
+  it('still holds the near edge to the pace ceiling', () => {
+    const proj = project(CLIMBING, 140, TODAY, { capPerWeek: 1 })
+    const { range, start } = commitWindow(proj, null, TODAY)
+    expect(range.soonest).toBe(soonestReachable(proj, TODAY))
+    expect(start >= range.soonest && start <= range.latest).toBe(true)
+  })
+
+  it('offers only dates a lock can be made on', () => {
+    const flat = project([{ date: '2025-12-01', value: 100 }, { date: '2025-12-20', value: 100 }], 200, TODAY)
+    const { range, start } = commitWindow(flat, null, TODAY)
+    for (const date of [range.soonest, start, range.latest]) {
+      expect(lockProjectionByDate('squat', flat, date, TODAY)?.etaDate).toBe(date)
+    }
+  })
+})
+
+describe('canCommit', () => {
+  it('wants a reading and a gap', () => {
+    expect(canCommit(project(CLIMBING, 140, TODAY))).toBe(true)
+    expect(canCommit(project([], 200, TODAY))).toBe(false)
+    expect(canCommit(project([{ date: '2025-12-20', value: 200 }], 200, TODAY))).toBe(false)
   })
 })
 

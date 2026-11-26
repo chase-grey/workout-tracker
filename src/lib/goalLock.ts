@@ -342,6 +342,48 @@ export function commitRange(
   return { soonest, latest: latest > soonest ? latest : addDays(soonest, MIN_COMMIT_SLACK_DAYS) }
 }
 
+/** How far out a goal with no estimate to bargain against may be committed. */
+const OPEN_COMMIT_DAYS = 2 * 365
+
+/** Whether a goal has anything to commit: a reading, and a gap left to its target. */
+export function canCommit(proj: Projection): boolean {
+  return Number.isFinite(proj.current) && proj.current !== proj.target
+}
+
+/**
+ * The dates a goal may be committed to and the one the picker opens on, whether
+ * or not there is an estimate to open it around.
+ *
+ * A commitment used to be offered only once the projection landed inside
+ * {@link LOCK_HORIZON_MONTHS}. Chase's ruling (2026-11-25): a date can be set on
+ * any open goal, asked for from the goal's sheet. The row still lights up on
+ * its own only inside the horizon (see {@link withinHorizon}).
+ *
+ * With an estimate, however far out, this is {@link commitRange} around it and
+ * the picker opens on the estimate. Without one (no pace, or a pace pointing the
+ * wrong way) there is nothing to measure "too late" against, so the window runs
+ * to {@link OPEN_COMMIT_DAYS} and opens on the horizon. The near edge is the same
+ * either way: a week, or the soonest the goal's pace ceiling can reach.
+ */
+export function commitWindow(
+  proj: Projection,
+  estimate: string | null,
+  today: Date = new Date(),
+): { range: CommitRange; start: string } {
+  if (estimate) {
+    const range = commitRange(proj, estimate, today)
+    return { range, start: clampToRange(estimate, range) }
+  }
+  const todayIso = toISODate(today)
+  const { soonest } = commitRange(proj, todayIso, today)
+  const open = addDays(todayIso, OPEN_COMMIT_DAYS)
+  const range = { soonest, latest: open > soonest ? open : addDays(soonest, MIN_COMMIT_SLACK_DAYS) }
+  const horizon = toISODate(
+    new Date(today.getFullYear(), today.getMonth() + LOCK_HORIZON_MONTHS, today.getDate()),
+  )
+  return { range, start: clampToRange(horizon, range) }
+}
+
 /** `iso` held inside a commit window, so every control offers the same dates. */
 export function clampToRange(iso: string, range: CommitRange): string {
   return iso < range.soonest ? range.soonest : iso > range.latest ? range.latest : iso

@@ -437,6 +437,9 @@ const APP_FLOWS = [
       'progress/body-fat-%',
       'progress/whole-body',
       ...Array.from({ length: 14 }, (_, i) => `progress/page-${i + 1}`),
+      'progress/goal-sheet',
+      'progress/goal-commit',
+      'progress/goal-committed',
     ],
     async run({ page, take, note }) {
       if (!(await page.eval(pressJs('progress')))) return note('progress: no tab button')
@@ -457,6 +460,39 @@ const APP_FLOWS = [
         await sleep(1200)
         await take(`progress/page-${i + 1}`)
       }
+      // A tap on a goal asks before it opens anything, and its sheet is where a
+      // goal the row hasn't lit up for is given a date. Walk the open goals that
+      // wear neither a commit prompt nor a commitment until one offers a date.
+      const sheet = `document.querySelector('[role="dialog"]')`
+      const plain = `[...document.querySelectorAll('h4 > button')].filter((b) => {
+        const row = b.closest('.rounded-2xl')
+        return row && ![...row.querySelectorAll('button')].some((x) => /^(commit|change date)$/.test(x.textContent.trim()))
+      })`
+      const count = await page.eval(`(${plain}).length`)
+      let dated = false
+      for (let i = 0; i < count && !dated; i++) {
+        await page.eval(`(() => { const b = (${plain})[${i}]; b.scrollIntoView({ block: 'center' }); b.click(); return true })()`)
+        await sleep(300)
+        if (!(await page.eval(`!!(${sheet})`))) {
+          note('progress: a tap on a goal raised no sheet')
+          break
+        }
+        if (await page.eval(`!!document.querySelector('[data-tap-zone]')`)) note('progress: a tap on a goal started a session')
+        if (await page.eval(`(${sheet}).textContent.includes('commit to a date')`)) {
+          await take('progress/goal-sheet')
+          await page.eval(pressJs('commit to a date'))
+          await sleep(1900)
+          await page.eval(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'commit')?.scrollIntoView({ block: 'center' }) ?? null`)
+          await sleep(300)
+          await take('progress/goal-commit')
+          await page.eval(`[...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'commit').at(-1)?.click() ?? null`)
+          await sleep(1900)
+          await take('progress/goal-committed')
+          dated = true
+        } else await page.eval(pressJs('cancel'))
+        await sleep(200)
+      }
+      if (count > 0 && !dated) note('progress: no goal offered "commit to a date"')
     },
   },
   {

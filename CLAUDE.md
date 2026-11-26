@@ -244,6 +244,23 @@ Outside Settings and the forms a sheet opens, nothing on a page wears an
   `editTiles`) the stack shows a labelled edit button that retires with use.
   That is the only one.
 
+## A tap on a goal asks first
+
+Chase's ruling (2026-11-25): a tap on a goal on Progress never goes straight
+to the workout, the camera or the weigh-in. It raises the goal's sheet
+(`features/progress/GoalSheet`), which names that screen on its first button
+and carries the one line that says a hold edits or rearranges, since a tap
+there may have been a reach for that. A new kind of goal gets its words in
+`GoalsPanel`'s `openLabel`.
+
+The same sheet is where a goal is given a date. **Any open goal with a
+reading can be committed to a date**, however far out its projection is, or
+with none (`goalLock.commitWindow`, `canCommit`); a committed one can always
+have its date changed. The row still lights up and offers the date by itself
+only inside six months. The near edge is unchanged: a week, or the soonest the
+goal's pace ceiling can reach. `npm run shots -- progress goal` taps a goal,
+notes a session that started or a sheet that didn't come, and commits one.
+
 ## A desktop window
 
 Past 700px wide the app is in a desktop window, and it uses it (2026-11-25).

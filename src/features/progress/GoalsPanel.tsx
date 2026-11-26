@@ -40,10 +40,10 @@ import {
   adoptModel,
   expectedAt,
   clampToRange,
-  commitRange,
+  canCommit,
+  commitWindow,
   currentPaceSeries,
   currentPaceAt,
-  dateWithinHorizon,
   lockProjectionByDate,
   paceAgainstLock,
   projectedSeries,
@@ -71,6 +71,7 @@ import { AxisBreak } from '../../components/AxisBreak'
 import { ChartTag } from '../../components/ChartTag'
 import { BodyWeightChart } from './BodyWeightChart'
 import { CommitChart } from './CommitChart'
+import { GoalSheet } from './GoalSheet'
 import { FlexLadderBlock, ladderTitle, type Ladder } from './FlexLadderBlock'
 import { LiftLadderBlock } from './LiftLadderBlock'
 import { GoalTooltip } from './GoalTooltip'
@@ -376,26 +377,36 @@ function paceLabel(proj: Projection, unit: string): string {
  * moved — drag the finish line along the target and the curve you'd be signing
  * up for redraws against the machine's own, which stays where it is. The date
  * field is the same value spelled out, for setting it exactly.
+ *
+ * A goal further out than that, or with no projection at all, gets the same
+ * prompt when its sheet is asked for a date (see GoalSheet, goalLock.commitWindow):
+ * it opens on the estimate if there is one and on the horizon if there isn't,
+ * and `onClose` gives it a way to be put away again, since nothing but the ask
+ * put it there.
  */
 function LockInPrompt({
   goal,
   proj,
   onLock,
+  onClose,
 }: {
   goal: GoalSpec
   proj: Projection
   onLock: (etaDate: string) => void
+  onClose?: () => void
 }) {
-  const [date, setDate] = useState(proj.etaDate ?? '')
-  const range = useMemo(() => commitRange(proj, proj.etaDate!), [proj])
+  const { range, start } = useMemo(() => commitWindow(proj, proj.etaDate), [proj])
+  const [date, setDate] = useState(start)
   const valid = date >= range.soonest && date <= range.latest
 
   return (
     <div className="mt-2 rounded-xl bg-accent-2/10 p-3" {...ROW_SHIELD}>
-      <p className="text-sm font-medium text-accent-2">
-        <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
-        on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
-      </p>
+      {proj.etaDate && (
+        <p className="text-sm font-medium text-accent-2">
+          <MdBolt className="inline align-text-bottom mr-1" aria-hidden />
+          on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
+        </p>
+      )}
       <CommitChart
         goalId={goal.id}
         proj={proj}
@@ -425,6 +436,13 @@ function LockInPrompt({
           commit
         </button>
       </div>
+      {onClose && (
+        <div className="mt-3 flex">
+          <button onClick={onClose} className="ml-auto text-sm text-neutral-400 active:opacity-70">
+            cancel
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -441,11 +459,10 @@ function LockInPrompt({
  * window applies, so a date can only be re-signed where it could have been signed
  * in the first place.
  *
- * A goal whose estimate has drifted past {@link LOCK_HORIZON_MONTHS} has no
- * honest date left to offer: that's the distance at which the app doesn't ask for
- * a commitment at all. All this can do then is let the commitment go, and the row
- * goes back to projecting — which is the only way out of a date that was signed
- * from too far off in the first place.
+ * That window no longer closes at {@link LOCK_HORIZON_MONTHS}. A date can be set
+ * on a goal however far out its estimate is, or with none (Chase, 2026-11-25; see
+ * goalLock.commitWindow), so one that has drifted that far can be moved as well
+ * as dropped.
  */
 function RecommitPrompt({
   goal,
@@ -466,11 +483,9 @@ function RecommitPrompt({
   onClose: () => void
 }) {
   const estimate = proj.onTrack ? proj.etaDate : revisedEta
-  const inReach = estimate != null && dateWithinHorizon(estimate)
   const range = useMemo(
-    () => (inReach ? commitRange(proj, estimate!) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [proj, estimate, inReach],
+    () => (canCommit(proj) ? commitWindow(proj, estimate).range : null),
+    [proj, estimate],
   )
   // The date in force is where the handle starts — held inside the window, so a
   // commitment made from further out than the window now reaches opens on a date
@@ -498,7 +513,7 @@ function RecommitPrompt({
             points={goal.points}
             date={date}
             onChange={setDate}
-            estimate={estimate!}
+            estimate={estimate}
             lift={goal.exerciseKey}
           />
           <div className="mt-3 flex items-center gap-2">
@@ -523,13 +538,7 @@ function RecommitPrompt({
             </button>
           </div>
         </>
-      ) : (
-        <p className="mt-2 text-sm text-neutral-400">
-          {estimate == null
-            ? 'no pace to set a new date from yet.'
-            : `${fmtDate(estimate)} is too far out to commit to.`}
-        </p>
-      )}
+      ) : null}
 
       <div className="mt-3 flex items-center gap-4">
         <button onClick={onDrop} className="text-sm text-accent-deep active:opacity-70">
@@ -672,16 +681,19 @@ function AttemptPrompt({
  * track against the committed line, with a chart of actual vs projected and a way
  * to change the date or let the commitment go ({@link RecommitPrompt}).
  *
- * A goal still open is also the way in to logging toward it: a tap on the row
- * opens the screen its readings come off (see `onOpen`), wherever the tap lands
- * that isn't a control or a chart of the row's own ({@link ROW_SHIELD}). The
- * title is the same action as a real button, for a keyboard or a screen reader.
+ * A goal still open is also the way in to logging toward it: a tap on the row,
+ * wherever it lands that isn't a control or a chart of the row's own
+ * ({@link ROW_SHIELD}), asks first (see GoalSheet) and then opens the screen its
+ * readings come off (see `onOpen`). The same sheet is where a goal the row
+ * hasn't lit up for is given a date. The title is the same action as a real
+ * button, for a keyboard or a screen reader.
  */
 function GoalRow({
   goal,
   proj,
   lock,
   onOpen,
+  openLabel = 'open',
   onDrop,
   onLock,
   onLogAttempt,
@@ -699,6 +711,8 @@ function GoalRow({
    * read off; the camera, for the one pose; the weigh-in sheet.
    */
   onOpen?: () => void
+  /** That screen, as the words on the sheet's button: `log a weigh-in`. */
+  openLabel?: string
   /** Let a commitment go, putting the goal back to a live projection. */
   onDrop: () => void
   /** Commit the goal to a target date — the first one, or a changed one. */
@@ -733,6 +747,10 @@ function GoalRow({
   // Open only while the date is being changed, and closed again by committing or
   // cancelling — a committed goal reads as a commitment the rest of the time.
   const [editing, setEditing] = useState(false)
+  // The sheet a tap raises, and the date prompt it can open on a goal that
+  // isn't offering one by itself.
+  const [asking, setAsking] = useState(false)
+  const [committing, setCommitting] = useState(false)
   const has = Number.isFinite(proj.current)
   const reached = isReached(goal)
   const doneDate = reached ? reachedDate(goal) : null
@@ -753,6 +771,9 @@ function GoalRow({
   // rather than freezing the projection on its own. A goal already at its target
   // has nothing left to commit to.
   const lockable = !lock && !reached && !ready && withinHorizon(proj)
+  // Any other open goal with a reading can be given a date too, when asked.
+  const datable = !lock && !reached && !ready && !lockable && canCommit(proj)
+  const dating = datable && committing
   // A committed goal shows the target its line lands on, which is what the pace
   // reading is measured against. For a bench or squat multiple that is the weight
   // the goal follows today carried to the committed date (see goals.liveLocks),
@@ -779,11 +800,13 @@ function GoalRow({
   const ring = grouped ? '' : goalRing(lockable, !!lock && !reached, reached, ready)
   // A goal already met has nothing left to enter.
   const open = reached ? undefined : onOpen
-  const onRowClick = open
+  const ask = open ? () => setAsking(true) : undefined
+  const onRowClick = ask
     ? (e: MouseEvent<HTMLDivElement>) => {
-        if (!(e.target as Element).closest(ROW_SHIELDED)) open()
+        if (!(e.target as Element).closest(ROW_SHIELDED)) ask()
       }
     : undefined
+  const dateAction = lock ? (editing ? undefined : 'change date') : datable && !committing ? 'commit to a date' : undefined
 
   return (
     <div
@@ -793,7 +816,7 @@ function GoalRow({
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="font-semibold">
           {open ? (
-            <button onClick={open} className="text-left font-semibold">
+            <button onClick={ask} className="text-left font-semibold">
               {goal.title}
             </button>
           ) : (
@@ -897,6 +920,16 @@ function GoalRow({
         </>
       ) : lockable ? (
         <LockInPrompt goal={goal} proj={proj} onLock={onLock} />
+      ) : dating ? (
+        <LockInPrompt
+          goal={goal}
+          proj={proj}
+          onLock={(etaDate) => {
+            onLock(etaDate)
+            setCommitting(false)
+          }}
+          onClose={() => setCommitting(false)}
+        />
       ) : proj.onTrack ? (
         <p className="mt-1 text-sm text-accent-2">
           on track · eta {fmtDate(proj.etaDate)} ({paceLabel(proj, goal.unit)})
@@ -916,7 +949,7 @@ function GoalRow({
           so a separate raw-history chart below them is a redundant second graph.
           A row charted above has that history on the shared chart already. The
           bare data chart is for the states with no projection to show. */}
-      {showData && !chartedAbove && !reached && !lock && !lockable && goal.points.length > 0 && (
+      {showData && !chartedAbove && !reached && !lock && !lockable && !dating && goal.points.length > 0 && (
         <DataChart
           points={goal.points}
           target={targetAtEta(proj)}
@@ -927,6 +960,24 @@ function GoalRow({
       )}
 
       {children}
+
+      {asking && open && (
+        <GoalSheet
+          title={goal.title}
+          action={openLabel}
+          onAction={() => {
+            setAsking(false)
+            open()
+          }}
+          dateAction={dateAction}
+          onDate={() => {
+            setAsking(false)
+            if (lock) setEditing(true)
+            else setCommitting(true)
+          }}
+          onCancel={() => setAsking(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1148,7 +1199,15 @@ export function GoalsPanel({
   // off, narrowed to the one thing the goal is about. A lift goal opens a workout
   // of that lift, a stretch rung the camera on that pose (which takes a typed
   // angle too — see CameraMeasure), a bodyweight goal the weigh-in sheet. The
-  // six-pack is answered in its own row and never comes through here.
+  // row asks before any of them (see GoalSheet), under the words `openLabel`
+  // gives that screen. The six-pack is answered in its own row and never comes
+  // through here.
+  const openLabel = (g: GoalSpec): string =>
+    isWeightGoal(g)
+      ? 'log a weigh-in'
+      : g.exerciseKey
+        ? `start ${exerciseName(g.exerciseKey)} workout`
+        : 'take a photo'
   const openGoal = (g: GoalSpec) => {
     if (isWeightGoal(g)) {
       setWeighing(true)
@@ -1218,8 +1277,9 @@ export function GoalsPanel({
     updateSettings({ ...settings, lockedGoals: next })
   }
 
-  // Commit a goal that's within reach to a target date — the one it projects, or
-  // one the user nudged sooner or later. This is the deliberate lock the lit-up
+  // Commit a goal to a target date — the one it projects, or one the user nudged
+  // sooner or later, or one picked with no projection to nudge (see
+  // goalLock.commitWindow). This is the deliberate lock the lit-up
   // row offers in place of the old automatic snapshot, and the same path a
   // committed goal changes its date through (see RecommitPrompt).
   const lockIn = (goal: GoalSpec, etaDate: string) => {
@@ -1296,6 +1356,7 @@ export function GoalsPanel({
       proj={projections.get(g.id)!}
       lock={locked[g.id]}
       onOpen={() => openGoal(g)}
+      openLabel={openLabel(g)}
       onDrop={() => dropCommitment(g)}
       onLock={(etaDate) => lockIn(g, etaDate)}
       onLogAttempt={(weightLbs, reps) => {
