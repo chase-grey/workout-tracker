@@ -10,22 +10,22 @@
  */
 import { api } from './api'
 import { storage } from './storage'
-import { issueToken } from '../lib/issueToken'
+import { issueProofs, withProof } from '../lib/issueToken'
 
 /**
- * The token this device proves itself to the backend with: the one entered in
- * Settings, or the owner's own account key on a device that signed in and was
- * never given it (see lib/issueToken). The /exec URL is baked into this public
- * bundle, so without it anyone holding the bundle could file issues on the
- * repo — or read the ones already filed.
+ * What this device proves itself to the backend with: the owner's own account
+ * key, then the token entered in Settings (see lib/issueToken). Each call below
+ * goes out with the first, and with the next only if that one is refused. The
+ * /exec URL is baked into this public bundle, so without a proof anyone holding
+ * the bundle could file issues on the repo — or read the ones already filed.
  *
  * Persisted under `chatToken`, which is what it was called while the same token
  * also reached the chat coach across a public tunnel. That path is gone, but the
  * key is device-local and never synced (see lib/settingsSync), so renaming it
  * would quietly empty every phone's issue list until the token was typed again.
  */
-function backendToken(): string {
-  return issueToken(storage.loadSettings())
+function backendProofs(): string[] {
+  return issueProofs(storage.loadSettings())
 }
 
 export type IssueArea = 'plan' | 'chat' | 'timer' | 'history' | 'other'
@@ -221,17 +221,20 @@ export async function reportIssue(
   input: ReportIssueInput,
   chatTail?: string,
 ): Promise<ReportedIssue> {
-  const secret = backendToken()
-  if (!secret) {
+  const proofs = backendProofs()
+  if (proofs.length === 0) {
     throw new Error('add your issue token in Settings to file issues.')
   }
-  return api.reportIssue({
-    secret,
-    title: input.title,
-    body: input.body ?? '',
-    area: input.area ?? '',
-    context: collectContext(chatTail),
-  })
+  const context = collectContext(chatTail)
+  return withProof(proofs, (secret) =>
+    api.reportIssue({
+      secret,
+      title: input.title,
+      body: input.body ?? '',
+      area: input.area ?? '',
+      context,
+    }),
+  )
 }
 
 /**
@@ -255,22 +258,22 @@ export function cachedIssues(): TrackedIssue[] | null {
  * only correct one.
  */
 export async function listIssues(): Promise<TrackedIssue[]> {
-  const secret = backendToken()
-  if (!secret) {
+  const proofs = backendProofs()
+  if (proofs.length === 0) {
     throw new Error('add your issue token in Settings to see filed issues.')
   }
-  const list = await api.listIssues(secret)
+  const list = await withProof(proofs, (secret) => api.listIssues(secret))
   storage.saveIssues(list)
   return list
 }
 
 /** The comment thread on one issue — the fixer's question and anything since. */
 export async function fetchIssueThread(number: number): Promise<IssueThread> {
-  const secret = backendToken()
-  if (!secret) {
+  const proofs = backendProofs()
+  if (proofs.length === 0) {
     throw new Error('add your issue token in Settings to read this issue.')
   }
-  return api.issueThread(secret, number)
+  return withProof(proofs, (secret) => api.issueThread(secret, number))
 }
 
 /**
@@ -279,13 +282,13 @@ export async function fetchIssueThread(number: number): Promise<IssueThread> {
  * so the next poll picks it up with the whole thread as context.
  */
 export async function answerIssue(number: number, answer: string): Promise<void> {
-  const secret = backendToken()
-  if (!secret) {
+  const proofs = backendProofs()
+  if (proofs.length === 0) {
     throw new Error('add your issue token in Settings to answer.')
   }
   const text = answer.trim()
   if (!text) throw new Error('write an answer first.')
-  await api.answerIssue({ secret, number, answer: text })
+  await withProof(proofs, (secret) => api.answerIssue({ secret, number, answer: text }))
 }
 
 /**

@@ -408,7 +408,11 @@ issue routes take the owner's account key as well as the issue token
 (`provesOwner` in `SimpleBackend.gs`, `lib/issueToken` in the app). The token
 typed into Settings exists only on the phones that predate accounts; a device
 that signed in by email or off a sign-in link never had it, and the coach
-there answered every report with "add your issue token". A new owner-only
+there answered every report with "add your issue token". The key goes first
+and a typed token never stands in its way: nothing rechecks a token once it
+is typed, and the owner's phone, signed in, was refused with "Bad chat
+secret" because a stale one went ahead of its key (same day). Whichever proof
+is refused, the other is tried (`withProof`). A new owner-only
 feature is gated on `issueToken(settings)` or the account's `owner`, never on
 `settings.chatToken` alone.
 
