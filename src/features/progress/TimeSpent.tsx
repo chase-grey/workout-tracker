@@ -66,7 +66,7 @@ export function TimeSpent() {
     () =>
       [
         { key: 'workout', name: 'working out', sec: totals.workoutSec, fill: colors().workout },
-        { key: 'stretch', name: 'stretch + core', sec: totals.stretchSec, fill: colors().stretch },
+        { key: 'stretch', name: 'stretch', sec: totals.stretchSec, fill: colors().stretch },
         { key: 'rest', name: 'resting', sec: totals.restSec, fill: colors().rest },
       ].filter((d) => d.sec > 0),
     [totals],
@@ -194,7 +194,7 @@ export function TimeSpent() {
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Line type="monotone" dataKey="workout" name="working out" stroke={colors().workout} strokeWidth={2} dot={{ r: 2 }} />
-                  <Line type="monotone" dataKey="stretch" name="stretch + core" stroke={colors().stretch} strokeWidth={2} dot={{ r: 2 }} />
+                  <Line type="monotone" dataKey="stretch" name="stretch" stroke={colors().stretch} strokeWidth={2} dot={{ r: 2 }} />
                   <Line type="monotone" dataKey="rest" name="resting" stroke={colors().rest} strokeWidth={2} dot={{ r: 2 }} />
                   {paceRow &&
                     (['workout', 'stretch', 'rest'] as const).map((k) => (

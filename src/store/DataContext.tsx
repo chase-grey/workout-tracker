@@ -1108,7 +1108,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // + core" would be a plain misstatement of what happened.
       const ambient = await logFlex(
         {
-          note: withCore ? 'stretch + core' : 'stretch',
+          note: 'stretch',
           routines: [routine],
           startSides: input.startSide ? { [routine]: input.startSide } : {},
         },

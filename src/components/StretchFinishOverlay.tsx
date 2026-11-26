@@ -31,7 +31,7 @@ export function StretchFinishOverlay({
   summary: StretchFinishSummary
   onClose: () => void
 }) {
-  const { routine, withCore, anglePRs, flexGoals, prs, totalSec, activeSec, restSec, projected } =
+  const { routine, anglePRs, flexGoals, prs, totalSec, activeSec, restSec, projected } =
     summary
   // One card, whichever kind of best was beaten: a deeper angle and a heavier
   // plate are the same news, and two gold boxes saying "new pr" would only make
@@ -60,7 +60,7 @@ export function StretchFinishOverlay({
             aria-hidden
           />
           <h1 className="mt-3 text-3xl font-black leading-tight">
-            {withCore ? 'stretch + core complete' : 'stretch complete'}
+            stretch complete
           </h1>
           <p className="mt-1 text-sm tracking-wider text-neutral-500">
             {FLEX_ROUTINES[routine].label}

@@ -432,6 +432,13 @@ No explanatory subtext, hint captions, or "how to use this" sentences under
 controls. A clear label is enough. In particular: do not caption a tappable
 screen with "tap anywhere to advance" — the flow teaches it in one set.
 
+The stretch session is called `stretch` everywhere it is named on screen. It
+lost its core block on 2026-09-22, when the sit-ups became a session of their
+own, and "stretch + core" stayed on the time spent chart, the finish screen
+and the toast until 2026-11-25. `src/stretchName.test.ts` fails on the old
+name anywhere but the note stamped on core rows in the sheet. When a session
+gains or loses a part, search for its name before finishing.
+
 ## A line of facts wraps between facts, and only when it must
 
 Chase, 2026-11-25, at "set" on one line and "2 of 2" on the next: text does

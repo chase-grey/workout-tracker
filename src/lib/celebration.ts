@@ -294,7 +294,7 @@ export function workoutDoneCelebration(_dayType: WorkoutRow['day_type']): Celebr
 
 export const stretchDoneCelebration: Celebration = {
   tier: 'small',
-  title: 'stretch + core done',
+  title: 'stretch done',
   icon: 'check',
   ack: true,
 }
